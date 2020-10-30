@@ -4,12 +4,10 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    // Tell cargo to tell rustc to link the system bzip2
-    // shared library.
-    println!("cargo:rustc-link-lib=bz2");
-
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rustc-link-lib=readstat");
+    println!("cargo:rustc-link-search=/usr/local/lib");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
@@ -21,11 +19,14 @@ fn main() {
         // Select which functions and types to build bindins for
         .whitelist_function("readstat_get_row_count")
         .whitelist_function("readstat_parse_sas7bdat")
+        .whitelist_function("readstat_parser_free")
         .whitelist_function("readstat_parser_init")
         .whitelist_function("readstat_set_metadata_handler")
         .whitelist_type("readstat_error_t")
         .whitelist_type("readstat_metadata_t")
         .whitelist_type("readstat_parser_t")
+        .whitelist_type("READSTAT_HANDLER_OK")
+        .whitelist_type("READSTAT_OK")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
