@@ -2,9 +2,9 @@
 Example Rust binary that counts the number of records in a SAS binary file (`sas7bdat`).
 
 ## ReadStat
-The Rust binary is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
+The Rust binary is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).  Thus [building](https://github.com/WizardMac/ReadStat#installation) the `ReadStat` library is required to make use of the Rust binary.
 
-The binary binds to `ReadStat` and follows the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.  Thus [building](https://github.com/WizardMac/ReadStat#installation) the `ReadStat` library is required.
+The binary binds to `ReadStat` and follows the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.
 
 ## Run
 The binary is run via the following, assuming Rust and cargo are [setup and installed](https://rustup.rs/):
