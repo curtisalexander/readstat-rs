@@ -6,6 +6,8 @@ use std::path::PathBuf;
 fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
+
+    // Linking
     println!("cargo:rustc-link-lib=readstat");
     println!("cargo:rustc-link-search=/usr/local/lib");
 
@@ -16,7 +18,7 @@ fn main() {
         // The input header we would like to generate
         // bindings for.
         .header("wrapper.h")
-        // Select which functions and types to build bindins for
+        // Select which functions and types to build bindings for
         .whitelist_function("readstat_get_row_count")
         .whitelist_function("readstat_parse_sas7bdat")
         .whitelist_function("readstat_parser_free")
