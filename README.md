@@ -7,7 +7,7 @@ The Rust binary is only possible due to the excellent [ReadStat](https://github.
 The binary binds to `ReadStat` and follows the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.
 
 ## Run
-The binary is run via the following, assuming Rust and cargo are [setup and installed](https://rustup.rs/):
+The binary is run via the following, assuming Rust and cargo [installed and setup](https://rustup.rs/):
 
 ```sh
 cargo run -- --sas /some/dir/to/example.sas7bdat
