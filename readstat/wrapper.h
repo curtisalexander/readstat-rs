@@ -1,1 +1,1 @@
-#include "../vendor/ReadStat/src/readstat.h"
+#include "../readstat-sys/vendor/ReadStat/src/readstat.h"
