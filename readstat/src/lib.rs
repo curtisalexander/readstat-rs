@@ -2,6 +2,7 @@
 #![allow(non_camel_case_types)]
 mod bindings;
 
+use dunce;
 use std::error::Error;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
@@ -40,7 +41,7 @@ unsafe extern "C" fn handle_metadata(
 }
 
 pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
-    let sas_path = &args.sas;
+    let sas_path = dunce::canonicalize(&args.sas)?;
 
     let mut buf = Vec::new();
     buf.extend(sas_path.as_os_str().as_bytes());

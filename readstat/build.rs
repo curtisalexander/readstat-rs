@@ -9,7 +9,7 @@ fn main() {
 
     // Linking
     println!("cargo:rustc-link-lib=readstat");
-    println!("cargo:rustc-link-search=/usr/local/lib");
+    // println!("cargo:rustc-link-search=/usr/local/lib");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
