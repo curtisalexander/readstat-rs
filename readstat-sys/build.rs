@@ -1,36 +1,56 @@
-use cc::Build;
+use cc;
+use dunce;
 use std::env;
-use std::path::PathBuf;
+use std::fs;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+
+fn is_c_file(entry: &fs::DirEntry) -> bool {
+    let c_extension = OsStr::new("c");
+    match entry.path().extension() {
+        Some(e) => e == c_extension,
+        None => false
+    }
+}
+
+fn is_file(entry: &fs::DirEntry) -> bool {
+    entry
+        .file_type()
+        .unwrap()
+        .is_file()
+}
+
+fn get_all_c_files<P: AsRef<Path>>(dir: P) -> Vec<PathBuf> {
+    fs::read_dir(&dir)
+        .unwrap()
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| is_file(e) && is_c_file(e))
+        .map(|e| e.path())
+        .collect()
+}
 
 fn main() {
-    let project_fir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-        .canonicalize()
-        .unwrap();
-    let root_dir = project_dir.parent().unwrap();
-    let src = root_dir.join("vendor").join("ReadStat").join("src");
+    let project_dir = dunce::canonicalize(PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
 
+    let src = project_dir.join("vendor").join("ReadStat").join("src");
+    let sas = project_dir.join("vendor").join("ReadStat").join("src").join("sas");
+    let spss = project_dir.join("vendor").join("ReadStat").join("src").join("spss");
+    let stata = project_dir.join("vendor").join("ReadStat").join("src").join("stata");
+    let txt = project_dir.join("vendor").join("ReadStat").join("src").join("txt");
+    
+    let src_c_files = get_all_c_files(&src);
+    let sas_c_files = get_all_c_files(&sas);
+    let spss_c_files = get_all_c_files(&spss);
+    let stata_c_files = get_all_c_files(&stata);
+    let txt_c_files = get_all_c_files(&txt);
 
     cc::Build::new()
-        .file(src.join("CKHashTable.c"))
-        .file(src.join("readstat_bits.c"))
-        .file(src.join("readstat_convert.c"))
-        .file(src.join("readstat_error.c"))
-        .file(src.join("readstat_io_unistd.c"))
-        .file(src.join("readstat_malloc.c"))
-        .file(src.join("readstat_metadata.c"))
-        .file(src.join("readstat_parser.c"))
-        .file(src.join("readstat_value.c"))
-        .file(src.join("readstat_variable.c"))
-        .file(src.join("readstat_writer.c"))
-        .file(src.join("sas").join("ieee.c"))
-        .file(src.join("sas").join("readstat_sas.c"))
-        .file(src.join("sas").join("readstat_cas7bcat_read.c"))
-        .file(src.join("sas").join("readstat_sas7bcat_write.c"))
-        .file(src.join("sas").join("readstat_sas7bdat_read.c"))
-        .file(src.join("sas").join("readstat_sas7bdat_write.c"))
-        .file(src.join("sas").join("readstat_sas_rle.c"))
-        .file(src.join("sas").join("readstat_xport.c"))
-        .file(src.join("sas").join("readstat_xport_read.c"))
+        .files(src_c_files)
+        .files(sas_c_files)
+        .files(spss_c_files)
+        .files(stata_c_files)
+        .files(txt_c_files)
         .include(&src)
         .warnings(false)
         .compile("readstat");
