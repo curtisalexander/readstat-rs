@@ -9,7 +9,7 @@ The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as 
 The binary binds to `ReadStat` and follows the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.
 
 ## Run
-The binary is run from within the `readstat` direcotry using the following.  This assumes Rust and cargo have been [installed and setup](https://rustup.rs/).
+The binary is run from within the `readstat` directory using the following.  This assumes Rust and cargo have been [installed and setup](https://rustup.rs/).
 
 ```sh
 cd readstat
