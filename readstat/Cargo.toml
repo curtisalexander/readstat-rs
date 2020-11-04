@@ -6,13 +6,10 @@ edition = "2018"
 description = "Rust wrapper of the ReadStat C library"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
-build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[build-dependencies]
-bindgen = "0.55"
-readstat-sys = { path = "../readstat-sys", version = "0.1.0" }
-
 [dependencies]
 dunce = "1.0"
+readstat-sys = { path = "../readstat-sys", version = "0.1.0" }
 structopt = "0.3"
+thiserror = "1.0"
