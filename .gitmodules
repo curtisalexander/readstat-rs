@@ -1,0 +1,3 @@
+[submodule "readstat-sys/vendor/ReadStat"]
+	path = readstat-sys/vendor/ReadStat
+	url = https://github.com/WizardMac/ReadStat.git
