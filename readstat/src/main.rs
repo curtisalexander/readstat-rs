@@ -1,10 +1,10 @@
 use structopt::StructOpt;
 
-use readstat::Args;
+use readstat::ReadStat;
 use std::process;
 
 fn main() {
-    let args = Args::from_args();
+    let args = ReadStat::from_args();
     if let Err(e) = readstat::run(args) {
         println!("Stopping with error: {}", e);
         process::exit(1);
