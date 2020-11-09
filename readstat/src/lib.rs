@@ -4,6 +4,7 @@ use dunce;
 use readstat_sys;
 use std::error::Error;
 use std::ffi::CString;
+use std::os::raw::{c_int, c_void};
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 use thiserror::Error;
@@ -37,18 +38,20 @@ enum ReadStatHandler {
 
 pub unsafe extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
-    ctx: *mut std::os::raw::c_void,
-) -> std::os::raw::c_int {
+    ctx: *mut c_void,
+) -> c_int {
     let my_count = ctx as *mut i32;
 
-    let rc: std::os::raw::c_int = readstat_sys::readstat_get_row_count(metadata);
+    let rc: c_int = readstat_sys::readstat_get_row_count(metadata);
 
     *my_count = rc;
     // println!("my_count is {:#?}", my_count);
     // println!("my_count derefed is {:#?}", *my_count);
 
-    ReadStatHandler::READSTAT_HANDLER_OK as std::os::raw::c_int
+    ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
+
+type HandleMetadata = extern "C" fn(metadata: *mut readstat_sys::readstat_metadata_t, ctx: *mut c_void) -> c_int;
 
 #[cfg(unix)]
 pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
@@ -62,6 +65,35 @@ pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
     let rust_str = path.as_os_str().as_str().ok_or(InvalidPath)?;
     let bytes = path.as_os_str().as_bytes();
     CString::new(rust_str).map_err(|_| InvalidPath)
+}
+
+pub struct ReadStatParser {
+    verbose: bool,
+    parser: *mut readstat_sys::readstat_parser_t,
+}
+
+impl ReadStatParser {
+    fn new(verbose: bool) -> Self {
+        let parser: *mut readstat_sys::readstat_parser_t =
+            unsafe { readstat_sys::readstat_parser_init() };
+        Self { parser, verbose }
+    }
+
+    fn set_metadata_handler_error(&self, metadata_handler: HandleMetadata) -> Result<(), Box<dyn Error>> {
+        let set_metadata_handler_error =
+            unsafe { readstat_sys::readstat_set_metadata_handler(self.parser, Some(metadata_handler)) };
+        if set_metadata_handler_error == readstat_sys::readstat_error_e_READSTAT_OK {
+            Ok(())
+        } else {
+            Err(From::from("Unable to set metadata handler"))
+        }
+    }
+}
+
+impl Drop for ReadStatParser {
+    fn drop(&mut self) {
+        unsafe { readstat_sys::readstat_parser_free(self.parser) };
+    }
 }
 
 pub fn get_row_count(
