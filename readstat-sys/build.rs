@@ -3,34 +3,7 @@ extern crate bindgen;
 use cc;
 use dunce;
 use std::env;
-use std::fs;
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
-
-fn is_c_file(entry: &fs::DirEntry) -> bool {
-    let c_extension = OsStr::new("c");
-    match entry.path().extension() {
-        Some(e) => e == c_extension,
-        None => false
-    }
-}
-
-fn is_file(entry: &fs::DirEntry) -> bool {
-    entry
-        .file_type()
-        .unwrap()
-        .is_file()
-}
-
-fn get_all_c_files<P: AsRef<Path>>(dir: P) -> Vec<PathBuf> {
-    fs::read_dir(&dir)
-        .unwrap()
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| is_file(e) && is_c_file(e))
-        .map(|e| e.path())
-        .collect()
-}
+use std::path::PathBuf;
 
 fn main() {
     let project_dir = dunce::canonicalize(PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
@@ -40,19 +13,52 @@ fn main() {
     let spss = src.join("spss");
     let stata = src.join("stata");
     let txt = src.join("txt");
-    
-    let src_c_files = get_all_c_files(&src);
-    let sas_c_files = get_all_c_files(&sas);
-    let spss_c_files = get_all_c_files(&spss);
-    let stata_c_files = get_all_c_files(&stata);
-    let txt_c_files = get_all_c_files(&txt);
-
+  
     cc::Build::new()
-        .files(src_c_files)
-        .files(sas_c_files)
-        .files(spss_c_files)
-        .files(stata_c_files)
-        .files(txt_c_files)
+        .file(src.join("CKHashTable.c"))
+        .file(src.join("readstat_bits.c"))
+        .file(src.join("readstat_convert.c"))
+        .file(src.join("readstat_error.c"))
+        .file(src.join("readstat_io_unistd.c"))
+        .file(src.join("readstat_malloc.c"))
+        .file(src.join("readstat_metadata.c"))
+        .file(src.join("readstat_parser.c"))
+        .file(src.join("readstat_value.c"))
+        .file(src.join("readstat_variable.c"))
+        .file(src.join("readstat_writer.c"))
+        .file(sas.join("ieee.c"))
+        .file(sas.join("readstat_sas.c"))
+        .file(sas.join("readstat_sas7bcat_read.c"))
+        .file(sas.join("readstat_sas7bcat_write.c"))
+        .file(sas.join("readstat_sas7bdat_read.c"))
+        .file(sas.join("readstat_sas7bdat_write.c"))
+        .file(sas.join("readstat_sas_rle.c"))
+        .file(sas.join("readstat_xport.c"))
+        .file(sas.join("readstat_xport_read.c"))
+        .file(sas.join("readstat_xport_write.c"))
+        .file(spss.join("readstat_por.c"))
+        .file(spss.join("readstat_por_parse.c"))
+        .file(spss.join("readstat_por_read.c"))
+        .file(spss.join("readstat_por_write.c"))
+        .file(spss.join("readstat_sav.c"))
+        .file(spss.join("readstat_sav_compress.c"))
+        .file(spss.join("readstat_sav_parse.c"))
+        .file(spss.join("readstat_sav_parse_timestamp.c"))
+        .file(spss.join("readstat_sav_read.c"))
+        .file(spss.join("readstat_sav_write.c"))
+        .file(spss.join("readstat_spss.c"))
+        .file(spss.join("readstat_spss_parse.c"))
+        .file(stata.join("readstat_dta.c"))
+        .file(stata.join("readstat_dta_parse_timestamp.c"))
+        .file(stata.join("readstat_dta_read.c"))
+        .file(stata.join("readstat_dta_write.c"))
+        .file(txt.join("commands_util.c"))
+        .file(txt.join("readstat_copy.c"))
+        .file(txt.join("readstat_sas_commands_read.c"))
+        .file(txt.join("readstat_spss_commands_read.c"))
+        .file(txt.join("readstat_schema.c"))
+        .file(txt.join("readstat_stata_dictionary_read.c"))
+        .file(txt.join("readstat_txt_read.c"))
         .include(&src)
         .warnings(false)
         .compile("readstat");
@@ -62,16 +68,12 @@ fn main() {
 
     // Linking
     println!("cargo:rustc-link-lib=static=readstat");
-    // println!("cargo:rustc-link-search=/home/calex/code/readstat-rs/readstat/target/debug/build/readstat-sys-87fcd7a4da21a534/out");
-    // println!("cargo:rustc-link-lib=readstat");
-    // println!("cargo:rustc-link-search=/usr/local/lib");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
     // the resulting bindings.
     let bindings = bindgen::Builder::default()
-        // The input header we would like to generate
-        // bindings for.
+        // The input header we would like to generate bindings for
         .header("wrapper.h")
         // Select which functions and types to build bindings for
         .whitelist_function("readstat_get_row_count")
@@ -85,11 +87,11 @@ fn main() {
         .whitelist_type("READSTAT_HANDLER_OK")
         .whitelist_type("READSTAT_OK")
         // Tell cargo to invalidate the built crate whenever any of the
-        // included header files changed.
+        // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        // Finish the builder and generate the bindings.
+        // Finish the builder and generate the bindings
         .generate()
-        // Unwrap the Result and panic on failure.
+        // Unwrap the Result and panic on failure
         .expect("Unable to generate bindings");
 
     // Write the bindings to the $OUT_DIR/bindings.rs file.
