@@ -77,13 +77,17 @@ fn main() {
         .header("wrapper.h")
         // Select which functions and types to build bindings for
         .whitelist_function("readstat_get_row_count")
+        .whitelist_function("readstat_get_var_count")
         .whitelist_function("readstat_parse_sas7bdat")
         .whitelist_function("readstat_parser_free")
         .whitelist_function("readstat_parser_init")
         .whitelist_function("readstat_set_metadata_handler")
+        .whitelist_function("readstat_set_variable_handler")
+        .whitelist_function("readstat_variable_get_name")
         .whitelist_type("readstat_error_t")
         .whitelist_type("readstat_metadata_t")
         .whitelist_type("readstat_parser_t")
+        .whitelist_type("readstat_variable_t")
         .whitelist_type("READSTAT_HANDLER_OK")
         .whitelist_type("READSTAT_OK")
         // Tell cargo to invalidate the built crate whenever any of the
