@@ -40,13 +40,13 @@ pub unsafe extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
 ) -> c_int {
-    let my_count = ctx as *mut i32;
+    let mut md = &mut *(ctx as *mut ReadStatMetadata);
 
     let rc: c_int = readstat_sys::readstat_get_row_count(metadata);
 
-    *my_count = rc;
-    debug!("my_count is {:#?}", my_count);
-    debug!("my_count derefed is {:#?}", *my_count);
+    md.row_count = rc;
+    debug!("md struct is {:#?}", md);
+    debug!("row_count is {:#?}", md.row_count);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -63,6 +63,17 @@ pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
     let rust_str = path.as_os_str().as_str().ok_or(InvalidPath)?;
     let bytes = path.as_os_str().as_bytes();
     CString::new(rust_str).map_err(|_| InvalidPath)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ReadStatMetadata {
+    row_count: c_int,
+}
+
+impl ReadStatMetadata {
+    fn new() -> Self {
+        Self { row_count: 0 }
+    }
 }
 
 pub struct ReadStatParser {
@@ -137,25 +148,21 @@ pub fn get_row_count(
     );
     debug!("Path as C string is {:?}", sas_path_cstring);
 
-    let mut my_count = 0;
-    let pmy_count = &mut my_count as *mut i32;
-    let pmy_count_void = pmy_count as *mut c_void;
-    // let pmy_count_void = &mut my_count as *mut _ as *mut c_void;
+    let mut readstat_md = ReadStatMetadata::new() ;
+    let preadstat_md = &mut readstat_md as *mut ReadStatMetadata as *mut c_void;
 
     let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-    debug!(
-        "Initially, error ==> {}", &error
-    );
+    debug!("Initially, error ==> {}", &error);
 
     let parser = ReadStatParser::new();
 
     parser.set_metadata_handler_error(Some(handle_metadata))?;
 
-    parser.parse_sas7bdat(psas_path_cstring, pmy_count_void)?;
+    parser.parse_sas7bdat(psas_path_cstring, preadstat_md)?;
 
-    let record_count = unsafe { *pmy_count };
+    let row_count = readstat_md.row_count;
 
-    Ok((error, record_count))
+    Ok((error, row_count))
 }
 
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
