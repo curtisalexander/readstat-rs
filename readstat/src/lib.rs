@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types)]
 
 use dunce;
+use log::debug;
 use readstat_sys;
 use std::error::Error;
 use std::ffi::CString;
@@ -17,9 +18,6 @@ pub enum ReadStat {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
         file: PathBuf,
-        /// Verbose
-        #[structopt(long, short)]
-        verbose: bool,
         #[structopt(long, short)]
         raw: bool,
     },
@@ -47,8 +45,8 @@ pub unsafe extern "C" fn handle_metadata(
     let rc: c_int = readstat_sys::readstat_get_row_count(metadata);
 
     *my_count = rc;
-    // println!("my_count is {:#?}", my_count);
-    // println!("my_count derefed is {:#?}", *my_count);
+    debug!("my_count is {:#?}", my_count);
+    debug!("my_count derefed is {:#?}", *my_count);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -69,15 +67,14 @@ pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
 
 pub struct ReadStatParser {
     parser: *mut readstat_sys::readstat_parser_t,
-    verbose: bool,
 }
 
 impl ReadStatParser {
-    fn new(verbose: bool) -> Self {
+    fn new() -> Self {
         let parser: *mut readstat_sys::readstat_parser_t =
             unsafe { readstat_sys::readstat_parser_init() };
 
-        Self { parser, verbose }
+        Self { parser }
     }
 
     fn set_metadata_handler_error(
@@ -87,12 +84,10 @@ impl ReadStatParser {
         let set_metadata_handler_error =
             unsafe { readstat_sys::readstat_set_metadata_handler(self.parser, metadata_handler) };
 
-        if self.verbose {
-            println!(
-                "After setting metadata handler, error ==> {}",
-                &set_metadata_handler_error
-            );
-        }
+        debug!(
+            "After setting metadata handler, error ==> {}",
+            &set_metadata_handler_error
+        );
 
         if set_metadata_handler_error == readstat_sys::readstat_error_e_READSTAT_OK {
             Ok(())
@@ -109,12 +104,10 @@ impl ReadStatParser {
         let parse_sas7bdat_error: readstat_sys::readstat_error_t =
             unsafe { readstat_sys::readstat_parse_sas7bdat(self.parser, path, user_ctx) };
 
-        if self.verbose {
-            println!(
-                "After calling parse sas7bdat, error ==> {}",
-                &parse_sas7bdat_error
-            );
-        }
+        debug!(
+            "After calling parse sas7bdat, error ==> {}",
+            &parse_sas7bdat_error
+        );
 
         if parse_sas7bdat_error == readstat_sys::readstat_error_e_READSTAT_OK {
             Ok(())
@@ -126,9 +119,7 @@ impl ReadStatParser {
 
 impl Drop for ReadStatParser {
     fn drop(&mut self) {
-        if self.verbose {
-            println!("Freeing parser");
-        }
+        debug!("Freeing parser");
 
         unsafe { readstat_sys::readstat_parser_free(self.parser) };
     }
@@ -136,18 +127,15 @@ impl Drop for ReadStatParser {
 
 pub fn get_row_count(
     path: &PathBuf,
-    verbose: bool,
 ) -> Result<(readstat_sys::readstat_error_t, i32), Box<dyn Error>> {
     let sas_path_cstring = path_to_cstring(&path)?;
     let psas_path_cstring = sas_path_cstring.as_ptr();
 
-    if verbose {
-        println!(
-            "Counting the number of records within the file {}",
-            path.to_string_lossy()
-        );
-        println!("Path as C string is {:?}", sas_path_cstring);
-    }
+    debug!(
+        "Counting the number of records within the file {}",
+        path.to_string_lossy()
+    );
+    debug!("Path as C string is {:?}", sas_path_cstring);
 
     let mut my_count = 0;
     let pmy_count = &mut my_count as *mut i32;
@@ -155,11 +143,11 @@ pub fn get_row_count(
     // let pmy_count_void = &mut my_count as *mut _ as *mut c_void;
 
     let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-    if verbose {
-        println!("Initially, error ==> {}", &error);
-    }
+    debug!(
+        "Initially, error ==> {}", &error
+    );
 
-    let parser = ReadStatParser::new(verbose);
+    let parser = ReadStatParser::new();
 
     parser.set_metadata_handler_error(Some(handle_metadata))?;
 
@@ -171,10 +159,12 @@ pub fn get_row_count(
 }
 
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
+    env_logger::init();
+
     match rs {
-        ReadStat::Rows { file, verbose, raw } => {
+        ReadStat::Rows { file, raw } => {
             let sas_path = dunce::canonicalize(&file)?;
-            let (error, record_count) = get_row_count(&sas_path, verbose)?;
+            let (error, record_count) = get_row_count(&sas_path)?;
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
