@@ -11,30 +11,29 @@ use structopt::StructOpt;
 use thiserror::Error;
 
 #[derive(StructOpt, Debug)]
-#[structopt(about = "count rows in sas7bdat")]
-pub enum ReadStat {
+#[structopt(about = "Utilities for sas7bdat files")]
+pub struct ReadStat {
+    #[structopt(parse(from_os_str))]
+    /// Path to sas7bdat file
+    file: PathBuf,
+    #[structopt(subcommand)]
+    cmd: Command
+}
+
+#[derive(StructOpt, Debug)]
+pub enum Command {
     /// Get row count
     Rows {
-        #[structopt(parse(from_os_str))]
-        /// Path to sas7bdat file
-        file: PathBuf,
         #[structopt(long, short)]
         raw: bool,
     },
     /// Get variable count
     Vars {
-        #[structopt(parse(from_os_str))]
-        /// Path to sas7bdat file
-        file: PathBuf,
         #[structopt(long, short)]
         raw: bool,
     },
     /// Print vars
-    PrintVars {
-        #[structopt(parse(from_os_str))]
-        /// Path to sas7bdat file
-        file: PathBuf,
-    },
+    PrintVars { },
 }
 
 #[derive(Error, Debug, Copy, Clone, PartialEq)]
@@ -79,7 +78,8 @@ pub unsafe extern "C" fn handle_variable(
     let md = &mut *(ctx as *mut ReadStatMetadata);
 
     // FIXME
-    let var = CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable)).to_str().unwrap();
+    let var = CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable));
+    // let var = CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable)).to_str().unwrap();
 
     md.vars.push(&var);
 
@@ -107,7 +107,7 @@ pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
 struct ReadStatMetadata<'a> {
     row_count: c_int,
     var_count: c_int,
-    vars: Vec<&'a str>
+    vars: Vec<&'a CStr>
 }
 
 impl ReadStatMetadata<'_> {
@@ -255,7 +255,7 @@ pub fn get_var_count(
 
 pub fn print_var_count(
     path: &PathBuf,
-) -> Result<(readstat_sys::readstat_error_t, Vec<&str>), Box<dyn Error>> {
+) -> Result<(readstat_sys::readstat_error_t, Vec<&CStr>), Box<dyn Error>> {
     let sas_path_cstring = path_to_cstring(&path)?;
     let psas_path_cstring = sas_path_cstring.as_ptr();
 
@@ -286,9 +286,9 @@ pub fn print_var_count(
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    match rs {
-        ReadStat::Rows { file, raw } => {
-            let sas_path = dunce::canonicalize(&file)?;
+    match rs.cmd {
+        Command::Rows { raw } => {
+            let sas_path = dunce::canonicalize(&rs.file)?;
             let (error, record_count) = get_row_count(&sas_path)?;
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
@@ -305,8 +305,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 Ok(())
             }
         },
-        ReadStat::Vars { file, raw } => {
-            let sas_path = dunce::canonicalize(&file)?;
+        Command::Vars { raw } => {
+            let sas_path = dunce::canonicalize(&rs.file)?;
             let (error, var_count) = get_var_count(&sas_path)?;
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
@@ -323,8 +323,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 Ok(())
             }
         },
-        ReadStat::PrintVars { file, } => {
-            let sas_path = dunce::canonicalize(&file)?;
+        Command::PrintVars { } => {
+            let sas_path = dunce::canonicalize(&rs.file)?;
             let (error, vars) = print_var_count(&sas_path)?;
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
