@@ -17,7 +17,7 @@ pub struct ReadStat {
     /// Path to sas7bdat file
     file: PathBuf,
     #[structopt(subcommand)]
-    cmd: Command
+    cmd: Command,
 }
 
 #[derive(StructOpt, Debug)]
@@ -33,7 +33,7 @@ pub enum Command {
         raw: bool,
     },
     /// Print vars
-    PrintVars { },
+    PrintVars {},
 }
 
 #[derive(Error, Debug, Copy, Clone, PartialEq)]
@@ -68,23 +68,22 @@ pub unsafe extern "C" fn handle_metadata(
 }
 
 pub unsafe extern "C" fn handle_variable(
-    #[allow(unused_variables)]
-    index: c_int,
+    #[allow(unused_variables)] index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
-    #[allow(unused_variables)]
-    val_labels: *const c_char,
+    #[allow(unused_variables)] val_labels: *const c_char,
     ctx: *mut c_void,
 ) -> c_int {
     let md = &mut *(ctx as *mut ReadStatMetadata);
 
-    // FIXME
-    let var = CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable));
-    // let var = CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable)).to_str().unwrap();
-
-    md.vars.push(&var);
+    let var = CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
+        .to_str()
+        .unwrap()
+        .to_owned();
 
     debug!("md struct is {:#?}", md);
-    debug!("var pushed is {:#?}", var);
+    debug!("var pushed is {:#?}", &var);
+
+    md.vars.push(var);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -104,15 +103,19 @@ pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
 }
 
 #[derive(Debug)]
-struct ReadStatMetadata<'a> {
+struct ReadStatMetadata {
     row_count: c_int,
     var_count: c_int,
-    vars: Vec<&'a CStr>
+    vars: Vec<String>,
 }
 
-impl ReadStatMetadata<'_> {
+impl ReadStatMetadata {
     fn new() -> Self {
-        Self { row_count: 0, var_count: 0, vars: Vec::new() }
+        Self {
+            row_count: 0,
+            var_count: 0,
+            vars: Vec::new(),
+        }
     }
 }
 
@@ -207,7 +210,7 @@ pub fn get_row_count(
     );
     debug!("Path as C string is {:?}", sas_path_cstring);
 
-    let mut readstat_md = ReadStatMetadata::new() ;
+    let mut readstat_md = ReadStatMetadata::new();
     let preadstat_md = &mut readstat_md as *mut ReadStatMetadata as *mut c_void;
 
     let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -236,7 +239,7 @@ pub fn get_var_count(
     );
     debug!("Path as C string is {:?}", sas_path_cstring);
 
-    let mut readstat_md = ReadStatMetadata::new() ;
+    let mut readstat_md = ReadStatMetadata::new();
     let preadstat_md = &mut readstat_md as *mut ReadStatMetadata as *mut c_void;
 
     let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -255,7 +258,7 @@ pub fn get_var_count(
 
 pub fn print_var_count(
     path: &PathBuf,
-) -> Result<(readstat_sys::readstat_error_t, Vec<&CStr>), Box<dyn Error>> {
+) -> Result<(readstat_sys::readstat_error_t, Vec<String>), Box<dyn Error>> {
     let sas_path_cstring = path_to_cstring(&path)?;
     let psas_path_cstring = sas_path_cstring.as_ptr();
 
@@ -265,7 +268,7 @@ pub fn print_var_count(
     );
     debug!("Path as C string is {:?}", sas_path_cstring);
 
-    let mut readstat_md = ReadStatMetadata::new() ;
+    let mut readstat_md = ReadStatMetadata::new();
     let preadstat_md = &mut readstat_md as *mut ReadStatMetadata as *mut c_void;
 
     let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -304,7 +307,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 }
                 Ok(())
             }
-        },
+        }
         Command::Vars { raw } => {
             let sas_path = dunce::canonicalize(&rs.file)?;
             let (error, var_count) = get_var_count(&sas_path)?;
@@ -322,8 +325,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 }
                 Ok(())
             }
-        },
-        Command::PrintVars { } => {
+        }
+        Command::PrintVars {} => {
             let sas_path = dunce::canonicalize(&rs.file)?;
             let (error, vars) = print_var_count(&sas_path)?;
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
