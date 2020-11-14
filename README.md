@@ -1,36 +1,31 @@
 # readstat-rs
-Example Rust binary that counts the number of records in a SAS binary file (`sas7bdat`).
+Example Rust binary that to work with a SAS binary file (`sas7bdat`).
 
 ## ReadStat
 The Rust binary is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
 
 The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/readstat) binary utilizes `readstat-sys` as a dependency.
 
-The binary adapts the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.
+The binary, in part, adapts the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.
 
 ## Run
 After building with `cargo build`, the binary is invoked using [structopt subcommands](https://docs.rs/structopt/0.3.20/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
-- rows &rarr; write row count to standard out
-- vars &rarr; write variable count to standard out
+- metadata &rarr; writes the following to standard out
+    - row count
+    - variable count
+    - variable names
 
-Debug information can be printed to standard out by setting the environment variable `RUST_LOG=1` before the call to `readstat`.
+Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.
 
 ```sh
-RUST_LOG=1 readstat ...
+RUST_LOG=debug readstat ...
 ```
 
-### Row Count
-To write the row count to standard out, invoke the following.
+### Metadata
+To write metadata to standard out, invoke the following.
 
 ```sh
-readstat rows /some/dir/to/example.sas7bdat 
-```
-
-### Variable Count
-To write the var count to standard out, invoke the following.
-
-```sh
-readstat vars /some/dir/to/example.sas7bdat 
+readstat /some/dir/to/example.sas7bdat metadata
 ```
 
 ## Testing
@@ -54,7 +49,7 @@ Short term the developed binary was a helpful exercise in binding to a C library
 ### Long Term
 Uncertain of the long term goals of this repository.  Possibilities include:
 - Completing and publishing the `readstat-sys` crate
-- Building a Rust library &mdash; `readstat` &mdash; that allows a Rust programmer to work with `sas7bdat` files
+- Building a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
 - Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
 - Develop a command line tool that performs transformations from `sas7bdat` to other file types
     - `arrow`
