@@ -4,6 +4,7 @@ use colored::Colorize;
 use dunce;
 use log::debug;
 use readstat_sys;
+use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
@@ -24,7 +25,7 @@ pub struct ReadStat {
 #[derive(StructOpt, Debug)]
 pub enum Command {
     /// Get sas7bdat metadata
-    Metadata { },
+    Metadata {},
 }
 
 // C types
@@ -38,14 +39,14 @@ enum ReadStatHandler {
 }
 
 // C callback functions
-pub unsafe extern "C" fn handle_metadata(
+pub extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
 ) -> c_int {
-    let mut md = &mut *(ctx as *mut ReadStatMetadata);
+    let mut md = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
-    let rc: c_int = readstat_sys::readstat_get_row_count(metadata);
-    let vc: c_int = readstat_sys::readstat_get_var_count(metadata);
+    let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
+    let vc: c_int = unsafe { readstat_sys::readstat_get_var_count(metadata) };
 
     md.row_count = rc;
     md.var_count = vc;
@@ -57,20 +58,22 @@ pub unsafe extern "C" fn handle_metadata(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
-pub unsafe extern "C" fn handle_variable(
+pub extern "C" fn handle_variable(
     #[allow(unused_variables)] index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     #[allow(unused_variables)] val_labels: *const c_char,
     ctx: *mut c_void,
 ) -> c_int {
-    let md = &mut *(ctx as *mut ReadStatMetadata);
+    let md = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
-    let var = CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
-        .to_str()
-        .unwrap()
-        .to_owned();
-
-    let var_type: readstat_sys::readstat_type_t = readstat_sys::readstat_variable_get_type(variable);
+    let var = unsafe {
+        CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
+            .to_str()
+            .unwrap()
+            .to_owned()
+    };
+    let var_type: readstat_sys::readstat_type_t =
+        unsafe { readstat_sys::readstat_variable_get_type(variable) };
     debug!("md struct is {:#?}", md);
     debug!("var type pushed is {:#?}", var_type);
     debug!("var pushed is {:#?}", &var);
@@ -97,6 +100,7 @@ pub struct ReadStatMetadata {
     pub row_count: c_int,
     pub var_count: c_int,
     pub vars: Vec<String>,
+    pub varsh: Vec<HashMap<String, String>>,
 }
 
 impl ReadStatMetadata {
@@ -106,14 +110,12 @@ impl ReadStatMetadata {
             row_count: 0,
             var_count: 0,
             vars: Vec::new(),
+            varsh: Vec::new(),
         }
     }
 
     pub fn set_path(self, path: PathBuf) -> Self {
-        Self {
-            path : path,
-            ..self
-        }
+        Self { path: path, ..self }
     }
 
     pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
@@ -134,7 +136,6 @@ impl ReadStatMetadata {
 
         Ok(error)
     }
-
 }
 
 struct ReadStatParser {
@@ -244,14 +245,17 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     );
 
     match rs.cmd {
-        Command::Metadata { } => {
+        Command::Metadata {} => {
             let mut md = ReadStatMetadata::new().set_path(sas_path);
             let error = md.get_metadata()?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
-                println!("Metadata for the file {}\n", md.path.to_string_lossy().yellow());
+                println!(
+                    "Metadata for the file {}\n",
+                    md.path.to_string_lossy().yellow()
+                );
                 println!("{}: {}", "Row count".green(), md.row_count);
                 println!("{}: {}", "Variable count".red(), md.var_count);
                 println!("{}:", "Variable names".blue());
