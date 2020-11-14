@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types)]
 
+use colored::Colorize;
 use dunce;
 use log::debug;
 use readstat_sys;
@@ -8,8 +9,8 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
-use thiserror::Error;
 
+// StructOpt
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Utilities for sas7bdat files")]
 pub struct ReadStat {
@@ -22,24 +23,11 @@ pub struct ReadStat {
 
 #[derive(StructOpt, Debug)]
 pub enum Command {
-    /// Get row count
-    Rows {
-        #[structopt(long, short)]
-        raw: bool,
-    },
-    /// Get variable count
-    Vars {
-        #[structopt(long, short)]
-        raw: bool,
-    },
-    /// Print vars
-    PrintVars {},
+    /// Get sas7bdat metadata
+    Metadata { },
 }
 
-#[derive(Error, Debug, Copy, Clone, PartialEq)]
-#[error("Invalid path")]
-pub struct InvalidPath;
-
+// C types
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
@@ -49,6 +37,7 @@ enum ReadStatHandler {
     READSTAT_HANDLER_SKIP_VARIABLE,
 }
 
+// C callback functions
 pub unsafe extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
@@ -60,6 +49,7 @@ pub unsafe extern "C" fn handle_metadata(
 
     md.row_count = rc;
     md.var_count = vc;
+
     debug!("md struct is {:#?}", md);
     debug!("row_count is {:#?}", md.row_count);
     debug!("var_count is {:#?}", md.var_count);
@@ -80,7 +70,9 @@ pub unsafe extern "C" fn handle_variable(
         .unwrap()
         .to_owned();
 
+    let var_type: readstat_sys::readstat_type_t = readstat_sys::readstat_variable_get_type(variable);
     debug!("md struct is {:#?}", md);
+    debug!("var type pushed is {:#?}", var_type);
     debug!("var pushed is {:#?}", &var);
 
     md.vars.push(var);
@@ -88,38 +80,64 @@ pub unsafe extern "C" fn handle_variable(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
-#[cfg(unix)]
-pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
-    use std::os::unix::ffi::OsStrExt;
-    let bytes = path.as_os_str().as_bytes();
-    CString::new(bytes).map_err(|_| InvalidPath)
-}
+/*
+pub unsafe extern "C" fn handle_value(
+    obs_index: c_int,
+    variable: *mut readstat_sys::readstat_variable_t,
 
-#[cfg(not(unix))]
-pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
-    let rust_str = path.as_os_str().as_str().ok_or(InvalidPath)?;
-    let bytes = path.as_os_str().as_bytes();
-    CString::new(rust_str).map_err(|_| InvalidPath)
-}
+) -> c_int {
 
+}
+*/
+
+// Structs
 #[derive(Debug)]
-struct ReadStatMetadata {
-    row_count: c_int,
-    var_count: c_int,
-    vars: Vec<String>,
+pub struct ReadStatMetadata {
+    pub path: PathBuf,
+    pub row_count: c_int,
+    pub var_count: c_int,
+    pub vars: Vec<String>,
 }
 
 impl ReadStatMetadata {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
+            path: PathBuf::new(),
             row_count: 0,
             var_count: 0,
             vars: Vec::new(),
         }
     }
+
+    pub fn set_path(self, path: PathBuf) -> Self {
+        Self {
+            path : path,
+            ..self
+        }
+    }
+
+    pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
+        let path = &self.path;
+        let cpath = path_to_cstring(&path)?;
+        debug!("Path as C string is {:?}", cpath);
+        let ppath = cpath.as_ptr();
+
+        let ctx = self as *mut ReadStatMetadata as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let _ = ReadStatParser::new()
+            .set_metadata_handler(Some(handle_metadata))?
+            .set_variable_handler(Some(handle_variable))?
+            .parse_sas7bdat(ppath, ctx)?;
+
+        Ok(error)
+    }
+
 }
 
-pub struct ReadStatParser {
+struct ReadStatParser {
     parser: *mut readstat_sys::readstat_parser_t,
 }
 
@@ -132,9 +150,9 @@ impl ReadStatParser {
     }
 
     fn set_metadata_handler(
-        &self,
+        self,
         metadata_handler: readstat_sys::readstat_metadata_handler,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error>> {
         let set_metadata_handler_error =
             unsafe { readstat_sys::readstat_set_metadata_handler(self.parser, metadata_handler) };
 
@@ -144,16 +162,16 @@ impl ReadStatParser {
         );
 
         if set_metadata_handler_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(())
+            Ok(self)
         } else {
             Err(From::from("Unable to set metadata handler"))
         }
     }
 
     fn set_variable_handler(
-        &self,
+        self,
         variable_handler: readstat_sys::readstat_variable_handler,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error>> {
         let set_variable_handler_error =
             unsafe { readstat_sys::readstat_set_variable_handler(self.parser, variable_handler) };
 
@@ -163,17 +181,17 @@ impl ReadStatParser {
         );
 
         if set_variable_handler_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(())
+            Ok(self)
         } else {
             Err(From::from("Unable to set variable handler"))
         }
     }
 
     fn parse_sas7bdat(
-        &self,
+        self,
         path: *const c_char,
         user_ctx: *mut c_void,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error>> {
         let parse_sas7bdat_error: readstat_sys::readstat_error_t =
             unsafe { readstat_sys::readstat_parse_sas7bdat(self.parser, path, user_ctx) };
 
@@ -183,7 +201,7 @@ impl ReadStatParser {
         );
 
         if parse_sas7bdat_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(())
+            Ok(self)
         } else {
             Err(From::from("Unable to parse sas7bdat"))
         }
@@ -198,146 +216,47 @@ impl Drop for ReadStatParser {
     }
 }
 
-pub fn get_row_count(
-    path: &PathBuf,
-) -> Result<(readstat_sys::readstat_error_t, i32), Box<dyn Error>> {
-    let sas_path_cstring = path_to_cstring(&path)?;
-    let psas_path_cstring = sas_path_cstring.as_ptr();
-
-    debug!(
-        "Counting the number of records within the file {}",
-        path.to_string_lossy()
-    );
-    debug!("Path as C string is {:?}", sas_path_cstring);
-
-    let mut readstat_md = ReadStatMetadata::new();
-    let preadstat_md = &mut readstat_md as *mut ReadStatMetadata as *mut c_void;
-
-    let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-    debug!("Initially, error ==> {}", &error);
-
-    let parser = ReadStatParser::new();
-
-    parser.set_metadata_handler(Some(handle_metadata))?;
-
-    parser.parse_sas7bdat(psas_path_cstring, preadstat_md)?;
-
-    let row_count = readstat_md.row_count;
-
-    Ok((error, row_count))
+// Utility functions
+#[cfg(unix)]
+pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error>> {
+    use std::os::unix::ffi::OsStrExt;
+    let bytes = path.as_os_str().as_bytes();
+    CString::new(bytes).map_err(|_| From::from("Invalid path"))
 }
 
-pub fn get_var_count(
-    path: &PathBuf,
-) -> Result<(readstat_sys::readstat_error_t, i32), Box<dyn Error>> {
-    let sas_path_cstring = path_to_cstring(&path)?;
-    let psas_path_cstring = sas_path_cstring.as_ptr();
-
-    debug!(
-        "Counting the number of variables within the file {}",
-        path.to_string_lossy()
-    );
-    debug!("Path as C string is {:?}", sas_path_cstring);
-
-    let mut readstat_md = ReadStatMetadata::new();
-    let preadstat_md = &mut readstat_md as *mut ReadStatMetadata as *mut c_void;
-
-    let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-    debug!("Initially, error ==> {}", &error);
-
-    let parser = ReadStatParser::new();
-
-    parser.set_metadata_handler(Some(handle_metadata))?;
-
-    parser.parse_sas7bdat(psas_path_cstring, preadstat_md)?;
-
-    let var_count = readstat_md.var_count;
-
-    Ok((error, var_count))
+#[cfg(not(unix))]
+pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
+    let rust_str = path.as_os_str().as_str().ok_or(InvalidPath)?;
+    let bytes = path.as_os_str().as_bytes();
+    CString::new(rust_str).map_err(|_| From::from("Invalid path"))
 }
 
-pub fn print_var_count(
-    path: &PathBuf,
-) -> Result<(readstat_sys::readstat_error_t, Vec<String>), Box<dyn Error>> {
-    let sas_path_cstring = path_to_cstring(&path)?;
-    let psas_path_cstring = sas_path_cstring.as_ptr();
-
-    debug!(
-        "Printing the variables within the file {}",
-        path.to_string_lossy()
-    );
-    debug!("Path as C string is {:?}", sas_path_cstring);
-
-    let mut readstat_md = ReadStatMetadata::new();
-    let preadstat_md = &mut readstat_md as *mut ReadStatMetadata as *mut c_void;
-
-    let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-    debug!("Initially, error ==> {}", &error);
-
-    let parser = ReadStatParser::new();
-
-    // parser.set_metadata_handler(Some(handle_metadata_vc))?;
-    parser.set_variable_handler(Some(handle_variable))?;
-
-    parser.parse_sas7bdat(psas_path_cstring, preadstat_md)?;
-
-    let vars = readstat_md.vars;
-
-    Ok((error, vars))
-}
-
+// Run
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
+    // TODO: validate path exists and has sas7bdat extension
+    let sas_path = dunce::canonicalize(&rs.file)?;
+
+    debug!(
+        "Counting the number of variables within the file {}",
+        sas_path.to_string_lossy()
+    );
+
     match rs.cmd {
-        Command::Rows { raw } => {
-            let sas_path = dunce::canonicalize(&rs.file)?;
-            let (error, record_count) = get_row_count(&sas_path)?;
+        Command::Metadata { } => {
+            let mut md = ReadStatMetadata::new().set_path(sas_path);
+            let error = md.get_metadata()?;
+
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
-                if !raw {
-                    println!(
-                        "The file {:#?} contains {:#?} rows",
-                        &sas_path.display(),
-                        record_count
-                    );
-                } else {
-                    println!("{}", record_count);
-                }
-                Ok(())
-            }
-        }
-        Command::Vars { raw } => {
-            let sas_path = dunce::canonicalize(&rs.file)?;
-            let (error, var_count) = get_var_count(&sas_path)?;
-            if error != readstat_sys::readstat_error_e_READSTAT_OK {
-                Err(From::from("Error when attempting to parse sas7bdat"))
-            } else {
-                if !raw {
-                    println!(
-                        "The file {:#?} contains {:#?} variables",
-                        &sas_path.display(),
-                        var_count
-                    );
-                } else {
-                    println!("{}", var_count);
-                }
-                Ok(())
-            }
-        }
-        Command::PrintVars {} => {
-            let sas_path = dunce::canonicalize(&rs.file)?;
-            let (error, vars) = print_var_count(&sas_path)?;
-            if error != readstat_sys::readstat_error_e_READSTAT_OK {
-                Err(From::from("Error when attempting to parse sas7bdat"))
-            } else {
-                println!(
-                    "The file {:#?} contains the following variables:",
-                    &sas_path.display(),
-                );
-                for v in vars.iter() {
-                    println!("{:?}", v);
+                println!("Metadata for the file {}\n", md.path.to_string_lossy().yellow());
+                println!("{}: {}", "Row count".green(), md.row_count);
+                println!("{}: {}", "Variable count".red(), md.var_count);
+                println!("{}:", "Variable names".blue());
+                for v in md.vars.iter() {
+                    println!("{}", v);
                 }
                 Ok(())
             }

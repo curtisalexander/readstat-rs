@@ -76,20 +76,75 @@ fn main() {
         // The input header we would like to generate bindings for
         .header("wrapper.h")
         // Select which functions and types to build bindings for
+        // Register callbacks
+        .whitelist_function("readstat_set_metadata_handler")
+        .whitelist_function("readstat_set_note_handler")
+        .whitelist_function("readstat_set_variable_handler")
+        .whitelist_function("readstat_set_fweight_handler")
+        .whitelist_function("readstat_set_value_handler")
+        .whitelist_function("readstat_set_value_label_handler")
+        .whitelist_function("readstat_set_error_handler")
+        .whitelist_function("readstat_set_progress_handler")
+        .whitelist_function("readstat_set_row_limit")
+        .whitelist_function("readstat_set_row_offset")
+        // Metadata
         .whitelist_function("readstat_get_row_count")
         .whitelist_function("readstat_get_var_count")
-        .whitelist_function("readstat_parse_sas7bdat")
-        .whitelist_function("readstat_parser_free")
-        .whitelist_function("readstat_parser_init")
-        .whitelist_function("readstat_set_metadata_handler")
-        .whitelist_function("readstat_set_variable_handler")
+        .whitelist_function("readstat_get_creation_time")
+        .whitelist_function("readstat_get_modified_time")
+        .whitelist_function("readstat_get_file_format_version")
+        .whitelist_function("readstat_get_file_format_is_64bit")
+        .whitelist_function("readstat_get_compression")
+        .whitelist_function("readstat_get_endianness")
+        .whitelist_function("readstat_get_table_name")
+        .whitelist_function("readstat_get_file_label")
+        .whitelist_function("readstat_get_file_encoding")
+        // Variables
+        .whitelist_function("readstat_variable_get_index")
+        .whitelist_function("readstat_variable_get_index_after_skipping")
         .whitelist_function("readstat_variable_get_name")
+        .whitelist_function("readstat_variable_get_label")
+        .whitelist_function("readstat_variable_get_format")
+        .whitelist_function("readstat_variable_get_type")
+        .whitelist_function("readstat_variable_get_type_class")
+        // Values
+        .whitelist_function("readstat_value_type")
+        .whitelist_function("readstat_value_type_class")
+        .whitelist_function("readstat_value_is_missing")
+        .whitelist_function("readstat_value_is_system_missing")
+        .whitelist_function("readstat_value_is_tagged_missing")
+        .whitelist_function("readstat_value_is_defined_missing")
+        .whitelist_function("readstat_value_tag")
+        .whitelist_function("readstat_int8_value")
+        .whitelist_function("readstat_int16_value")
+        .whitelist_function("readstat_int32_value")
+        .whitelist_function("readstat_float_value")
+        .whitelist_function("readstat_double_value")
+        .whitelist_function("readstat_string_value")
+        .whitelist_function("readstat_type_class")
+        // Parsing
+        .whitelist_function("readstat_parser_init")
+        .whitelist_function("readstat_parse_sas7bdat")
+        .whitelist_function("readstat_parse_sas7bcat")
+        .whitelist_function("readstat_parse_xport")
+        .whitelist_function("readstat_parser_free")
+        // Types
+        // Error
         .whitelist_type("readstat_error_t")
+        // .whitelist_type("READSTAT_HANDLER_OK")
+        // .whitelist_type("READSTAT_OK")
+        // Metadata
         .whitelist_type("readstat_metadata_t")
-        .whitelist_type("readstat_parser_t")
+        .whitelist_type("readstat_compress_t")
+        .whitelist_type("readstat_endian_t")
+        // Variables
         .whitelist_type("readstat_variable_t")
-        .whitelist_type("READSTAT_HANDLER_OK")
-        .whitelist_type("READSTAT_OK")
+        // Values
+        .whitelist_type("readstat_type_t")
+        .whitelist_type("readstat_type_class_t")
+        .whitelist_type("readstat_value_t")
+        // Parsing
+        .whitelist_type("readstat_parser_t")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
