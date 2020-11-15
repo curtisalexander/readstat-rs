@@ -4,7 +4,7 @@ Example Rust binary that to work with a SAS binary file (`sas7bdat`).
 ## ReadStat
 The Rust binary is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
 
-The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/readstat) binary utilizes `readstat-sys` as a dependency.
+The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
 
 The binary, in part, adapts the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.
 
@@ -28,6 +28,19 @@ To write metadata to standard out, invoke the following.
 readstat /some/dir/to/example.sas7bdat metadata
 ```
 
+### Data
+To write data (as [tab-separated values](https://en.wikipedia.org/wiki/Tab-separated_values)) to standard out, invoke the following.
+
+```sh
+readstat /some/dir/to/example.sas7bdat data
+```
+
+To save the resulting `tsv` to a file.
+
+```sh
+readstat /some/dir/to/example.sas7bdat data > example.tsv
+```
+
 ## Testing
 To run unit / integration tests, run the following within the `readstat` directory.
 
@@ -40,6 +53,11 @@ To ensure no memory leaks, run [valgrind](https://valgrind.org/).
 ```
 valgrind ./target/debug/deps/get_row_count_test-11793a929ad2468f
 ```
+
+## Compatibility
+- Linux &rarr; developed on Linux and tested there
+- macOS &rarr; have not tested; may build and run
+- Windows &rarr; does not build; [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate needs work to build on Windows
 
 ## Goals
 
