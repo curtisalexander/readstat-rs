@@ -4,7 +4,7 @@ use colored::Colorize;
 use dunce;
 use log::debug;
 use readstat_sys;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
@@ -66,19 +66,26 @@ pub extern "C" fn handle_variable(
 ) -> c_int {
     let md = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
-    let var = unsafe {
+    let var_index: c_int = unsafe {
+        readstat_sys::readstat_variable_get_index(variable)
+    };
+
+    let var_name = unsafe {
         CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
             .to_str()
             .unwrap()
             .to_owned()
     };
+
     let var_type: readstat_sys::readstat_type_t =
         unsafe { readstat_sys::readstat_variable_get_type(variable) };
+
     debug!("md struct is {:#?}", md);
     debug!("var type pushed is {:#?}", var_type);
-    debug!("var pushed is {:#?}", &var);
+    debug!("var pushed is {:#?}", &var_name);
 
-    md.vars.push(var);
+    // md.vars.push(var);
+    md.vars.insert(ReadStatVar::new(var_index, var_name), var_type);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -99,8 +106,7 @@ pub struct ReadStatMetadata {
     pub path: PathBuf,
     pub row_count: c_int,
     pub var_count: c_int,
-    pub vars: Vec<String>,
-    pub varsh: Vec<HashMap<String, String>>,
+    pub vars: BTreeMap<ReadStatVar, readstat_sys::readstat_type_t>,
 }
 
 impl ReadStatMetadata {
@@ -109,8 +115,7 @@ impl ReadStatMetadata {
             path: PathBuf::new(),
             row_count: 0,
             var_count: 0,
-            vars: Vec::new(),
-            varsh: Vec::new(),
+            vars: BTreeMap::new(),
         }
     }
 
@@ -135,6 +140,18 @@ impl ReadStatMetadata {
             .parse_sas7bdat(ppath, ctx)?;
 
         Ok(error)
+    }
+}
+
+#[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub struct ReadStatVar {
+    var_index: c_int,
+    var_name: String
+}
+
+impl ReadStatVar {
+    fn new(var_index: c_int, var_name: String) -> Self {
+        Self { var_index, var_name }
     }
 }
 
@@ -259,8 +276,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 println!("{}: {}", "Row count".green(), md.row_count);
                 println!("{}: {}", "Variable count".red(), md.var_count);
                 println!("{}:", "Variable names".blue());
-                for v in md.vars.iter() {
-                    println!("{}", v);
+                for (k, v) in md.vars.iter() {
+                    println!("{}: {} of type {}", k.var_index, k.var_name.bright_purple(), v);
                 }
                 Ok(())
             }
