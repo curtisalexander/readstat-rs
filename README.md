@@ -10,10 +10,11 @@ The binary, in part, adapts the [reading files](https://github.com/WizardMac/Rea
 
 ## Run
 After building with `cargo build`, the binary is invoked using [structopt subcommands](https://docs.rs/structopt/0.3.20/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
-- metadata &rarr; writes the following to standard out
+- `metadata` &rarr; writes the following to standard out
     - row count
     - variable count
     - variable names
+- `data` &rarr; writes parsed data as `tsv`
 
 Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.
 
@@ -29,7 +30,7 @@ readstat /some/dir/to/example.sas7bdat metadata
 ```
 
 ### Data
-To write data (as [tab-separated values](https://en.wikipedia.org/wiki/Tab-separated_values)) to standard out, invoke the following.
+To write parsed data (as [tab-separated values](https://en.wikipedia.org/wiki/Tab-separated_values)) to standard out, invoke the following.
 
 ```sh
 readstat /some/dir/to/example.sas7bdat data
