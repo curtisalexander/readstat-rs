@@ -217,12 +217,12 @@ impl ReadStatMetadata {
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub struct ReadStatVar {
-    var_index: c_int,
-    var_name: String,
+    pub var_index: c_int,
+    pub var_name: String,
 }
 
 impl ReadStatVar {
-    fn new(var_index: c_int, var_name: String) -> Self {
+    pub fn new(var_index: c_int, var_name: String) -> Self {
         Self {
             var_index,
             var_name,
