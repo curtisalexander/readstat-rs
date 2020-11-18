@@ -26,6 +26,7 @@ pub struct ReadStat {
 pub enum Command {
     /// Get sas7bdat metadata
     Metadata {},
+    PrintData {},
     Data {},
 }
 
@@ -40,6 +41,12 @@ enum ReadStatHandler {
 }
 
 // C callback functions
+
+// TODO: May need a version of handle_metadata that only gets metadata
+//       and a version that does very little and instead metadata handling occurs
+//       in handle_value function
+//       As an example see the below from the readstat binary
+//         https://github.com/WizardMac/ReadStat/blob/master/src/bin/readstat.c#L98
 pub extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
@@ -83,14 +90,13 @@ pub extern "C" fn handle_variable(
     debug!("var type pushed is {:#?}", var_type);
     debug!("var pushed is {:#?}", &var_name);
 
-    // md.vars.push(var);
     md.vars
-        .insert(ReadStatVar::new(var_index, var_name), var_type);
+        .insert(ReadStatVarMetadata::new(var_index, var_name), var_type);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
-pub extern "C" fn handle_value(
+pub extern "C" fn handle_value_print(
     #[allow(unused_variables)] obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     value: readstat_sys::readstat_value_t,
@@ -106,9 +112,9 @@ pub extern "C" fn handle_value(
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
     if is_missing == 0 {
-        let value: ReadStatVarType = match val_type {
-            readstat_sys::readstat_type_e_READSTAT_TYPE_STRING => {
-                ReadStatVarType::ReadStat_String(unsafe {
+        let value: ReadStatVar = match val_type {
+            readstat_sys::readstat_type_e_READSTAT_TYPE_STRING | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
+                ReadStatVar::ReadStat_String(unsafe {
                     CStr::from_ptr(readstat_sys::readstat_string_value(value))
                         .to_str()
                         .unwrap()
@@ -116,30 +122,32 @@ pub extern "C" fn handle_value(
                 })
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
-                ReadStatVarType::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
+                ReadStatVar::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
-                ReadStatVarType::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
+                ReadStatVar::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
-                ReadStatVarType::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
+                ReadStatVar::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
-                ReadStatVarType::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
+                ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-                ReadStatVarType::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
+                ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
             }
-            _ => ReadStatVarType::ReadStat_String(String::new()),
+            // exhaustive
+            // _ => ReadStatVarType::ReadStat_String(String::new()),
+            _ => unreachable!()
         };
 
         match value {
-            ReadStatVarType::ReadStat_String(s) => print!("{}", s),
-            ReadStatVarType::ReadStat_i8(i) => print!("{}", i),
-            ReadStatVarType::ReadStat_i16(i) => print!("{}", i),
-            ReadStatVarType::ReadStat_i32(i) => print!("{}", i),
-            ReadStatVarType::ReadStat_f32(f) => print!("{:.6}", f),
-            ReadStatVarType::ReadStat_f64(f) => print!("{:.6}", f),
+            ReadStatVar::ReadStat_String(s) => print!("{}", s),
+            ReadStatVar::ReadStat_i8(i) => print!("{}", i),
+            ReadStatVar::ReadStat_i16(i) => print!("{}", i),
+            ReadStatVar::ReadStat_i32(i) => print!("{}", i),
+            ReadStatVar::ReadStat_f32(f) => print!("{:.6}", f),
+            ReadStatVar::ReadStat_f64(f) => print!("{:.6}", f),
         }
     }
 
@@ -152,13 +160,113 @@ pub extern "C" fn handle_value(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
+pub extern "C" fn handle_value(
+    #[allow(unused_variables)] obs_index: c_int,
+    variable: *mut readstat_sys::readstat_variable_t,
+    value: readstat_sys::readstat_value_t,
+    ctx: *mut c_void,
+) -> c_int {
+    let d = unsafe { &mut *(ctx as *mut ReadStatData) };
+    let md = &mut d.metadata;
+    let var_count = md.var_count;
+
+    let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
+
+    let value_type: readstat_sys::readstat_type_t =
+        unsafe { readstat_sys::readstat_value_type(value) };
+
+    let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
+
+    if var_index == 0 {
+        d.rowdata = Vec::with_capacity(var_count as usize);
+    }
+
+    if is_missing == 0 {
+        let value: ReadStatVar = match value_type {
+            readstat_sys::readstat_type_e_READSTAT_TYPE_STRING | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
+                ReadStatVar::ReadStat_String(unsafe {
+                    CStr::from_ptr(readstat_sys::readstat_string_value(value))
+                        .to_str()
+                        .unwrap()
+                        .to_owned()
+                })
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
+                ReadStatVar::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
+                ReadStatVar::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
+                ReadStatVar::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
+                ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
+                ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
+            }
+            // exhaustive
+            // _ => ReadStatVarType::ReadStat_String(String::new()),
+            _ => unreachable!()
+        };
+
+        d.rowdata.push(value);
+    }
+
+    if var_index == md.var_count - 1 {
+        let row = d.rowdata.clone();
+        d.data.push(row);
+        d.rowdata.clear(); 
+    }
+
+    ReadStatHandler::READSTAT_HANDLER_OK as c_int
+}
+
 // Structs
+#[derive(Debug)]
+pub struct ReadStatData {
+    pub metadata: ReadStatMetadata,
+    pub data: Vec<Vec<ReadStatVar>>,
+    pub rowdata: Vec<ReadStatVar>,
+}
+
+impl ReadStatData {
+    pub fn new(md: ReadStatMetadata) -> Self {
+        Self {
+            metadata: md,
+            data: Vec::new(),
+            rowdata: Vec::new(),
+        }
+    }
+
+    pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
+        let path = &self.metadata.path;
+        let cpath = path_to_cstring(&path)?;
+        debug!("Path as C string is {:?}", cpath);
+        let ppath = cpath.as_ptr();
+
+        let ctx = self as *mut ReadStatData as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let _ = ReadStatParser::new()
+            .set_metadata_handler(Some(handle_metadata))?
+            .set_variable_handler(Some(handle_variable))?
+            .set_value_handler(Some(handle_value))?
+            .parse_sas7bdat(ppath, ctx)?;
+
+        Ok(error)
+    }
+}
+
 #[derive(Debug)]
 pub struct ReadStatMetadata {
     pub path: PathBuf,
     pub row_count: c_int,
     pub var_count: c_int,
-    pub vars: BTreeMap<ReadStatVar, readstat_sys::readstat_type_t>,
+    pub vars: BTreeMap<ReadStatVarMetadata, readstat_sys::readstat_type_t>,
 }
 
 impl ReadStatMetadata {
@@ -194,7 +302,7 @@ impl ReadStatMetadata {
         Ok(error)
     }
 
-    pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
+    pub fn print_data(&mut self) -> Result<u32, Box<dyn Error>> {
         let path = &self.path;
         let cpath = path_to_cstring(&path)?;
         debug!("Path as C string is {:?}", cpath);
@@ -208,7 +316,7 @@ impl ReadStatMetadata {
         let _ = ReadStatParser::new()
             .set_metadata_handler(Some(handle_metadata))?
             .set_variable_handler(Some(handle_variable))?
-            .set_value_handler(Some(handle_value))?
+            .set_value_handler(Some(handle_value_print))?
             .parse_sas7bdat(ppath, ctx)?;
 
         Ok(error)
@@ -216,12 +324,12 @@ impl ReadStatMetadata {
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
-pub struct ReadStatVar {
+pub struct ReadStatVarMetadata {
     pub var_index: c_int,
     pub var_name: String,
 }
 
-impl ReadStatVar {
+impl ReadStatVarMetadata {
     pub fn new(var_index: c_int, var_name: String) -> Self {
         Self {
             var_index,
@@ -230,7 +338,8 @@ impl ReadStatVar {
     }
 }
 
-enum ReadStatVarType {
+#[derive(Debug, Clone)]
+pub enum ReadStatVar {
     ReadStat_String(String),
     ReadStat_i8(i8),
     ReadStat_i16(i16),
@@ -239,18 +348,18 @@ enum ReadStatVarType {
     ReadStat_f64(f64),
 }
 
-impl std::fmt::Display for ReadStatVarType {
+impl std::fmt::Display for ReadStatVar {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                ReadStatVarType::ReadStat_String(s) => s.to_string(),
-                ReadStatVarType::ReadStat_i8(i) => i.to_string(),
-                ReadStatVarType::ReadStat_i16(i) => i.to_string(),
-                ReadStatVarType::ReadStat_i32(i) => i.to_string(),
-                ReadStatVarType::ReadStat_f32(f) => f.to_string(),
-                ReadStatVarType::ReadStat_f64(f) => f.to_string(),
+                ReadStatVar::ReadStat_String(s) => s.to_string(),
+                ReadStatVar::ReadStat_i8(i) => i.to_string(),
+                ReadStatVar::ReadStat_i16(i) => i.to_string(),
+                ReadStatVar::ReadStat_i32(i) => i.to_string(),
+                ReadStatVar::ReadStat_f32(f) => f.to_string(),
+                ReadStatVar::ReadStat_f64(f) => f.to_string(),
             }
         )
     }
@@ -407,7 +516,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 Ok(())
             }
         }
-        Command::Data {} => {
+        Command::PrintData {} => {
             let mut md = ReadStatMetadata::new().set_path(sas_path);
             let error = md.get_metadata()?;
 
@@ -422,11 +531,55 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     }
                 }
                 // Write data to standard out
-                let error = md.get_data()?;
+                let error = md.print_data()?;
 
                 if error != readstat_sys::readstat_error_e_READSTAT_OK {
                     Err(From::from("Error when attempting to parse sas7bdat"))
                 } else {
+                    Ok(())
+                }
+            }
+        },
+        Command::Data {} => {
+            let mut md = ReadStatMetadata::new().set_path(sas_path);
+            let error = md.get_metadata()?;
+
+            if error != readstat_sys::readstat_error_e_READSTAT_OK {
+                Err(From::from("Error when attempting to parse sas7bdat"))
+            } else {
+                for (k, _) in md.vars.iter() {
+                    if k.var_index == md.var_count - 1 {
+                        println!("{}", k.var_name);
+                    } else {
+                        print!("{}\t", k.var_name);
+                    }
+                }
+                // Get data
+                let mut d = ReadStatData::new(md);
+
+                // Write data to standard out
+                let error = d.get_data()?;
+
+                if error != readstat_sys::readstat_error_e_READSTAT_OK {
+                    Err(From::from("Error when attempting to parse sas7bdat"))
+                } else {
+                    for row in d.data.iter() {
+                        for (i, v) in row.iter().enumerate() {
+                            match v {
+                                ReadStatVar::ReadStat_String(s) => print!("{}", s),
+                                ReadStatVar::ReadStat_i8(i) => print!("{}", i),
+                                ReadStatVar::ReadStat_i16(i) => print!("{}", i),
+                                ReadStatVar::ReadStat_i32(i) => print!("{}", i),
+                                ReadStatVar::ReadStat_f32(f) => print!("{:.6}", f),
+                                ReadStatVar::ReadStat_f64(f) => print!("{:.6}", f),
+                            }
+                            if i == (d.metadata.var_count - 1) as usize {
+                                print!("\n");
+                            } else {
+                                print!("\t");
+                            }
+                        }
+                    }
                     Ok(())
                 }
             }
