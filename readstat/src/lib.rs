@@ -4,6 +4,7 @@ use colored::Colorize;
 use dunce;
 use log::debug;
 use readstat_sys;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{CStr, CString};
@@ -178,7 +179,7 @@ pub extern "C" fn handle_value(
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
     if var_index == 0 {
-        d.rowdata = Vec::with_capacity(var_count as usize);
+        d.row = Vec::with_capacity(var_count as usize);
     }
 
     if is_missing == 0 {
@@ -211,32 +212,32 @@ pub extern "C" fn handle_value(
             _ => unreachable!()
         };
 
-        d.rowdata.push(value);
+        d.row.push(value);
     }
 
     if var_index == md.var_count - 1 {
-        let row = d.rowdata.clone();
-        d.data.push(row);
-        d.rowdata.clear(); 
+        let row = d.row.clone();
+        d.rows.push(row);
+        d.row.clear(); 
     }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
 // Structs
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub metadata: ReadStatMetadata,
-    pub data: Vec<Vec<ReadStatVar>>,
-    pub rowdata: Vec<ReadStatVar>,
+    pub row: Vec<ReadStatVar>,
+    pub rows: Vec<Vec<ReadStatVar>>,
 }
 
 impl ReadStatData {
     pub fn new(md: ReadStatMetadata) -> Self {
         Self {
             metadata: md,
-            data: Vec::new(),
-            rowdata: Vec::new(),
+            row: Vec::new(),
+            rows: Vec::new(),
         }
     }
 
@@ -259,9 +260,27 @@ impl ReadStatData {
 
         Ok(error)
     }
+
+    pub fn write(&self, out: PathBuf) -> Result<(), Box<dyn Error>> {
+        let mut wtr = csv::WriterBuilder::new()
+            .quote_style(csv::QuoteStyle::Always)
+            .from_path(out)?;
+
+        let vars: Vec<String> = self.metadata.vars.iter()
+            .map(|(k, _)| k.var_name.clone())
+            .collect();
+
+        wtr.serialize(vars)?;
+
+        for r in &self.rows {
+            wtr.serialize(r)?;
+        }
+        wtr.flush()?;
+        Ok(())
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct ReadStatMetadata {
     pub path: PathBuf,
     pub row_count: c_int,
@@ -323,7 +342,7 @@ impl ReadStatMetadata {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
+#[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
 pub struct ReadStatVarMetadata {
     pub var_index: c_int,
     pub var_name: String,
@@ -338,7 +357,7 @@ impl ReadStatVarMetadata {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum ReadStatVar {
     ReadStat_String(String),
     ReadStat_i8(i8),
@@ -547,6 +566,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
+                /*
                 for (k, _) in md.vars.iter() {
                     if k.var_index == md.var_count - 1 {
                         println!("{}", k.var_name);
@@ -554,16 +574,16 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         print!("{}\t", k.var_name);
                     }
                 }
+                */
                 // Get data
                 let mut d = ReadStatData::new(md);
-
-                // Write data to standard out
                 let error = d.get_data()?;
 
                 if error != readstat_sys::readstat_error_e_READSTAT_OK {
                     Err(From::from("Error when attempting to parse sas7bdat"))
                 } else {
-                    for row in d.data.iter() {
+                    /*
+                    for row in d.rows.iter() {
                         for (i, v) in row.iter().enumerate() {
                             match v {
                                 ReadStatVar::ReadStat_String(s) => print!("{}", s),
@@ -580,6 +600,12 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                             }
                         }
                     }
+                    */
+                    // Ok(())
+                    let out_dir = dunce::canonicalize(PathBuf::from("/home/calex/code/readstat-rs/data")).unwrap();
+                    let out_file = out_dir.join("cars_serde.csv");
+                    println!("out_file is {}", out_file.to_string_lossy());
+                    d.write(out_file)?;
                     Ok(())
                 }
             }
