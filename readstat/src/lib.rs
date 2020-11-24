@@ -4,7 +4,7 @@ use colored::Colorize;
 use dunce;
 use log::debug;
 use readstat_sys;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{CStr, CString};
@@ -205,10 +205,23 @@ pub extern "C" fn handle_value(
                 ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-                ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
+                let v = unsafe { readstat_sys::readstat_double_value(value) };
+
+                // SAS on Windows with x64 processors can only represent 15 digits
+                // https://documentation.sas.com/?cdcId=pgmsascdc&cdcVersion=9.4_3.5&docsetId=lrcon&docsetTarget=p0ji1unv6thm0dn1gp4t01a1u0g6.htm&locale=en#n0pd8l179ai8odn17nncb4izqq3d
+
+                // Also, see the notes for Microsoft Excel on Windows
+                // https://docs.microsoft.com/en-us/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result
+
+                // truncate the double to only have 15 decimal digits
+                // let scale_factor = 1000000000000000_u64 as f64;  // 10_f64.powi(15);
+                // let scale_factor = 10000000000000000_u64 as f64;  // 10_f64.powi(14);
+                // let v_15 = f64::trunc(v * scale_factor) / scale_factor;
+                // ReadStatVar::ReadStat_f64(v_15)
+
+                ReadStatVar::ReadStat_f64(v)
             }
             // exhaustive
-            // _ => ReadStatVarType::ReadStat_String(String::new()),
             _ => unreachable!()
         };
 
@@ -357,7 +370,7 @@ impl ReadStatVarMetadata {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum ReadStatVar {
     ReadStat_String(String),
     ReadStat_i8(i8),
@@ -366,6 +379,38 @@ pub enum ReadStatVar {
     ReadStat_f32(f32),
     ReadStat_f64(f64),
 }
+
+impl Serialize for ReadStatVar {
+    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        ReadStatVarTrunc::from(self).serialize(s)
+    }
+}
+#[derive(Debug, Clone, Serialize)]
+pub enum ReadStatVarTrunc {
+    ReadStat_String(String),
+    ReadStat_i8(i8),
+    ReadStat_i16(i16),
+    ReadStat_i32(i32),
+    ReadStat_f32(f32),
+    ReadStat_f64(f64),
+}
+
+impl <'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
+    fn from(other: &'a ReadStatVar) -> Self {
+        match other {
+            ReadStatVar::ReadStat_String(s) => Self::ReadStat_String(s.to_owned()),
+            ReadStatVar::ReadStat_i8(i) => Self::ReadStat_i8(*i),
+            ReadStatVar::ReadStat_i16(i) => Self::ReadStat_i16(*i),
+            ReadStatVar::ReadStat_i32(i) => Self::ReadStat_i32(*i),
+            // Format as strings
+            ReadStatVar::ReadStat_f32(f) => Self::ReadStat_f32(format!("{:.14}", f).parse::<f32>().unwrap()),
+            ReadStatVar::ReadStat_f64(f) => Self::ReadStat_f64(format!("{:.14}", f).parse::<f64>().unwrap()),
+        }
+    }
+}
+
+
 
 impl std::fmt::Display for ReadStatVar {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -491,8 +536,8 @@ pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error>> {
 }
 
 #[cfg(not(unix))]
-pub fn path_to_cstring(path: &Path) -> Result<CString, InvalidPath> {
-    let rust_str = path.as_os_str().as_str().ok_or(InvalidPath)?;
+pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error>> {
+    let rust_str = path.as_os_str().as_str().ok_or(Err(From::from("Invalid path")))?;
     let bytes = path.as_os_str().as_bytes();
     CString::new(rust_str).map_err(|_| From::from("Invalid path"))
 }
