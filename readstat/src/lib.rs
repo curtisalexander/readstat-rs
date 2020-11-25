@@ -77,6 +77,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
+                // Write header
                 for (k, _) in md.vars.iter() {
                     if k.var_index == md.var_count - 1 {
                         println!("{}", k.var_name);

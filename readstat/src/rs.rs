@@ -56,6 +56,7 @@ impl ReadStatData {
             .map(|(k, _)| k.var_name.clone())
             .collect();
 
+        // header
         wtr.serialize(vars)?;
 
         for r in &self.rows {
