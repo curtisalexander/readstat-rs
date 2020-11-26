@@ -1,4 +1,4 @@
-use crate::rs::{ReadStatData, /*ReadStatMetadata,*/ ReadStatVar, ReadStatVarMetadata};
+use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata};
 
 use log::debug;
 use readstat_sys;
@@ -26,11 +26,14 @@ pub extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
 ) -> c_int {
+    // dereference ctx pointer
     let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
+    // get row count and variable count
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     let vc: c_int = unsafe { readstat_sys::readstat_get_var_count(metadata) };
 
+    // insert into ReadStatData struct
     d.row_count = rc;
     d.var_count = vc;
 
@@ -47,10 +50,13 @@ pub extern "C" fn handle_variable(
     #[allow(unused_variables)] val_labels: *const c_char,
     ctx: *mut c_void,
 ) -> c_int {
+    // dereference ctx pointer
     let d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
+    // get index, type, and name
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
-
+    let var_type: readstat_sys::readstat_type_t =
+        unsafe { readstat_sys::readstat_variable_get_type(variable) };
     let var_name = unsafe {
         CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
             .to_str()
@@ -58,13 +64,11 @@ pub extern "C" fn handle_variable(
             .to_owned()
     };
 
-    let var_type: readstat_sys::readstat_type_t =
-        unsafe { readstat_sys::readstat_variable_get_type(variable) };
-
     debug!("d struct is {:#?}", d);
     debug!("var type pushed is {:#?}", var_type);
     debug!("var pushed is {:#?}", &var_name);
 
+    // insert into BTreeMap within ReadStatData struct
     d.vars
         .insert(ReadStatVarMetadata::new(var_index, var_name), var_type);
 
@@ -160,7 +164,7 @@ pub extern "C" fn handle_value(
         d.rows = Vec::with_capacity(d.row_count as usize);
     }
 
-    // get value and push into row
+    // get value and push into row within ReadStatData struct
     if is_missing == 0 {
         let value: ReadStatVar = match value_type {
             readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
@@ -195,7 +199,7 @@ pub extern "C" fn handle_value(
         d.row.push(value);
     }
 
-    // if last variable for a row, push into rows
+    // if last variable for a row, push into rows within ReadStatData struct
     if var_index == d.var_count - 1 {
         d.rows.push(d.row.clone());
         // clear row after pushing into rows; has no effect on capacity
