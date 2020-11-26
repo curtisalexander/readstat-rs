@@ -1,5 +1,5 @@
 # readstat-rs
-Example Rust binary that to work with a SAS binary file (`sas7bdat`).
+Example Rust binary to work with SAS binary &mdash; `sas7bdat` &mdash; files.
 
 ## ReadStat
 The Rust binary is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
