@@ -294,6 +294,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "path-clean"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecba01bf2678719532c5e3059e0b5f0811273d94b397088b82e3bd0a78c78fdd"
+
+[[package]]
 name = "peeking_take_while"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -356,6 +362,7 @@ dependencies = [
  "dunce",
  "env_logger 0.8.1",
  "log",
+ "path-clean",
  "readstat-sys",
  "serde",
  "serde_json",
