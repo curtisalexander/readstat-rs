@@ -1,4 +1,4 @@
-use crate::rs::{ReadStatData, ReadStatMetadata, ReadStatVar, ReadStatVarMetadata};
+use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata};
 
 use log::debug;
 use readstat_sys;
@@ -26,17 +26,20 @@ pub extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
 ) -> c_int {
-    let mut md = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
+    // dereference ctx pointer
+    let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
+    // get row count and variable count
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     let vc: c_int = unsafe { readstat_sys::readstat_get_var_count(metadata) };
 
-    md.row_count = rc;
-    md.var_count = vc;
+    // insert into ReadStatData struct
+    d.row_count = rc;
+    d.var_count = vc;
 
-    debug!("md struct is {:#?}", md);
-    debug!("row_count is {:#?}", md.row_count);
-    debug!("var_count is {:#?}", md.var_count);
+    debug!("d struct is {:#?}", d);
+    debug!("row_count is {:#?}", d.row_count);
+    debug!("var_count is {:#?}", d.var_count);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -47,10 +50,13 @@ pub extern "C" fn handle_variable(
     #[allow(unused_variables)] val_labels: *const c_char,
     ctx: *mut c_void,
 ) -> c_int {
-    let md = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
+    // dereference ctx pointer
+    let d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
+    // get index, type, and name
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
-
+    let var_type: readstat_sys::readstat_type_t =
+        unsafe { readstat_sys::readstat_variable_get_type(variable) };
     let var_name = unsafe {
         CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
             .to_str()
@@ -58,19 +64,18 @@ pub extern "C" fn handle_variable(
             .to_owned()
     };
 
-    let var_type: readstat_sys::readstat_type_t =
-        unsafe { readstat_sys::readstat_variable_get_type(variable) };
-
-    debug!("md struct is {:#?}", md);
+    debug!("d struct is {:#?}", d);
     debug!("var type pushed is {:#?}", var_type);
     debug!("var pushed is {:#?}", &var_name);
 
-    md.vars
+    // insert into BTreeMap within ReadStatData struct
+    d.vars
         .insert(ReadStatVarMetadata::new(var_index, var_name), var_type);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
+/*
 pub extern "C" fn handle_value_print(
     #[allow(unused_variables)] obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
@@ -134,6 +139,7 @@ pub extern "C" fn handle_value_print(
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
+*/
 
 pub extern "C" fn handle_value(
     #[allow(unused_variables)] obs_index: c_int,
@@ -141,21 +147,24 @@ pub extern "C" fn handle_value(
     value: readstat_sys::readstat_value_t,
     ctx: *mut c_void,
 ) -> c_int {
+    // dereference ctx pointer
     let d = unsafe { &mut *(ctx as *mut ReadStatData) };
-    let md = &mut d.metadata;
-    let var_count = md.var_count;
 
+    // get index, type, and missingness
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
-
     let value_type: readstat_sys::readstat_type_t =
         unsafe { readstat_sys::readstat_value_type(value) };
-
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    if var_index == 0 {
-        d.row = Vec::with_capacity(var_count as usize);
+    // if first row and first variable, allocate row and rows
+    if obs_index == 0 && var_index == 0 {
+        // Vec containing a single row, needs capacity = number of variables
+        d.row = Vec::with_capacity(d.var_count as usize);
+        // Vec containing all rows, needs capacity = number of rows
+        d.rows = Vec::with_capacity(d.row_count as usize);
     }
 
+    // get value and push into row within ReadStatData struct
     if is_missing == 0 {
         let value: ReadStatVar = match value_type {
             readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
@@ -186,12 +195,14 @@ pub extern "C" fn handle_value(
             _ => unreachable!(),
         };
 
+        // push into row
         d.row.push(value);
     }
 
-    if var_index == md.var_count - 1 {
-        let row = d.row.clone();
-        d.rows.push(row);
+    // if last variable for a row, push into rows within ReadStatData struct
+    if var_index == d.var_count - 1 {
+        d.rows.push(d.row.clone());
+        // clear row after pushing into rows; has no effect on capacity
         d.row.clear();
     }
 

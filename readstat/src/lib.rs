@@ -8,6 +8,7 @@ use dunce;
 use log::debug;
 use path_clean::PathClean;
 use readstat_sys;
+use serde::Serialize;
 use std::env;
 use std::error::Error;
 use std::ffi::CString;
@@ -15,7 +16,9 @@ use std::path::PathBuf;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
-pub use rs::{ReadStatData, ReadStatMetadata, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc};
+pub use rs::{
+    ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc,
+};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -28,6 +31,7 @@ pub struct ReadStat {
     cmd: Command,
 }
 
+// StructOpts subcommands
 #[derive(StructOpt, Debug)]
 pub enum Command {
     /// Display sas7bdat metadata
@@ -43,16 +47,17 @@ pub enum Command {
         #[structopt(long, parse(from_os_str))]
         out_file: Option<PathBuf>,
         /// Output type, defaults to csv
-        #[structopt(long, default_value="csv", possible_values=&OutType::variants(), case_insensitive=true)]
-        out_type: OutType,
+        #[structopt(long, possible_values=&OutType::variants(), case_insensitive=true)]
+        out_type: Option<OutType>,
     },
 }
 
 arg_enum! {
-    #[derive(Debug)]
+    #[derive(Debug, Clone, Serialize)]
     #[allow(non_camel_case_types)]
     pub enum OutType {
         csv,
+        stdout
     }
 }
 
@@ -60,18 +65,28 @@ pub struct ReadStatPath {
     pub path: PathBuf,
     pub extension: String,
     pub cstring_path: CString,
+    pub out_path: Option<PathBuf>,
+    pub out_type: Option<OutType>,
 }
 
 impl ReadStatPath {
-    pub fn new(path: PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        path: PathBuf,
+        out_path: Option<PathBuf>,
+        out_type: Option<OutType>,
+    ) -> Result<Self, Box<dyn Error>> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
+        let op: Option<PathBuf> = Self::validate_out_path(out_path)?;
 
+        // TODO: validate out_path
         Ok(Self {
             path: p,
             extension: ext,
             cstring_path: csp,
+            out_path: op,
+            out_type: out_type,
         })
     }
 
@@ -111,6 +126,31 @@ impl ReadStatPath {
         }
     }
 
+    fn validate_out_path(p: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
+        match p {
+            None => Ok(None),
+            Some(p) => {
+                let abs_path = if p.is_absolute() {
+                    p
+                } else {
+                    env::current_dir()?.join(p)
+                };
+                let abs_path = abs_path.clean();
+
+                match abs_path.parent() {
+                    None => Err(From::from(format!("The parent directory of the value of the parameter  --out-file ({}) does not exist", &abs_path.to_string_lossy()))),
+                    Some(parent) => {
+                        if parent.exists() {
+                            Ok(Some(abs_path))
+                        } else {
+                            Err(From::from(format!("The parent directory of the value of the parameter  --out-file ({}) does not exist", &parent.to_string_lossy())))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn validate_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
@@ -129,89 +169,66 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let sas_path = dunce::canonicalize(&rs.in_file)?;
-    let sas_path = ReadStatPath::new(sas_path)?;
 
     debug!(
         "Counting the number of variables within the file {}",
-        sas_path.path.to_string_lossy()
+        &sas_path.to_string_lossy()
     );
 
     match rs.cmd {
         Command::Metadata {} => {
-            let mut md = ReadStatMetadata::new(sas_path);
-            let error = md.get_metadata()?;
+            // out_path and out_type determine the type of writing performed
+            let rsp = ReadStatPath::new(sas_path, None, None)?;
+            let mut d = ReadStatData::new(rsp);
+            let error = d.get_metadata()?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
-                println!(
-                    "Metadata for the file {}\n",
-                    md.path.to_string_lossy().yellow()
-                );
-                println!("{}: {}", "Row count".green(), md.row_count);
-                println!("{}: {}", "Variable count".red(), md.var_count);
-                println!("{}:", "Variable names".blue());
-                for (k, v) in md.vars.iter() {
-                    println!(
-                        "{}: {} of type {}",
-                        k.var_index,
-                        k.var_name.bright_purple(),
-                        v
-                    );
-                }
-                Ok(())
+                d.write()
             }
         }
         Command::Preview { rows: _ } => {
-            let mut md = ReadStatMetadata::new(sas_path);
-            let error = md.get_metadata()?;
+            // out_path and out_type determine the type of writing performed
+            let rsp = ReadStatPath::new(sas_path, None, Some(OutType::stdout))?;
+            let mut d = ReadStatData::new(rsp);
+            let error = d.get_metadata()?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
+                // TODO: create a preview writer
                 // Write header
-                for (k, _) in md.vars.iter() {
-                    if k.var_index == md.var_count - 1 {
+                for (k, _) in d.vars.iter() {
+                    if k.var_index == d.var_count - 1 {
                         println!("{}", k.var_name);
                     } else {
                         print!("{}\t", k.var_name);
                     }
                 }
-                // Write data to standard out
-                let error = md.print_data()?;
-
-                if error != readstat_sys::readstat_error_e_READSTAT_OK {
-                    Err(From::from("Error when attempting to parse sas7bdat"))
-                } else {
-                    Ok(())
-                }
+                Ok(())
             }
         }
-        Command::Data {
-            out_file: _,
-            out_type: _,
-        } => {
-            let mut md = ReadStatMetadata::new(sas_path);
-            let error = md.get_metadata()?;
+        Command::Data { out_file, out_type } => {
+            let of = out_file;
+            let ot = out_type;
+            // out_path and out_type determine the type of writing performed
+            let rsp = ReadStatPath::new(sas_path, of, ot)?;
+            let mut d = ReadStatData::new(rsp);
+            let error = d.get_data()?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
-                // Get data
-                let mut d = ReadStatData::new(md);
-                let error = d.get_data()?;
+                // TODO: Replace hard-coded path with dynamic path provided by user
+                let out_dir =
+                    dunce::canonicalize(PathBuf::from("/home/calex/code/readstat-rs/data"))
+                        .unwrap();
+                let out_file = out_dir.join("cars_serde.csv");
+                println!("out_file is {}", out_file.to_string_lossy());
 
-                if error != readstat_sys::readstat_error_e_READSTAT_OK {
-                    Err(From::from("Error when attempting to parse sas7bdat"))
-                } else {
-                    let out_dir =
-                        dunce::canonicalize(PathBuf::from("/home/calex/code/readstat-rs/data"))
-                            .unwrap();
-                    let out_file = out_dir.join("cars_serde.csv");
-                    println!("out_file is {}", out_file.to_string_lossy());
-                    d.write(out_file)?;
-                    Ok(())
-                }
+                // Write to file (using serde)
+                d.write()
             }
         }
     }

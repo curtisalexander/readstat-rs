@@ -1,71 +1,17 @@
+use colored::Colorize;
 use log::debug;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
+use std::io::stdout;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
 
 use crate::cb;
-use crate::ReadStatPath;
+use crate::{OutType, ReadStatPath};
 
-#[derive(Debug, Serialize)]
-pub struct ReadStatMetadata {
-    pub path: PathBuf,
-    pub cstring_path: CString,
-    pub row_count: c_int,
-    pub var_count: c_int,
-    pub vars: BTreeMap<ReadStatVarMetadata, readstat_sys::readstat_type_t>,
-}
-
-impl ReadStatMetadata {
-    pub fn new(rsp: ReadStatPath) -> Self {
-        Self {
-            path: rsp.path,
-            cstring_path: rsp.cstring_path,
-            row_count: 0,
-            var_count: 0,
-            vars: BTreeMap::new(),
-        }
-    }
-
-    pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
-        let cpath = &self.cstring_path;
-        debug!("Path as C string is {:?}", cpath);
-        let ppath = cpath.as_ptr();
-
-        let ctx = self as *mut ReadStatMetadata as *mut c_void;
-
-        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
-
-        let _ = ReadStatParser::new()
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
-            .parse_sas7bdat(ppath, ctx)?;
-
-        Ok(error)
-    }
-
-    pub fn print_data(&mut self) -> Result<u32, Box<dyn Error>> {
-        let cpath = &self.cstring_path;
-        debug!("Path as C string is {:?}", cpath);
-        let ppath = cpath.as_ptr();
-
-        let ctx = self as *mut ReadStatMetadata as *mut c_void;
-
-        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
-
-        let _ = ReadStatParser::new()
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
-            .set_value_handler(Some(cb::handle_value_print))?
-            .parse_sas7bdat(ppath, ctx)?;
-
-        Ok(error)
-    }
-}
+const DIGITS: usize = 14;
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
 pub struct ReadStatVarMetadata {
@@ -101,23 +47,6 @@ impl Serialize for ReadStatVar {
     }
 }
 
-impl std::fmt::Display for ReadStatVar {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                ReadStatVar::ReadStat_String(s) => s.to_string(),
-                ReadStatVar::ReadStat_i8(i) => i.to_string(),
-                ReadStatVar::ReadStat_i16(i) => i.to_string(),
-                ReadStatVar::ReadStat_i32(i) => i.to_string(),
-                ReadStatVar::ReadStat_f32(f) => f.to_string(),
-                ReadStatVar::ReadStat_f64(f) => f.to_string(),
-            }
-        )
-    }
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub enum ReadStatVarTrunc {
     ReadStat_String(String),
@@ -135,13 +64,13 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
             ReadStatVar::ReadStat_i8(i) => Self::ReadStat_i8(*i),
             ReadStatVar::ReadStat_i16(i) => Self::ReadStat_i16(*i),
             ReadStatVar::ReadStat_i32(i) => Self::ReadStat_i32(*i),
-            // Format as strings to get only 14 digits
-            // Then parse back into f32 or f64 so that the trailing zeroes are trimmed when serializing
+            // Format as string to truncate float to only contain 14 decimal digits
+            // Parse back into float so that the trailing zeroes are trimmed when serializing
             ReadStatVar::ReadStat_f32(f) => {
-                Self::ReadStat_f32(format!("{:.14}", f).parse::<f32>().unwrap())
+                Self::ReadStat_f32(format!("{1:.0$}", DIGITS, f).parse::<f32>().unwrap())
             }
             ReadStatVar::ReadStat_f64(f) => {
-                Self::ReadStat_f64(format!("{:.14}", f).parse::<f64>().unwrap())
+                Self::ReadStat_f64(format!("{1:.0$}", DIGITS, f).parse::<f64>().unwrap())
             }
         }
     }
@@ -149,24 +78,35 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
 
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
-    pub metadata: ReadStatMetadata,
+    pub path: PathBuf,
+    pub cstring_path: CString,
+    pub out_path: Option<PathBuf>,
+    pub out_type: Option<OutType>,
+    pub row_count: c_int,
+    pub var_count: c_int,
+    pub vars: BTreeMap<ReadStatVarMetadata, readstat_sys::readstat_type_t>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
 }
 
 impl ReadStatData {
-    pub fn new(md: ReadStatMetadata) -> Self {
+    pub fn new(rsp: ReadStatPath) -> Self {
         Self {
-            metadata: md,
+            path: rsp.path,
+            cstring_path: rsp.cstring_path,
+            out_path: rsp.out_path,
+            out_type: rsp.out_type,
+            row_count: 0,
+            var_count: 0,
+            vars: BTreeMap::new(),
             row: Vec::new(),
             rows: Vec::new(),
         }
     }
 
     pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
-        let cpath = &self.metadata.cstring_path;
-        debug!("Path as C string is {:?}", cpath);
-        let ppath = cpath.as_ptr();
+        debug!("Path as C string is {:?}", &self.cstring_path);
+        let ppath = self.cstring_path.as_ptr();
 
         let ctx = self as *mut ReadStatData as *mut c_void;
 
@@ -182,25 +122,88 @@ impl ReadStatData {
         Ok(error)
     }
 
-    pub fn write(&self, out: PathBuf) -> Result<(), Box<dyn Error>> {
+    pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
+        debug!("Path as C string is {:?}", &self.cstring_path);
+        let ppath = self.cstring_path.as_ptr();
+
+        let ctx = self as *mut ReadStatData as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let _ = ReadStatParser::new()
+            .set_metadata_handler(Some(cb::handle_metadata))?
+            .set_variable_handler(Some(cb::handle_variable))?
+            .parse_sas7bdat(ppath, ctx)?;
+
+        Ok(error)
+    }
+
+    pub fn write(&self) -> Result<(), Box<dyn Error>> {
+        match self.out_type {
+            Some(OutType::csv) => self.write_to_csv(),
+            Some(OutType::stdout) => self.write_to_stdout(),
+            None => self.write_metadata_to_stdout(),
+        }
+    }
+
+    pub fn write_to_csv(&self) -> Result<(), Box<dyn Error>> {
+        match &self.out_path {
+            None => Err(From::from(
+                "Error writing csv as output path is the set to None",
+            )),
+            Some(p) => {
+                let mut wtr = csv::WriterBuilder::new()
+                    .quote_style(csv::QuoteStyle::Always)
+                    .from_path(p)?;
+
+                // write header
+                let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+                wtr.serialize(vars)?;
+
+                // write rows
+                for r in &self.rows {
+                    wtr.serialize(r)?;
+                }
+                wtr.flush()?;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn write_to_stdout(&self) -> Result<(), Box<dyn Error>> {
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
-            .from_path(out)?;
+            .from_writer(stdout());
 
-        let vars: Vec<String> = self
-            .metadata
-            .vars
-            .iter()
-            .map(|(k, _)| k.var_name.clone())
-            .collect();
-
-        // header
+        // write header
+        let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
         wtr.serialize(vars)?;
 
+        // write rows
         for r in &self.rows {
             wtr.serialize(r)?;
         }
         wtr.flush()?;
+        Ok(())
+    }
+
+    pub fn write_metadata_to_stdout(&self) -> Result<(), Box<dyn Error>> {
+        println!(
+            "Metadata for the file {}\n",
+            self.path.to_string_lossy().yellow()
+        );
+        println!("{}: {}", "Row count".green(), self.row_count);
+        println!("{}: {}", "Variable count".red(), self.var_count);
+        println!("{}:", "Variable names".blue());
+        for (k, v) in self.vars.iter() {
+            println!(
+                "{}: {} of type {}",
+                k.var_index,
+                k.var_name.bright_purple(),
+                v
+            );
+        }
         Ok(())
     }
 }
