@@ -60,6 +60,24 @@ valgrind ./target/debug/deps/get_row_count_test-11793a929ad2468f
 - macOS &rarr; have not tested; *may* build and run
 - Windows &rarr; does not build; [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate needs work to build on Windows
 
+
+## Disclaimer
+:warning: Decimal values are truncated to contain only 14 decimal digits!
+
+For example, the number `1.123456789012345` created within SAS would be returned as `1.12345678901234` within Rust.
+
+Why does this happen?  Truncation to only 14 decimal digits has been purposely implemented within the Rust code.
+
+As a specific example, when working with the [cars.sas7bdat](data/README.md) dataset, the number `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits).  Yet, numeric values created on Windows with an x64 processor are only accurate to 15 digits.
+SAS represents all numeric values in floating-point representation.
+
+### Sources
+- [How SAS Stores Numeric Values](https://documentation.sas.com/?cdcId=pgmsascdc&cdcVersion=9.4_3.5&docsetId=lrcon&docsetTarget=p0ji1unv6thm0dn1gp4t01a1u0g6.htm&locale=en#n00dmtao82eizen1e6yziw3s31da)
+- [Accuracy on x64 Windows Processors](https://documentation.sas.com/?cdcId=pgmsascdc&cdcVersion=9.4_3.5&docsetId=lrcon&docsetTarget=p0ji1unv6thm0dn1gp4t01a1u0g6.htm&locale=en#n0pd8l179ai8odn17nncb4izqq3d)
+    - SAS on Windows with x64 processors can only represent 15 digits
+- [Floating-point arithmetic may give inaccurate results in Excel](https://docs.microsoft.com/en-us/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result)
+    - Also, see the notes for Microsoft Excel on Windows
+
 ## Goals
 
 ### Short Term
