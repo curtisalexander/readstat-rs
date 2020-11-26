@@ -30,7 +30,6 @@ impl ReadStatMetadata {
     }
 
     pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
-        // unwrap because cstring_path validated when ReadStatPath created
         let cpath = &self.cstring_path;
         debug!("Path as C string is {:?}", cpath);
         let ppath = cpath.as_ptr();

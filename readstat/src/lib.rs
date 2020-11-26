@@ -2,7 +2,6 @@
 
 mod cb;
 mod rs;
-// mod util;
 
 use colored::Colorize;
 use dunce;
@@ -15,7 +14,6 @@ use std::ffi::CString;
 use std::path::PathBuf;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
-// use util::validate_path;
 
 pub use rs::{ReadStatData, ReadStatMetadata, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc};
 
@@ -32,9 +30,9 @@ pub struct ReadStat {
 
 #[derive(StructOpt, Debug)]
 pub enum Command {
-    /// Get sas7bdat metadata
+    /// Display sas7bdat metadata
     Metadata {},
-    /// Print rows to standard out
+    /// Write rows to standard out
     Preview {
         #[structopt(long, default_value = "10")]
         rows: u32,
@@ -61,7 +59,7 @@ arg_enum! {
 pub struct ReadStatPath {
     pub path: PathBuf,
     pub extension: String,
-    pub cstring_path: CString
+    pub cstring_path: CString,
 }
 
 impl ReadStatPath {
@@ -73,7 +71,7 @@ impl ReadStatPath {
         Ok(Self {
             path: p,
             extension: ext,
-            cstring_path: csp
+            cstring_path: csp,
         })
     }
 
@@ -86,7 +84,8 @@ impl ReadStatPath {
 
     #[cfg(not(unix))]
     pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
-        let rust_str = &self.path
+        let rust_str = &self
+            .path
             .as_os_str()
             .as_str()
             .ok_or(Err(From::from("Invalid path")))?;
@@ -188,7 +187,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        Command::Data { out_file: _, out_type: _ } => {
+        Command::Data {
+            out_file: _,
+            out_type: _,
+        } => {
             let mut md = ReadStatMetadata::new(sas_path);
             let error = md.get_metadata()?;
 

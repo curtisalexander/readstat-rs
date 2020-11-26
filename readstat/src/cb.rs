@@ -113,7 +113,6 @@ pub extern "C" fn handle_value_print(
                 ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
             }
             // exhaustive
-            // _ => ReadStatVarType::ReadStat_String(String::new()),
             _ => unreachable!(),
         };
 
