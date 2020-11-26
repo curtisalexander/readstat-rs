@@ -9,6 +9,9 @@ use std::path::PathBuf;
 use crate::cb;
 use crate::ReadStatPath;
 
+const DIGITS: usize = 14;
+
+/*
 #[derive(Debug, Serialize)]
 pub struct ReadStatMetadata {
     pub path: PathBuf,
@@ -66,6 +69,7 @@ impl ReadStatMetadata {
         Ok(error)
     }
 }
+*/
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
 pub struct ReadStatVarMetadata {
@@ -136,12 +140,12 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
             ReadStatVar::ReadStat_i16(i) => Self::ReadStat_i16(*i),
             ReadStatVar::ReadStat_i32(i) => Self::ReadStat_i32(*i),
             // Format as strings to get only 14 digits
-            // Then parse back into f32 or f64 so that the trailing zeroes are trimmed when serializing
+            // Parse back into float so that the trailing zeroes are trimmed when serializing
             ReadStatVar::ReadStat_f32(f) => {
-                Self::ReadStat_f32(format!("{:.14}", f).parse::<f32>().unwrap())
+                Self::ReadStat_f32(format!("{1:.0$}", DIGITS, f).parse::<f32>().unwrap())
             }
             ReadStatVar::ReadStat_f64(f) => {
-                Self::ReadStat_f64(format!("{:.14}", f).parse::<f64>().unwrap())
+                Self::ReadStat_f64(format!("{1:.0$}", DIGITS, f).parse::<f64>().unwrap())
             }
         }
     }
@@ -149,24 +153,31 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
 
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
-    pub metadata: ReadStatMetadata,
+    pub path: PathBuf,
+    pub cstring_path: CString,
+    pub row_count: c_int,
+    pub var_count: c_int,
+    pub vars: BTreeMap<ReadStatVarMetadata, readstat_sys::readstat_type_t>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
 }
 
 impl ReadStatData {
-    pub fn new(md: ReadStatMetadata) -> Self {
+    pub fn new(rsp: ReadStatPath) -> Self {
         Self {
-            metadata: md,
+            path: rsp.path,
+            cstring_path: rsp.cstring_path,
+            row_count: 0,
+            var_count: 0,
+            vars: BTreeMap::new(),
             row: Vec::new(),
             rows: Vec::new(),
         }
     }
 
     pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
-        let cpath = &self.metadata.cstring_path;
-        debug!("Path as C string is {:?}", cpath);
-        let ppath = cpath.as_ptr();
+        debug!("Path as C string is {:?}", &self.cstring_path);
+        let ppath = self.cstring_path.as_ptr();
 
         let ctx = self as *mut ReadStatData as *mut c_void;
 
@@ -182,13 +193,29 @@ impl ReadStatData {
         Ok(error)
     }
 
+    pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
+        debug!("Path as C string is {:?}", &self.cstring_path);
+        let ppath = self.cstring_path.as_ptr();
+
+        let ctx = self as *mut ReadStatData as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let _ = ReadStatParser::new()
+            .set_metadata_handler(Some(cb::handle_metadata))?
+            .set_variable_handler(Some(cb::handle_variable))?
+            .parse_sas7bdat(ppath, ctx)?;
+
+        Ok(error)
+    }
+
     pub fn write(&self, out: PathBuf) -> Result<(), Box<dyn Error>> {
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_path(out)?;
 
         let vars: Vec<String> = self
-            .metadata
             .vars
             .iter()
             .map(|(k, _)| k.var_name.clone())

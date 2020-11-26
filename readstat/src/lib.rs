@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
-pub use rs::{ReadStatData, ReadStatMetadata, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc};
+pub use rs::{ReadStatData, /*ReadStatMetadata,*/ ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -138,20 +138,20 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
     match rs.cmd {
         Command::Metadata {} => {
-            let mut md = ReadStatMetadata::new(sas_path);
-            let error = md.get_metadata()?;
+            let mut d = ReadStatData::new(sas_path);
+            let error = d.get_metadata()?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
                 println!(
                     "Metadata for the file {}\n",
-                    md.path.to_string_lossy().yellow()
+                    d.path.to_string_lossy().yellow()
                 );
-                println!("{}: {}", "Row count".green(), md.row_count);
-                println!("{}: {}", "Variable count".red(), md.var_count);
+                println!("{}: {}", "Row count".green(), d.row_count);
+                println!("{}: {}", "Variable count".red(), d.var_count);
                 println!("{}:", "Variable names".blue());
-                for (k, v) in md.vars.iter() {
+                for (k, v) in d.vars.iter() {
                     println!(
                         "{}: {} of type {}",
                         k.var_index,
@@ -163,55 +163,54 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             }
         }
         Command::Preview { rows: _ } => {
-            let mut md = ReadStatMetadata::new(sas_path);
-            let error = md.get_metadata()?;
+            let mut d = ReadStatData::new(sas_path);
+            let error = d.get_metadata()?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
                 // Write header
-                for (k, _) in md.vars.iter() {
-                    if k.var_index == md.var_count - 1 {
+                for (k, _) in d.vars.iter() {
+                    if k.var_index == d.var_count - 1 {
                         println!("{}", k.var_name);
                     } else {
                         print!("{}\t", k.var_name);
                     }
                 }
                 // Write data to standard out
-                let error = md.print_data()?;
+                /*
+                let error = d.print_data()?;
 
                 if error != readstat_sys::readstat_error_e_READSTAT_OK {
                     Err(From::from("Error when attempting to parse sas7bdat"))
                 } else {
                     Ok(())
                 }
+                */
+                Ok(())
             }
         }
         Command::Data {
             out_file: _,
             out_type: _,
         } => {
-            let mut md = ReadStatMetadata::new(sas_path);
-            let error = md.get_metadata()?;
+            // Get data
+            let mut d = ReadStatData::new(sas_path);
+            let error = d.get_data()?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
-                // Get data
-                let mut d = ReadStatData::new(md);
-                let error = d.get_data()?;
+                // TODO: Replace hard-coded path with dynamic path provided by user
+                let out_dir =
+                    dunce::canonicalize(PathBuf::from("/home/calex/code/readstat-rs/data"))
+                        .unwrap();
+                let out_file = out_dir.join("cars_serde.csv");
+                println!("out_file is {}", out_file.to_string_lossy());
 
-                if error != readstat_sys::readstat_error_e_READSTAT_OK {
-                    Err(From::from("Error when attempting to parse sas7bdat"))
-                } else {
-                    let out_dir =
-                        dunce::canonicalize(PathBuf::from("/home/calex/code/readstat-rs/data"))
-                            .unwrap();
-                    let out_file = out_dir.join("cars_serde.csv");
-                    println!("out_file is {}", out_file.to_string_lossy());
-                    d.write(out_file)?;
-                    Ok(())
-                }
+                // Write to file (using serde)
+                d.write(out_file)?;
+                Ok(())
             }
         }
     }
