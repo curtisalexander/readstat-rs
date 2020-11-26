@@ -2,96 +2,36 @@ use log::debug;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
 
 use crate::cb;
-use crate::util;
-
-#[derive(Debug, Serialize)]
-pub struct ReadStatData {
-    pub metadata: ReadStatMetadata,
-    pub row: Vec<ReadStatVar>,
-    pub rows: Vec<Vec<ReadStatVar>>,
-}
-
-impl ReadStatData {
-    pub fn new(md: ReadStatMetadata) -> Self {
-        Self {
-            metadata: md,
-            row: Vec::new(),
-            rows: Vec::new(),
-        }
-    }
-
-    pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
-        let path = &self.metadata.path;
-        let cpath = util::path_to_cstring(&path)?;
-        debug!("Path as C string is {:?}", cpath);
-        let ppath = cpath.as_ptr();
-
-        let ctx = self as *mut ReadStatData as *mut c_void;
-
-        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
-
-        let _ = ReadStatParser::new()
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
-            .set_value_handler(Some(cb::handle_value))?
-            .parse_sas7bdat(ppath, ctx)?;
-
-        Ok(error)
-    }
-
-    pub fn write(&self, out: PathBuf) -> Result<(), Box<dyn Error>> {
-        let mut wtr = csv::WriterBuilder::new()
-            .quote_style(csv::QuoteStyle::Always)
-            .from_path(out)?;
-
-        let vars: Vec<String> = self
-            .metadata
-            .vars
-            .iter()
-            .map(|(k, _)| k.var_name.clone())
-            .collect();
-
-        // header
-        wtr.serialize(vars)?;
-
-        for r in &self.rows {
-            wtr.serialize(r)?;
-        }
-        wtr.flush()?;
-        Ok(())
-    }
-}
+use crate::ReadStatPath;
 
 #[derive(Debug, Serialize)]
 pub struct ReadStatMetadata {
     pub path: PathBuf,
+    pub cstring_path: CString,
     pub row_count: c_int,
     pub var_count: c_int,
     pub vars: BTreeMap<ReadStatVarMetadata, readstat_sys::readstat_type_t>,
 }
 
 impl ReadStatMetadata {
-    pub fn new() -> Self {
+    pub fn new(rsp: ReadStatPath) -> Self {
         Self {
-            path: PathBuf::new(),
+            path: rsp.path,
+            cstring_path: rsp.cstring_path,
             row_count: 0,
             var_count: 0,
             vars: BTreeMap::new(),
         }
     }
 
-    pub fn set_path(self, path: PathBuf) -> Self {
-        Self { path: path, ..self }
-    }
-
     pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
-        let path = &self.path;
-        let cpath = util::path_to_cstring(&path)?;
+        // unwrap because cstring_path validated when ReadStatPath created
+        let cpath = &self.cstring_path;
         debug!("Path as C string is {:?}", cpath);
         let ppath = cpath.as_ptr();
 
@@ -109,8 +49,7 @@ impl ReadStatMetadata {
     }
 
     pub fn print_data(&mut self) -> Result<u32, Box<dyn Error>> {
-        let path = &self.path;
-        let cpath = util::path_to_cstring(&path)?;
+        let cpath = &self.cstring_path;
         debug!("Path as C string is {:?}", cpath);
         let ppath = cpath.as_ptr();
 
@@ -163,6 +102,23 @@ impl Serialize for ReadStatVar {
     }
 }
 
+impl std::fmt::Display for ReadStatVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ReadStatVar::ReadStat_String(s) => s.to_string(),
+                ReadStatVar::ReadStat_i8(i) => i.to_string(),
+                ReadStatVar::ReadStat_i16(i) => i.to_string(),
+                ReadStatVar::ReadStat_i32(i) => i.to_string(),
+                ReadStatVar::ReadStat_f32(f) => f.to_string(),
+                ReadStatVar::ReadStat_f64(f) => f.to_string(),
+            }
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub enum ReadStatVarTrunc {
     ReadStat_String(String),
@@ -192,20 +148,61 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
     }
 }
 
-impl std::fmt::Display for ReadStatVar {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                ReadStatVar::ReadStat_String(s) => s.to_string(),
-                ReadStatVar::ReadStat_i8(i) => i.to_string(),
-                ReadStatVar::ReadStat_i16(i) => i.to_string(),
-                ReadStatVar::ReadStat_i32(i) => i.to_string(),
-                ReadStatVar::ReadStat_f32(f) => f.to_string(),
-                ReadStatVar::ReadStat_f64(f) => f.to_string(),
-            }
-        )
+#[derive(Debug, Serialize)]
+pub struct ReadStatData {
+    pub metadata: ReadStatMetadata,
+    pub row: Vec<ReadStatVar>,
+    pub rows: Vec<Vec<ReadStatVar>>,
+}
+
+impl ReadStatData {
+    pub fn new(md: ReadStatMetadata) -> Self {
+        Self {
+            metadata: md,
+            row: Vec::new(),
+            rows: Vec::new(),
+        }
+    }
+
+    pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
+        let cpath = &self.metadata.cstring_path;
+        debug!("Path as C string is {:?}", cpath);
+        let ppath = cpath.as_ptr();
+
+        let ctx = self as *mut ReadStatData as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let _ = ReadStatParser::new()
+            .set_metadata_handler(Some(cb::handle_metadata))?
+            .set_variable_handler(Some(cb::handle_variable))?
+            .set_value_handler(Some(cb::handle_value))?
+            .parse_sas7bdat(ppath, ctx)?;
+
+        Ok(error)
+    }
+
+    pub fn write(&self, out: PathBuf) -> Result<(), Box<dyn Error>> {
+        let mut wtr = csv::WriterBuilder::new()
+            .quote_style(csv::QuoteStyle::Always)
+            .from_path(out)?;
+
+        let vars: Vec<String> = self
+            .metadata
+            .vars
+            .iter()
+            .map(|(k, _)| k.var_name.clone())
+            .collect();
+
+        // header
+        wtr.serialize(vars)?;
+
+        for r in &self.rows {
+            wtr.serialize(r)?;
+        }
+        wtr.flush()?;
+        Ok(())
     }
 }
 

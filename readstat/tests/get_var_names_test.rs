@@ -9,8 +9,9 @@ fn get_var_names() {
     let project_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let data_dir = project_dir.parent().unwrap().join("data");
     let sas_path = dunce::canonicalize(data_dir.join("cars.sas7bdat")).unwrap();
+    let sas_path = readstat::ReadStatPath::new(sas_path).unwrap();
 
-    let mut md = readstat::ReadStatMetadata::new().set_path(sas_path);
+    let mut md = readstat::ReadStatMetadata::new(sas_path);
     let error = md.get_metadata().unwrap();
 
     assert_eq!(error, readstat_sys::readstat_error_e_READSTAT_OK);
