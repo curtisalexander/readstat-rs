@@ -1,6 +1,7 @@
-use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata};
+use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarType, ReadStatVarMetadata};
 
 use log::debug;
+use num_traits::FromPrimitive;
 use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
@@ -55,8 +56,14 @@ pub extern "C" fn handle_variable(
 
     // get index, type, and name
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
-    let var_type: readstat_sys::readstat_type_t =
-        unsafe { readstat_sys::readstat_variable_get_type(variable) };
+    let var_type = unsafe {
+        match FromPrimitive::from_u32(readstat_sys::readstat_variable_get_type(variable)) {
+            Some(t) => t,
+            None => ReadStatVarType::Unknown
+        }
+    };
+    //let var_type: readstat_sys::readstat_type_t =
+    //    unsafe { readstat_sys::readstat_variable_get_type(variable) };
     let var_name = unsafe {
         CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
             .to_str()

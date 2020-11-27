@@ -1,5 +1,6 @@
 use colored::Colorize;
 use log::debug;
+use num_derive::FromPrimitive;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -76,15 +77,27 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
     }
 }
 
+#[derive(Debug, FromPrimitive, Serialize)]
+pub enum ReadStatVarType {
+    String = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING as isize,
+    Int8 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 as isize,
+    Int16 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 as isize,
+    Int32 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 as isize,
+    Float = readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT as isize,
+    Double = readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE as isize,
+    StringRef = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF as isize,
+    Unknown,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
-    pub out_type: Option<OutType>,
+    pub out_type: OutType,
     pub row_count: c_int,
     pub var_count: c_int,
-    pub vars: BTreeMap<ReadStatVarMetadata, readstat_sys::readstat_type_t>,
+    pub vars: BTreeMap<ReadStatVarMetadata, ReadStatVarType>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
 }
@@ -140,14 +153,13 @@ impl ReadStatData {
     }
 
     pub fn write(&self) -> Result<(), Box<dyn Error>> {
-        match self.out_type {
-            Some(OutType::csv) => self.write_to_csv(),
-            Some(OutType::stdout) => self.write_to_stdout(),
-            None => self.write_metadata_to_stdout(),
+        match self {
+            Self { out_path: None, out_type: OutType::csv, .. } => self.write_data_to_stdout(),
+            Self { out_path: Some(_), out_type: OutType::csv, .. } => self.write_data_to_csv(),
         }
     }
 
-    pub fn write_to_csv(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_data_to_csv(&self) -> Result<(), Box<dyn Error>> {
         match &self.out_path {
             None => Err(From::from(
                 "Error writing csv as output path is the set to None",
@@ -171,7 +183,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn write_to_stdout(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_data_to_stdout(&self) -> Result<(), Box<dyn Error>> {
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_writer(stdout());
@@ -198,7 +210,7 @@ impl ReadStatData {
         println!("{}:", "Variable names".blue());
         for (k, v) in self.vars.iter() {
             println!(
-                "{}: {} of type {}",
+                "{}: {} of type {:#?}",
                 k.var_index,
                 k.var_name.bright_purple(),
                 v

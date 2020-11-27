@@ -26,6 +26,6 @@ fn get_var_names() {
 
     assert_eq!(contains_brand_key, true);
     assert_eq!(contains_brand_key_wrong_index, false);
-    assert_eq!(*brand_type, 0 as readstat_sys::readstat_type_t);
+    assert!(matches!(*brand_type, readstat::ReadStatVarType::String));
 
 }

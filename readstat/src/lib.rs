@@ -17,7 +17,7 @@ use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
 pub use rs::{
-    ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc,
+    ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType
 };
 
 // StructOpt
@@ -45,7 +45,7 @@ pub enum Command {
     Data {
         /// Output file path
         #[structopt(long, parse(from_os_str))]
-        out_file: Option<PathBuf>,
+        out_path: Option<PathBuf>,
         /// Output type, defaults to csv
         #[structopt(long, possible_values=&OutType::variants(), case_insensitive=true)]
         out_type: Option<OutType>,
@@ -53,20 +53,20 @@ pub enum Command {
 }
 
 arg_enum! {
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Clone, Copy, Serialize)]
     #[allow(non_camel_case_types)]
     pub enum OutType {
         csv,
-        stdout
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ReadStatPath {
     pub path: PathBuf,
     pub extension: String,
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
-    pub out_type: Option<OutType>,
+    pub out_type: OutType,
 }
 
 impl ReadStatPath {
@@ -79,14 +79,14 @@ impl ReadStatPath {
         let ext = Self::validate_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
         let op: Option<PathBuf> = Self::validate_out_path(out_path)?;
+        let ot = Self::validate_out_type(out_type)?;
 
-        // TODO: validate out_path
         Ok(Self {
             path: p,
             extension: ext,
             cstring_path: csp,
             out_path: op,
-            out_type: out_type,
+            out_type: ot,
         })
     }
 
@@ -106,6 +106,19 @@ impl ReadStatPath {
             .ok_or(Err(From::from("Invalid path")))?;
         // let bytes = &self.path.as_os_str().as_bytes();
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
+    }
+
+    fn validate_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .and_then(|e| Some(e.to_owned()))
+            .map_or(
+                Err(From::from(format!(
+                    "File {} does not have an extension!",
+                    path.to_string_lossy().yellow()
+                ))),
+                |e| Ok(e),
+            )
     }
 
     fn validate_path(p: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
@@ -151,17 +164,11 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .and_then(|e| Some(e.to_owned()))
-            .map_or(
-                Err(From::from(format!(
-                    "File {} does not have an extension!",
-                    path.to_string_lossy().yellow()
-                ))),
-                |e| Ok(e),
-            )
+    fn validate_out_type(t: Option<OutType>) -> Result<OutType, Box<dyn Error>> {
+        match t {
+            None => Ok(OutType::csv),
+            Some(t) => Ok(t)
+        }
     }
 }
 
@@ -185,12 +192,12 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
-                d.write()
+                d.write_metadata_to_stdout()
             }
         }
         Command::Preview { rows: _ } => {
             // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(OutType::stdout))?;
+            let rsp = ReadStatPath::new(sas_path, None, Some(OutType::csv))?;
             let mut d = ReadStatData::new(rsp);
             let error = d.get_metadata()?;
 
@@ -209,14 +216,38 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 Ok(())
             }
         }
-        Command::Data { out_file, out_type } => {
-            let of = out_file;
-            let ot = out_type;
+        Command::Data { out_path, out_type } => {
             // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, of, ot)?;
+            let rsp = ReadStatPath::new(sas_path, out_path, out_type)?;
             let mut d = ReadStatData::new(rsp);
-            let error = d.get_data()?;
 
+            match &d {
+                ReadStatData { out_path: None, out_type: OutType::csv, .. } => {
+                    println!("A value was not provided for the parameter --out-file, thus displaying metadata only");
+
+                    let error = d.get_metadata()?;
+
+                    if error != readstat_sys::readstat_error_e_READSTAT_OK {
+                        Err(From::from("Error when attempting to parse sas7bdat"))
+                    } else {
+                        d.write_metadata_to_stdout()
+                    }
+                },
+                ReadStatData { out_path: Some(p), out_type: OutType::csv, .. } => {
+                    println!("Writing parsed data to file {},", p.to_string_lossy());
+                    
+                    let error = d.get_data()?;
+
+                    if error != readstat_sys::readstat_error_e_READSTAT_OK {
+                        Err(From::from("Error when attempting to parse sas7bdat"))
+                    } else {
+                        d.write()
+                    }
+                },
+            }
+
+            // let error = d.get_data()?;
+            /*
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
@@ -224,12 +255,13 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 let out_dir =
                     dunce::canonicalize(PathBuf::from("/home/calex/code/readstat-rs/data"))
                         .unwrap();
-                let out_file = out_dir.join("cars_serde.csv");
-                println!("out_file is {}", out_file.to_string_lossy());
+                let out_path = out_dir.join("cars_serde.csv");
+                println!("out_path is {}", out_path.to_string_lossy());
 
                 // Write to file (using serde)
                 d.write()
             }
+            */
         }
     }
 }
