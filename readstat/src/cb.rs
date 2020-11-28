@@ -1,4 +1,4 @@
-use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarType, ReadStatVarMetadata};
+use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
 
 use log::debug;
 use num_traits::FromPrimitive;
@@ -59,7 +59,7 @@ pub extern "C" fn handle_variable(
     let var_type = unsafe {
         match FromPrimitive::from_u32(readstat_sys::readstat_variable_get_type(variable)) {
             Some(t) => t,
-            None => ReadStatVarType::Unknown
+            None => ReadStatVarType::Unknown,
         }
     };
     //let var_type: readstat_sys::readstat_type_t =
@@ -81,72 +81,6 @@ pub extern "C" fn handle_variable(
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
-
-/*
-pub extern "C" fn handle_value_print(
-    #[allow(unused_variables)] obs_index: c_int,
-    variable: *mut readstat_sys::readstat_variable_t,
-    value: readstat_sys::readstat_value_t,
-    ctx: *mut c_void,
-) -> c_int {
-    let md = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
-
-    let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
-
-    let val_type: readstat_sys::readstat_type_t =
-        unsafe { readstat_sys::readstat_value_type(value) };
-
-    let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
-
-    if is_missing == 0 {
-        let value: ReadStatVar = match val_type {
-            readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
-            | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
-                ReadStatVar::ReadStat_String(unsafe {
-                    CStr::from_ptr(readstat_sys::readstat_string_value(value))
-                        .to_str()
-                        .unwrap()
-                        .to_owned()
-                })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
-                ReadStatVar::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
-                ReadStatVar::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
-                ReadStatVar::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
-                ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-                ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
-            }
-            // exhaustive
-            _ => unreachable!(),
-        };
-
-        match value {
-            ReadStatVar::ReadStat_String(s) => print!("{}", s),
-            ReadStatVar::ReadStat_i8(i) => print!("{}", i),
-            ReadStatVar::ReadStat_i16(i) => print!("{}", i),
-            ReadStatVar::ReadStat_i32(i) => print!("{}", i),
-            ReadStatVar::ReadStat_f32(f) => print!("{:.6}", f),
-            ReadStatVar::ReadStat_f64(f) => print!("{:.6}", f),
-        }
-    }
-
-    if var_index == md.var_count - 1 {
-        print!("\n");
-    } else {
-        print!("\t");
-    }
-
-    ReadStatHandler::READSTAT_HANDLER_OK as c_int
-}
-*/
 
 pub extern "C" fn handle_value(
     #[allow(unused_variables)] obs_index: c_int,
