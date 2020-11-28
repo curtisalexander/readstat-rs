@@ -9,13 +9,14 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
 use std::io::stdout;
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::path::PathBuf;
 
 use crate::cb;
 use crate::OutType;
 
 const DIGITS: usize = 14;
+const PREVIEW_ROWS: c_long = 10 ;
 
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
@@ -109,12 +110,12 @@ impl ReadStatPath {
                 let abs_path = abs_path.clean();
 
                 match abs_path.parent() {
-                    None => Err(From::from(format!("The parent directory of the value of the parameter  --out-file ({}) does not exist", &abs_path.to_string_lossy()))),
+                    None => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
                     Some(parent) => {
                         if parent.exists() {
                             Ok(Some(abs_path))
                         } else {
-                            Err(From::from(format!("The parent directory of the value of the parameter  --out-file ({}) does not exist", &parent.to_string_lossy())))
+                            Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &parent.to_string_lossy())))
                         }
                     }
                 }
@@ -268,6 +269,25 @@ impl ReadStatData {
         Ok(error)
     }
 
+    pub fn get_preview(&mut self) -> Result<u32, Box<dyn Error>> {
+        debug!("Path as C string is {:?}", &self.cstring_path);
+        let ppath = self.cstring_path.as_ptr();
+
+        let ctx = self as *mut ReadStatData as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let _ = ReadStatParser::new()
+            .set_metadata_handler(Some(cb::handle_metadata))?
+            .set_variable_handler(Some(cb::handle_variable))?
+            .set_value_handler(Some(cb::handle_value))?
+            .set_row_limit(PREVIEW_ROWS)?
+            .parse_sas7bdat(ppath, ctx)?;
+
+        Ok(error)
+    }
+
     pub fn write(&self) -> Result<(), Box<dyn Error>> {
         match self {
             Self { out_path: None, out_type: OutType::csv, .. } => self.write_data_to_stdout(),
@@ -364,6 +384,25 @@ impl ReadStatParser {
             Ok(self)
         } else {
             Err(From::from("Unable to set metadata handler"))
+        }
+    }
+
+    fn set_row_limit(
+        self,
+        row_limit: c_long,
+    ) -> Result<Self, Box<dyn Error>> {
+        let set_row_limit_error =
+            unsafe { readstat_sys::readstat_set_row_limit(self.parser, row_limit) };
+
+        debug!(
+            "After setting row limit, error ==> {}",
+            &set_row_limit_error
+        );
+
+        if set_row_limit_error == readstat_sys::readstat_error_e_READSTAT_OK {
+            Ok(self)
+        } else {
+            Err(From::from("Unable to set row limit"))
         }
     }
 
