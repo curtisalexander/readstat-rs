@@ -1,4 +1,5 @@
 use colored::Colorize;
+use dunce;
 use std::env;
 use log::debug;
 use num_derive::FromPrimitive;
@@ -99,10 +100,11 @@ impl ReadStatPath {
         match p {
             None => Ok(None),
             Some(p) => {
-                let abs_path = if p.is_absolute() {
-                    p
+                let path = dunce::canonicalize(p)?;
+                let abs_path = if path.is_absolute() {
+                    path
                 } else {
-                    env::current_dir()?.join(p)
+                    env::current_dir()?.join(path)
                 };
                 let abs_path = abs_path.clean();
 
