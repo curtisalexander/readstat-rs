@@ -1,0 +1,19 @@
+[package]
+name = "iconv-sys"
+version = "0.1.0"
+authors = ["Curtis Alexander <calex@calex.org>"]
+edition = "2018"
+description = "Bindings for iconv"
+license = "LGPL"
+repository = "https://github.com/curtisalexander/readstat-rs/iconv-sys"
+links = "iconv"
+build = "build.rs"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+cc = "1.0"
+dunce = "1.0"
+
+[dependencies]
