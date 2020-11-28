@@ -16,7 +16,6 @@ use crate::cb;
 use crate::OutType;
 
 const DIGITS: usize = 14;
-const PREVIEW_ROWS: c_long = 10;
 
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
@@ -269,7 +268,7 @@ impl ReadStatData {
         Ok(error)
     }
 
-    pub fn get_preview(&mut self) -> Result<u32, Box<dyn Error>> {
+    pub fn get_preview(&mut self, row_limit: u32) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -282,7 +281,7 @@ impl ReadStatData {
             .set_metadata_handler(Some(cb::handle_metadata))?
             .set_variable_handler(Some(cb::handle_variable))?
             .set_value_handler(Some(cb::handle_value))?
-            .set_row_limit(PREVIEW_ROWS)?
+            .set_row_limit(row_limit as c_long)?
             .parse_sas7bdat(ppath, ctx)?;
 
         Ok(error)

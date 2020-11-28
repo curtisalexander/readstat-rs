@@ -78,11 +78,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 d.write_metadata_to_stdout()
             }
         }
-        Command::Preview { rows: _ } => {
+        Command::Preview { rows } => {
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, Some(OutType::csv))?;
             let mut d = ReadStatData::new(rsp);
-            let error = d.get_preview()?;
+            let error = d.get_preview(rows)?;
 
             if error != readstat_sys::readstat_error_e_READSTAT_OK {
                 Err(From::from("Error when attempting to parse sas7bdat"))
