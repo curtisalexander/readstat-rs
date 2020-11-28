@@ -1,6 +1,8 @@
 use colored::Colorize;
+use std::env;
 use log::debug;
 use num_derive::FromPrimitive;
+use path_clean::PathClean;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -10,9 +12,121 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
 
 use crate::cb;
-use crate::{OutType, ReadStatPath};
+use crate::OutType;
 
 const DIGITS: usize = 14;
+
+#[derive(Debug, Clone)]
+pub struct ReadStatPath {
+    pub path: PathBuf,
+    pub extension: String,
+    pub cstring_path: CString,
+    pub out_path: Option<PathBuf>,
+    pub out_type: OutType,
+}
+
+impl ReadStatPath {
+    pub fn new(
+        path: PathBuf,
+        out_path: Option<PathBuf>,
+        out_type: Option<OutType>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let p = Self::validate_path(path)?;
+        let ext = Self::validate_extension(&p)?;
+        let csp = Self::path_to_cstring(&p)?;
+        let op: Option<PathBuf> = Self::validate_out_path(out_path)?;
+        let ot = Self::validate_out_type(out_type)?;
+
+        Ok(Self {
+            path: p,
+            extension: ext,
+            cstring_path: csp,
+            out_path: op,
+            out_type: ot,
+        })
+    }
+
+    #[cfg(unix)]
+    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
+        use std::os::unix::ffi::OsStrExt;
+        let bytes = path.as_os_str().as_bytes();
+        CString::new(bytes).map_err(|_| From::from("Invalid path"))
+    }
+
+    #[cfg(not(unix))]
+    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
+        let rust_str = &self
+            .path
+            .as_os_str()
+            .as_str()
+            .ok_or(Err(From::from("Invalid path")))?;
+        // let bytes = &self.path.as_os_str().as_bytes();
+        CString::new(rust_str).map_err(|_| From::from("Invalid path"))
+    }
+
+    fn validate_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .and_then(|e| Some(e.to_owned()))
+            .map_or(
+                Err(From::from(format!(
+                    "File {} does not have an extension!",
+                    path.to_string_lossy().yellow()
+                ))),
+                |e| Ok(e),
+            )
+    }
+
+    fn validate_path(p: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+        let abs_path = if p.is_absolute() {
+            p
+        } else {
+            env::current_dir()?.join(p)
+        };
+        let abs_path = abs_path.clean();
+
+        if abs_path.exists() {
+            Ok(abs_path)
+        } else {
+            Err(From::from(format!(
+                "File {} does not exist!",
+                abs_path.to_string_lossy().yellow()
+            )))
+        }
+    }
+
+    fn validate_out_path(p: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
+        match p {
+            None => Ok(None),
+            Some(p) => {
+                let abs_path = if p.is_absolute() {
+                    p
+                } else {
+                    env::current_dir()?.join(p)
+                };
+                let abs_path = abs_path.clean();
+
+                match abs_path.parent() {
+                    None => Err(From::from(format!("The parent directory of the value of the parameter  --out-file ({}) does not exist", &abs_path.to_string_lossy()))),
+                    Some(parent) => {
+                        if parent.exists() {
+                            Ok(Some(abs_path))
+                        } else {
+                            Err(From::from(format!("The parent directory of the value of the parameter  --out-file ({}) does not exist", &parent.to_string_lossy())))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn validate_out_type(t: Option<OutType>) -> Result<OutType, Box<dyn Error>> {
+        match t {
+            None => Ok(OutType::csv),
+            Some(t) => Ok(t)
+        }
+    }
+}
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
 pub struct ReadStatVarMetadata {
