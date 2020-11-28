@@ -1,11 +1,11 @@
 use colored::Colorize;
 use dunce;
-use std::env;
 use log::debug;
 use num_derive::FromPrimitive;
 use path_clean::PathClean;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
+use std::env;
 use std::error::Error;
 use std::ffi::CString;
 use std::io::stdout;
@@ -16,7 +16,7 @@ use crate::cb;
 use crate::OutType;
 
 const DIGITS: usize = 14;
-const PREVIEW_ROWS: c_long = 10 ;
+const PREVIEW_ROWS: c_long = 10;
 
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
@@ -126,7 +126,7 @@ impl ReadStatPath {
     fn validate_out_type(t: Option<OutType>) -> Result<OutType, Box<dyn Error>> {
         match t {
             None => Ok(OutType::csv),
-            Some(t) => Ok(t)
+            Some(t) => Ok(t),
         }
     }
 }
@@ -290,8 +290,16 @@ impl ReadStatData {
 
     pub fn write(&self) -> Result<(), Box<dyn Error>> {
         match self {
-            Self { out_path: None, out_type: OutType::csv, .. } => self.write_data_to_stdout(),
-            Self { out_path: Some(_), out_type: OutType::csv, .. } => self.write_data_to_csv(),
+            Self {
+                out_path: None,
+                out_type: OutType::csv,
+                ..
+            } => self.write_data_to_stdout(),
+            Self {
+                out_path: Some(_),
+                out_type: OutType::csv,
+                ..
+            } => self.write_data_to_csv(),
         }
     }
 
@@ -387,10 +395,7 @@ impl ReadStatParser {
         }
     }
 
-    fn set_row_limit(
-        self,
-        row_limit: c_long,
-    ) -> Result<Self, Box<dyn Error>> {
+    fn set_row_limit(self, row_limit: c_long) -> Result<Self, Box<dyn Error>> {
         let set_row_limit_error =
             unsafe { readstat_sys::readstat_set_row_limit(self.parser, row_limit) };
 

@@ -3,6 +3,7 @@
 mod cb;
 mod rs;
 
+use colored::Colorize;
 use dunce;
 use log::debug;
 use readstat_sys;
@@ -12,9 +13,7 @@ use std::path::PathBuf;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
-pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType
-};
+pub use rs::{ReadStatData, ReadStatPath, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -89,18 +88,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
                 d.write()
-                // TODO: create a preview writer
-                // Write header
-                /*
-                for (k, _) in d.vars.iter() {
-                    if k.var_index == d.var_count - 1 {
-                        println!("{}", k.var_name);
-                    } else {
-                        print!("{}\t", k.var_name);
-                    }
-                }
-                Ok(())
-                */
             }
         }
         Command::Data { out_path, out_type } => {
@@ -109,8 +96,12 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp);
 
             match &d {
-                ReadStatData { out_path: None, out_type: OutType::csv, .. } => {
-                    println!("A value was not provided for the parameter --out-path, thus displaying metadata only");
+                ReadStatData {
+                    out_path: None,
+                    out_type: OutType::csv,
+                    ..
+                } => {
+                    println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--out-path".bright_cyan());
 
                     let error = d.get_metadata()?;
 
@@ -119,10 +110,14 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     } else {
                         d.write_metadata_to_stdout()
                     }
-                },
-                ReadStatData { out_path: Some(p), out_type: OutType::csv, .. } => {
+                }
+                ReadStatData {
+                    out_path: Some(p),
+                    out_type: OutType::csv,
+                    ..
+                } => {
                     println!("Writing parsed data to file {},", p.to_string_lossy());
-                    
+
                     let error = d.get_data()?;
 
                     if error != readstat_sys::readstat_error_e_READSTAT_OK {
@@ -130,25 +125,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     } else {
                         d.write()
                     }
-                },
+                }
             }
-
-            // let error = d.get_data()?;
-            /*
-            if error != readstat_sys::readstat_error_e_READSTAT_OK {
-                Err(From::from("Error when attempting to parse sas7bdat"))
-            } else {
-                // TODO: Replace hard-coded path with dynamic path provided by user
-                let out_dir =
-                    dunce::canonicalize(PathBuf::from("/home/calex/code/readstat-rs/data"))
-                        .unwrap();
-                let out_path = out_dir.join("cars_serde.csv");
-                println!("out_path is {}", out_path.to_string_lossy());
-
-                // Write to file (using serde)
-                d.write()
-            }
-            */
         }
     }
 }
