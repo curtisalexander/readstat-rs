@@ -14,7 +14,9 @@ After building with `cargo build`, the binary is invoked using [structopt subcom
     - row count
     - variable count
     - variable names
-- `data` &rarr; writes parsed data as `tsv`
+    - variable types
+- `preview` &rarr; writes first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
+- `data` &rarr; writes parsed data in `csv` format to either standard out or a file
 
 Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.
 
@@ -30,10 +32,10 @@ readstat /some/dir/to/example.sas7bdat metadata
 ```
 
 ### Data
-To write parsed data (as [tab-separated values](https://en.wikipedia.org/wiki/Tab-separated_values)) to standard out, invoke the following.
+To write parsed data (as a `csv`) to standard out, invoke the following.
 
 ```sh
-readstat /some/dir/to/example.sas7bdat data
+readstat /some/dir/to/example.sas7bdat data --out-type csv
 ```
 
 To save the resulting `tsv` to a file.

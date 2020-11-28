@@ -116,7 +116,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     out_type: OutType::csv,
                     ..
                 } => {
-                    println!("Writing parsed data to file {},", p.to_string_lossy());
+                    println!("Writing parsed data to file {}", p.to_string_lossy());
 
                     let error = d.get_data()?;
 
