@@ -31,17 +31,18 @@ To write metadata to standard out, invoke the following.
 readstat /some/dir/to/example.sas7bdat metadata
 ```
 
-### Data
-To write parsed data (as a `csv`) to standard out, invoke the following.
+### Preview Data
+To write the first 10 rows of parsed data (as a `csv`) to standard out, invoke the following.
 
 ```sh
-readstat /some/dir/to/example.sas7bdat data --out-type csv
+readstat /some/dir/to/example.sas7bdat preview
 ```
 
-To save the resulting `tsv` to a file.
+### Data
+To write parsed data (as a `csv`) to a file, invoke the following.
 
 ```sh
-readstat /some/dir/to/example.sas7bdat data > example.tsv
+readstat /some/dir/to/example.sas7bdat data --out-path /some/dir/to/example.csv --out-type csv
 ```
 
 ## Testing
@@ -68,7 +69,7 @@ valgrind ./target/debug/deps/get_row_count_test-11793a929ad2468f
 
 For example, the number `1.123456789012345` created within SAS would be returned as `1.12345678901234` within Rust.
 
-Why does this happen?  Truncation to only 14 decimal digits has been purposely implemented within the Rust code.
+Why does this happen?  Is this an error?  No, truncation to only 14 decimal digits has been purposely implemented within the Rust code.
 
 As a specific example, when working with the [cars.sas7bdat](data/README.md) dataset, the number `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits).  Yet, numeric values created on Windows with an x64 processor are only accurate to 15 digits.
 SAS represents all numeric values in floating-point representation.
