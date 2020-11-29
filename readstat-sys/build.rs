@@ -149,8 +149,6 @@ fn main() {
         // Types
         // Error
         .whitelist_type("readstat_error_t")
-        // .whitelist_type("READSTAT_HANDLER_OK")
-        // .whitelist_type("READSTAT_OK")
         // Metadata
         .whitelist_type("readstat_metadata_t")
         .whitelist_type("readstat_compress_t")

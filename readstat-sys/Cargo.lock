@@ -155,6 +155,7 @@ checksum = "3c1ad908cc71012b7bea4d0c53ba96a8cba9962f048fa68d143376143d863b7a"
 name = "iconv-sys"
 version = "0.1.0"
 dependencies = [
+ "bindgen",
  "cc",
  "dunce",
 ]
