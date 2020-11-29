@@ -28,19 +28,20 @@ fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
 
-    // Linking
-    println!("cargo:rustc-link-lib=static=iconv");
 
     // Copy and communicate headers
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    
+    // Linking
+    println!("cargo:rustc-link-lib=static=iconv");
+    println!("cargo:rustc-link-search=native={}", out_path.to_str().unwrap());
 
     fs::create_dir_all(out_path.join("include")).unwrap();
     fs::copy(include.join("iconv.h"), out_path.join("include/iconv.h")).unwrap();
 
-    println!("cargo:root={}", out_path.to_str().unwrap());
+    // println!("cargo:root={}", out_path.to_str().unwrap());
     println!("cargo:include={}/include", out_path.to_str().unwrap());
 
-/*
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
     // the resulting bindings.
@@ -49,10 +50,10 @@ fn main() {
         .header("wrapper.h")
         // Select which functions and types to build bindings for
         // Register callbacks
-        .whitelist_function("libiconv_close")
-        .whitelist_function("libiconv_open")
+        //.whitelist_function("libiconv_close")
+        //.whitelist_function("libiconv_open")
         // Types
-        .whitelist_type("libiconv_t")
+        //.whitelist_type("libiconv_t")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -66,5 +67,4 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
-*/
 }

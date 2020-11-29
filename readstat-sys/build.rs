@@ -72,6 +72,11 @@ fn main() {
         cc.include(include);
     }
 
+    // Include zlib.h
+    if let Some(include) = env::var_os("DEP_Z_INCLUDE") {
+        cc.include(include);
+    }
+
     // Path to libclang
     if target.contains("windows-msvc") {
         println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
@@ -86,6 +91,8 @@ fn main() {
 
     // Linking
     println!("cargo:rustc-link-lib=static=readstat");
+    println!("cargo:rustc-link-lib=static=iconv");
+    println!("cargo:rustc-link-lib=static=z");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
