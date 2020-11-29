@@ -59,9 +59,9 @@ valgrind ./target/debug/deps/get_row_count_test-11793a929ad2468f
 ```
 
 ## Compatibility
-- Linux &rarr; developed on Linux; succesfully builds and runs
+- Linux &rarr; principally developed on Linux; succesfully builds and runs
 - macOS &rarr; have not tested; *may* build and run
-- Windows &rarr; does not build; [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate needs work to build on Windows
+- Windows &rarr; successfully builds and runs
 
 
 ## Disclaimer
