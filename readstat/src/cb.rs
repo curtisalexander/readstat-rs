@@ -57,7 +57,7 @@ pub extern "C" fn handle_variable(
     // get index, type, and name
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
     let var_type = unsafe {
-        match FromPrimitive::from_u32(readstat_sys::readstat_variable_get_type(variable)) {
+        match FromPrimitive::from_i32(readstat_sys::readstat_variable_get_type(variable)) {
             Some(t) => t,
             None => ReadStatVarType::Unknown,
         }

@@ -6,6 +6,8 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
+    let target = env::var("TARGET").unwrap();
+
     let project_dir = dunce::canonicalize(PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
 
     let src = project_dir.join("vendor").join("ReadStat").join("src");
@@ -14,7 +16,9 @@ fn main() {
     let stata = src.join("stata");
     let txt = src.join("txt");
   
-    cc::Build::new()
+    let mut cc = cc::Build::new();
+
+    cc
         .file(src.join("CKHashTable.c"))
         .file(src.join("readstat_bits.c"))
         .file(src.join("readstat_convert.c"))
@@ -60,14 +64,35 @@ fn main() {
         .file(txt.join("readstat_stata_dictionary_read.c"))
         .file(txt.join("readstat_txt_read.c"))
         .include(&src)
-        .warnings(false)
-        .compile("readstat");
+        .warnings(false);
+
+
+    // Include iconv.h
+    if let Some(include) = env::var_os("DEP_ICONV_INCLUDE") {
+        cc.include(include);
+    }
+
+    // Include zlib.h
+    if let Some(include) = env::var_os("DEP_Z_INCLUDE") {
+        cc.include(include);
+    }
+
+    // Path to libclang
+    if target.contains("windows-msvc") {
+        println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
+    }
+
+    // Compile
+    cc.compile("readstat");
+
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
 
     // Linking
     println!("cargo:rustc-link-lib=static=readstat");
+    println!("cargo:rustc-link-lib=static=iconv");
+    println!("cargo:rustc-link-lib=static=z");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
@@ -131,8 +156,6 @@ fn main() {
         // Types
         // Error
         .whitelist_type("readstat_error_t")
-        // .whitelist_type("READSTAT_HANDLER_OK")
-        // .whitelist_type("READSTAT_OK")
         // Metadata
         .whitelist_type("readstat_metadata_t")
         .whitelist_type("readstat_compress_t")

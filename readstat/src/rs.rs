@@ -55,12 +55,10 @@ impl ReadStatPath {
 
     #[cfg(not(unix))]
     pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
-        let rust_str = &self
-            .path
+        let rust_str = path
             .as_os_str()
-            .as_str()
-            .ok_or(Err(From::from("Invalid path")))?;
-        // let bytes = &self.path.as_os_str().as_bytes();
+            .to_str()
+            .ok_or("Invalid path")?;
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
     }
 
@@ -231,7 +229,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
+    pub fn get_data(&mut self) -> Result<i32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -249,7 +247,7 @@ impl ReadStatData {
         Ok(error)
     }
 
-    pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
+    pub fn get_metadata(&mut self) -> Result<i32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -266,7 +264,7 @@ impl ReadStatData {
         Ok(error)
     }
 
-    pub fn get_preview(&mut self, row_limit: u32) -> Result<u32, Box<dyn Error>> {
+    pub fn get_preview(&mut self, row_limit: u32) -> Result<i32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 

@@ -1,3 +1,4 @@
 /data/*.csv
+/iconv-sys/target
 /readstat/target
 /readstat-sys/target
