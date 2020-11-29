@@ -230,7 +230,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn get_data(&mut self) -> Result<i32, Box<dyn Error>> {
+    pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -248,7 +248,7 @@ impl ReadStatData {
         Ok(error)
     }
 
-    pub fn get_metadata(&mut self) -> Result<i32, Box<dyn Error>> {
+    pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -265,7 +265,7 @@ impl ReadStatData {
         Ok(error)
     }
 
-    pub fn get_preview(&mut self, row_limit: u32) -> Result<i32, Box<dyn Error>> {
+    pub fn get_preview(&mut self, row_limit: u32) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
