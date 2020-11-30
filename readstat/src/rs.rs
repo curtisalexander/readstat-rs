@@ -245,7 +245,7 @@ impl ReadStatData {
             .set_value_handler(Some(cb::handle_value))?
             .parse_sas7bdat(ppath, ctx)?;
 
-        Ok(error)
+        Ok(error as u32)
     }
 
     pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
@@ -262,7 +262,7 @@ impl ReadStatData {
             .set_variable_handler(Some(cb::handle_variable))?
             .parse_sas7bdat(ppath, ctx)?;
 
-        Ok(error)
+        Ok(error as u32)
     }
 
     pub fn get_preview(&mut self, row_limit: u32) -> Result<u32, Box<dyn Error>> {
@@ -281,7 +281,7 @@ impl ReadStatData {
             .set_row_limit(row_limit as c_long)?
             .parse_sas7bdat(ppath, ctx)?;
 
-        Ok(error)
+        Ok(error as u32)
     }
 
     pub fn write(&self) -> Result<(), Box<dyn Error>> {

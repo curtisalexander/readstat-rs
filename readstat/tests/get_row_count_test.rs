@@ -15,7 +15,7 @@ fn get_row_count() {
     let mut d = readstat::ReadStatData::new(rsp);
     let error = d.get_metadata().unwrap();
 
-    assert_eq!(error, readstat_sys::readstat_error_e_READSTAT_OK);
+    assert_eq!(error, readstat_sys::readstat_error_e_READSTAT_OK as u32);
 
     assert_eq!(d.row_count, 1081);
 }
