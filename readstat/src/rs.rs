@@ -93,6 +93,33 @@ impl ReadStatPath {
         }
     }
 
+    #[cfg(unix)]
+    fn validate_out_path(p: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
+        match p {
+            None => Ok(None),
+            Some(p) => {
+                let abs_path = if p.is_absolute() {
+                    p
+                } else {
+                    env::current_dir()?.join(p)
+                };
+                let abs_path = abs_path.clean();
+
+                match abs_path.parent() {
+                    None => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
+                    Some(parent) => {
+                        if parent.exists() {
+                            Ok(Some(abs_path))
+                        } else {
+                            Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &parent.to_string_lossy())))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
     fn validate_out_path(p: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
         match p {
             None => Ok(None),
