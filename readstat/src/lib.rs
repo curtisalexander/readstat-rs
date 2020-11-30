@@ -72,7 +72,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp);
             let error = d.get_metadata()?;
 
-            if error != readstat_sys::readstat_error_e_READSTAT_OK {
+            if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
                 d.write_metadata_to_stdout()
@@ -84,7 +84,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp);
             let error = d.get_preview(rows)?;
 
-            if error != readstat_sys::readstat_error_e_READSTAT_OK {
+            if error != readstat_sys::readstat_error_e_READSTAT_OK as u32{
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
                 d.write()
@@ -105,7 +105,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
                     let error = d.get_metadata()?;
 
-                    if error != readstat_sys::readstat_error_e_READSTAT_OK {
+                    if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
                         Err(From::from("Error when attempting to parse sas7bdat"))
                     } else {
                         d.write_metadata_to_stdout()
@@ -116,11 +116,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     out_type: OutType::csv,
                     ..
                 } => {
-                    println!("Writing parsed data to file {}", p.to_string_lossy());
+                    println!("Writing parsed data to file {}", p.to_string_lossy().yellow());
 
                     let error = d.get_data()?;
 
-                    if error != readstat_sys::readstat_error_e_READSTAT_OK {
+                    if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
                         Err(From::from("Error when attempting to parse sas7bdat"))
                     } else {
                         d.write()
