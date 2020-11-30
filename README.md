@@ -61,7 +61,7 @@ valgrind ./target/debug/deps/get_row_count_test-11793a929ad2468f
 ## Compatibility
 - Linux &rarr; principally developed on Linux; succesfully builds and runs
 - macOS &rarr; have not tested; *may* build and run
-- Windows &rarr; ~~successfully builds and runs~~ `bindgen` generates inconsistent C types...need further research
+- Windows &rarr; successfully builds and runs
 
 
 ## Disclaimer
