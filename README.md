@@ -62,6 +62,7 @@ valgrind ./target/debug/deps/get_row_count_test-11793a929ad2468f
 - Linux &rarr; principally developed on Linux; succesfully builds and runs
 - macOS &rarr; have not tested; *may* build and run
 - Windows &rarr; successfully builds and runs
+    - Requires the [dev branch](https://github.com/WizardMac/ReadStat/tree/dev) of `ReadStat` to build using MSVC in lieu of setting up an msys2 environment
 
 
 ## Disclaimer
