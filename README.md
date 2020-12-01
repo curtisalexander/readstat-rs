@@ -15,8 +15,8 @@ After building with `cargo build`, the binary is invoked using [structopt subcom
     - variable count
     - variable names
     - variable types
-- `preview` &rarr; writes first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
-- `data` &rarr; writes parsed data in `csv` format to either standard out or a file
+- `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
+- `data` &rarr; writes parsed data in `csv` format to file
 
 Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.
 
@@ -71,15 +71,14 @@ For example, the number `1.123456789012345` created within SAS would be returned
 
 Why does this happen?  Is this an error?  No, truncation to only 14 decimal digits has been purposely implemented within the Rust code.
 
-As a specific example, when working with the [cars.sas7bdat](data/README.md) dataset, the number `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits).  Yet, numeric values created on Windows with an x64 processor are only accurate to 15 digits.
-SAS represents all numeric values in floating-point representation.
+As a specific example, when working with the [cars.sas7bdat](data/README.md) dataset, the numeric value `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits) within Rust.  Numeric values created on Windows with an x64 processor are only accurate to 15 digits.
+And SAS represents all numeric values in floating-point representation, creating a challenge for all parsed numerics.
 
 ### Sources
 - [How SAS Stores Numeric Values](https://documentation.sas.com/?cdcId=pgmsascdc&cdcVersion=9.4_3.5&docsetId=lrcon&docsetTarget=p0ji1unv6thm0dn1gp4t01a1u0g6.htm&locale=en#n00dmtao82eizen1e6yziw3s31da)
 - [Accuracy on x64 Windows Processors](https://documentation.sas.com/?cdcId=pgmsascdc&cdcVersion=9.4_3.5&docsetId=lrcon&docsetTarget=p0ji1unv6thm0dn1gp4t01a1u0g6.htm&locale=en#n0pd8l179ai8odn17nncb4izqq3d)
     - SAS on Windows with x64 processors can only represent 15 digits
 - [Floating-point arithmetic may give inaccurate results in Excel](https://docs.microsoft.com/en-us/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result)
-    - Also, see the notes for Microsoft Excel on Windows
 
 ## Goals
 
@@ -87,18 +86,19 @@ SAS represents all numeric values in floating-point representation.
 Short term the developed binary was a helpful exercise in binding to a C library using [bindgen](https://rust-lang.github.io/rust-bindgen/) and the [Rust FFI](https://doc.rust-lang.org/nomicon/ffi.html).  It definitely required a review of C pointers (and for which I claim no expertise)!
 
 ### Long Term
-Uncertain of the long term goals of this repository.  Possibilities include:
+The long term goals of this repository are uncertain.  Possibilities include:
 - Completing and publishing the `readstat-sys` crate
-- Building a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
+- Developing and publishing a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
+    - Could implement a custom [serde data format](https://serde.rs/data-format.html) for `sas7bdat` files
 - Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
-- Develop a command line tool that performs transformations from `sas7bdat` to other file types
+- Developing a command line tool that performs transformations from `sas7bdat` to other file types (via [serde](https://serde.rs/))
     - `arrow`
     - `csv`
-    - `json`
+    - `ndjson`
     - `parquet`
 
 ## Resources
-The following have been **_incredibly_** helpful while developing.
+The following have been **_incredibly_** helpful while developing!
 - [How to not RiiR](http://adventures.michaelfbryan.com/posts/how-not-to-riir/#building-chmlib-sys)
 - [Making a *-sys crate](https://kornel.ski/rust-sys-crate)
 - [Rust Closures in FFI](https://adventures.michaelfbryan.com/posts/rust-closures-in-ffi/)
