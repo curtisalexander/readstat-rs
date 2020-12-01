@@ -4,8 +4,8 @@ mod cb;
 mod rs;
 
 use colored::Colorize;
-use dunce;
 use log::debug;
+use path_abs::{PathAbs, PathInfo};
 use readstat_sys;
 use serde::Serialize;
 use std::error::Error;
@@ -58,7 +58,7 @@ arg_enum! {
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let sas_path = dunce::canonicalize(&rs.in_path)?;
+    let sas_path = PathAbs::new(&rs.in_path)?.as_path().to_path_buf(); 
 
     debug!(
         "Counting the number of variables within the file {}",

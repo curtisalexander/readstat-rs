@@ -1,13 +1,12 @@
 extern crate bindgen;
 
 use cc;
-use dunce;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 
 fn main() {
-    let project_dir = dunce::canonicalize(PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())).unwrap();
+    let project_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
     let root = project_dir.join("vendor").join("libiconv-win-build");
     let include = root.join("include");

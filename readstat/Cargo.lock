@@ -169,12 +169,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dunce"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2641c4a7c0c4101df53ea572bffdc561c146f6c2eb09e4df02bc4811e3feeb4"
-
-[[package]]
 name = "env_logger"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -223,7 +217,6 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cc",
- "dunce",
 ]
 
 [[package]]
@@ -318,10 +311,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "path-clean"
-version = "0.1.0"
+name = "path_abs"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecba01bf2678719532c5e3059e0b5f0811273d94b397088b82e3bd0a78c78fdd"
+checksum = "eb6b8e6dede0bf94e9300e669f335ba92d5fc9fc8be7f4b1ca8a05206489388c"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "std_prelude",
+ "stfu8",
+]
 
 [[package]]
 name = "peeking_take_while"
@@ -379,16 +378,15 @@ dependencies = [
 
 [[package]]
 name = "readstat"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "colored",
  "csv",
- "dunce",
  "env_logger",
  "log",
  "num-derive",
  "num-traits",
- "path-clean",
+ "path_abs",
  "readstat-sys",
  "serde",
  "serde_json",
@@ -401,7 +399,6 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cc",
- "dunce",
  "iconv-sys",
  "libz-sys",
 ]
@@ -481,6 +478,22 @@ name = "shlex"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
+
+[[package]]
+name = "std_prelude"
+version = "0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8207e78455ffdf55661170876f88daf85356e4edd54e0a3dbc79586ca1e50cbe"
+
+[[package]]
+name = "stfu8"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bf70433e3300a3c395d06606a700cdf4205f4f14dbae2c6833127c6bb22db77"
+dependencies = [
+ "lazy_static",
+ "regex",
+]
 
 [[package]]
 name = "strsim"

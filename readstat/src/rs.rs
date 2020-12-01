@@ -1,15 +1,14 @@
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
-use path_clean::PathClean;
+use path_abs::{PathAbs, PathInfo};
+use std::path::PathBuf;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
-use std::env;
 use std::error::Error;
 use std::ffi::CString;
 use std::io::stdout;
 use std::os::raw::{c_char, c_int, c_long, c_void};
-use std::path::PathBuf;
 
 use crate::cb;
 use crate::OutType;
@@ -76,15 +75,10 @@ impl ReadStatPath {
     }
 
     fn validate_path(p: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
-        let abs_path = if p.is_absolute() {
-            p
-        } else {
-            env::current_dir()?.join(p)
-        };
-        let abs_path = abs_path.clean();
+        let abs_path = PathAbs::new(p)?;
 
         if abs_path.exists() {
-            Ok(abs_path)
+            Ok(abs_path.as_path().to_path_buf())
         } else {
             Err(From::from(format!(
                 "File {} does not exist!",
@@ -93,50 +87,19 @@ impl ReadStatPath {
         }
     }
 
-    #[cfg(unix)]
     fn validate_out_path(p: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
         match p {
             None => Ok(None),
             Some(p) => {
-                let abs_path = if p.is_absolute() {
-                    p
-                } else {
-                    env::current_dir()?.join(p)
-                };
-                let abs_path = abs_path.clean();
+                let abs_path = PathAbs::new(p)?;
 
                 match abs_path.parent() {
-                    None => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
-                    Some(parent) => {
+                    //None => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
+                    Err(_) => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
+                    Ok(parent) => {
+                    // Some(parent) => {
                         if parent.exists() {
-                            Ok(Some(abs_path))
-                        } else {
-                            Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &parent.to_string_lossy())))
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[cfg(not(unix))]
-    fn validate_out_path(p: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
-        match p {
-            None => Ok(None),
-            Some(p) => {
-                let path = dunce::canonicalize(p)?;
-                let abs_path = if path.is_absolute() {
-                    path
-                } else {
-                    env::current_dir()?.join(path)
-                };
-                let abs_path = abs_path.clean();
-
-                match abs_path.parent() {
-                    None => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
-                    Some(parent) => {
-                        if parent.exists() {
-                            Ok(Some(abs_path))
+                            Ok(Some(abs_path.as_path().to_path_buf()))
                         } else {
                             Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &parent.to_string_lossy())))
                         }
@@ -267,6 +230,9 @@ impl ReadStatData {
         debug!("Initially, error ==> {}", &error);
 
         let _ = ReadStatParser::new()
+            // TODO: for parsing data, a new metadata handler may be needed that
+            //   does not get the row count but just the var count
+            // Believe it will save time when working with extremely large files
             .set_metadata_handler(Some(cb::handle_metadata))?
             .set_variable_handler(Some(cb::handle_variable))?
             .set_value_handler(Some(cb::handle_value))?
@@ -302,6 +268,9 @@ impl ReadStatData {
         debug!("Initially, error ==> {}", &error);
 
         let _ = ReadStatParser::new()
+            // TODO: for just a data preview, a new metadata handler may be needed that
+            //   does not get the row count but just the var count
+            // Believe it will save time when working with extremely large files
             .set_metadata_handler(Some(cb::handle_metadata))?
             .set_variable_handler(Some(cb::handle_variable))?
             .set_value_handler(Some(cb::handle_value))?
