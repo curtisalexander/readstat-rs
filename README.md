@@ -107,3 +107,5 @@ The following have been **_incredibly_** helpful while developing!
     - [Part 1](https://youtu.be/jNNz4h3iIlw)
     - [Part 2](https://youtu.be/ugiR9M16fwg)
 - Stack Overflow answers by [Jake Goulding](https://stackoverflow.com/users/155423/shepmaster)
+- ReadStat pull request to add [MSVC/Windows support](https://github.com/WizardMac/ReadStat/pull/214)
+- [jamovi-readstat](https://github.com/jamovi/jamovi-readstat) [appveyor.yml](https://github.com/jamovi/jamovi-readstat/blob/master/appveyor.yml) file to build ReadStat on Windows
