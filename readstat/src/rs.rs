@@ -170,6 +170,7 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
             ReadStatVar::ReadStat_i32(i) => Self::ReadStat_i32(*i),
             // Format as string to truncate float to only contain 14 decimal digits
             // Parse back into float so that the trailing zeroes are trimmed when serializing
+            // TODO: Is there an alternative that does not require conversion from and to a float?
             ReadStatVar::ReadStat_f32(f) => {
                 Self::ReadStat_f32(format!("{1:.0$}", DIGITS, f).parse::<f32>().unwrap())
             }
