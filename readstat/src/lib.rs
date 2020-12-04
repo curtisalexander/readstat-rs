@@ -78,6 +78,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 d.write_metadata_to_stdout()
             }
         }
+        // TODO: create a command line flag --raw
+        //       when --raw = True, print the preview using println and strings rather than serde
         Command::Preview { rows } => {
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, Some(OutType::csv))?;
