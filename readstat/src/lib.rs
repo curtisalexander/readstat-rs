@@ -84,7 +84,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp);
             let error = d.get_preview(rows)?;
 
-            if error != readstat_sys::readstat_error_e_READSTAT_OK as u32{
+            if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
                 Err(From::from("Error when attempting to parse sas7bdat"))
             } else {
                 d.write()
