@@ -60,6 +60,8 @@ jobs:
           target: ${{ env.target }}
           default: true
           override: true
+      - name: Add iconv
+        run: brew update && brew install libiconv
       - name: Build
         run: cd readstat && cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
