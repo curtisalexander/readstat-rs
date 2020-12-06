@@ -29,6 +29,8 @@ jobs:
           target: ${{ env.target }}
           default: true
           override: true
+      - name: readstat directory
+        run: cd readstat
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
@@ -60,6 +62,8 @@ jobs:
           target: ${{ env.target }}
           default: true
           override: true
+      - name: readstat directory
+        run: cd readstat
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
