@@ -14,11 +14,10 @@ fn main() {
     let spss = src.join("spss");
     let stata = src.join("stata");
     let txt = src.join("txt");
-  
+
     let mut cc = cc::Build::new();
 
-    cc
-        .file(src.join("CKHashTable.c"))
+    cc.file(src.join("CKHashTable.c"))
         .file(src.join("readstat_bits.c"))
         .file(src.join("readstat_convert.c"))
         .file(src.join("readstat_error.c"))
@@ -65,7 +64,6 @@ fn main() {
         .include(&src)
         .warnings(false);
 
-
     // Include iconv.h
     if let Some(include) = env::var_os("DEP_ICONV_INCLUDE") {
         cc.include(include);
@@ -85,7 +83,6 @@ fn main() {
 
     // Compile
     cc.compile("readstat");
-
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
