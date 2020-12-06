@@ -2,13 +2,13 @@ use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
-use std::path::PathBuf;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
 use std::io::stdout;
 use std::os::raw::{c_char, c_int, c_long, c_void};
+use std::path::PathBuf;
 
 use crate::cb;
 use crate::OutType;
@@ -54,10 +54,7 @@ impl ReadStatPath {
 
     #[cfg(not(unix))]
     pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
-        let rust_str = path
-            .as_os_str()
-            .to_str()
-            .ok_or("Invalid path")?;
+        let rust_str = path.as_os_str().to_str().ok_or("Invalid path")?;
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
     }
 
@@ -140,6 +137,7 @@ pub enum ReadStatVar {
     ReadStat_i32(i32),
     ReadStat_f32(f32),
     ReadStat_f64(f64),
+    ReadStat_missing(()),
 }
 
 impl Serialize for ReadStatVar {
@@ -159,6 +157,7 @@ pub enum ReadStatVarTrunc {
     ReadStat_i32(i32),
     ReadStat_f32(f32),
     ReadStat_f64(f64),
+    ReadStat_missing(()),
 }
 
 impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
@@ -177,6 +176,7 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
             ReadStatVar::ReadStat_f64(f) => {
                 Self::ReadStat_f64(format!("{1:.0$}", DIGITS, f).parse::<f64>().unwrap())
             }
+            ReadStatVar::ReadStat_missing(_) => Self::ReadStat_missing(()),
         }
     }
 }

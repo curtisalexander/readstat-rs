@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
-pub use rs::{ReadStatData, ReadStatPath, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType};
+pub use rs::{ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
