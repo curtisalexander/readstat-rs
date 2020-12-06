@@ -103,6 +103,10 @@ pub extern "C" fn handle_value(
         d.rows = Vec::with_capacity(d.row_count as usize);
     }
 
+    debug!("var_index is {:#?}", var_index);
+    debug!("value_type is {:#?}", value_type);
+    debug!("is_missing {:#?}", is_missing);
+
     // get value and push into row within ReadStatData struct
     if is_missing == 0 {
         let value: ReadStatVar = match value_type {
@@ -134,12 +138,36 @@ pub extern "C" fn handle_value(
             _ => unreachable!(),
         };
 
+        debug!("value is {:#?}", value);
+
+        // push into row
+        d.row.push(value);
+    } else {
+        // For now represent missing values as the unit type
+        // When serializing to csv (which is the only output type at the moment),
+        //   the unit type is serialized as a missing value
+        // For example, the following SAS dataset
+        //   | id | name | age |
+        //   | 4 | Alice | .   |
+        //   | 5 | ""    | 30  |
+        // would be serialized as the following in csv
+        //   id,name,age
+        //   4,Alice,,
+        //   5,,30
+        // And thus any missingness treatment is in fact handled by the tool that
+        // consumes the csv file
+        let value = ReadStatVar::ReadStat_missing(());
+        debug!("value is {:#?}", value);
+
         // push into row
         d.row.push(value);
     }
 
     // if last variable for a row, push into rows within ReadStatData struct
     if var_index == d.var_count - 1 {
+        // collecting ALL rows into memory before ever writing
+        // TODO: benchmark changes if were to push (for example) 1,000 rows at a time
+        //       into the Vector and then flush to disk in a quasi-streaming fashion
         d.rows.push(d.row.clone());
         // clear row after pushing into rows; has no effect on capacity
         d.row.clear();
