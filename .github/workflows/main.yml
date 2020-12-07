@@ -1,4 +1,4 @@
-name: Rust
+name: readstat-rs
 
 env:
   PACKAGE_NAME: readstat
