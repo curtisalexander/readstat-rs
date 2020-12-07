@@ -74,7 +74,7 @@ jobs:
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
       - name: Build
-        run:
+        run: |
             cd readstat
             $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm"
             cargo build --release
