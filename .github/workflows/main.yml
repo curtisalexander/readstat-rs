@@ -76,7 +76,7 @@ jobs:
       - name: Build
         run: |
             cd readstat
-            $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm"
+            $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\lib"
             cargo build --release
       - name: Zip
         run: Compress-Archive -Path readstat\target\release\${{ env.PACKAGE_NAME }}.exe -DestinationPath readstat\target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip  -CompressionLevel Optimal
