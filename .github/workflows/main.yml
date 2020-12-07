@@ -45,6 +45,7 @@ jobs:
     runs-on: windows-latest
     env:
       target: x86_64-pc-windows-msvc
+      LIBCLANG_PATH: ${{ runner.temp }}\llvm
     steps:
       - name: Get git tag version
         id: get_version
@@ -65,13 +66,13 @@ jobs:
         id: cache-llvm
         uses: actions/cache@v2
         with:
-          path: ${{ runner.temp }}/llvm
+          path: ${{ env.LIBCLANG_PATH }}
           key: llvm-11.0
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
         with:
           version: "11.0"
-          directory: ${{ runner.temp }}/llvm
+          directory: ${{ env.LIBCLANG_PATH }}
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
       - name: Build
         run: cd readstat && cargo build --release

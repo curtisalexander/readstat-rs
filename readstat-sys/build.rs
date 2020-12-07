@@ -74,9 +74,13 @@ fn main() {
         cc.include(include);
     }
 
-    // Path to libclang
+    // Linking
     if target.contains("windows-msvc") {
-        println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
+        // Path to libclang
+        if let Some(_) = env::var_os("LIBCLANG_PATH") {
+        } else {
+            println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
+        }
         println!("cargo:rustc-link-lib=static=iconv");
         println!("cargo:rustc-link-lib=static=z");
     }

@@ -14,7 +14,6 @@ fn main() {
     let libcharset = root.join("libcharset").join("lib");
     let srclib = root.join("srclib");
 
-
     cc::Build::new()
         .file(libcharset.join("localcharset.c"))
         .file(lib.join("iconv.c"))
@@ -27,16 +26,22 @@ fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
 
-
     // Copy and communicate headers
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    
+
     // Linking
+    if let Some(_) = env::var_os("LIBCLANG_PATH") {
+    } else {
+        println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
+    }
     println!("cargo:rustc-link-lib=static=iconv");
-    println!("cargo:rustc-link-search=native={}", out_path.to_str().unwrap());
+    println!(
+        "cargo:rustc-link-search=native={}",
+        out_path.to_str().unwrap()
+    );
 
     fs::create_dir_all(out_path.join("include")).unwrap();
-    fs::copy(include.join("iconv.h"), out_path.join("include/iconv.h")).unwrap();
+    fs::copy(include.join("iconv.h"), out_path.join("include").join("iconv.h")).unwrap();
 
     // println!("cargo:root={}", out_path.to_str().unwrap());
     println!("cargo:include={}/include", out_path.to_str().unwrap());
