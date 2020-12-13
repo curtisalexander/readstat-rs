@@ -15,29 +15,28 @@ use structopt::StructOpt;
 
 pub use rs::{ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType};
 
-// StructOpt
-#[derive(StructOpt, Debug)]
-#[structopt(about = "Utility for sas7bdat files")]
-pub struct ReadStat {
-    #[structopt(parse(from_os_str))]
-    /// Path to sas7bdat file
-    in_path: PathBuf,
-    #[structopt(subcommand)]
-    cmd: Command,
-}
-
 // StructOpts subcommands
 #[derive(StructOpt, Debug)]
-pub enum Command {
+pub enum ReadStat {
     /// Display sas7bdat metadata
-    Metadata {},
+    Metadata {
+        #[structopt(parse(from_os_str))]
+        /// Path to sas7bdat file
+        in_path: PathBuf,
+    },
     /// Write rows to standard out
     Preview {
+        #[structopt(parse(from_os_str))]
+        /// Path to sas7bdat file
+        in_path: PathBuf,
         #[structopt(long, default_value = "10")]
         rows: u32,
     },
     /// Write parsed data to file of specific type
     Data {
+        #[structopt(parse(from_os_str))]
+        /// Path to sas7bdat file
+        in_path: PathBuf,
         /// Output file path
         #[structopt(long, parse(from_os_str))]
         out_path: Option<PathBuf>,
@@ -58,15 +57,14 @@ arg_enum! {
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let sas_path = PathAbs::new(&rs.in_path)?.as_path().to_path_buf(); 
+    match rs {
+        ReadStat::Metadata { in_path} => {
+            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf(); 
+            debug!(
+                "Getting metadata from the file {}",
+                &sas_path.to_string_lossy()
+            );
 
-    debug!(
-        "Counting the number of variables within the file {}",
-        &sas_path.to_string_lossy()
-    );
-
-    match rs.cmd {
-        Command::Metadata {} => {
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, None)?;
             let mut d = ReadStatData::new(rsp);
@@ -80,7 +78,13 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
         }
         // TODO: create a command line flag --raw
         //       when --raw = True, print the preview using println and strings rather than serde
-        Command::Preview { rows } => {
+        ReadStat::Preview { in_path, rows } => {
+            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf(); 
+            debug!(
+                "Generating a data preview from the file {}",
+                &sas_path.to_string_lossy()
+            );
+
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, Some(OutType::csv))?;
             let mut d = ReadStatData::new(rsp);
@@ -92,7 +96,13 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 d.write()
             }
         }
-        Command::Data { out_path, out_type } => {
+        ReadStat::Data { in_path, out_path, out_type } => {
+            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf(); 
+            debug!(
+                "Generating data from the file {}",
+                &sas_path.to_string_lossy()
+            );
+
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, out_path, out_type)?;
             let mut d = ReadStatData::new(rsp);
