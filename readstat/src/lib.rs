@@ -13,7 +13,9 @@ use std::path::PathBuf;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
-pub use rs::{ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType};
+pub use rs::{
+    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType,
+};
 
 // StructOpts subcommands
 #[derive(StructOpt, Debug)]
@@ -58,8 +60,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     match rs {
-        ReadStat::Metadata { in_path} => {
-            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf(); 
+        ReadStat::Metadata { in_path } => {
+            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
                 "Getting metadata from the file {}",
                 &sas_path.to_string_lossy()
@@ -79,7 +81,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
         // TODO: create a command line flag --raw
         //       when --raw = True, print the preview using println and strings rather than serde
         ReadStat::Preview { in_path, rows } => {
-            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf(); 
+            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
                 "Generating a data preview from the file {}",
                 &sas_path.to_string_lossy()
@@ -96,8 +98,12 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 d.write()
             }
         }
-        ReadStat::Data { in_path, out_path, out_type } => {
-            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf(); 
+        ReadStat::Data {
+            in_path,
+            out_path,
+            out_type,
+        } => {
+            let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
                 "Generating data from the file {}",
                 &sas_path.to_string_lossy()
@@ -128,7 +134,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     out_type: OutType::csv,
                     ..
                 } => {
-                    println!("Writing parsed data to file {}", p.to_string_lossy().yellow());
+                    println!(
+                        "Writing parsed data to file {}",
+                        p.to_string_lossy().yellow()
+                    );
 
                     let error = d.get_data()?;
 
