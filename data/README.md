@@ -3,8 +3,6 @@ Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) b
 
 
 ## Sources
-- `sas7bdat` &rarr; https://www.alanelliott.com/sas/ED2_FILES.html
-<!--
-- `csv` &rarr; produced by the [readstat](https://github.com/WizardMac/ReadStat) C command line tool
-- `tsv` &rarr; produced by [readstat](https://github.com/curtisalexander/readstat-rs) Rust command line tool
--->
+- `ahs2019n.sas7bdat` &rarr; http://www2.census.gov/programs-surveys/ahs/2019/AHS%202019%20National%20PUF%20v1.1%20Flat%20SAS.zip
+  - Must be downloaded manually as currently ignored by `git` (i.e. has been added to the repository `.gitignore` file)
+- All other `sas7bdat` files &rarr; https://www.alanelliott.com/sas/ED2_FILES.html
