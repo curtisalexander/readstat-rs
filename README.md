@@ -107,6 +107,17 @@ And SAS represents all numeric values in floating-point representation, creating
     - SAS on Windows with x64 processors can only represent 15 digits
 - [Floating-point arithmetic may give inaccurate results in Excel](https://docs.microsoft.com/en-us/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result)
 
+## Profiling
+Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/flamegraph).
+
+To run, execute the following.
+```sh
+cd readstat
+cargo flamegraph --bin readstat -- data ../data/ahs2019n.sas7bdat --out-path ../data/ahs2019n.csv
+```
+
+File is written to `readstat/flamegraph.svg`.
+
 ## Goals
 
 ### Short Term
