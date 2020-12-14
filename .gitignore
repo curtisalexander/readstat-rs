@@ -1,4 +1,5 @@
 /data/*.csv
+/data/ahs2019n.sas7bdat
 /iconv-sys/target
 /readstat/target
 /readstat-sys/target
