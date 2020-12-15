@@ -43,7 +43,6 @@ fn main() {
     fs::create_dir_all(out_path.join("include")).unwrap();
     fs::copy(include.join("iconv.h"), out_path.join("include").join("iconv.h")).unwrap();
 
-    // println!("cargo:root={}", out_path.to_str().unwrap());
     println!("cargo:include={}/include", out_path.to_str().unwrap());
 
     // The bindgen::Builder is the main entry point
