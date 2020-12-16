@@ -7,6 +7,7 @@ use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
+use std::fs::OpenOptions;
 use std::io::stdout;
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::path::PathBuf;
@@ -93,10 +94,8 @@ impl ReadStatPath {
                 let abs_path = PathAbs::new(p)?;
 
                 match abs_path.parent() {
-                    //None => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
                     Err(_) => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
                     Ok(parent) => {
-                    // Some(parent) => {
                         if parent.exists() {
                             Ok(Some(abs_path.as_path().to_path_buf()))
                         } else {
@@ -139,7 +138,7 @@ pub enum ReadStatVar {
     ReadStat_i32(i32),
     ReadStat_f32(f32),
     ReadStat_f64(f64),
-    ReadStat_missing(()),
+    ReadStat_Missing(()),
 }
 
 impl Serialize for ReadStatVar {
@@ -159,7 +158,7 @@ pub enum ReadStatVarTrunc {
     ReadStat_i32(i32),
     ReadStat_f32(f32),
     ReadStat_f64(f64),
-    ReadStat_missing(()),
+    ReadStat_Missing(()),
 }
 
 impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
@@ -178,7 +177,7 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
             ReadStatVar::ReadStat_f64(f) => {
                 Self::ReadStat_f64(format!("{1:.0$}", DIGITS, f).parse::<f64>().unwrap())
             }
-            ReadStatVar::ReadStat_missing(_) => Self::ReadStat_missing(()),
+            ReadStatVar::ReadStat_Missing(_) => Self::ReadStat_Missing(()),
         }
     }
 }
@@ -206,6 +205,8 @@ pub struct ReadStatData {
     pub vars: BTreeMap<ReadStatVarMetadata, ReadStatVarType>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
+    pub wrote_header: bool,
+    pub errors: Vec<String>,
 }
 
 impl ReadStatData {
@@ -220,6 +221,8 @@ impl ReadStatData {
             vars: BTreeMap::new(),
             row: Vec::new(),
             rows: Vec::new(),
+            wrote_header: false,
+            errors: Vec::new(),
         }
     }
 
@@ -232,14 +235,14 @@ impl ReadStatData {
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {}", &error);
 
-        let _ = ReadStatParser::new()
+        let error = ReadStatParser::new()
             // TODO: for parsing data, a new metadata handler may be needed that
             //   does not get the row count but just the var count
             // Believe it will save time when working with extremely large files
             .set_metadata_handler(Some(cb::handle_metadata))?
             .set_variable_handler(Some(cb::handle_variable))?
             .set_value_handler(Some(cb::handle_value))?
-            .parse_sas7bdat(ppath, ctx)?;
+            .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
     }
@@ -253,10 +256,10 @@ impl ReadStatData {
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {}", &error);
 
-        let _ = ReadStatParser::new()
+        let error = ReadStatParser::new()
             .set_metadata_handler(Some(cb::handle_metadata))?
             .set_variable_handler(Some(cb::handle_variable))?
-            .parse_sas7bdat(ppath, ctx)?;
+            .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
     }
@@ -270,7 +273,7 @@ impl ReadStatData {
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {}", &error);
 
-        let _ = ReadStatParser::new()
+        let error = ReadStatParser::new()
             // TODO: for just a data preview, a new metadata handler may be needed that
             //   does not get the row count but just the var count
             // Believe it will save time when working with extremely large files
@@ -278,30 +281,48 @@ impl ReadStatData {
             .set_variable_handler(Some(cb::handle_variable))?
             .set_value_handler(Some(cb::handle_value))?
             .set_row_limit(row_limit as c_long)?
-            .parse_sas7bdat(ppath, ctx)?;
+            .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
     }
 
-    pub fn write(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
         match self {
             Self {
                 out_path: None,
                 out_type: OutType::csv,
                 ..
-            } => self.write_data_to_stdout(),
+            } if self.wrote_header => self.write_data_to_stdout(),
+            Self {
+                out_path: None,
+                out_type: OutType::csv,
+                ..
+            } => {
+                self.write_header_to_stdout()?;
+                self.wrote_header = true;
+                self.write_data_to_stdout()
+            },
             Self {
                 out_path: Some(_),
                 out_type: OutType::csv,
                 ..
-            } => self.write_data_to_csv(),
+            } if self.wrote_header => self.write_data_to_csv(),
+            Self {
+                out_path: Some(_),
+                out_type: OutType::csv,
+                ..
+            } => {
+                self.write_header_to_csv()?;
+                self.wrote_header = true;
+                self.write_data_to_csv()
+            }
         }
     }
 
-    pub fn write_data_to_csv(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_header_to_csv(&self) -> Result<(), Box<dyn Error>> {
         match &self.out_path {
             None => Err(From::from(
-                "Error writing csv as output path is the set to None",
+                "Error writing csv as output path is set to None",
             )),
             Some(p) => {
                 let mut wtr = csv::WriterBuilder::new()
@@ -311,6 +332,26 @@ impl ReadStatData {
                 // write header
                 let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
                 wtr.serialize(vars)?;
+                wtr.flush()?;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn write_data_to_csv(&self) -> Result<(), Box<dyn Error>> {
+        match &self.out_path {
+            None => Err(From::from(
+                "Error writing csv as output path is set to None",
+            )),
+            Some(p) => {
+                let f = OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(p)?;
+
+                let mut wtr = csv::WriterBuilder::new()
+                    .quote_style(csv::QuoteStyle::Always)
+                    .from_writer(f);
 
                 // write rows
                 for r in &self.rows {
@@ -322,7 +363,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn write_data_to_stdout(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_header_to_stdout(&self) -> Result<(), Box<dyn Error>> {
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_writer(stdout());
@@ -330,6 +371,15 @@ impl ReadStatData {
         // write header
         let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
         wtr.serialize(vars)?;
+
+        wtr.flush()?;
+        Ok(())
+    }
+
+    pub fn write_data_to_stdout(&self) -> Result<(), Box<dyn Error>> {
+        let mut wtr = csv::WriterBuilder::new()
+            .quote_style(csv::QuoteStyle::Always)
+            .from_writer(stdout());
 
         // write rows
         for r in &self.rows {
@@ -448,7 +498,7 @@ impl ReadStatParser {
         self,
         path: *const c_char,
         user_ctx: *mut c_void,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> readstat_sys::readstat_error_t {
         let parse_sas7bdat_error: readstat_sys::readstat_error_t =
             unsafe { readstat_sys::readstat_parse_sas7bdat(self.parser, path, user_ctx) };
 
@@ -457,11 +507,7 @@ impl ReadStatParser {
             &parse_sas7bdat_error
         );
 
-        match FromPrimitive::from_i32(parse_sas7bdat_error as i32) {
-            Some(ReadStatError::READSTAT_OK) => Ok(self),
-            Some(e) => Err(From::from(format!("Unable to parse sas7bdat: {:#?}", e))),
-            None => Err(From::from("Error when attempting to parse sas7bdate: Unknown return value")),
-        }
+        parse_sas7bdat_error
     }
 }
 

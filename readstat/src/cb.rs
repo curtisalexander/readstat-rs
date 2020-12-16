@@ -6,6 +6,8 @@ use std::os::raw::{c_char, c_int, c_void};
 
 use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
 
+const ROWS: usize = 10000;
+
 // C types
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
@@ -46,7 +48,7 @@ pub extern "C" fn handle_metadata(
 }
 
 pub extern "C" fn handle_variable(
-    #[allow(unused_variables)] index: c_int,
+    index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     #[allow(unused_variables)] val_labels: *const c_char,
     ctx: *mut c_void,
@@ -54,8 +56,7 @@ pub extern "C" fn handle_variable(
     // dereference ctx pointer
     let d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
-    // get index, type, and name
-    let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
+    // get type and name
     let var_type = match FromPrimitive::from_i32(unsafe {
         readstat_sys::readstat_variable_get_type(variable) as i32
     }) {
@@ -75,7 +76,7 @@ pub extern "C" fn handle_variable(
 
     // insert into BTreeMap within ReadStatData struct
     d.vars
-        .insert(ReadStatVarMetadata::new(var_index, var_name), var_type);
+        .insert(ReadStatVarMetadata::new(index, var_name), var_type);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -100,7 +101,9 @@ pub extern "C" fn handle_value(
         // Vec containing a single row, needs capacity = number of variables
         d.row = Vec::with_capacity(d.var_count as usize);
         // Vec containing all rows, needs capacity = number of rows
-        d.rows = Vec::with_capacity(d.row_count as usize);
+        // d.rows = Vec::with_capacity(d.row_count as usize);
+        // Allocate rows
+        d.rows = if d.row_count < ROWS as i32 { Vec::with_capacity(d.row_count as usize) } else { Vec::with_capacity(ROWS) };
     }
 
     debug!("var_index is {:#?}", var_index);
@@ -156,7 +159,7 @@ pub extern "C" fn handle_value(
         //   5,,30
         // And thus any missingness treatment is in fact handled by the tool that
         // consumes the csv file
-        let value = ReadStatVar::ReadStat_missing(());
+        let value = ReadStatVar::ReadStat_Missing(());
         debug!("value is {:#?}", value);
 
         // push into row
@@ -171,6 +174,16 @@ pub extern "C" fn handle_value(
         d.rows.push(d.row.clone());
         // clear row after pushing into rows; has no effect on capacity
         d.row.clear();
+    }
+
+    // if rows = buffer limit and last variable then go ahead and write
+    if (obs_index == ROWS as i32 - 1 || obs_index == d.row_count - 1) && var_index == d.var_count - 1 {
+        match d.write() {
+            Ok(()) => (),
+            // Err(e) => d.errors.push(format!("{:#?}", e)),
+            // For now just swallow any errors when writing
+            Err(_) => (),
+        }
     }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
