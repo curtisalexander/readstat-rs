@@ -32,6 +32,6 @@ fn parse_file_with_missing_data() {
     let non_missing_value = if let readstat::ReadStatVar::ReadStat_String(s) = &row_with_missing[0] { s.to_owned() } else { String::from("") };
     assert_eq!(non_missing_value, String::from("00102"));
 
-    let missing_value = if let readstat::ReadStatVar::ReadStat_missing(m) = &row_with_missing[4] {  *m } else { panic!("Row 2, var 4 value is not ()")  };
+    let missing_value = if let readstat::ReadStatVar::ReadStat_Missing(m) = &row_with_missing[4] {  *m } else { panic!("Row 2, var 4 value is not ()")  };
     assert_eq!(missing_value, ());
 }
