@@ -63,6 +63,12 @@ To write parsed data (as a `csv`) to a file, invoke the following.  Currently th
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv
 ```
 
+To write the first 100 rows of parsed data (as a `csv`) to a file, invoke the following.  Currently the only `--out-type` available is `csv`.
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --rows 100
+```
+
 ### Debug
 Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.  :warning: This is quite verbose!
 

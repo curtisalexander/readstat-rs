@@ -35,6 +35,7 @@ pub enum ReadStat {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
         input: PathBuf,
+        /// Number of rows to write
         #[structopt(long, default_value = "10")]
         rows: u32,
     },
@@ -49,6 +50,9 @@ pub enum ReadStat {
         /// Output file type, defaults to csv
         #[structopt(long, possible_values=&OutType::variants(), case_insensitive=true)]
         out_type: Option<OutType>,
+        /// Number of rows to write
+        #[structopt(long)]
+        rows: Option<u32>,
     },
 }
 
@@ -117,6 +121,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             input,
             output,
             out_type,
+            rows
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -159,7 +164,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         p.to_string_lossy().yellow()
                     );
 
-                    let error = d.get_data()?;
+                    let error = d.get_data(rows)?;
 
                     match FromPrimitive::from_i32(error as i32) {
                         Some(ReadStatError::READSTAT_OK) => Ok(()),

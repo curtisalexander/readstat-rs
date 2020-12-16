@@ -226,7 +226,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn get_data(&mut self) -> Result<u32, Box<dyn Error>> {
+    pub fn get_data(&mut self, row_limit: Option<u32>) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -235,14 +235,22 @@ impl ReadStatData {
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {}", &error);
 
-        let error = ReadStatParser::new()
-            // TODO: for parsing data, a new metadata handler may be needed that
-            //   does not get the row count but just the var count
-            // Believe it will save time when working with extremely large files
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
-            .set_value_handler(Some(cb::handle_value))?
-            .parse_sas7bdat(ppath, ctx);
+        // TODO: for parsing data, a new metadata handler may be needed that
+        //   does not get the row count but just the var count
+        // Believe it will save time when working with extremely large files
+        let error = match row_limit {
+            Some(r) => ReadStatParser::new()
+                .set_metadata_handler(Some(cb::handle_metadata))?
+                .set_variable_handler(Some(cb::handle_variable))?
+                .set_value_handler(Some(cb::handle_value))?
+                .set_row_limit(r as c_long)?
+                .parse_sas7bdat(ppath, ctx),
+            None => ReadStatParser::new()
+                .set_metadata_handler(Some(cb::handle_metadata))?
+                .set_variable_handler(Some(cb::handle_variable))?
+                .set_value_handler(Some(cb::handle_value))?
+                .parse_sas7bdat(ppath, ctx),
+        };
 
         Ok(error as u32)
     }
@@ -301,7 +309,7 @@ impl ReadStatData {
                 self.write_header_to_stdout()?;
                 self.wrote_header = true;
                 self.write_data_to_stdout()
-            },
+            }
             Self {
                 out_path: Some(_),
                 out_type: OutType::csv,
@@ -344,10 +352,7 @@ impl ReadStatData {
                 "Error writing csv as output path is set to None",
             )),
             Some(p) => {
-                let f = OpenOptions::new()
-                    .write(true)
-                    .append(true)
-                    .open(p)?;
+                let f = OpenOptions::new().write(true).append(true).open(p)?;
 
                 let mut wtr = csv::WriterBuilder::new()
                     .quote_style(csv::QuoteStyle::Always)
@@ -435,8 +440,13 @@ impl ReadStatParser {
 
         match FromPrimitive::from_i32(set_metadata_handler_error as i32) {
             Some(ReadStatError::READSTAT_OK) => Ok(self),
-            Some(e) => Err(From::from(format!("Unable to set metdata handler: {:#?}", e))),
-            None => Err(From::from("Error when attempting to set metadata handler: Unknown return value")),
+            Some(e) => Err(From::from(format!(
+                "Unable to set metdata handler: {:#?}",
+                e
+            ))),
+            None => Err(From::from(
+                "Error when attempting to set metadata handler: Unknown return value",
+            )),
         }
     }
 
@@ -452,7 +462,9 @@ impl ReadStatParser {
         match FromPrimitive::from_i32(set_row_limit_error as i32) {
             Some(ReadStatError::READSTAT_OK) => Ok(self),
             Some(e) => Err(From::from(format!("Unable to set row limit: {:#?}", e))),
-            None => Err(From::from("Error when attempting to set row limit: Unknown return value")),
+            None => Err(From::from(
+                "Error when attempting to set row limit: Unknown return value",
+            )),
         }
     }
 
@@ -470,8 +482,13 @@ impl ReadStatParser {
 
         match FromPrimitive::from_i32(set_variable_handler_error as i32) {
             Some(ReadStatError::READSTAT_OK) => Ok(self),
-            Some(e) => Err(From::from(format!("Unable to set variable handler: {:#?}", e))),
-            None => Err(From::from("Error when attempting to set variable handler: Unknown return value")),
+            Some(e) => Err(From::from(format!(
+                "Unable to set variable handler: {:#?}",
+                e
+            ))),
+            None => Err(From::from(
+                "Error when attempting to set variable handler: Unknown return value",
+            )),
         }
     }
 
@@ -490,7 +507,9 @@ impl ReadStatParser {
         match FromPrimitive::from_i32(set_value_handler_error as i32) {
             Some(ReadStatError::READSTAT_OK) => Ok(self),
             Some(e) => Err(From::from(format!("Unable to set value handler: {:#?}", e))),
-            None => Err(From::from("Error when attempting to set value handler: Unknown return value")),
+            None => Err(From::from(
+                "Error when attempting to set value handler: Unknown return value",
+            )),
         }
     }
 
