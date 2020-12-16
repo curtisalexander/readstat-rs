@@ -27,7 +27,7 @@ For details see the following.
 
 
 ## Run
-After [building](#build), the binary is invoked using [structopt subcommands](https://docs.rs/structopt/0.3.20/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
+After [building](#build), the binary is invoked using [structopt subcommands](https://docs.rs/structopt/0.3.21/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out
     - row count
     - variable count
@@ -40,27 +40,27 @@ After [building](#build), the binary is invoked using [structopt subcommands](ht
 To write metadata to standard out, invoke the following.
 
 ```sh
-readstat /some/dir/to/example.sas7bdat metadata
+readstat metadata /some/dir/to/example.sas7bdat
 ```
 
 ### Preview Data
 To write the first 10 rows of parsed data (as a `csv`) to standard out, invoke the following.
 
 ```sh
-readstat /some/dir/to/example.sas7bdat preview
+readstat preview /some/dir/to/example.sas7bdat
 ```
 
 To write the first 100 rows of parsed data (as a `csv`) to standard out, invoke the following.
 
 ```sh
-readstat /some/dir/to/example.sas7bdat preview --rows 100
+readstat preview /some/dir/to/example.sas7bdat --rows 100
 ```
 
 ### Data
 To write parsed data (as a `csv`) to a file, invoke the following.  Currently the only `--out-type` available is `csv`.
 
 ```sh
-readstat /some/dir/to/example.sas7bdat data --out-path /some/dir/to/example.csv
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv
 ```
 
 ### Debug
@@ -113,7 +113,7 @@ Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/fla
 To run, execute the following.
 ```sh
 cd readstat
-cargo flamegraph --bin readstat -- data ../data/ahs2019n.sas7bdat --out-path ../data/ahs2019n.csv
+cargo flamegraph --bin readstat -- data ../data/ahs2019n.sas7bdat --output ../data/ahs2019n.csv
 ```
 
 File is written to `readstat/flamegraph.svg`.
