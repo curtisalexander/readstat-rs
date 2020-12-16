@@ -1,23 +1,26 @@
 #![allow(non_camel_case_types)]
 
-mod cb;
-mod rs;
-
 use colored::Colorize;
 use log::debug;
+use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
-use readstat_sys;
 use serde::Serialize;
 use std::error::Error;
 use std::path::PathBuf;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
+mod cb;
+mod err;
+mod rs;
+
 pub use rs::{
     ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType,
 };
 
-// StructOpts subcommands
+pub use err::ReadStatError;
+
+// StructOpt
 #[derive(StructOpt, Debug)]
 pub enum ReadStat {
     /// Display sas7bdat metadata
@@ -72,10 +75,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp);
             let error = d.get_metadata()?;
 
-            if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
-                Err(From::from("Error when attempting to parse sas7bdat"))
-            } else {
-                d.write_metadata_to_stdout()
+            match FromPrimitive::from_i32(error as i32) {
+                Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
+                Some(e) => Err(From::from(format!("Error when attempting to parse sas7bdat: {:#?}", e))),
+                None => Err(From::from("Error when attempting to parse sas7bdat: Unknown return value")),
             }
         }
         // TODO: create a command line flag --raw
@@ -92,10 +95,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp);
             let error = d.get_preview(rows)?;
 
-            if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
-                Err(From::from("Error when attempting to parse sas7bdat"))
-            } else {
-                d.write()
+            match FromPrimitive::from_i32(error as i32) {
+                Some(ReadStatError::READSTAT_OK) => d.write(),
+                Some(e) => Err(From::from(format!("Error when attempting to parse sas7bdat: {:#?}", e))),
+                None => Err(From::from("Error when attempting to parse sas7bdat: Unknown return value")),
             }
         }
         ReadStat::Data {
@@ -123,10 +126,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
                     let error = d.get_metadata()?;
 
-                    if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
-                        Err(From::from("Error when attempting to parse sas7bdat"))
-                    } else {
-                        d.write_metadata_to_stdout()
+                    match FromPrimitive::from_i32(error as i32) {
+                        Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
+                        Some(e) => Err(From::from(format!("Error when attempting to parse sas7bdat: {:#?}", e))),
+                        None => Err(From::from("Error when attempting to parse sas7bdat: Unknown return value")),
                     }
                 }
                 ReadStatData {
@@ -141,10 +144,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
                     let error = d.get_data()?;
 
-                    if error != readstat_sys::readstat_error_e_READSTAT_OK as u32 {
-                        Err(From::from("Error when attempting to parse sas7bdat"))
-                    } else {
-                        d.write()
+                    match FromPrimitive::from_i32(error as i32) {
+                        Some(ReadStatError::READSTAT_OK) => d.write(),
+                        Some(e) => Err(From::from(format!("Error when attempting to parse sas7bdat: {:#?}", e))),
+                        None => Err(From::from("Error when attempting to parse sas7bdat: Unknown return value")),
                     }
                 }
             }

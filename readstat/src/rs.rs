@@ -1,6 +1,7 @@
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
@@ -11,6 +12,7 @@ use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::path::PathBuf;
 
 use crate::cb;
+use crate::err::ReadStatError;
 use crate::OutType;
 
 const DIGITS: usize = 14;
@@ -381,10 +383,10 @@ impl ReadStatParser {
             &set_metadata_handler_error
         );
 
-        if set_metadata_handler_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(self)
-        } else {
-            Err(From::from("Unable to set metadata handler"))
+        match FromPrimitive::from_i32(set_metadata_handler_error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(self),
+            Some(e) => Err(From::from(format!("Unable to set metdata handler: {:#?}", e))),
+            None => Err(From::from("Error when attempting to set metadata handler: Unknown return value")),
         }
     }
 
@@ -397,10 +399,10 @@ impl ReadStatParser {
             &set_row_limit_error
         );
 
-        if set_row_limit_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(self)
-        } else {
-            Err(From::from("Unable to set row limit"))
+        match FromPrimitive::from_i32(set_row_limit_error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(self),
+            Some(e) => Err(From::from(format!("Unable to set row limit: {:#?}", e))),
+            None => Err(From::from("Error when attempting to set row limit: Unknown return value")),
         }
     }
 
@@ -416,10 +418,10 @@ impl ReadStatParser {
             &set_variable_handler_error
         );
 
-        if set_variable_handler_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(self)
-        } else {
-            Err(From::from("Unable to set variable handler"))
+        match FromPrimitive::from_i32(set_variable_handler_error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(self),
+            Some(e) => Err(From::from(format!("Unable to set variable handler: {:#?}", e))),
+            None => Err(From::from("Error when attempting to set variable handler: Unknown return value")),
         }
     }
 
@@ -435,10 +437,10 @@ impl ReadStatParser {
             &set_value_handler_error
         );
 
-        if set_value_handler_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(self)
-        } else {
-            Err(From::from("Unable to set value handler"))
+        match FromPrimitive::from_i32(set_value_handler_error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(self),
+            Some(e) => Err(From::from(format!("Unable to set value handler: {:#?}", e))),
+            None => Err(From::from("Error when attempting to set value handler: Unknown return value")),
         }
     }
 
@@ -455,10 +457,10 @@ impl ReadStatParser {
             &parse_sas7bdat_error
         );
 
-        if parse_sas7bdat_error == readstat_sys::readstat_error_e_READSTAT_OK {
-            Ok(self)
-        } else {
-            Err(From::from("Unable to parse sas7bdat"))
+        match FromPrimitive::from_i32(parse_sas7bdat_error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(self),
+            Some(e) => Err(From::from(format!("Unable to parse sas7bdat: {:#?}", e))),
+            None => Err(From::from("Error when attempting to parse sas7bdate: Unknown return value")),
         }
     }
 }

@@ -1,10 +1,10 @@
-use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
-
 use log::debug;
 use num_traits::FromPrimitive;
 use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
+
+use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
 
 // C types
 #[allow(dead_code)]
