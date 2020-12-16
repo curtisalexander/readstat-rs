@@ -11,7 +11,7 @@ fn parse_file_with_missing_data() {
     let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
 
     let mut d = readstat::ReadStatData::new(rsp);
-    let error = d.get_data().unwrap();
+    let error = d.get_data(None).unwrap();
 
     assert_eq!(error, readstat_sys::readstat_error_e_READSTAT_OK as u32);
 

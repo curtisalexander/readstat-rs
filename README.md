@@ -1,7 +1,7 @@
 # readstat-rs
 ![readstat-rs](https://github.com/curtisalexander/readstat-rs/workflows/readstat-rs/badge.svg)
 
-Example Rust binary to work with SAS binary &mdash; `sas7bdat` &mdash; files.
+Rust developed tool to work with SAS binary &mdash; `sas7bdat` &mdash; files.
 
 ## ReadStat
 The Rust binary is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
@@ -61,6 +61,12 @@ To write parsed data (as a `csv`) to a file, invoke the following.  Currently th
 
 ```sh
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv
+```
+
+To write the first 100 rows of parsed data (as a `csv`) to a file, invoke the following.  Currently the only `--out-type` available is `csv`.
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --rows 100
 ```
 
 ### Debug
