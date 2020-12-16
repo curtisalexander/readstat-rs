@@ -183,7 +183,8 @@ pub extern "C" fn handle_value(
             // Err(e) => d.errors.push(format!("{:#?}", e)),
             // For now just swallow any errors when writing
             Err(_) => (),
-        }
+        };
+        d.rows.clear();
     }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
