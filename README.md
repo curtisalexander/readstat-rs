@@ -1,14 +1,12 @@
 # readstat-rs
 ![readstat-rs](https://github.com/curtisalexander/readstat-rs/workflows/readstat-rs/badge.svg)
 
-Rust developed tool to work with SAS binary &mdash; `sas7bdat` &mdash; files.
+Command-line tool to work with SAS binary &mdash; `sas7bdat` &mdash; files.
 
 ## ReadStat
-The Rust binary is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
+The command-line tool is a Rust binary and is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
 
 The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
-
-The binary, in part, adapts the [reading files](https://github.com/WizardMac/ReadStat#library-usage-reading-files) example in the `ReadStat` repository.
 
 ## Build
 
@@ -24,7 +22,6 @@ Building on Windows requires [LLVM 11](https://releases.llvm.org/download.html) 
 For details see the following.
 - [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L86)
 - [Utilize to build](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L77-L79)
-
 
 ## Run
 After [building](#build), the binary is invoked using [structopt subcommands](https://docs.rs/structopt/0.3.21/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
