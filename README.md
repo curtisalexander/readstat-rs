@@ -70,7 +70,13 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --
 Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.  :warning: This is quite verbose!
 
 ```sh
+# Linux
 RUST_LOG=debug readstat ...
+```
+
+```powershell
+# Windows
+$env:RUST_LOG="debug"; readstat ...
 ```
 
 ## Testing
