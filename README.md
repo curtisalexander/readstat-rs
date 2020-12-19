@@ -81,6 +81,16 @@ RUST_LOG=debug readstat ...
 $env:RUST_LOG="debug"; readstat ...
 ```
 
+### Help
+For full details run with `--help`.
+
+```sh
+readstat --help
+readstat metadata --help
+readstat preview --help
+readstat data --help
+```
+
 ## Testing
 To run unit / integration tests, run the following within the `readstat` directory.
 
