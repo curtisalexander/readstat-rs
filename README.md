@@ -137,7 +137,7 @@ Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/fla
 To run, execute the following.
 ```sh
 cd readstat
-cargo flamegraph --bin readstat -- data ../data/ahs2019n.sas7bdat --output ../data/ahs2019n.csv
+cargo flamegraph --bin readstat -- data ../data/_ahs2019n.sas7bdat --output ../data/_ahs2019n.csv
 ```
 
 File is written to `readstat/flamegraph.svg`.

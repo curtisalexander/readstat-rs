@@ -1,5 +1,6 @@
 /data/*.csv
-/data/ahs2019n.sas7bdat
+# starts with _ are larger files to exclude
+/data/_*.sas7bdat
 /iconv-sys/target
 /readstat/target
 /readstat-sys/target
