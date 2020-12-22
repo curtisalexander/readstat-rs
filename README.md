@@ -162,6 +162,30 @@ cargo flamegraph --bin readstat -- data ../data/_ahs2019n.sas7bdat --output ../d
 
 File is written to `readstat/flamegraph.svg`.
 
+## Github Actions
+Below is the rough `git tag` dance to delete and/or add tags to trigger Github Actions.
+
+```sh
+# delete local tag
+git tag --delete v0.1.0
+
+# delete remote tag
+git push --delete origin v0.1.0
+
+# add and commit local changes
+git add .
+git commit -m "commit msg"
+
+# push local changes to remote
+git push
+
+# add local tag
+git tag -a v0.1.0 -m "v0.1.0"
+
+# push local tag to remote
+git push origin --tags
+```
+
 ## Goals
 
 ### Short Term
@@ -192,7 +216,3 @@ The following have been **_incredibly_** helpful while developing!
 - Stack Overflow answers by [Jake Goulding](https://stackoverflow.com/users/155423/shepmaster)
 - ReadStat pull request to add [MSVC/Windows support](https://github.com/WizardMac/ReadStat/pull/214)
 - [jamovi-readstat](https://github.com/jamovi/jamovi-readstat) [appveyor.yml](https://github.com/jamovi/jamovi-readstat/blob/master/appveyor.yml) file to build ReadStat on Windows
-
-## Git Tag Dance
-
-```
