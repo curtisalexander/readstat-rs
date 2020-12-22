@@ -131,6 +131,23 @@ Finally, SAS represents all numeric values in floating-point representation whic
     - SAS on Windows with x64 processors can only represent 15 digits
 - [Floating-point arithmetic may give inaccurate results in Excel](https://docs.microsoft.com/en-us/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result)
 
+## Benchmarking
+Benchmarking performed with [hyperfine](https://github.com/sharkdp/hyperfine).
+
+To run, execute the following from within the `readstat-rs/readstat` directory.
+
+```powershell
+# Windows
+hyperfine --warmup 5 "ReadStat_App.exe -f ..\data\cars.sas7bdat ..\data\cars_c.csv" ".\target\release\readstat.exe data ..\data\cars.sas7bdat --output ..\data\cars_rust.csv"
+```
+
+```sh
+# Linux
+hyperfine --warmup 5 "ReadStat_App.exe -f ../data/cars.sas7bdat ../data/cars_c.csv" "./target/release/readstat.exe data ../data/cars.sas7bdat --output ../data/cars_rust.csv"
+```
+
+:note: Believe first experiments are challenging to interpret due to file caching.  Need to review `--prepare` option provided by `hyperfine`.
+
 ## Profiling
 Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/flamegraph).
 
