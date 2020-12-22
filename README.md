@@ -137,6 +137,8 @@ Finally, SAS represents all numeric values in floating-point representation whic
 ## Benchmarking
 Benchmarking performed with [hyperfine](https://github.com/sharkdp/hyperfine).
 
+This example compares the performance of the Rust binary with the performance of the C binary built from the `ReadStat` repository.  In general, hope that performance is fairly close to that of the C binary.
+
 To run, execute the following from within the `readstat-rs/readstat` directory.
 
 ```powershell
@@ -144,12 +146,14 @@ To run, execute the following from within the `readstat-rs/readstat` directory.
 hyperfine --warmup 5 "ReadStat_App.exe -f ..\data\cars.sas7bdat ..\data\cars_c.csv" ".\target\release\readstat.exe data ..\data\cars.sas7bdat --output ..\data\cars_rust.csv"
 ```
 
+:note: First experiments on Windows are challenging to interpret due to file caching.  Need to utilize `--prepare` option provided by `hyperfine`.
+
 ```sh
 # Linux
-hyperfine --warmup 5 "ReadStat_App.exe -f ../data/cars.sas7bdat ../data/cars_c.csv" "./target/release/readstat.exe data ../data/cars.sas7bdat --output ../data/cars_rust.csv"
+hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f ../data/cars.sas7bdat ../data/cars_c.csv" "./target/release/readstat data ../data/cars.sas7bdat --output ../data/cars_rust.csv"
 ```
 
-:note: Believe first experiments are challenging to interpret due to file caching.  Need to review `--prepare` option provided by `hyperfine`.
+Other, future, benchmarking may be performed when/if [channels and threads](https://github.com/curtisalexander/readstat-rs/issues/28) are developed.
 
 ## Profiling
 Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/flamegraph).
