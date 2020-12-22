@@ -177,7 +177,7 @@ pub extern "C" fn handle_value(
     }
 
     // if rows = buffer limit and last variable then go ahead and write
-    if (obs_index == ROWS as i32 - 1 || obs_index == d.row_count - 1) && var_index == d.var_count - 1 {
+    if (obs_index % (ROWS as i32 - 1) == 0 || obs_index == d.row_count - 1) && var_index == d.var_count - 1 {
         match d.write() {
             Ok(()) => (),
             // Err(e) => d.errors.push(format!("{:#?}", e)),
