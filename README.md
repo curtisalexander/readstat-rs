@@ -8,6 +8,9 @@ The command-line tool is developed in Rust and is only possible due to the excel
 
 The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
 
+## Install
+\[Mostly\] static binaries for Linux and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
+
 ## Build
 
 ### Linux
@@ -189,3 +192,7 @@ The following have been **_incredibly_** helpful while developing!
 - Stack Overflow answers by [Jake Goulding](https://stackoverflow.com/users/155423/shepmaster)
 - ReadStat pull request to add [MSVC/Windows support](https://github.com/WizardMac/ReadStat/pull/214)
 - [jamovi-readstat](https://github.com/jamovi/jamovi-readstat) [appveyor.yml](https://github.com/jamovi/jamovi-readstat/blob/master/appveyor.yml) file to build ReadStat on Windows
+
+## Git Tag Dance
+
+```
