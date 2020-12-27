@@ -85,9 +85,9 @@ fn main() {
         println!("cargo:rustc-link-lib=static=z");
     }
 
-    if target.contains("apple-darwin") {
-        println!("cargo:rustc-link-search=native=/usr/lib/libiconv");
-    }
+    //if target.contains("apple-darwin") {
+    //    println!("cargo:rustc-link-search=native=/usr/lib/libiconv");
+    //}
 
     // Compile
     cc.compile("readstat");
