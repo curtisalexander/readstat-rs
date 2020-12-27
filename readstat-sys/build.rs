@@ -86,7 +86,7 @@ fn main() {
     }
 
     if target.contains("apple-darwin") {
-        println!("cargo:rustc-link-search=all=/usr/lib");
+        println!("cargo:rustc-link-search=/usr/local/opt/libiconv/lib");
     }
 
     // Compile
