@@ -9,7 +9,7 @@ fn parse_file_with_missing_data() {
     let sas_path = data_dir.join("hasmissing.sas7bdat");
     let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
 
-    let mut d = readstat::ReadStatData::new(rsp).set_reader(readstat::Reader::InMemory);
+    let mut d = readstat::ReadStatData::new(rsp).set_reader(readstat::Reader::mem);
     let error = d.get_data(None).unwrap();
 
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);

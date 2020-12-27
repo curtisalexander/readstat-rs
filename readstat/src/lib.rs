@@ -38,6 +38,10 @@ pub enum ReadStat {
         /// Number of rows to write
         #[structopt(long, default_value = "10")]
         rows: u32,
+        /// Type of reader 
+        #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
+        reader: Option<Reader>,
+
     },
     /// Write parsed data to file of specific type
     Data {
@@ -53,6 +57,9 @@ pub enum ReadStat {
         /// Number of rows to write
         #[structopt(long)]
         rows: Option<u32>,
+        /// Type of reader
+        #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
+        reader: Option<Reader>,
     },
 }
 
@@ -66,9 +73,10 @@ arg_enum! {
 
 arg_enum! {
     #[derive(Debug, Clone, Copy, Serialize)]
+    #[allow(non_camel_case_types)]
     pub enum Reader {
-        InMemory,
-        Streaming,
+        mem,
+        stream,
     }
 }
 
@@ -99,9 +107,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 )),
             }
         }
-        // TODO: create a command line flag --raw
-        //       when --raw = True, print the preview using println and strings rather than serde
-        ReadStat::Preview { input, rows } => {
+        ReadStat::Preview { input, rows, reader, } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
                 "Generating a data preview from the file {}",
@@ -110,12 +116,14 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, Some(OutType::csv))?;
-            let mut d = ReadStatData::new(rsp);
+            let mut d = match reader {
+                None => ReadStatData::new(rsp),
+                Some(r) => ReadStatData::new(rsp).set_reader(r),
+            };
             let error = d.get_preview(rows)?;
 
             match FromPrimitive::from_i32(error as i32) {
                 Some(ReadStatError::READSTAT_OK) => Ok(()),
-                // Some(ReadStatError::READSTAT_OK) => d.write(),
                 Some(e) => Err(From::from(format!(
                     "Error when attempting to parse sas7bdat: {:#?}",
                     e
@@ -130,6 +138,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             output,
             out_type,
             rows,
+            reader,
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -139,7 +148,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, output, out_type)?;
-            let mut d = ReadStatData::new(rsp);
+            let mut d = match reader {
+                None => ReadStatData::new(rsp),
+                Some(r) => ReadStatData::new(rsp).set_reader(r),
+            };
 
             match &d {
                 ReadStatData {

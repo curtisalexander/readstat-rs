@@ -256,7 +256,7 @@ impl ReadStatData {
             rows: Vec::new(),
             wrote_header: false,
             errors: Vec::new(),
-            reader: Reader::Streaming,
+            reader: Reader::stream,
         }
     }
 

@@ -105,14 +105,14 @@ pub extern "C" fn handle_value(
         // d.rows = Vec::with_capacity(d.row_count as usize);
         // Allocate rows
         d.rows = match d.reader {
-            Reader::Streaming => {
+            Reader::stream => {
                 if d.row_count < ROWS as i32 {
                     Vec::with_capacity(d.row_count as usize)
                 } else {
                     Vec::with_capacity(ROWS)
                 }
             }
-            Reader::InMemory => Vec::with_capacity(d.row_count as usize),
+            Reader::mem => Vec::with_capacity(d.row_count as usize),
         }
     }
 
@@ -187,7 +187,7 @@ pub extern "C" fn handle_value(
     }
 
     match d.reader {
-        Reader::Streaming => {
+        Reader::stream => {
             // if rows = buffer limit and last variable then go ahead and write
             if (obs_index % (ROWS as i32 - 1) == 0 || obs_index == d.row_count - 1)
                 && var_index == d.var_count - 1
@@ -201,7 +201,17 @@ pub extern "C" fn handle_value(
                 d.rows.clear();
             }
         }
-        Reader::InMemory => (),
+        Reader::mem => {
+            // if rows = buffer limit and last variable then go ahead and write
+            if obs_index == d.row_count - 1 && var_index == d.var_count - 1 {
+                match d.write() {
+                    Ok(()) => (),
+                    // Err(e) => d.errors.push(format!("{:#?}", e)),
+                    // For now just swallow any errors when writing
+                    Err(_) => (),
+                };
+            }
+        }
     }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
