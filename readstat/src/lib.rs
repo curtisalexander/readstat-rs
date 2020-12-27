@@ -15,7 +15,7 @@ mod err;
 mod rs;
 
 pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatReader, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType,
+    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType,
 };
 
 pub use err::ReadStatError;
@@ -61,6 +61,14 @@ arg_enum! {
     #[allow(non_camel_case_types)]
     pub enum OutType {
         csv,
+    }
+}
+
+arg_enum! {
+    #[derive(Debug, Clone, Copy, Serialize)]
+    pub enum Reader {
+        InMemory,
+        Streaming,
     }
 }
 

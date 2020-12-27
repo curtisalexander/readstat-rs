@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 use crate::cb;
 use crate::err::ReadStatError;
-use crate::OutType;
+use crate::{OutType, Reader};
 
 const DIGITS: usize = 14;
 const EXTENSIONS: &'static [&'static str] = &["sas7bdat", "sas7bcat"];
@@ -226,12 +226,6 @@ pub enum ReadStatVarType {
     Unknown,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub enum ReadStatReader {
-    InMemory,
-    Streaming,
-}
-
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
@@ -245,7 +239,7 @@ pub struct ReadStatData {
     pub rows: Vec<Vec<ReadStatVar>>,
     pub wrote_header: bool,
     pub errors: Vec<String>,
-    pub reader: ReadStatReader,
+    pub reader: Reader,
 }
 
 impl ReadStatData {
@@ -262,7 +256,7 @@ impl ReadStatData {
             rows: Vec::new(),
             wrote_header: false,
             errors: Vec::new(),
-            reader: ReadStatReader::Streaming,
+            reader: Reader::Streaming,
         }
     }
 
@@ -334,7 +328,7 @@ impl ReadStatData {
         Ok(error as u32)
     }
 
-    pub fn set_reader(self, reader: ReadStatReader) -> Self {
+    pub fn set_reader(self, reader: Reader) -> Self {
         Self {
             reader,
             ..self
