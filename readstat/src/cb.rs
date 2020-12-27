@@ -4,7 +4,7 @@ use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 
-use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
+use crate::rs::{ReadStatData, ReadStatReader, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
 
 const ROWS: usize = 1000;
 
@@ -103,7 +103,16 @@ pub extern "C" fn handle_value(
         // Vec containing all rows, needs capacity = number of rows
         // d.rows = Vec::with_capacity(d.row_count as usize);
         // Allocate rows
-        d.rows = if d.row_count < ROWS as i32 { Vec::with_capacity(d.row_count as usize) } else { Vec::with_capacity(ROWS) };
+        d.rows = match d.reader {
+            ReadStatReader::Streaming => {
+                if d.row_count < ROWS as i32 {
+                    Vec::with_capacity(d.row_count as usize)
+                } else {
+                    Vec::with_capacity(ROWS)
+                }
+            }
+            ReadStatReader::InMemory => Vec::with_capacity(d.row_count as usize),
+        }
     }
 
     debug!("var_index is {:#?}", var_index);
@@ -176,15 +185,22 @@ pub extern "C" fn handle_value(
         d.row.clear();
     }
 
-    // if rows = buffer limit and last variable then go ahead and write
-    if (obs_index % (ROWS as i32 - 1) == 0 || obs_index == d.row_count - 1) && var_index == d.var_count - 1 {
-        match d.write() {
-            Ok(()) => (),
-            // Err(e) => d.errors.push(format!("{:#?}", e)),
-            // For now just swallow any errors when writing
-            Err(_) => (),
-        };
-        d.rows.clear();
+    match d.reader {
+        ReadStatReader::Streaming => {
+            // if rows = buffer limit and last variable then go ahead and write
+            if (obs_index % (ROWS as i32 - 1) == 0 || obs_index == d.row_count - 1)
+                && var_index == d.var_count - 1
+            {
+                match d.write() {
+                    Ok(()) => (),
+                    // Err(e) => d.errors.push(format!("{:#?}", e)),
+                    // For now just swallow any errors when writing
+                    Err(_) => (),
+                };
+                d.rows.clear();
+            }
+        }
+        ReadStatReader::InMemory => (),
     }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int

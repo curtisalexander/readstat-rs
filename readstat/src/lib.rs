@@ -15,7 +15,7 @@ mod err;
 mod rs;
 
 pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType,
+    ReadStatData, ReadStatPath, ReadStatReader, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType,
 };
 
 pub use err::ReadStatError;
@@ -121,7 +121,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             input,
             output,
             out_type,
-            rows
+            rows,
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(

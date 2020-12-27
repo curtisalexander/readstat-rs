@@ -17,6 +17,7 @@ use crate::err::ReadStatError;
 use crate::OutType;
 
 const DIGITS: usize = 14;
+const EXTENSIONS: &'static [&'static str] = &["sas7bdat", "sas7bcat"];
 
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
@@ -34,10 +35,14 @@ impl ReadStatPath {
         out_type: Option<OutType>,
     ) -> Result<Self, Box<dyn Error>> {
         let p = Self::validate_path(path)?;
-        let ext = Self::validate_extension(&p)?;
+        let ext = Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
         let op: Option<PathBuf> = Self::validate_out_path(out_path)?;
         let ot = Self::validate_out_type(out_type)?;
+        let op = match op {
+            None => op,
+            Some(op) => Self::validate_out_extension(&op, ot)?
+        };
 
         Ok(Self {
             path: p,
@@ -61,7 +66,7 @@ impl ReadStatPath {
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
     }
 
-    fn validate_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
+    fn validate_in_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
             .and_then(|e| Some(e.to_owned()))
@@ -70,12 +75,39 @@ impl ReadStatPath {
                     "File {} does not have an extension!",
                     path.to_string_lossy().yellow()
                 ))),
-                |e| Ok(e),
+                |e|
+                    if EXTENSIONS.iter().any(|&ext| ext == e) {
+                        Ok(e)
+                    } else {
+                        Err(From::from(format!("Expecting extension `sas7bdat` or `sas7bcat`.  File {} does not have expected extension!", path.to_string_lossy().yellow())))
+                    }
             )
     }
 
-    fn validate_path(p: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
-        let abs_path = PathAbs::new(p)?;
+    fn validate_out_extension(path: &PathBuf, out_type: OutType) -> Result<Option<PathBuf>, Box<dyn Error>> {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .and_then(|e| Some(e.to_owned()))
+            .map_or(
+                Err(From::from(format!(
+                    "File {} does not have an extension!  Expecting extension {}.",
+                    path.to_string_lossy().yellow(),
+                    out_type
+                ))),
+                |e|
+                    match out_type {
+                        OutType::csv =>
+                            if e == String::from("csv") {
+                                Ok(Some(path.to_owned()))
+                            } else {
+                                Err(From::from(format!("Expecting extension `{}`.  Instead, file {} has extension {}.", out_type, path.to_string_lossy().yellow(), e)))
+                            }
+                    }
+            )
+    }
+
+    fn validate_path(path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+        let abs_path = PathAbs::new(path)?;
 
         if abs_path.exists() {
             Ok(abs_path.as_path().to_path_buf())
@@ -87,19 +119,19 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_out_path(p: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
-        match p {
+    fn validate_out_path(path: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
+        match path {
             None => Ok(None),
             Some(p) => {
                 let abs_path = PathAbs::new(p)?;
 
                 match abs_path.parent() {
-                    Err(_) => Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &abs_path.to_string_lossy()))),
+                    Err(_) => Err(From::from(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &abs_path.to_string_lossy()))),
                     Ok(parent) => {
                         if parent.exists() {
                             Ok(Some(abs_path.as_path().to_path_buf()))
                         } else {
-                            Err(From::from(format!("The parent directory of the value of the parameter  --out-path ({}) does not exist", &parent.to_string_lossy())))
+                            Err(From::from(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &parent.to_string_lossy())))
                         }
                     }
                 }
@@ -107,8 +139,8 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_out_type(t: Option<OutType>) -> Result<OutType, Box<dyn Error>> {
-        match t {
+    fn validate_out_type(out_type: Option<OutType>) -> Result<OutType, Box<dyn Error>> {
+        match out_type {
             None => Ok(OutType::csv),
             Some(t) => Ok(t),
         }
@@ -194,6 +226,12 @@ pub enum ReadStatVarType {
     Unknown,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub enum ReadStatReader {
+    InMemory,
+    Streaming,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
@@ -207,6 +245,7 @@ pub struct ReadStatData {
     pub rows: Vec<Vec<ReadStatVar>>,
     pub wrote_header: bool,
     pub errors: Vec<String>,
+    pub reader: ReadStatReader,
 }
 
 impl ReadStatData {
@@ -223,6 +262,7 @@ impl ReadStatData {
             rows: Vec::new(),
             wrote_header: false,
             errors: Vec::new(),
+            reader: ReadStatReader::Streaming,
         }
     }
 
@@ -292,6 +332,13 @@ impl ReadStatData {
             .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
+    }
+
+    pub fn set_reader(self, reader: ReadStatReader) -> Self {
+        Self {
+            reader,
+            ..self
+        }
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
