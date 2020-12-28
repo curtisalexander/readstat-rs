@@ -1,7 +1,7 @@
 ![readstat-rs](https://github.com/curtisalexander/readstat-rs/workflows/readstat-rs/badge.svg)
 
 # readstat-rs
-Command-line tool to work with SAS binary &mdash; `sas7bdat` &mdash; files.
+Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
 
 ## ReadStat
 The command-line tool is developed in Rust and is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
