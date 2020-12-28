@@ -66,7 +66,18 @@ To write the first 100 rows of parsed data (as a `csv`) to a file, invoke the fo
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --rows 100
 ```
 
-:memo: The `data` subcommand can take the parameter `--out-type`.  Currently the only `--out-type` available is `csv` and thus the parameter is elided from the above examples.
+:memo: The `data` subcommand includes a parameter for `--out-type`, which is the type of file that is to be written.  Currently the only available file type for `--out-type` is `csv` and thus the parameter is elided from the above examples.
+
+### Reader
+The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
+- `mem` &rarr; Parse and read the entire `sas7bdat` into memory before writing to either standard out or a file
+- `stream` (default) &rarr; Parse and read at most [1,000 rows](https://github.com/curtisalexander/readstat-rs/blob/main/readstat/src/cb.rs#L10) into memory before writing to disk
+
+**Why is this useful?**
+- `mem` is useful particularly for test purposes
+- `stream` is useful in keeping memory usage low for extrememly large datasets
+- In general, would not expect anyone to deviate from the default (`stream`) unless they had a specific need
+- In addition, by enabling these options as command line parameters [hyperfine](#benchmarking) can be used to benchmark across an assortment of file sizes
 
 ### Debug
 Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.  :warning: This is quite verbose!
@@ -106,9 +117,10 @@ valgrind ./target/debug/deps/get_row_count_test-<hash>
 ```
 
 ## Platform Support
-- Linux &rarr; principal development environment; succesfully builds and runs
-- macOS &rarr; successfully builds and runs
-- Windows &rarr; successfully builds and runs
+- :white_check_mark: Linux   &rarr; successfully builds and runs
+    - Principal development environment
+- :white_check_mark: macOS   &rarr; successfully builds and runs
+- :white_check_mark: Windows &rarr; successfully builds and runs
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
     - [Requires `libclang`](#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
 
@@ -119,7 +131,7 @@ For example, the number `1.123456789012345` created within SAS would be returned
 
 Why does this happen?  Is this an ementation error?  No, truncation to only 14 decimal digits has been purposely implemented within the Rust code.
 
-As a specific example, when testing with the [cars.sas7bdat](data/README.md) dataset, the numeric value `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits) within Rust.  The `cars.sas7bdat` dataset was created on Windows.  Values created on Windows with an x64 processor are only accurate to 15 digits.
+As a specific example, when testing with the [cars.sas7bdat](data/README.md) dataset (which was created originally on Windows), the numeric value `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits) within Rust.  Values created on Windows with an x64 processor are only accurate to 15 digits.
 
 Only utilizing 14 decimal digits [mirrors the approach](https://github.com/WizardMac/ReadStat/blob/master/src/bin/write/mod_csv.c#L147) of the [ReadStat binary](https://github.com/WizardMac/ReadStat#command-line-usage) when writing to `csv`.
 
@@ -136,14 +148,14 @@ Benchmarking performed with [hyperfine](https://github.com/sharkdp/hyperfine).
 
 This example compares the performance of the Rust binary with the performance of the C binary built from the `ReadStat` repository.  In general, hope that performance is fairly close to that of the C binary.
 
-To run, execute the following from within the `readstat-rs/readstat` directory.
+To run, execute the following from within the `readstat` directory.
 
 ```powershell
 # Windows
 hyperfine --warmup 5 "ReadStat_App.exe -f ..\data\cars.sas7bdat ..\data\cars_c.csv" ".\target\release\readstat.exe data ..\data\cars.sas7bdat --output ..\data\cars_rust.csv"
 ```
 
-:note: First experiments on Windows are challenging to interpret due to file caching.  Need to utilize `--prepare` option provided by `hyperfine`.
+:memo: First experiments on Windows are challenging to interpret due to file caching.  Need further research into utilizing the `--prepare` option provided by `hyperfine` on Windows.
 
 ```sh
 # Linux and macOS
@@ -155,16 +167,15 @@ Other, future, benchmarking may be performed when/if [channels and threads](http
 ## Profiling
 Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/flamegraph).
 
-To run, execute the following.
+To run, execute the following from within the `readstat` directory.
 ```sh
-cd readstat
 cargo flamegraph --bin readstat -- data ../data/_ahs2019n.sas7bdat --output ../data/_ahs2019n.csv
 ```
 
 File is written to `readstat/flamegraph.svg`.
 
 ## Github Actions
-Below is the rough `git tag` dance to delete and/or add tags to trigger Github Actions.
+Below is the rough `git tag` dance to delete and/or add tags to [trigger Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L7-L10).
 
 ```sh
 # delete local tag
