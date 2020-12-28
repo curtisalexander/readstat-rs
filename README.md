@@ -76,12 +76,12 @@ The `preview` and `data` subcommands include a parameter for `--reader`.  The po
 
 **Why is this useful?**
 - `mem` is useful for testing purposes
-- `stream` is useful in keeping memory usage low for extrememly large datasets
-- In general, would not expect anyone to deviate from the default (`stream`) unless they had a specific need
-- In addition, by enabling these options as command line parameters [hyperfine](#benchmarking) can be used to benchmark across an assortment of file sizes
+- `stream` is useful for keeping memory usage low for large datasets
+- In general, do not expect users to deviate from the default &mdash; `stream` &mdash; unless they had a specific need
+- In addition, by enabling these options as command line parameters [hyperfine](#benchmarking) may be used to benchmark across an assortment of file sizes
 
 ### Debug
-Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.  :warning: This is quite verbose!
+Debug information is printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.  :warning: This is quite verbose!
 
 ```sh
 # Linux and macOS
@@ -104,24 +104,24 @@ readstat data --help
 ```
 
 ## Testing
-To run unit / integration tests, run the following within the `readstat` directory.
+To perform unit / integration tests, run the following within the `readstat` directory.
 
 ```
 cargo test
 ```
 
 ### Valgrind
-To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `get_row_count_test`, run the following.
+To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `parse_file_metadata_test`, run the following from within the `readstat` directory.
 
 ```
-valgrind ./target/debug/deps/get_row_count_test-<hash>
+valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 ```
 
 ## Platform Support
-- :white_check_mark: Linux   &rarr; successfully builds and runs
+- :check_mark_button: Linux   &rarr; successfully builds and runs
     - Principal development environment
-- :white_check_mark: macOS   &rarr; successfully builds and runs
-- :white_check_mark: Windows &rarr; successfully builds and runs
+- :check_mark_button: macOS   &rarr; successfully builds and runs
+- :check_mark_button: Windows &rarr; successfully builds and runs
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
     - [Requires `libclang`](#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
 
@@ -173,7 +173,7 @@ To run, execute the following from within the `readstat` directory.
 cargo flamegraph --bin readstat -- data ../data/_ahs2019n.sas7bdat --output ../data/_ahs2019n.csv
 ```
 
-File is written to `readstat/flamegraph.svg`.
+Flamegraph is written to `readstat/flamegraph.svg`.
 
 ## Github Actions
 Below is the rough `git tag` dance to delete and/or add tags to [trigger Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L7-L10).
