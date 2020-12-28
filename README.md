@@ -24,7 +24,7 @@ For details see the following.
 - [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L77-L79)
 
 ## Run
-After [building](#build), the binary is invoked using [subcommands](https://docs.rs/structopt/0.3.21/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
+After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/structopt/0.3.21/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out
     - row count
     - variable count
