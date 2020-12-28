@@ -86,10 +86,6 @@ fn main() {
     } else if target.contains("apple-darwin") {
         println!("cargo:rustc-link-lib=iconv");
         println!("cargo:rustc-link-lib=z");
-    } else if target.contains("linux-gnu") {
-        println!("cargo:rustc-link-lib=iconv");
-        println!("cargo:rustc-link-lib=z");
-    }
 
     // Compile
     cc.compile("readstat");
