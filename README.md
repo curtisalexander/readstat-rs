@@ -118,10 +118,10 @@ valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 ```
 
 ## Platform Support
-- :check_mark_button: Linux   &rarr; successfully builds and runs
+- :heavy_check_mark: Linux   &rarr; successfully builds and runs
     - Principal development environment
-- :check_mark_button: macOS   &rarr; successfully builds and runs
-- :check_mark_button: Windows &rarr; successfully builds and runs
+- :heavy_check_mark: macOS   &rarr; successfully builds and runs
+- :heavy_check_mark: Windows &rarr; successfully builds and runs
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
     - [Requires `libclang`](#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
 
