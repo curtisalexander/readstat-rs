@@ -30,6 +30,7 @@ After [building](#build) or [installing](#install), the binary is invoked using 
     - variable count
     - variable names
     - variable types
+    - ...[plans for more](https://github.com/curtisalexander/readstat-rs/issues/20)
 - `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
 - `data` &rarr; writes parsed data in `csv` format to a file
 
@@ -74,7 +75,7 @@ The `preview` and `data` subcommands include a parameter for `--reader`.  The po
 - `stream` (default) &rarr; Parse and read at most [1,000 rows](https://github.com/curtisalexander/readstat-rs/blob/main/readstat/src/cb.rs#L10) into memory before writing to disk
 
 **Why is this useful?**
-- `mem` is useful particularly for test purposes
+- `mem` is useful for testing purposes
 - `stream` is useful in keeping memory usage low for extrememly large datasets
 - In general, would not expect anyone to deviate from the default (`stream`) unless they had a specific need
 - In addition, by enabling these options as command line parameters [hyperfine](#benchmarking) can be used to benchmark across an assortment of file sizes
