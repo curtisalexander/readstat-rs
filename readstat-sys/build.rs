@@ -83,6 +83,9 @@ fn main() {
         }
         println!("cargo:rustc-link-lib=static=iconv");
         println!("cargo:rustc-link-lib=static=z");
+    } else if target.contains("apple-darwin") {
+        println!("cargo:rustc-link-lib=iconv");
+        println!("cargo:rustc-link-lib=z");
     }
 
     // Compile

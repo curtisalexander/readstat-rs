@@ -10,7 +10,7 @@ fn parse_file_with_missing_data() {
     let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
 
     let mut d = readstat::ReadStatData::new(rsp).set_reader(readstat::Reader::mem);
-    let error = d.get_data(None).unwrap();
+    let error = d.get_data(Some(5)).unwrap();
 
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
@@ -33,7 +33,7 @@ fn parse_file_with_missing_data() {
     assert_eq!(var_count, 9);
 
     let row_count = d.row_count;
-    assert_eq!(row_count, 50);
+    assert_eq!(row_count, 5);
 
     let row_with_missing = &d.rows[1];
     let non_missing_value = if let readstat::ReadStatVar::ReadStat_String(s) = &row_with_missing[0] { s.to_owned() } else { String::from("") };

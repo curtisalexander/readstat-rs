@@ -1,6 +1,6 @@
 [package]
 name = "readstat"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2018"
 description = "Rust wrapper of the ReadStat C library"
