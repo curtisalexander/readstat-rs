@@ -9,21 +9,18 @@ The command-line tool is developed in Rust and is only possible due to the excel
 The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
 
 ## Install
-\[Mostly\] static binaries for Linux and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
+\[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
 
 ## Build
 
-### Linux
+### Linux and macOS
 Building is as straightforward as `cargo build`.
-
-### macOS
-Currently, `readstat` does not build on macOS.  Updates to the [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) [build.rs](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) script are required in order to build.
 
 ### Windows
 Building on Windows requires [LLVM 11](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
 
 For details see the following.
-- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L86)
+- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L83)
 - [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L77-L79)
 
 ## Run
@@ -75,7 +72,7 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --
 Debug information can be printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.  :warning: This is quite verbose!
 
 ```sh
-# Linux
+# Linux and macOS
 RUST_LOG=debug readstat ...
 ```
 
@@ -110,7 +107,7 @@ valgrind ./target/debug/deps/get_row_count_test-<hash>
 
 ## Platform Support
 - Linux &rarr; principal development environment; succesfully builds and runs
-- macOS &rarr; currently does not build; see [macOS](#macoS) for more details
+- macOS &rarr; successfully builds and runs
 - Windows &rarr; successfully builds and runs
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
     - [Requires `libclang`](#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
@@ -149,7 +146,7 @@ hyperfine --warmup 5 "ReadStat_App.exe -f ..\data\cars.sas7bdat ..\data\cars_c.c
 :note: First experiments on Windows are challenging to interpret due to file caching.  Need to utilize `--prepare` option provided by `hyperfine`.
 
 ```sh
-# Linux
+# Linux and macOS
 hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f ../data/cars.sas7bdat ../data/cars_c.csv" "./target/release/readstat data ../data/cars.sas7bdat --output ../data/cars_rust.csv"
 ```
 
