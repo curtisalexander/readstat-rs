@@ -7,7 +7,7 @@ use std::os::raw::{c_char, c_int, c_void};
 use crate::Reader;
 use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
 
-const ROWS: usize = 1000;
+const ROWS: usize = 10000;
 
 // C types
 #[allow(dead_code)]
