@@ -41,7 +41,7 @@ impl ReadStatPath {
         let ot = Self::validate_out_type(out_type)?;
         let op = match op {
             None => op,
-            Some(op) => Self::validate_out_extension(&op, ot)?
+            Some(op) => Self::validate_out_extension(&op, ot)?,
         };
 
         Ok(Self {
@@ -84,7 +84,10 @@ impl ReadStatPath {
             )
     }
 
-    fn validate_out_extension(path: &PathBuf, out_type: OutType) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    fn validate_out_extension(
+        path: &PathBuf,
+        out_type: OutType,
+    ) -> Result<Option<PathBuf>, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
             .and_then(|e| Some(e.to_owned()))
@@ -94,15 +97,20 @@ impl ReadStatPath {
                     path.to_string_lossy().yellow(),
                     out_type
                 ))),
-                |e|
-                    match out_type {
-                        OutType::csv =>
-                            if e == String::from("csv") {
-                                Ok(Some(path.to_owned()))
-                            } else {
-                                Err(From::from(format!("Expecting extension `{}`.  Instead, file {} has extension {}.", out_type, path.to_string_lossy().yellow(), e)))
-                            }
+                |e| match out_type {
+                    OutType::csv => {
+                        if e == String::from("csv") {
+                            Ok(Some(path.to_owned()))
+                        } else {
+                            Err(From::from(format!(
+                                "Expecting extension `{}`.  Instead, file {} has extension {}.",
+                                out_type,
+                                path.to_string_lossy().yellow(),
+                                e
+                            )))
+                        }
                     }
+                },
             )
     }
 
@@ -171,7 +179,12 @@ pub struct ReadStatVarMetadata {
 }
 
 impl ReadStatVarMetadata {
-    pub fn new(var_type: ReadStatVarType, var_type_class: ReadStatVarTypeClass, var_label: String, var_format: String) -> Self {
+    pub fn new(
+        var_type: ReadStatVarType,
+        var_type_class: ReadStatVarTypeClass,
+        var_label: String,
+        var_format: String,
+    ) -> Self {
         Self {
             var_type,
             var_type_class,
@@ -385,10 +398,7 @@ impl ReadStatData {
     }
 
     pub fn set_reader(self, reader: Reader) -> Self {
-        Self {
-            reader,
-            ..self
-        }
+        Self { reader, ..self }
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
@@ -502,7 +512,15 @@ impl ReadStatData {
         println!("{}: {}", "Table label".cyan(), self.file_label);
         println!("{}: {}", "File encoding".yellow(), self.file_encoding);
         println!("{}: {}", "Format version".green(), self.version);
-        println!("{}: {}", "Bitness".red(), if self.is64bit == 0 { "32-bit" } else { "64-bit" });
+        println!(
+            "{}: {}",
+            "Bitness".red(),
+            if self.is64bit == 0 {
+                "32-bit"
+            } else {
+                "64-bit"
+            }
+        );
         println!("{}: {}", "Creation time".blue(), self.creation_time);
         println!("{}: {}", "Modified time".cyan(), self.modified_time);
         println!("{}: {:#?}", "Compression".yellow(), self.compression);

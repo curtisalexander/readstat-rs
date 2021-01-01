@@ -15,7 +15,8 @@ mod err;
 mod rs;
 
 pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarTrunc, ReadStatVarType,
+    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarTrunc,
+    ReadStatVarType,
 };
 
 pub use err::ReadStatError;
@@ -38,10 +39,9 @@ pub enum ReadStat {
         /// Number of rows to write
         #[structopt(long, default_value = "10")]
         rows: u32,
-        /// Type of reader 
+        /// Type of reader
         #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
         reader: Option<Reader>,
-
     },
     /// Write parsed data to file of specific type
     Data {
@@ -107,7 +107,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 )),
             }
         }
-        ReadStat::Preview { input, rows, reader, } => {
+        ReadStat::Preview {
+            input,
+            rows,
+            reader,
+        } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
                 "Generating a data preview from the file {}",

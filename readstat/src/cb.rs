@@ -6,8 +6,8 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 
 use crate::rs::{
-    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatVarTypeClass, ReadStatVar,
-    ReadStatVarIndexAndName, ReadStatVarType, ReadStatVarMetadata
+    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatVar, ReadStatVarIndexAndName,
+    ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
 };
 use crate::Reader;
 
@@ -44,28 +44,24 @@ pub extern "C" fn handle_metadata(
     let table_name = if table_name_ptr == std::ptr::null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(table_name_ptr)
-            .to_str()
-            .unwrap()
-            .to_owned() }
+        unsafe { CStr::from_ptr(table_name_ptr).to_str().unwrap().to_owned() }
     };
     let file_label_ptr = unsafe { readstat_sys::readstat_get_file_label(metadata) };
     let file_label = if file_label_ptr == std::ptr::null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(file_label_ptr)
-            .to_str()
-            .unwrap()
-            .to_owned() }
+        unsafe { CStr::from_ptr(file_label_ptr).to_str().unwrap().to_owned() }
     };
     let file_encoding_ptr = unsafe { readstat_sys::readstat_get_file_encoding(metadata) };
     let file_encoding = if file_encoding_ptr == std::ptr::null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(file_encoding_ptr)
-            .to_str()
-            .unwrap()
-            .to_owned() }
+        unsafe {
+            CStr::from_ptr(file_encoding_ptr)
+                .to_str()
+                .unwrap()
+                .to_owned()
+        }
     };
     let version: c_int = unsafe { readstat_sys::readstat_get_file_format_version(metadata) };
     let is64bit = unsafe { readstat_sys::readstat_get_file_format_is_64bit(metadata) };
@@ -150,29 +146,20 @@ pub extern "C" fn handle_variable(
     let var_name = if var_name_ptr == std::ptr::null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(var_name_ptr)
-            .to_str()
-            .unwrap()
-            .to_owned() }
+        unsafe { CStr::from_ptr(var_name_ptr).to_str().unwrap().to_owned() }
     };
     let var_label_ptr = unsafe { readstat_sys::readstat_variable_get_label(variable) };
     let var_label = if var_label_ptr == std::ptr::null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(var_label_ptr)
-            .to_str()
-            .unwrap()
-            .to_owned() }
+        unsafe { CStr::from_ptr(var_label_ptr).to_str().unwrap().to_owned() }
     };
 
     let var_format_ptr = unsafe { readstat_sys::readstat_variable_get_format(variable) };
     let var_format = if var_format_ptr == std::ptr::null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(var_format_ptr)
-            .to_str()
-            .unwrap()
-            .to_owned() }
+        unsafe { CStr::from_ptr(var_format_ptr).to_str().unwrap().to_owned() }
     };
 
     debug!("var_type is {:#?}", &var_type);
@@ -182,8 +169,10 @@ pub extern "C" fn handle_variable(
     debug!("var_format is {}", &var_format);
 
     // insert into BTreeMap within ReadStatData struct
-    d.vars
-        .insert(ReadStatVarIndexAndName::new(index, var_name), ReadStatVarMetadata::new(var_type, var_type_class, var_label, var_format));
+    d.vars.insert(
+        ReadStatVarIndexAndName::new(index, var_name),
+        ReadStatVarMetadata::new(var_type, var_type_class, var_label, var_format),
+    );
 
     debug!("d struct is {:#?}", d);
 
