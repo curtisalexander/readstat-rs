@@ -28,9 +28,20 @@ After [building](#build) or [installing](#install), the binary is invoked using 
 - `metadata` &rarr; writes the following to standard out
     - row count
     - variable count
+    - table name
+    - table label
+    - file encoding
+    - format version
+    - bitness
+    - creation time
+    - modified time
+    - compression
+    - byte order
     - variable names
+    - variable type classes
     - variable types
-    - ...[plans for more](https://github.com/curtisalexander/readstat-rs/issues/20)
+    - variable labels
+    - variable formats
 - `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
 - `data` &rarr; writes parsed data in `csv` format to a file
 
@@ -76,8 +87,8 @@ The `preview` and `data` subcommands include a parameter for `--reader`.  The po
 
 **Why is this useful?**
 - `mem` is useful for testing purposes
-- `stream` is useful for keeping memory usage low for large datasets
-- In general, do not expect users to deviate from the default &mdash; `stream` &mdash; unless they had a specific need
+- `stream` is useful for keeping memory usage low for large datasets (and hence is the default)
+- In general, users should not need to deviate from the default &mdash; `stream` &mdash; unless they have a specific need
 - In addition, by enabling these options as command line parameters [hyperfine](#benchmarking) may be used to benchmark across an assortment of file sizes
 
 ### Debug
@@ -174,6 +185,8 @@ cargo flamegraph --bin readstat -- data ../data/_ahs2019n.sas7bdat --output ../d
 ```
 
 Flamegraph is written to `readstat/flamegraph.svg`.
+
+:memo: Have yet to utilize flamegraphs in order to improve performance.
 
 ## Github Actions
 Below is the rough `git tag` dance to delete and/or add tags to [trigger Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L7-L10).
