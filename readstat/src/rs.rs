@@ -41,7 +41,7 @@ impl ReadStatPath {
         let ot = Self::validate_out_type(out_type)?;
         let op = match op {
             None => op,
-            Some(op) => Self::validate_out_extension(&op, ot)?
+            Some(op) => Self::validate_out_extension(&op, ot)?,
         };
 
         Ok(Self {
@@ -84,7 +84,10 @@ impl ReadStatPath {
             )
     }
 
-    fn validate_out_extension(path: &PathBuf, out_type: OutType) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    fn validate_out_extension(
+        path: &PathBuf,
+        out_type: OutType,
+    ) -> Result<Option<PathBuf>, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
             .and_then(|e| Some(e.to_owned()))
@@ -94,15 +97,20 @@ impl ReadStatPath {
                     path.to_string_lossy().yellow(),
                     out_type
                 ))),
-                |e|
-                    match out_type {
-                        OutType::csv =>
-                            if e == String::from("csv") {
-                                Ok(Some(path.to_owned()))
-                            } else {
-                                Err(From::from(format!("Expecting extension `{}`.  Instead, file {} has extension {}.", out_type, path.to_string_lossy().yellow(), e)))
-                            }
+                |e| match out_type {
+                    OutType::csv => {
+                        if e == String::from("csv") {
+                            Ok(Some(path.to_owned()))
+                        } else {
+                            Err(From::from(format!(
+                                "Expecting extension `{}`.  Instead, file {} has extension {}.",
+                                out_type,
+                                path.to_string_lossy().yellow(),
+                                e
+                            )))
+                        }
                     }
+                },
             )
     }
 
@@ -148,16 +156,40 @@ impl ReadStatPath {
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
-pub struct ReadStatVarMetadata {
+pub struct ReadStatVarIndexAndName {
     pub var_index: c_int,
     pub var_name: String,
 }
 
-impl ReadStatVarMetadata {
+impl ReadStatVarIndexAndName {
     pub fn new(var_index: c_int, var_name: String) -> Self {
         Self {
             var_index,
             var_name,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReadStatVarMetadata {
+    pub var_type: ReadStatVarType,
+    pub var_type_class: ReadStatVarTypeClass,
+    pub var_label: String,
+    pub var_format: String,
+}
+
+impl ReadStatVarMetadata {
+    pub fn new(
+        var_type: ReadStatVarType,
+        var_type_class: ReadStatVarTypeClass,
+        var_label: String,
+        var_format: String,
+    ) -> Self {
+        Self {
+            var_type,
+            var_type_class,
+            var_label,
+            var_format,
         }
     }
 }
@@ -226,6 +258,25 @@ pub enum ReadStatVarType {
     Unknown,
 }
 
+#[derive(Debug, FromPrimitive, Serialize)]
+pub enum ReadStatCompress {
+    None = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_NONE as isize,
+    Rows = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_ROWS as isize,
+    Binary = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_BINARY as isize,
+}
+
+#[derive(Debug, FromPrimitive, Serialize)]
+pub enum ReadStatEndian {
+    None = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_NONE as isize,
+    Little = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_LITTLE as isize,
+    Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
+}
+
+#[derive(Debug, FromPrimitive, Serialize)]
+pub enum ReadStatVarTypeClass {
+    String = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_STRING as isize,
+    Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
+}
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
@@ -234,7 +285,16 @@ pub struct ReadStatData {
     pub out_type: OutType,
     pub row_count: c_int,
     pub var_count: c_int,
-    pub vars: BTreeMap<ReadStatVarMetadata, ReadStatVarType>,
+    pub table_name: String,
+    pub file_label: String,
+    pub file_encoding: String,
+    pub version: c_int,
+    pub is64bit: c_int,
+    pub creation_time: String,
+    pub modified_time: String,
+    pub compression: ReadStatCompress,
+    pub endianness: ReadStatEndian,
+    pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
     pub wrote_header: bool,
@@ -251,6 +311,15 @@ impl ReadStatData {
             out_type: rsp.out_type,
             row_count: 0,
             var_count: 0,
+            table_name: String::new(),
+            file_label: String::new(),
+            file_encoding: String::new(),
+            version: 0,
+            is64bit: 0,
+            creation_time: String::new(),
+            modified_time: String::new(),
+            compression: ReadStatCompress::None,
+            endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
             row: Vec::new(),
             rows: Vec::new(),
@@ -267,7 +336,7 @@ impl ReadStatData {
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
+        debug!("Initially, error ==> {:#?}", &error);
 
         // TODO: for parsing data, a new metadata handler may be needed that
         //   does not get the row count but just the var count
@@ -329,10 +398,7 @@ impl ReadStatData {
     }
 
     pub fn set_reader(self, reader: Reader) -> Self {
-        Self {
-            reader,
-            ..self
-        }
+        Self { reader, ..self }
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
@@ -438,19 +504,40 @@ impl ReadStatData {
     pub fn write_metadata_to_stdout(&self) -> Result<(), Box<dyn Error>> {
         println!(
             "Metadata for the file {}\n",
-            self.path.to_string_lossy().yellow()
+            self.path.to_string_lossy().bright_yellow()
         );
         println!("{}: {}", "Row count".green(), self.row_count);
         println!("{}: {}", "Variable count".red(), self.var_count);
-        println!("{}:", "Variable names".blue());
+        println!("{}: {}", "Table name".blue(), self.table_name);
+        println!("{}: {}", "Table label".cyan(), self.file_label);
+        println!("{}: {}", "File encoding".yellow(), self.file_encoding);
+        println!("{}: {}", "Format version".green(), self.version);
+        println!(
+            "{}: {}",
+            "Bitness".red(),
+            if self.is64bit == 0 {
+                "32-bit"
+            } else {
+                "64-bit"
+            }
+        );
+        println!("{}: {}", "Creation time".blue(), self.creation_time);
+        println!("{}: {}", "Modified time".cyan(), self.modified_time);
+        println!("{}: {:#?}", "Compression".yellow(), self.compression);
+        println!("{}: {:#?}", "Byte order".green(), self.endianness);
+        println!("{}:", "Variable names".purple());
         for (k, v) in self.vars.iter() {
             println!(
-                "{}: {} of type {:#?}",
+                "{}: {} with metadata {{ type class: {}, type: {}, label: {}, format: {} }}",
                 k.var_index,
                 k.var_name.bright_purple(),
-                v
+                format!("{:#?}", v.var_type_class).bright_green(),
+                format!("{:#?}", v.var_type).bright_red(),
+                v.var_label.bright_blue(),
+                v.var_format.bright_cyan(),
             );
         }
+
         Ok(())
     }
 }
