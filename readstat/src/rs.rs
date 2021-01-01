@@ -226,6 +226,20 @@ pub enum ReadStatVarType {
     Unknown,
 }
 
+#[derive(Debug, FromPrimitive, Serialize)]
+pub enum ReadStatCompress {
+    None = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_NONE as isize,
+    Rows = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_ROWS as isize,
+    Binary = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_BINARY as isize,
+}
+
+#[derive(Debug, FromPrimitive, Serialize)]
+pub enum ReadStatEndian {
+    None = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_NONE as isize,
+    Little = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_LITTLE as isize,
+    Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
@@ -234,6 +248,15 @@ pub struct ReadStatData {
     pub out_type: OutType,
     pub row_count: c_int,
     pub var_count: c_int,
+    pub table_name: String,
+    pub file_label: String,
+    pub file_encoding: String,
+    pub version: c_int,
+    pub is64bit: c_int,
+    pub creation_time: String,
+    pub modified_time: String,
+    pub compression: ReadStatCompress,
+    pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarMetadata, ReadStatVarType>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
@@ -251,6 +274,15 @@ impl ReadStatData {
             out_type: rsp.out_type,
             row_count: 0,
             var_count: 0,
+            table_name: String::new(),
+            file_label: String::new(),
+            file_encoding: String::new(),
+            version: 0,
+            is64bit: 0,
+            creation_time: String::new(),
+            modified_time: String::new(),
+            compression: ReadStatCompress::None,
+            endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
             row: Vec::new(),
             rows: Vec::new(),
@@ -442,7 +474,16 @@ impl ReadStatData {
         );
         println!("{}: {}", "Row count".green(), self.row_count);
         println!("{}: {}", "Variable count".red(), self.var_count);
-        println!("{}:", "Variable names".blue());
+        println!("{}: {}", "Table name".blue(), self.table_name);
+        println!("{}: {}", "Table label".cyan(), self.file_label);
+        println!("{}: {}", "File encoding".yellow(), self.file_encoding);
+        println!("{}: {}", "Format version".green(), self.version);
+        println!("{}: {}", "Bitness".red(), if self.is64bit == 0 { "32-bit" } else { "64-bit" });
+        println!("{}: {}", "Creation time".blue(), self.creation_time);
+        println!("{}: {}", "Modified time".cyan(), self.modified_time);
+        println!("{}: {:#?}", "Compression".yellow(), self.compression);
+        println!("{}: {:#?}", "Byte order".green(), self.endianness);
+        println!("{}:", "Variable names".purple());
         for (k, v) in self.vars.iter() {
             println!(
                 "{}: {} of type {:#?}",
@@ -451,6 +492,7 @@ impl ReadStatData {
                 v
             );
         }
+
         Ok(())
     }
 }

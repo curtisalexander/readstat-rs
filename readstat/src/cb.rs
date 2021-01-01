@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
 use readstat_sys;
@@ -5,7 +6,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 
 use crate::Reader;
-use crate::rs::{ReadStatData, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
+use crate::rs::{ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
 
 const ROWS: usize = 10000;
 
@@ -33,17 +34,69 @@ pub extern "C" fn handle_metadata(
     // dereference ctx pointer
     let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
-    // get row count and variable count
+    // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     let vc: c_int = unsafe { readstat_sys::readstat_get_var_count(metadata) };
+    let table_name = unsafe {
+        CStr::from_ptr(readstat_sys::readstat_get_table_name(metadata))
+            .to_str()
+            .unwrap()
+            .to_owned()
+    };
+    let file_label = unsafe {
+        CStr::from_ptr(readstat_sys::readstat_get_file_label(metadata))
+            .to_str()
+            .unwrap()
+            .to_owned()
+    };
+    let file_encoding = unsafe {
+        CStr::from_ptr(readstat_sys::readstat_get_file_encoding(metadata))
+            .to_str()
+            .unwrap()
+            .to_owned()
+    };
+    let version: c_int = unsafe { readstat_sys::readstat_get_file_format_version(metadata) };
+    let is64bit = unsafe { readstat_sys::readstat_get_file_format_is_64bit(metadata) };
+    let ct = NaiveDateTime::from_timestamp(unsafe { readstat_sys::readstat_get_creation_time(metadata) }, 0).format("%Y-%m-%d %H:%M:%S").to_string();
+    let mt = NaiveDateTime::from_timestamp(unsafe { readstat_sys::readstat_get_modified_time(metadata) }, 0).format("%Y-%m-%d %H:%M:%S").to_string();
+    let compression = match FromPrimitive::from_i32(unsafe {
+        readstat_sys::readstat_get_compression(metadata) as i32
+    }) {
+        Some(t) => t,
+        None => ReadStatCompress::None,
+    };
+    let endianness = match FromPrimitive::from_i32(unsafe {
+        readstat_sys::readstat_get_endianness(metadata) as i32
+    }) {
+        Some(t) => t,
+        None => ReadStatEndian::None,
+    };
 
     // insert into ReadStatData struct
     d.row_count = rc;
     d.var_count = vc;
+    d.table_name = table_name;
+    d.file_label = file_label;
+    d.file_encoding = file_encoding;
+    d.version = version;
+    d.is64bit = is64bit;
+    d.creation_time = ct;
+    d.modified_time = mt;
+    d.compression = compression;
+    d.endianness = endianness;
 
     debug!("d struct is {:#?}", d);
     debug!("row_count is {:#?}", d.row_count);
     debug!("var_count is {:#?}", d.var_count);
+    debug!("table_name is {:#?}", d.table_name);
+    debug!("file_label is {:#?}", d.file_label);
+    debug!("file_encoding is {:#?}", d.file_encoding);
+    debug!("version is {:#?}", d.version);
+    debug!("is64bit is {:#?}", d.is64bit);
+    debug!("creation_time is {}", d.creation_time);
+    debug!("modified_time is {}", d.modified_time);
+    debug!("compression is {:#?}", d.compression);
+    debug!("endianness is {:#?}", d.endianness);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
