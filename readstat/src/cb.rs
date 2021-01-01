@@ -5,8 +5,11 @@ use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 
+use crate::rs::{
+    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatVarTypeClass, ReadStatVar,
+    ReadStatVarIndexAndName, ReadStatVarType, ReadStatVarMetadata
+};
 use crate::Reader;
-use crate::rs::{ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatVar, ReadStatVarMetadata, ReadStatVarType};
 
 const ROWS: usize = 10000;
 
@@ -37,28 +40,47 @@ pub extern "C" fn handle_metadata(
     // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     let vc: c_int = unsafe { readstat_sys::readstat_get_var_count(metadata) };
-    let table_name = unsafe {
-        CStr::from_ptr(readstat_sys::readstat_get_table_name(metadata))
+    let table_name_ptr = unsafe { readstat_sys::readstat_get_table_name(metadata) };
+    let table_name = if table_name_ptr == std::ptr::null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(table_name_ptr)
             .to_str()
             .unwrap()
-            .to_owned()
+            .to_owned() }
     };
-    let file_label = unsafe {
-        CStr::from_ptr(readstat_sys::readstat_get_file_label(metadata))
+    let file_label_ptr = unsafe { readstat_sys::readstat_get_file_label(metadata) };
+    let file_label = if file_label_ptr == std::ptr::null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(file_label_ptr)
             .to_str()
             .unwrap()
-            .to_owned()
+            .to_owned() }
     };
-    let file_encoding = unsafe {
-        CStr::from_ptr(readstat_sys::readstat_get_file_encoding(metadata))
+    let file_encoding_ptr = unsafe { readstat_sys::readstat_get_file_encoding(metadata) };
+    let file_encoding = if file_encoding_ptr == std::ptr::null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(file_encoding_ptr)
             .to_str()
             .unwrap()
-            .to_owned()
+            .to_owned() }
     };
     let version: c_int = unsafe { readstat_sys::readstat_get_file_format_version(metadata) };
     let is64bit = unsafe { readstat_sys::readstat_get_file_format_is_64bit(metadata) };
-    let ct = NaiveDateTime::from_timestamp(unsafe { readstat_sys::readstat_get_creation_time(metadata) }, 0).format("%Y-%m-%d %H:%M:%S").to_string();
-    let mt = NaiveDateTime::from_timestamp(unsafe { readstat_sys::readstat_get_modified_time(metadata) }, 0).format("%Y-%m-%d %H:%M:%S").to_string();
+    let ct = NaiveDateTime::from_timestamp(
+        unsafe { readstat_sys::readstat_get_creation_time(metadata) },
+        0,
+    )
+    .format("%Y-%m-%d %H:%M:%S")
+    .to_string();
+    let mt = NaiveDateTime::from_timestamp(
+        unsafe { readstat_sys::readstat_get_modified_time(metadata) },
+        0,
+    )
+    .format("%Y-%m-%d %H:%M:%S")
+    .to_string();
     let compression = match FromPrimitive::from_i32(unsafe {
         readstat_sys::readstat_get_compression(metadata) as i32
     }) {
@@ -71,6 +93,18 @@ pub extern "C" fn handle_metadata(
         Some(t) => t,
         None => ReadStatEndian::None,
     };
+
+    debug!("row_count is {}", rc);
+    debug!("var_count is {}", vc);
+    debug!("table_name is {}", &table_name);
+    debug!("file_label is {}", &file_label);
+    debug!("file_encoding is {}", &file_encoding);
+    debug!("version is {}", version);
+    debug!("is64bit is {}", is64bit);
+    debug!("creation_time is {}", &ct);
+    debug!("modified_time is {}", &mt);
+    debug!("compression is {:#?}", &compression);
+    debug!("endianness is {:#?}", &endianness);
 
     // insert into ReadStatData struct
     d.row_count = rc;
@@ -86,17 +120,6 @@ pub extern "C" fn handle_metadata(
     d.endianness = endianness;
 
     debug!("d struct is {:#?}", d);
-    debug!("row_count is {:#?}", d.row_count);
-    debug!("var_count is {:#?}", d.var_count);
-    debug!("table_name is {:#?}", d.table_name);
-    debug!("file_label is {:#?}", d.file_label);
-    debug!("file_encoding is {:#?}", d.file_encoding);
-    debug!("version is {:#?}", d.version);
-    debug!("is64bit is {:#?}", d.is64bit);
-    debug!("creation_time is {}", d.creation_time);
-    debug!("modified_time is {}", d.modified_time);
-    debug!("compression is {:#?}", d.compression);
-    debug!("endianness is {:#?}", d.endianness);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -110,27 +133,59 @@ pub extern "C" fn handle_variable(
     // dereference ctx pointer
     let d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
-    // get type and name
+    // get variable metadata
     let var_type = match FromPrimitive::from_i32(unsafe {
         readstat_sys::readstat_variable_get_type(variable) as i32
     }) {
         Some(t) => t,
         None => ReadStatVarType::Unknown,
     };
-    let var_name = unsafe {
-        CStr::from_ptr(readstat_sys::readstat_variable_get_name(variable))
+    let var_type_class = match FromPrimitive::from_i32(unsafe {
+        readstat_sys::readstat_variable_get_type_class(variable) as i32
+    }) {
+        Some(t) => t,
+        None => ReadStatVarTypeClass::Numeric,
+    };
+    let var_name_ptr = unsafe { readstat_sys::readstat_variable_get_name(variable) };
+    let var_name = if var_name_ptr == std::ptr::null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(var_name_ptr)
             .to_str()
             .unwrap()
-            .to_owned()
+            .to_owned() }
+    };
+    let var_label_ptr = unsafe { readstat_sys::readstat_variable_get_label(variable) };
+    let var_label = if var_label_ptr == std::ptr::null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(var_label_ptr)
+            .to_str()
+            .unwrap()
+            .to_owned() }
     };
 
-    debug!("d struct is {:#?}", d);
-    debug!("var type pushed is {:#?}", var_type);
-    debug!("var pushed is {:#?}", &var_name);
+    let var_format_ptr = unsafe { readstat_sys::readstat_variable_get_format(variable) };
+    let var_format = if var_format_ptr == std::ptr::null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(var_format_ptr)
+            .to_str()
+            .unwrap()
+            .to_owned() }
+    };
+
+    debug!("var_type is {:#?}", &var_type);
+    debug!("var_type_class is {:#?}", &var_type_class);
+    debug!("var_name is {}", &var_name);
+    debug!("var_label is {}", &var_label);
+    debug!("var_format is {}", &var_format);
 
     // insert into BTreeMap within ReadStatData struct
     d.vars
-        .insert(ReadStatVarMetadata::new(index, var_name), var_type);
+        .insert(ReadStatVarIndexAndName::new(index, var_name), ReadStatVarMetadata::new(var_type, var_type_class, var_label, var_format));
+
+    debug!("d struct is {:#?}", d);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -169,9 +224,9 @@ pub extern "C" fn handle_value(
         }
     }
 
-    debug!("var_index is {:#?}", var_index);
-    debug!("value_type is {:#?}", value_type);
-    debug!("is_missing {:#?}", is_missing);
+    debug!("var_index is {}", var_index);
+    debug!("value_type is {:#?}", &value_type);
+    debug!("is_missing is {}", is_missing);
 
     // get value and push into row within ReadStatData struct
     if is_missing == 0 {
@@ -223,7 +278,7 @@ pub extern "C" fn handle_value(
         // And thus any missingness treatment is in fact handled by the tool that
         // consumes the csv file
         let value = ReadStatVar::ReadStat_Missing(());
-        debug!("value is {:#?}", value);
+        debug!("value is {:#?}", &value);
 
         // push into row
         d.row.push(value);

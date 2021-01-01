@@ -148,16 +148,35 @@ impl ReadStatPath {
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
-pub struct ReadStatVarMetadata {
+pub struct ReadStatVarIndexAndName {
     pub var_index: c_int,
     pub var_name: String,
 }
 
-impl ReadStatVarMetadata {
+impl ReadStatVarIndexAndName {
     pub fn new(var_index: c_int, var_name: String) -> Self {
         Self {
             var_index,
             var_name,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReadStatVarMetadata {
+    pub var_type: ReadStatVarType,
+    pub var_type_class: ReadStatVarTypeClass,
+    pub var_label: String,
+    pub var_format: String,
+}
+
+impl ReadStatVarMetadata {
+    pub fn new(var_type: ReadStatVarType, var_type_class: ReadStatVarTypeClass, var_label: String, var_format: String) -> Self {
+        Self {
+            var_type,
+            var_type_class,
+            var_label,
+            var_format,
         }
     }
 }
@@ -240,6 +259,11 @@ pub enum ReadStatEndian {
     Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
 }
 
+#[derive(Debug, FromPrimitive, Serialize)]
+pub enum ReadStatVarTypeClass {
+    String = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_STRING as isize,
+    Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
+}
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
@@ -257,7 +281,7 @@ pub struct ReadStatData {
     pub modified_time: String,
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
-    pub vars: BTreeMap<ReadStatVarMetadata, ReadStatVarType>,
+    pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
     pub wrote_header: bool,
@@ -299,7 +323,7 @@ impl ReadStatData {
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
+        debug!("Initially, error ==> {:#?}", &error);
 
         // TODO: for parsing data, a new metadata handler may be needed that
         //   does not get the row count but just the var count
@@ -470,7 +494,7 @@ impl ReadStatData {
     pub fn write_metadata_to_stdout(&self) -> Result<(), Box<dyn Error>> {
         println!(
             "Metadata for the file {}\n",
-            self.path.to_string_lossy().yellow()
+            self.path.to_string_lossy().bright_yellow()
         );
         println!("{}: {}", "Row count".green(), self.row_count);
         println!("{}: {}", "Variable count".red(), self.var_count);
@@ -486,10 +510,13 @@ impl ReadStatData {
         println!("{}:", "Variable names".purple());
         for (k, v) in self.vars.iter() {
             println!(
-                "{}: {} of type {:#?}",
+                "{}: {} with metadata {{ type class: {}, type: {}, label: {}, format: {} }}",
                 k.var_index,
                 k.var_name.bright_purple(),
-                v
+                format!("{:#?}", v.var_type_class).bright_green(),
+                format!("{:#?}", v.var_type).bright_red(),
+                v.var_label.bright_blue(),
+                v.var_format.bright_cyan(),
             );
         }
 

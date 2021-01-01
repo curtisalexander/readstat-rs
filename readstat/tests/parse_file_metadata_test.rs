@@ -48,14 +48,14 @@ fn get_var_names() {
 
     let vars = d.vars;
 
-    let contains_brand_key = vars.contains_key(&readstat::ReadStatVarMetadata::new(0 as std::os::raw::c_int, String::from("Brand")));
+    let contains_brand_key = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(0 as std::os::raw::c_int, String::from("Brand")));
 
-    let contains_brand_key_wrong_index = vars.contains_key(&readstat::ReadStatVarMetadata::new(1 as std::os::raw::c_int, String::from("Brand")));
+    let contains_brand_key_wrong_index = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(1 as std::os::raw::c_int, String::from("Brand")));
 
-    let brand_type = vars.get(&readstat::ReadStatVarMetadata::new(0 as std::os::raw::c_int, String::from("Brand"))).unwrap();
+    let brand_type = &vars.get(&readstat::ReadStatVarIndexAndName::new(0 as std::os::raw::c_int, String::from("Brand"))).unwrap().var_type;
 
     assert_eq!(contains_brand_key, true);
     assert_eq!(contains_brand_key_wrong_index, false);
-    assert!(matches!(*brand_type, readstat::ReadStatVarType::String));
+    assert!(matches!(brand_type, readstat::ReadStatVarType::String));
 
 }

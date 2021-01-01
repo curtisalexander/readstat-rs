@@ -15,19 +15,19 @@ fn parse_file_with_missing_data() {
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     let vars = d.vars;
-    let contains_id_key = vars.contains_key(&readstat::ReadStatVarMetadata::new(
+    let contains_id_key = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
         0 as std::os::raw::c_int,
         String::from("ID"),
     ));
     assert!(contains_id_key);
 
-    let id_type = vars
-        .get(&readstat::ReadStatVarMetadata::new(
+    let id_type = &vars
+        .get(&readstat::ReadStatVarIndexAndName::new(
             0 as std::os::raw::c_int,
             String::from("ID"),
         ))
-        .unwrap();
-    assert!(matches!(*id_type, readstat::ReadStatVarType::String));
+        .unwrap().var_type;
+    assert!(matches!(id_type, readstat::ReadStatVarType::String));
 
     let var_count = d.var_count;
     assert_eq!(var_count, 9);

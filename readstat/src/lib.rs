@@ -15,7 +15,7 @@ mod err;
 mod rs;
 
 pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarMetadata, ReadStatVarTrunc, ReadStatVarType,
+    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarTrunc, ReadStatVarType,
 };
 
 pub use err::ReadStatError;
