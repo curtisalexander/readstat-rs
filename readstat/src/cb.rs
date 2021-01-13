@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
 use log::debug;
 use num_traits::FromPrimitive;
 use readstat_sys;
@@ -219,7 +219,7 @@ pub extern "C" fn handle_value(
 
     // get value and push into row within ReadStatData struct
     if is_missing == 0 {
-        let value: ReadStatVar = match value_type {
+        let mut value: ReadStatVar = match value_type {
             readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
             | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
                 ReadStatVar::ReadStat_String(unsafe {
@@ -251,6 +251,15 @@ pub extern "C" fn handle_value(
         debug!("value is {:#?}", value);
 
         // TODO: check if date/datetime format
+        let (_, v) = d.vars.iter().find(|(k, _)| k.var_index == var_index).unwrap();
+        if v.var_format.contains("DATETIME") {
+            let f = match value {
+                ReadStatVar::ReadStat_f64(f) => f as i64,
+                _ => 0 as i64,
+            };
+            // Number of seconds between SAS start date (1960-01-01) and Unix start date (1970-01-01)
+            value = ReadStatVar::ReadStat_String(Utc.timestamp(f, 0).checked_sub_signed(Duration::seconds(315619200)).unwrap().to_rfc3339());
+        }
 
         // push into row
         d.row.push(value);
