@@ -300,7 +300,7 @@ pub extern "C" fn handle_value(
             }
         }
         Reader::mem => {
-            // if rows = buffer limit and last variable then go ahead and write
+            // if rows = row count and last variable then go ahead and write
             if obs_index == d.row_count - 1 && var_index == d.var_count - 1 {
                 match d.write() {
                     Ok(()) => (),
