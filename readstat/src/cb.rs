@@ -257,7 +257,8 @@ pub extern "C" fn handle_value(
                 ReadStatVar::ReadStat_f64(f) => f as i64,
                 _ => 0 as i64,
             };
-            // Number of seconds between SAS start date (1960-01-01) and Unix start date (1970-01-01)
+            // 315619200 = Number of seconds between SAS start date (1960-01-01) and Unix start date (1970-01-01)
+            // 315619200 = 60s*60m*24hr*365d*10y + 60s*60m*24hr*3d (3 leap years: 1960, 1964, 1968)
             value = ReadStatVar::ReadStat_String(Utc.timestamp(f, 0).checked_sub_signed(Duration::seconds(315619200)).unwrap().to_rfc3339());
         }
 
