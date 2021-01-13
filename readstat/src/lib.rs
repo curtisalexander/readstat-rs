@@ -163,7 +163,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     out_type: OutType::csv,
                     ..
                 } => {
-                    println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--out-path".bright_cyan());
+                    println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
                     let error = d.get_metadata()?;
 
