@@ -250,6 +250,8 @@ pub extern "C" fn handle_value(
 
         debug!("value is {:#?}", value);
 
+        // TODO: check if date/datetime format
+
         // push into row
         d.row.push(value);
     } else {
