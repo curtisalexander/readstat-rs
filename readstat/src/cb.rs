@@ -257,9 +257,10 @@ pub extern "C" fn handle_value(
         // When serializing to csv (which is the only output type at the moment),
         //   the unit type is serialized as a missing value
         // For example, the following SAS dataset
-        //   | id | name | age |
-        //   | 4 | Alice | .   |
-        //   | 5 | ""    | 30  |
+        //   | id | name  | age |
+        //   |----|-------|-----|
+        //   | 4  | Alice | .   |
+        //   | 5  | ""    | 30  |
         // would be serialized as the following in csv
         //   id,name,age
         //   4,Alice,,
