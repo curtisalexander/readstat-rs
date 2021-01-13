@@ -251,6 +251,9 @@ pub extern "C" fn handle_value(
         debug!("value is {:#?}", value);
 
         // TODO: check if date/datetime format
+        // Rather than have a massive set of string comparisons, may want to convert the original strings to enums and then match on the enums
+        // Probably can move the date/datetime checks out of the handle_value function and into the handle_variable function
+        // The value conversion, obviously, would still need to occur here within handle_value
         let (_, v) = d.vars.iter().find(|(k, _)| k.var_index == var_index).unwrap();
         if v.var_format.contains("DATETIME") {
             let f = match value {
