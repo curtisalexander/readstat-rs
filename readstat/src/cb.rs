@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
 use log::debug;
 use num_traits::FromPrimitive;
 use readstat_sys;
@@ -6,12 +6,14 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 
 use crate::rs::{
-    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatVar, ReadStatVarIndexAndName,
-    ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
+    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatFormatClass, ReadStatVar,
+    ReadStatVarIndexAndName, ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
 };
 use crate::Reader;
 
 const ROWS: usize = 10000;
+const SEC_SHIFT: i64 = 315619200;
+const SEC_PER_HOUR: i64 = 86400;
 
 // C types
 #[allow(dead_code)]
@@ -162,16 +164,31 @@ pub extern "C" fn handle_variable(
         unsafe { CStr::from_ptr(var_format_ptr).to_str().unwrap().to_owned() }
     };
 
+    let var_format_class = if var_format.starts_with("YYMMDD") {
+        Some(ReadStatFormatClass::Date)
+    } else if var_format.starts_with("DATETIME") {
+        Some(ReadStatFormatClass::DateTime)
+    } else {
+        None
+    };
+
     debug!("var_type is {:#?}", &var_type);
     debug!("var_type_class is {:#?}", &var_type_class);
     debug!("var_name is {}", &var_name);
     debug!("var_label is {}", &var_label);
     debug!("var_format is {}", &var_format);
+    debug!("var_format_class is {:#?}", &var_format_class);
 
     // insert into BTreeMap within ReadStatData struct
     d.vars.insert(
         ReadStatVarIndexAndName::new(index, var_name),
-        ReadStatVarMetadata::new(var_type, var_type_class, var_label, var_format),
+        ReadStatVarMetadata::new(
+            var_type,
+            var_type_class,
+            var_label,
+            var_format,
+            var_format_class,
+        ),
     );
 
     debug!("d struct is {:#?}", d);
@@ -249,6 +266,57 @@ pub extern "C" fn handle_value(
         };
 
         debug!("value is {:#?}", value);
+
+        // TODO: check if date/datetime format
+        // Rather than have a massive set of string comparisons, may want to convert the original strings to enums and then match on the enums
+        // Probably can move the date/datetime checks out of the handle_value function and into the handle_variable function
+        // The value conversion, obviously, would still need to occur here within handle_value
+        let (_, v) = d
+            .vars
+            .iter()
+            .find(|(k, _)| k.var_index == var_index)
+            .unwrap();
+
+        let value = match v.var_format_class {
+            Some(ReadStatFormatClass::Date) => {
+                let f = match value {
+                    ReadStatVar::ReadStat_f64(f) => f as i64,
+                    _ => 0 as i64,
+                };
+                ReadStatVar::ReadStat_Date(
+                    Utc.timestamp(f*SEC_PER_HOUR, 0)
+                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                        .unwrap()
+                        .naive_utc()
+                        .date(),
+                )
+            }
+            Some(ReadStatFormatClass::DateTime) => {
+                let f = match value {
+                    ReadStatVar::ReadStat_f64(f) => f as i64,
+                    _ => 0 as i64,
+                };
+                ReadStatVar::ReadStat_DateTime(
+                    Utc.timestamp(f, 0)
+                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                        .unwrap(),
+                )
+            }
+            Some(ReadStatFormatClass::Time) => {
+                let f = match value {
+                    ReadStatVar::ReadStat_f64(f) => f as i64,
+                    _ => 0 as i64,
+                };
+                ReadStatVar::ReadStat_Time(
+                    Utc.timestamp(f, 0)
+                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                        .unwrap()
+                        .naive_utc()
+                        .time(),
+                )
+            }
+            None => value,
+        };
 
         // push into row
         d.row.push(value);

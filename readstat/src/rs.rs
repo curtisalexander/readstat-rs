@@ -1,3 +1,4 @@
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
@@ -176,6 +177,7 @@ pub struct ReadStatVarMetadata {
     pub var_type_class: ReadStatVarTypeClass,
     pub var_label: String,
     pub var_format: String,
+    pub var_format_class: Option<ReadStatFormatClass>,
 }
 
 impl ReadStatVarMetadata {
@@ -184,12 +186,14 @@ impl ReadStatVarMetadata {
         var_type_class: ReadStatVarTypeClass,
         var_label: String,
         var_format: String,
+        var_format_class: Option<ReadStatFormatClass>,
     ) -> Self {
         Self {
             var_type,
             var_type_class,
             var_label,
             var_format,
+            var_format_class,
         }
     }
 }
@@ -203,6 +207,9 @@ pub enum ReadStatVar {
     ReadStat_f32(f32),
     ReadStat_f64(f64),
     ReadStat_Missing(()),
+    ReadStat_Date(NaiveDate),
+    ReadStat_DateTime(DateTime<Utc>),
+    ReadStat_Time(NaiveTime),
 }
 
 impl Serialize for ReadStatVar {
@@ -223,6 +230,9 @@ pub enum ReadStatVarTrunc {
     ReadStat_f32(f32),
     ReadStat_f64(f64),
     ReadStat_Missing(()),
+    ReadStat_Date(NaiveDate),
+    ReadStat_DateTime(DateTime<Utc>),
+    ReadStat_Time(NaiveTime),
 }
 
 impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
@@ -242,6 +252,9 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
                 Self::ReadStat_f64(format!("{1:.0$}", DIGITS, f).parse::<f64>().unwrap())
             }
             ReadStatVar::ReadStat_Missing(_) => Self::ReadStat_Missing(()),
+            ReadStatVar::ReadStat_Date(d) => Self::ReadStat_Date(*d),
+            ReadStatVar::ReadStat_DateTime(dt) => Self::ReadStat_DateTime(*dt),
+            ReadStatVar::ReadStat_Time(t) => Self::ReadStat_Time(*t),
         }
     }
 }
@@ -277,6 +290,14 @@ pub enum ReadStatVarTypeClass {
     String = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_STRING as isize,
     Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
 }
+
+#[derive(Debug, Serialize)]
+pub enum ReadStatFormatClass {
+    Date,
+    DateTime,
+    Time,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
@@ -528,13 +549,22 @@ impl ReadStatData {
         println!("{}:", "Variable names".purple());
         for (k, v) in self.vars.iter() {
             println!(
-                "{}: {} with metadata {{ type class: {}, type: {}, label: {}, format: {} }}",
+                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {} }}",
                 k.var_index,
                 k.var_name.bright_purple(),
                 format!("{:#?}", v.var_type_class).bright_green(),
                 format!("{:#?}", v.var_type).bright_red(),
                 v.var_label.bright_blue(),
-                v.var_format.bright_cyan(),
+                (match &v.var_format_class {
+                    Some(f) => match f {
+                        ReadStatFormatClass::Date => "Date",
+                        ReadStatFormatClass::DateTime => "DateTime",
+                        ReadStatFormatClass::Time => "Time",
+                    },
+                    None => "",
+                })
+                .bright_cyan(),
+                v.var_format.bright_yellow(),
             );
         }
 
