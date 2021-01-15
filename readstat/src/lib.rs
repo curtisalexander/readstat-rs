@@ -12,6 +12,7 @@ use structopt::StructOpt;
 
 mod cb;
 mod err;
+mod formats;
 mod rs;
 
 pub use rs::{
