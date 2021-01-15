@@ -402,17 +402,19 @@ dependencies = [
 
 [[package]]
 name = "readstat"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "colored",
  "csv",
  "env_logger",
+ "lazy_static",
  "log",
  "num-derive",
  "num-traits",
  "path_abs",
  "readstat-sys",
+ "regex",
  "serde",
  "serde_json",
  "structopt",

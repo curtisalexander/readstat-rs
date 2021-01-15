@@ -5,6 +5,7 @@ use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 
+use crate::formats;
 use crate::rs::{
     ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatFormatClass, ReadStatVar,
     ReadStatVarIndexAndName, ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
@@ -164,13 +165,14 @@ pub extern "C" fn handle_variable(
         unsafe { CStr::from_ptr(var_format_ptr).to_str().unwrap().to_owned() }
     };
 
-    let var_format_class = if var_format.starts_with("YYMMDD") {
-        Some(ReadStatFormatClass::Date)
-    } else if var_format.starts_with("DATETIME") {
-        Some(ReadStatFormatClass::DateTime)
-    } else {
-        None
-    };
+    let var_format_class = formats::match_var_format(&var_format);
+    //let var_format_class = if var_format.starts_with("YYMMDD") {
+    //    Some(ReadStatFormatClass::Date)
+    //} else if var_format.starts_with("DATETIME") {
+    //    Some(ReadStatFormatClass::DateTime)
+    //} else {
+    //    None
+    //};
 
     debug!("var_type is {:#?}", &var_type);
     debug!("var_type_class is {:#?}", &var_type_class);
