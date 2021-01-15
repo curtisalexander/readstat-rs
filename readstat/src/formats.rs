@@ -14,14 +14,14 @@ pub fn match_var_format(v: &str) -> Option<ReadStatFormatClass> {
     lazy_static!(
         static ref RE_DATETIME: Regex = Regex::new(
             r#"(?xi)
-            (^DATETIME[0-9]*$) |
+            (^DATETIME[0-9]*$)
             "#
         ).unwrap();
     );
     lazy_static!(
         static ref RE_TIME: Regex = Regex::new(
             r#"(?xi)
-            (^TIME[0-9]*$) |
+            (^TIME[0-9]*$)
             "#
         ).unwrap();
     );
