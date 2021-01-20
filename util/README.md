@@ -9,3 +9,5 @@ Utility programs to aid development
         - Number of character columns (vars)
         - Size of character columns
     - Useful for generating test files
+- `create_date_and_datetime_ds.sas`
+    - SAS macro that creates a `sas7bdat` file containing various date and datetimes
