@@ -374,6 +374,7 @@ impl ReadStatData {
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {:#?}", &error);
+
         // TODO: for parsing data, a new metadata handler may be needed that
         //   does not get the row count but just the var count
         // Believe it will save time when working with extremely large files
@@ -417,6 +418,19 @@ impl ReadStatData {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
+        // spinner
+        self.pb = ProgressBar::new(self.rows.len() as u64);
+        self.pb.enable_steady_tick(120);
+        self.pb.set_style(
+            ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise}] {msg}"),
+        );
+        let msg = format!(
+            "Parsing sas7bdat file: {}",
+            &self.path.to_string_lossy().yellow()
+        );
+
+        self.pb.set_message(&msg);
+
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -431,6 +445,8 @@ impl ReadStatData {
             .set_value_handler(Some(cb::handle_value))?
             .set_row_limit(row_limit as c_long)?
             .parse_sas7bdat(ppath, ctx);
+
+        self.pb.finish_and_clear();
 
         Ok(error as u32)
     }
@@ -520,8 +536,8 @@ impl ReadStatData {
                     // std::thread::sleep(std::time::Duration::from_millis(100));
                     wtr.serialize(r)?;
                 }
-                wtr.flush()?;
                 self.pb.finish();
+                wtr.flush()?;
                 Ok(())
             }
         }
