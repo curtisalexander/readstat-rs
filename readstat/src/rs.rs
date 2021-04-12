@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -74,13 +75,13 @@ impl ReadStatPath {
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!",
-                    path.to_string_lossy().yellow()
+                    path.to_string_lossy().bright_yellow()
                 ))),
                 |e|
                     if EXTENSIONS.iter().any(|&ext| ext == e) {
                         Ok(e)
                     } else {
-                        Err(From::from(format!("Expecting extension `sas7bdat` or `sas7bcat`.  File {} does not have expected extension!", path.to_string_lossy().yellow())))
+                        Err(From::from(format!("Expecting extension `sas7bdat` or `sas7bcat`.  File {} does not have expected extension!", path.to_string_lossy().bright_yellow())))
                     }
             )
     }
@@ -95,7 +96,7 @@ impl ReadStatPath {
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!  Expecting extension {}.",
-                    path.to_string_lossy().yellow(),
+                    path.to_string_lossy().bright_yellow(),
                     out_type
                 ))),
                 |e| match out_type {
@@ -106,7 +107,7 @@ impl ReadStatPath {
                             Err(From::from(format!(
                                 "Expecting extension `{}`.  Instead, file {} has extension {}.",
                                 out_type,
-                                path.to_string_lossy().yellow(),
+                                path.to_string_lossy().bright_yellow(),
                                 e
                             )))
                         }
@@ -123,7 +124,7 @@ impl ReadStatPath {
         } else {
             Err(From::from(format!(
                 "File {} does not exist!",
-                abs_path.to_string_lossy().yellow()
+                abs_path.to_string_lossy().bright_yellow()
             )))
         }
     }
@@ -321,6 +322,8 @@ pub struct ReadStatData {
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
+    #[serde(skip)]
+    pub pb: ProgressBar,
 }
 
 impl ReadStatData {
@@ -347,12 +350,25 @@ impl ReadStatData {
             wrote_header: false,
             errors: Vec::new(),
             reader: Reader::stream,
+            pb: ProgressBar::new(0),
         }
     }
 
     pub fn get_data(&mut self, row_limit: Option<u32>) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
+
+        self.pb = ProgressBar::new(self.rows.len() as u64);
+        self.pb.enable_steady_tick(120);
+        self.pb.set_style(
+            ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise}] {msg}"),
+        );
+        let msg = format!(
+            "Parsing sas7bdat file {}",
+            &self.path.to_string_lossy().bright_red()
+        );
+
+        self.pb.set_message(&msg);
 
         let ctx = self as *mut ReadStatData as *mut c_void;
 
@@ -375,6 +391,8 @@ impl ReadStatData {
                 .set_value_handler(Some(cb::handle_value))?
                 .parse_sas7bdat(ppath, ctx),
         };
+
+        self.pb.finish();
 
         Ok(error as u32)
     }
@@ -400,6 +418,19 @@ impl ReadStatData {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
+        // spinner
+        self.pb = ProgressBar::new(self.rows.len() as u64);
+        self.pb.enable_steady_tick(120);
+        self.pb.set_style(
+            ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise}] {msg}"),
+        );
+        let msg = format!(
+            "Parsing sas7bdat file {}",
+            &self.path.to_string_lossy().bright_red()
+        );
+
+        self.pb.set_message(&msg);
+
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -414,6 +445,8 @@ impl ReadStatData {
             .set_value_handler(Some(cb::handle_value))?
             .set_row_limit(row_limit as c_long)?
             .parse_sas7bdat(ppath, ctx);
+
+        self.pb.finish_and_clear();
 
         Ok(error as u32)
     }
@@ -474,7 +507,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn write_data_to_csv(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         match &self.out_path {
             None => Err(From::from(
                 "Error writing csv as output path is set to None",
@@ -486,10 +519,24 @@ impl ReadStatData {
                     .quote_style(csv::QuoteStyle::Always)
                     .from_writer(f);
 
+                // progress bar
+                self.pb.finish_at_current_pos();
+                self.pb = ProgressBar::new(self.rows.len() as u64);
+                self.pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
+                        .progress_chars("##-"),
+                );
+                self.pb.set_message("Rows processed");
+
                 // write rows
                 for r in &self.rows {
+                    self.pb.inc(1);
+                    // Only used to observe progress bar
+                    // std::thread::sleep(std::time::Duration::from_millis(100));
                     wtr.serialize(r)?;
                 }
+                self.pb.finish();
                 wtr.flush()?;
                 Ok(())
             }

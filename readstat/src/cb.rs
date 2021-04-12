@@ -286,7 +286,7 @@ pub extern "C" fn handle_value(
                     _ => 0 as i64,
                 };
                 ReadStatVar::ReadStat_Date(
-                    Utc.timestamp(f*SEC_PER_HOUR, 0)
+                    Utc.timestamp(f * SEC_PER_HOUR, 0)
                         .checked_sub_signed(Duration::seconds(SEC_SHIFT))
                         .unwrap()
                         .naive_utc()
@@ -357,7 +357,8 @@ pub extern "C" fn handle_value(
     match d.reader {
         Reader::stream => {
             // if rows = buffer limit and last variable then go ahead and write
-            if (obs_index % (ROWS as i32 - 1) == 0 || obs_index == d.row_count - 1)
+            if ((obs_index % (ROWS as i32 - 1) == 0 && obs_index != 0)
+                || obs_index == d.row_count - 1)
                 && var_index == d.var_count - 1
             {
                 match d.write() {
