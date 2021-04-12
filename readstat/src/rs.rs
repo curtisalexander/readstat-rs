@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -321,6 +322,8 @@ pub struct ReadStatData {
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
+    #[serde(skip)]
+    pub pb: ProgressBar,
 }
 
 impl ReadStatData {
@@ -347,6 +350,7 @@ impl ReadStatData {
             wrote_header: false,
             errors: Vec::new(),
             reader: Reader::stream,
+            pb: ProgressBar::new(0),
         }
     }
 
@@ -354,11 +358,22 @@ impl ReadStatData {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
+        self.pb = ProgressBar::new(self.rows.len() as u64);
+        self.pb.enable_steady_tick(120);
+        self.pb.set_style(
+            ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise}] {msg}"),
+        );
+        let msg = format!(
+            "Parsing sas7bdat file: {}",
+            &self.path.to_string_lossy().yellow()
+        );
+
+        self.pb.set_message(&msg);
+
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {:#?}", &error);
-
         // TODO: for parsing data, a new metadata handler may be needed that
         //   does not get the row count but just the var count
         // Believe it will save time when working with extremely large files
@@ -375,6 +390,8 @@ impl ReadStatData {
                 .set_value_handler(Some(cb::handle_value))?
                 .parse_sas7bdat(ppath, ctx),
         };
+
+        self.pb.finish();
 
         Ok(error as u32)
     }
@@ -474,7 +491,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn write_data_to_csv(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         match &self.out_path {
             None => Err(From::from(
                 "Error writing csv as output path is set to None",
@@ -486,11 +503,25 @@ impl ReadStatData {
                     .quote_style(csv::QuoteStyle::Always)
                     .from_writer(f);
 
+                // progress bar
+                self.pb.finish_at_current_pos();
+                self.pb = ProgressBar::new(self.rows.len() as u64);
+                self.pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
+                        .progress_chars("##-"),
+                );
+                self.pb.set_message("Rows processed");
+
                 // write rows
                 for r in &self.rows {
+                    self.pb.inc(1);
+                    // Only used to observe progress bar
+                    // std::thread::sleep(std::time::Duration::from_millis(100));
                     wtr.serialize(r)?;
                 }
                 wtr.flush()?;
+                self.pb.finish();
                 Ok(())
             }
         }
