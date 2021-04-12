@@ -186,7 +186,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 } => {
                     println!(
                         "Writing parsed data to file {}",
-                        p.to_string_lossy().yellow()
+                        p.to_string_lossy().bright_yellow()
                     );
 
                     let error = d.get_data(rows)?;

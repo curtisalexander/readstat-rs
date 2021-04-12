@@ -75,13 +75,13 @@ impl ReadStatPath {
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!",
-                    path.to_string_lossy().yellow()
+                    path.to_string_lossy().bright_yellow()
                 ))),
                 |e|
                     if EXTENSIONS.iter().any(|&ext| ext == e) {
                         Ok(e)
                     } else {
-                        Err(From::from(format!("Expecting extension `sas7bdat` or `sas7bcat`.  File {} does not have expected extension!", path.to_string_lossy().yellow())))
+                        Err(From::from(format!("Expecting extension `sas7bdat` or `sas7bcat`.  File {} does not have expected extension!", path.to_string_lossy().bright_yellow())))
                     }
             )
     }
@@ -96,7 +96,7 @@ impl ReadStatPath {
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!  Expecting extension {}.",
-                    path.to_string_lossy().yellow(),
+                    path.to_string_lossy().bright_yellow(),
                     out_type
                 ))),
                 |e| match out_type {
@@ -107,7 +107,7 @@ impl ReadStatPath {
                             Err(From::from(format!(
                                 "Expecting extension `{}`.  Instead, file {} has extension {}.",
                                 out_type,
-                                path.to_string_lossy().yellow(),
+                                path.to_string_lossy().bright_yellow(),
                                 e
                             )))
                         }
@@ -124,7 +124,7 @@ impl ReadStatPath {
         } else {
             Err(From::from(format!(
                 "File {} does not exist!",
-                abs_path.to_string_lossy().yellow()
+                abs_path.to_string_lossy().bright_yellow()
             )))
         }
     }
@@ -364,8 +364,8 @@ impl ReadStatData {
             ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise}] {msg}"),
         );
         let msg = format!(
-            "Parsing sas7bdat file: {}",
-            &self.path.to_string_lossy().yellow()
+            "Parsing sas7bdat file {}",
+            &self.path.to_string_lossy().bright_red()
         );
 
         self.pb.set_message(&msg);
@@ -425,8 +425,8 @@ impl ReadStatData {
             ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise}] {msg}"),
         );
         let msg = format!(
-            "Parsing sas7bdat file: {}",
-            &self.path.to_string_lossy().yellow()
+            "Parsing sas7bdat file {}",
+            &self.path.to_string_lossy().bright_red()
         );
 
         self.pb.set_message(&msg);
