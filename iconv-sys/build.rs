@@ -53,10 +53,10 @@ fn main() {
         .header("wrapper.h")
         // Select which functions and types to build bindings for
         // Register callbacks
-        //.whitelist_function("libiconv_close")
-        //.whitelist_function("libiconv_open")
+        //.allowlist_function("libiconv_close")
+        //.allowlist_function("libiconv_open")
         // Types
-        //.whitelist_type("libiconv_t")
+        //.allowlist_type("libiconv_t")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
