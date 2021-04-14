@@ -3,6 +3,7 @@ use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use num_derive::FromPrimitive;
+use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
 use serde::{Serialize, Serializer};
@@ -566,18 +567,25 @@ impl ReadStatData {
                     ProgressStyle::default_bar()
                         .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
                         .progress_chars("##-"),
-                )};
-                if let Some(pb) = &self.pb { pb.set_message("Rows processed") };
+                )
+                };
+                if let Some(pb) = &self.pb {
+                    pb.set_message("Rows processed")
+                };
 
                 // write rows
                 for r in &self.rows {
-                    if let Some(pb) = &self.pb { pb.inc(1) };
+                    if let Some(pb) = &self.pb {
+                        pb.inc(1)
+                    };
                     // Only used to observe progress bar
                     // std::thread::sleep(std::time::Duration::from_millis(100));
                     wtr.serialize(r)?;
                 }
                 wtr.flush()?;
-                if let Some(pb) = &self.pb { pb.finish_at_current_pos() };
+                if let Some(pb) = &self.pb {
+                    pb.finish_at_current_pos()
+                };
 
                 Ok(())
             }
@@ -585,11 +593,13 @@ impl ReadStatData {
     }
 
     pub fn write_header_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear()
+        };
+
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_writer(stdout());
-
-        if let Some(pb) = &self.pb { pb.finish_and_clear() };
 
         // write header
         let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
@@ -614,15 +624,16 @@ impl ReadStatData {
     }
 
     pub fn write_metadata_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-
-        if let Some(pb) = &self.pb { pb.finish_and_clear() };
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear()
+        };
 
         println!(
             "Metadata for the file {}\n",
             self.path.to_string_lossy().bright_yellow()
         );
-        println!("{}: {}", "Row count".green(), self.row_count);
-        println!("{}: {}", "Variable count".red(), self.var_count);
+        println!("{}: {}", "Row count".green(), self.row_count.to_formatted_string(&Locale::en));
+        println!("{}: {}", "Variable count".red(), self.var_count.to_formatted_string(&Locale::en));
         println!("{}: {}", "Table name".blue(), self.table_name);
         println!("{}: {}", "Table label".cyan(), self.file_label);
         println!("{}: {}", "File encoding".yellow(), self.file_encoding);
