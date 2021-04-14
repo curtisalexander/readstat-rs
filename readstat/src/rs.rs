@@ -525,12 +525,30 @@ impl ReadStatData {
         }
     }
 
-    pub fn write_header_to_csv(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         match &self.out_path {
             None => Err(From::from(
                 "Error writing csv as output path is set to None",
             )),
             Some(p) => {
+                // progress bar
+                if let Some(pb) = &self.pb {
+                    pb.finish_at_current_pos()
+                };
+
+                self.pb = Some(ProgressBar::new(self.row_count as u64));
+                // self.pb = Some(ProgressBar::new(self.rows.len() as u64));
+                if let Some(pb) = &self.pb {
+                    pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
+                        .progress_chars("##-"),
+                )
+                };
+                if let Some(pb) = &self.pb {
+                    pb.set_message("Rows processed")
+                };
+
                 let mut wtr = csv::WriterBuilder::new()
                     .quote_style(csv::QuoteStyle::Always)
                     .from_path(p)?;
@@ -556,22 +574,6 @@ impl ReadStatData {
                 let mut wtr = csv::WriterBuilder::new()
                     .quote_style(csv::QuoteStyle::Always)
                     .from_writer(f);
-
-                // progress bar
-                if let Some(pb) = &self.pb {
-                    pb.finish_at_current_pos()
-                };
-                self.pb = Some(ProgressBar::new(self.rows.len() as u64));
-                if let Some(pb) = &self.pb {
-                    pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
-                        .progress_chars("##-"),
-                )
-                };
-                if let Some(pb) = &self.pb {
-                    pb.set_message("Rows processed")
-                };
 
                 // write rows
                 for r in &self.rows {
@@ -632,8 +634,16 @@ impl ReadStatData {
             "Metadata for the file {}\n",
             self.path.to_string_lossy().bright_yellow()
         );
-        println!("{}: {}", "Row count".green(), self.row_count.to_formatted_string(&Locale::en));
-        println!("{}: {}", "Variable count".red(), self.var_count.to_formatted_string(&Locale::en));
+        println!(
+            "{}: {}",
+            "Row count".green(),
+            self.row_count.to_formatted_string(&Locale::en)
+        );
+        println!(
+            "{}: {}",
+            "Variable count".red(),
+            self.var_count.to_formatted_string(&Locale::en)
+        );
         println!("{}: {}", "Table name".blue(), self.table_name);
         println!("{}: {}", "Table label".cyan(), self.file_label);
         println!("{}: {}", "File encoding".yellow(), self.file_encoding);
