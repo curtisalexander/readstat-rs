@@ -3,4 +3,4 @@
 	url = https://github.com/WizardMac/ReadStat.git
 [submodule "iconv-sys/vendor/libiconv-win-build"]
 	path = iconv-sys/vendor/libiconv-win-build
-	url = https://github.com/kiyolee/libiconv-win-build
+	url = https://github.com/kiyolee/libiconv-win-build.git
