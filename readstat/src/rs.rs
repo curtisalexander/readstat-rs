@@ -613,7 +613,10 @@ impl ReadStatData {
         Ok(())
     }
 
-    pub fn write_metadata_to_stdout(&self) -> Result<(), Box<dyn Error>> {
+    pub fn write_metadata_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
+
+        if let Some(pb) = &self.pb { pb.finish_and_clear() };
+
         println!(
             "Metadata for the file {}\n",
             self.path.to_string_lossy().bright_yellow()
