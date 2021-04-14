@@ -221,17 +221,14 @@ pub extern "C" fn handle_value(
         // d.rows = Vec::with_capacity(d.row_count as usize);
         // Allocate rows
         d.rows = match d.reader {
-            Reader::stream => {
-                if d.row_count < ROWS as i32 {
-                    Vec::with_capacity(d.row_count as usize)
-                } else {
-                    Vec::with_capacity(ROWS)
-                }
-            }
+            Reader::stream => Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize)),
             Reader::mem => Vec::with_capacity(d.row_count as usize),
         }
     }
 
+    debug!("row_count is {}", d.row_count);
+    debug!("var_count is {}", d.var_count);
+    debug!("obs_index is {}", obs_index);
     debug!("var_index is {}", var_index);
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
@@ -352,14 +349,13 @@ pub extern "C" fn handle_value(
         d.rows.push(d.row.clone());
         // clear row after pushing into rows; has no effect on capacity
         d.row.clear();
-    }
 
-    match d.reader {
-        Reader::stream => {
+        //println!("obs_index is {}", obs_index);
+        match d.reader {
             // if rows = buffer limit and last variable then go ahead and write
-            if ((obs_index % (ROWS as i32 - 1) == 0 && obs_index != 0)
-                || obs_index == d.row_count - 1)
-                && var_index == d.var_count - 1
+            Reader::stream
+                if (((obs_index + 1) % ROWS as i32 == 0) && (obs_index != 0))
+                    || obs_index == (d.row_count - 1) =>
             {
                 match d.write() {
                     Ok(()) => (),
@@ -374,22 +370,22 @@ pub extern "C" fn handle_value(
                 };
                 d.rows.clear();
             }
-        }
-        Reader::mem => {
-            // if rows = row count and last variable then go ahead and write
-            if obs_index == d.row_count - 1 && var_index == d.var_count - 1 {
-                match d.write() {
-                    Ok(()) => (),
-                    // Err(e) => d.errors.push(format!("{:#?}", e)),
-                    // TODO: what to do with writing errors?
-                    //       could include an errors container on the ReadStatData struct
-                    //         and carry the errors generated to be accessed by the end user
-                    //       or could simply dump the errors to standard out or even write them
-                    //         to a separate file
-                    // For now just swallow any errors when writing
-                    Err(_) => (),
-                };
+            Reader::mem => {
+                if obs_index == d.row_count - 1 {
+                    match d.write() {
+                        Ok(()) => (),
+                        // Err(e) => d.errors.push(format!("{:#?}", e)),
+                        // TODO: what to do with writing errors?
+                        //       could include an errors container on the ReadStatData struct
+                        //         and carry the errors generated to be accessed by the end user
+                        //       or could simply dump the errors to standard out or even write them
+                        //         to a separate file
+                        // For now just swallow any errors when writing
+                        Err(_) => (),
+                    };
+                }
             }
+            _ => (),
         }
     }
 
