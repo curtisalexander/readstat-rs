@@ -360,9 +360,8 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        self.pb = Some(ProgressBar::new(0));
+        self.pb = Some(ProgressBar::new(!0));
         if let Some(pb) = &self.pb {
-            pb.enable_steady_tick(120);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
@@ -372,7 +371,8 @@ impl ReadStatData {
                 &self.path.to_string_lossy().bright_red()
             );
             pb.set_message(&msg);
-        };
+            pb.enable_steady_tick(120);
+        }
 
         let ctx = self as *mut ReadStatData as *mut c_void;
 
@@ -404,9 +404,8 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        self.pb = Some(ProgressBar::new(0));
+        self.pb = Some(ProgressBar::new(!0));
         if let Some(pb) = &self.pb {
-            pb.enable_steady_tick(120);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
@@ -416,7 +415,8 @@ impl ReadStatData {
                 &self.path.to_string_lossy().bright_red()
             );
             pb.set_message(&msg);
-        };
+            pb.enable_steady_tick(120);
+        }
 
         let ctx = self as *mut ReadStatData as *mut c_void;
 
@@ -430,7 +430,7 @@ impl ReadStatData {
 
         if let Some(pb) = &self.pb {
             pb.finish_and_clear();
-        };
+        }
 
         Ok(error as u32)
     }
@@ -440,9 +440,8 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        self.pb = Some(ProgressBar::new(0));
+        self.pb = Some(ProgressBar::new(!0));
         if let Some(pb) = &self.pb {
-            pb.enable_steady_tick(120);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
@@ -452,7 +451,8 @@ impl ReadStatData {
                 &self.path.to_string_lossy().bright_red()
             );
             pb.set_message(&msg);
-        };
+            pb.enable_steady_tick(120);
+        }
 
         let ctx = self as *mut ReadStatData as *mut c_void;
 
@@ -515,21 +515,22 @@ impl ReadStatData {
                 "Error writing csv as output path is set to None",
             )),
             Some(p) => {
-                // progress bar
+                // spinner
                 if let Some(pb) = &self.pb {
                     pb.finish_at_current_pos();
-                };
+                }
 
+                // progress bar
                 self.pb = Some(ProgressBar::new(self.row_count as u64));
                 if let Some(pb) = &self.pb {
-                    pb.enable_steady_tick(120);
                     pb.set_style(
                     ProgressStyle::default_bar()
                         .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
                         .progress_chars("##-"),
                     );
-                    pb.set_message("Rows processed")
-                };
+                    pb.set_message("Rows processed");
+                    pb.enable_steady_tick(120);
+                }
 
                 let mut wtr = csv::WriterBuilder::new()
                     .quote_style(csv::QuoteStyle::Always)
@@ -557,7 +558,7 @@ impl ReadStatData {
             for r in &self.rows {
                 if let Some(pb) = &self.pb {
                     pb.inc(1)
-                };
+                }
                 // Only used to observe progress bar
                 // std::thread::sleep(std::time::Duration::from_millis(100));
                 wtr.serialize(r)?;
@@ -573,6 +574,10 @@ impl ReadStatData {
     }
 
     pub fn write_header_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear()
+        }
+
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_writer(stdout());
@@ -586,10 +591,6 @@ impl ReadStatData {
     }
 
     pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear();
-        };
-
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_writer(stdout());
