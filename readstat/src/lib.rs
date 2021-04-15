@@ -191,6 +191,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
                     let error = d.get_data(rows)?;
 
+                    // progress bar
+                    if let Some(pb) = &d.pb {
+                        pb.finish_at_current_pos()
+                    };
+
                     match FromPrimitive::from_i32(error as i32) {
                         Some(ReadStatError::READSTAT_OK) => Ok(()),
                         // Some(ReadStatError::READSTAT_OK) => d.write(),
