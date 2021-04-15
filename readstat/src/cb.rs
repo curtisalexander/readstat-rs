@@ -370,20 +370,18 @@ pub extern "C" fn handle_value(
                 };
                 d.rows.clear();
             }
-            Reader::mem => {
-                if obs_index == d.row_count - 1 {
-                    match d.write() {
-                        Ok(()) => (),
-                        // Err(e) => d.errors.push(format!("{:#?}", e)),
-                        // TODO: what to do with writing errors?
-                        //       could include an errors container on the ReadStatData struct
-                        //         and carry the errors generated to be accessed by the end user
-                        //       or could simply dump the errors to standard out or even write them
-                        //         to a separate file
-                        // For now just swallow any errors when writing
-                        Err(_) => (),
-                    };
-                }
+            Reader::mem if obs_index == (d.row_count - 1) => {
+                match d.write() {
+                    Ok(()) => (),
+                    // Err(e) => d.errors.push(format!("{:#?}", e)),
+                    // TODO: what to do with writing errors?
+                    //       could include an errors container on the ReadStatData struct
+                    //         and carry the errors generated to be accessed by the end user
+                    //       or could simply dump the errors to standard out or even write them
+                    //         to a separate file
+                    // For now just swallow any errors when writing
+                    Err(_) => (),
+                };
             }
             _ => (),
         }

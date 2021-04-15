@@ -362,20 +362,16 @@ impl ReadStatData {
         // spinner
         self.pb = Some(ProgressBar::new(0));
         if let Some(pb) = &self.pb {
-            pb.enable_steady_tick(120)
-        };
-        if let Some(pb) = &self.pb {
+            pb.enable_steady_tick(120);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            )
-        };
-        let msg = format!(
-            "Parsing sas7bdat file {}",
-            &self.path.to_string_lossy().bright_red()
-        );
-        if let Some(pb) = &self.pb {
-            pb.set_message(&msg)
+            );
+            let msg = format!(
+                "Parsing sas7bdat file {}",
+                &self.path.to_string_lossy().bright_red()
+            );
+            pb.set_message(&msg);
         };
 
         let ctx = self as *mut ReadStatData as *mut c_void;
@@ -400,10 +396,6 @@ impl ReadStatData {
                 .parse_sas7bdat(ppath, ctx),
         };
 
-        if let Some(pb) = &self.pb {
-            pb.finish_at_current_pos()
-        };
-
         Ok(error as u32)
     }
 
@@ -414,20 +406,16 @@ impl ReadStatData {
         // spinner
         self.pb = Some(ProgressBar::new(0));
         if let Some(pb) = &self.pb {
-            pb.enable_steady_tick(120)
-        };
-        if let Some(pb) = &self.pb {
+            pb.enable_steady_tick(120);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            )
-        };
-        let msg = format!(
-            "Parsing sas7bdat metadata from file {}",
-            &self.path.to_string_lossy().bright_red()
-        );
-        if let Some(pb) = &self.pb {
-            pb.set_message(&msg)
+            );
+            let msg = format!(
+                "Parsing sas7bdat metadata from file {}",
+                &self.path.to_string_lossy().bright_red()
+            );
+            pb.set_message(&msg);
         };
 
         let ctx = self as *mut ReadStatData as *mut c_void;
@@ -441,7 +429,7 @@ impl ReadStatData {
             .parse_sas7bdat(ppath, ctx);
 
         if let Some(pb) = &self.pb {
-            pb.finish()
+            pb.finish_and_clear();
         };
 
         Ok(error as u32)
@@ -454,20 +442,16 @@ impl ReadStatData {
         // spinner
         self.pb = Some(ProgressBar::new(0));
         if let Some(pb) = &self.pb {
-            pb.enable_steady_tick(120)
-        };
-        if let Some(pb) = &self.pb {
+            pb.enable_steady_tick(120);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            )
-        };
-        let msg = format!(
-            "Parsing sas7bdat file {}",
-            &self.path.to_string_lossy().bright_red()
-        );
-        if let Some(pb) = &self.pb {
-            pb.set_message(&msg)
+            );
+            let msg = format!(
+                "Parsing sas7bdat file {}",
+                &self.path.to_string_lossy().bright_red()
+            );
+            pb.set_message(&msg);
         };
 
         let ctx = self as *mut ReadStatData as *mut c_void;
@@ -533,19 +517,17 @@ impl ReadStatData {
             Some(p) => {
                 // progress bar
                 if let Some(pb) = &self.pb {
-                    pb.finish_at_current_pos()
+                    pb.finish_at_current_pos();
                 };
 
                 self.pb = Some(ProgressBar::new(self.row_count as u64));
-                // self.pb = Some(ProgressBar::new(self.rows.len() as u64));
                 if let Some(pb) = &self.pb {
+                    pb.enable_steady_tick(120);
                     pb.set_style(
                     ProgressStyle::default_bar()
                         .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
                         .progress_chars("##-"),
-                )
-                };
-                if let Some(pb) = &self.pb {
+                    );
                     pb.set_message("Rows processed")
                 };
 
@@ -564,41 +546,33 @@ impl ReadStatData {
     }
 
     pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        match &self.out_path {
-            None => Err(From::from(
-                "Error writing csv as output path is set to None",
-            )),
-            Some(p) => {
-                let f = OpenOptions::new().write(true).append(true).open(p)?;
+        if let Some(p) = &self.out_path {
+            let f = OpenOptions::new().write(true).append(true).open(p)?;
 
-                let mut wtr = csv::WriterBuilder::new()
-                    .quote_style(csv::QuoteStyle::Always)
-                    .from_writer(f);
+            let mut wtr = csv::WriterBuilder::new()
+                .quote_style(csv::QuoteStyle::Always)
+                .from_writer(f);
 
-                // write rows
-                for r in &self.rows {
-                    if let Some(pb) = &self.pb {
-                        pb.inc(1)
-                    };
-                    // Only used to observe progress bar
-                    // std::thread::sleep(std::time::Duration::from_millis(100));
-                    wtr.serialize(r)?;
-                }
-                wtr.flush()?;
+            // write rows
+            for r in &self.rows {
                 if let Some(pb) = &self.pb {
-                    pb.finish_at_current_pos()
+                    pb.inc(1)
                 };
-
-                Ok(())
+                // Only used to observe progress bar
+                // std::thread::sleep(std::time::Duration::from_millis(100));
+                wtr.serialize(r)?;
             }
+            wtr.flush()?;
+
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing csv as output path is set to None",
+            ))
         }
     }
 
     pub fn write_header_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear()
-        };
-
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_writer(stdout());
@@ -612,6 +586,10 @@ impl ReadStatData {
     }
 
     pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear();
+        };
+
         let mut wtr = csv::WriterBuilder::new()
             .quote_style(csv::QuoteStyle::Always)
             .from_writer(stdout());
@@ -626,10 +604,6 @@ impl ReadStatData {
     }
 
     pub fn write_metadata_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear()
-        };
-
         println!(
             "Metadata for the file {}\n",
             self.path.to_string_lossy().bright_yellow()
@@ -665,7 +639,7 @@ impl ReadStatData {
         for (k, v) in self.vars.iter() {
             println!(
                 "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {} }}",
-                k.var_index,
+                k.var_index.to_formatted_string(&Locale::en),
                 k.var_name.bright_purple(),
                 format!("{:#?}", v.var_type_class).bright_green(),
                 format!("{:#?}", v.var_type).bright_red(),
