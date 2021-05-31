@@ -370,7 +370,7 @@ impl ReadStatData {
                 "Parsing sas7bdat file {}",
                 &self.path.to_string_lossy().bright_red()
             );
-            pb.set_message(&msg);
+            pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
 
@@ -414,7 +414,7 @@ impl ReadStatData {
                 "Parsing sas7bdat metadata from file {}",
                 &self.path.to_string_lossy().bright_red()
             );
-            pb.set_message(&msg);
+            pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
 
@@ -450,7 +450,7 @@ impl ReadStatData {
                 "Parsing sas7bdat file {}",
                 &self.path.to_string_lossy().bright_red()
             );
-            pb.set_message(&msg);
+            pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
 
