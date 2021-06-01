@@ -1,3 +1,4 @@
+use arrow::{array, datatypes, record_batch};
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -318,8 +319,14 @@ pub struct ReadStatData {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
+    #[serde(skip)]
+    pub cols: Vec<array::ArrayDataBuilder>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
+    #[serde(skip)]
+    pub row_schema: datatypes::Schema,
+    #[serde(skip)]
+    pub batch: Option<record_batch::RecordBatch>,
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
@@ -346,8 +353,11 @@ impl ReadStatData {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
+            cols: Vec::new(),
             row: Vec::new(),
             rows: Vec::new(),
+            row_schema: datatypes::Schema::empty(),
+            batch: None,
             wrote_header: false,
             errors: Vec::new(),
             reader: Reader::stream,

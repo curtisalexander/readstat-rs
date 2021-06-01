@@ -1,3 +1,5 @@
+use arrow::{array, datatypes::DataType};
+use arrow::datatypes;
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
 use log::debug;
 use num_traits::FromPrimitive;
@@ -12,7 +14,7 @@ use crate::rs::{
 };
 use crate::Reader;
 
-const ROWS: usize = 10000;
+const ROWS: usize = 100000;
 const SEC_SHIFT: i64 = 315619200;
 const SEC_PER_HOUR: i64 = 86400;
 
@@ -166,13 +168,6 @@ pub extern "C" fn handle_variable(
     };
 
     let var_format_class = formats::match_var_format(&var_format);
-    //let var_format_class = if var_format.starts_with("YYMMDD") {
-    //    Some(ReadStatFormatClass::Date)
-    //} else if var_format.starts_with("DATETIME") {
-    //    Some(ReadStatFormatClass::DateTime)
-    //} else {
-    //    None
-    //};
 
     debug!("var_type is {:#?}", &var_type);
     debug!("var_type_class is {:#?}", &var_type_class);
@@ -195,6 +190,20 @@ pub extern "C" fn handle_variable(
 
     debug!("d struct is {:#?}", d);
 
+    // Build up Schema
+    let var_dt = match var_type {
+        ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => DataType::Utf8,
+        ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
+        ReadStatVarType::Int32 => DataType::Int32,
+        ReadStatVarType::Float => DataType::Float32,
+        ReadStatVarType::Double => DataType::Float64,
+    };
+    d.row_schema = datatypes::Schema::try_merge(vec![
+        d.row_schema,
+        datatypes::Schema::new(vec![datatypes::Field::new(&var_name, var_dt, true)]),
+    ])
+    .unwrap();
+
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
@@ -213,17 +222,40 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    // if first row and first variable, allocate row and rows
-    if obs_index == 0 && var_index == 0 {
-        // Vec containing a single row, needs capacity = number of variables
-        d.row = Vec::with_capacity(d.var_count as usize);
-        // Vec containing all rows, needs capacity = number of rows
-        // d.rows = Vec::with_capacity(d.row_count as usize);
-        // Allocate rows
-        d.rows = match d.reader {
-            Reader::stream => Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize)),
-            Reader::mem => Vec::with_capacity(d.row_count as usize),
+    // get variable metadata
+    let (_, v) = d
+        .vars
+        .iter()
+        .find(|(k, _)| k.var_index == var_index)
+        .unwrap();
+
+    // if first row, allocate cols and Arrow arrays
+    if obs_index == 0 {
+        // if first row and first variable, allocate cols
+        if var_index == 0 {
+            // Vec containing Arrow arrays, needs capacity = number of variables
+            d.cols = Vec::with_capacity(d.var_count as usize);
+            // Vec containing a single row, needs capacity = number of variables
+            d.row = Vec::with_capacity(d.var_count as usize);
+            // Vec containing all rows, needs capacity = number of rows
+            d.rows = match d.reader {
+                Reader::stream => Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize)),
+                Reader::mem => Vec::with_capacity(d.row_count as usize),
+            }
         }
+
+        // Build up cols by allocating Arrow arrays
+        /*
+        let mut array = match v.var_type {
+            ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => array::ArrayDataBuilder::new(DataType::Utf8),
+            ReadStatVarType::Int8 | ReadStatVarType::Int16 => array::ArrayDataBuilder::new(DataType::Int16),
+            ReadStatVarType::Int32 => array::ArrayDataBuilder::new(DataType::Int32),
+            ReadStatVarType::Float => array::ArrayDataBuilder::new(DataType::Float32),
+            ReadStatVarType::Double => array::ArrayDataBuilder::new(DataType::Float64),
+        }.len(d.row_count as usize);
+
+        d.cols.push(array);
+        */
     }
 
     debug!("row_count is {}", d.row_count);
@@ -233,8 +265,8 @@ pub extern "C" fn handle_value(
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
-    // get value and push into row within ReadStatData struct
     if is_missing == 0 {
+        // get value and push into row
         let value: ReadStatVar = match value_type {
             readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
             | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
@@ -343,9 +375,34 @@ pub extern "C" fn handle_value(
 
     // if last variable for a row, push into rows within ReadStatData struct
     if var_index == d.var_count - 1 {
+        /*
         // collecting ALL rows into memory before ever writing
         // TODO: benchmark changes if were to push (for example) 1,000 rows at a time
         //       into the Vector and then flush to disk in a quasi-streaming fashion
+        let fields = d.row_schema.fields();
+        let arrays = d.row
+            .iter()
+            .map(|rsv|) {
+                let result = match rsv {
+                    ReadStatVar::ReadStat_i8(i)
+                    | ReadStatVar::ReadStat_i16(i) => { arrow::array::Int16Array::into(i) },
+                    ReadStatVar::ReadStat_i32(i) => { arrow::array::Int32Array::into(i) },
+                    ReadStatVar::ReadStat_f32(f) => { arrow::array::Float32Array::into(f) },
+                    ReadStatVar::ReadStat_f64(f) => { arrow::array::Float64Array::into(f) },
+                    ReadStatVar::ReadStat_String(s) => { arrow::array::StringBuilder::into(s) },
+                    ReadStatVar::ReadStat_Date(d) => { arrow::array::Date32Builder::into(d) },
+                    ReadStatVar::ReadStat_DateTime(d) => { arrow::array::Date::into(d) },
+
+                };
+            }.collect();
+
+        d.rows.push(
+            RecordBatch::try_new(
+                Arc::new(d.row_schema),
+                
+            )
+        )
+        */
         d.rows.push(d.row.clone());
         // clear row after pushing into rows; has no effect on capacity
         d.row.clear();
