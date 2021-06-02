@@ -1,4 +1,4 @@
-use arrow::{array, datatypes, record_batch};
+use arrow::{datatypes, record_batch};
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -262,7 +262,7 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
     }
 }
 
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Debug, FromPrimitive, Serialize, Clone, Copy)]
 pub enum ReadStatVarType {
     String = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING as isize,
     Int8 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 as isize,
@@ -319,8 +319,6 @@ pub struct ReadStatData {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
-    #[serde(skip)]
-    pub cols: Vec<array::ArrayDataBuilder>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
     #[serde(skip)]
@@ -353,7 +351,6 @@ impl ReadStatData {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
-            cols: Vec::new(),
             row: Vec::new(),
             rows: Vec::new(),
             row_schema: datatypes::Schema::empty(),
@@ -480,6 +477,18 @@ impl ReadStatData {
             .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
+    }
+
+    pub fn get_readstatvarmeta_from_index(&self, var_index: i32) -> &ReadStatVarMetadata {
+        debug!("Path as C string is {:?}", &self.cstring_path);
+
+        let (_, v) = self
+            .vars
+            .iter()
+            .find(|(k, _)| k.var_index == var_index)
+            .unwrap();
+
+        v
     }
 
     pub fn set_reader(self, reader: Reader) -> Self {
