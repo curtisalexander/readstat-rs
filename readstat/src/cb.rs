@@ -1,5 +1,4 @@
 use arrow::array::{
-    Array,
     ArrayBuilder,
     ArrayRef,
     Int8Array,
@@ -220,7 +219,7 @@ pub extern "C" fn handle_variable(
     };
 
     d.schema =
-        Schema::try_merge(vec![Schema::new(vec![Field::new(
+        Schema::try_merge(vec![d.schema.clone(), Schema::new(vec![Field::new(
             &var_name, var_dt, true,
         )])])
         .unwrap();

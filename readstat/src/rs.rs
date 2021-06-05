@@ -583,7 +583,7 @@ impl<'a> ReadStatData<'a> {
 
                 // write header
                 let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-                wtr.write(&self.batch);
+                wtr.write(&self.batch).unwrap();
                 /*
                 wtr.serialize(vars)?;
                 wtr.flush()?;
@@ -615,7 +615,7 @@ impl<'a> ReadStatData<'a> {
                 wtr.serialize(r)?;
             }
             */
-            wtr.write(&self.batch);
+            wtr.write(&self.batch).unwrap();
             //wtr.flush()?;
 
             Ok(())
@@ -637,7 +637,7 @@ impl<'a> ReadStatData<'a> {
 
         // write header
         let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-        wtr.write(&self.batch);
+        wtr.write(&self.batch).unwrap();
         //wtr.serialize(vars)?;
         //wtr.flush()?;
 
@@ -656,7 +656,7 @@ impl<'a> ReadStatData<'a> {
         }
         wtr.flush()?;
         */
-        wtr.write(&self.batch);
+        wtr.write(&self.batch).unwrap();
         Ok(())
     }
 
