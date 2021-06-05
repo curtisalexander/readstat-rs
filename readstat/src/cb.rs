@@ -517,7 +517,7 @@ pub extern "C" fn handle_value(
                 d.batch = RecordBatch::try_new(
                     Arc::new(d.schema.clone()),
                     arrays
-                ).ok();
+                ).unwrap();
                 /*
                                         let result = match v.var_type {
                                             ReadStatVar::ReadStat_i8(i)

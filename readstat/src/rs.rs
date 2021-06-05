@@ -1,4 +1,6 @@
+use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
+use arrow::csv;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -16,6 +18,7 @@ use std::fs::OpenOptions;
 use std::io::stdout;
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::cb;
 use crate::err::ReadStatError;
@@ -327,7 +330,7 @@ pub struct ReadStatData<'a> {
     #[serde(skip)]
     pub schema: datatypes::Schema,
     #[serde(skip)]
-    pub batch: Option<record_batch::RecordBatch>,
+    pub batch: record_batch::RecordBatch,
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
@@ -358,7 +361,7 @@ impl<'a> ReadStatData<'a> {
             row: Vec::new(),
             rows: Vec::new(),
             schema: datatypes::Schema::empty(),
-            batch: None,
+            batch: RecordBatch::new_empty(Arc::new(datatypes::Schema::empty())),
             wrote_header: false,
             errors: Vec::new(),
             reader: Reader::stream,
@@ -500,6 +503,7 @@ impl<'a> ReadStatData<'a> {
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
+        /*
         match self {
             Self {
                 out_path: None,
@@ -530,6 +534,23 @@ impl<'a> ReadStatData<'a> {
                 self.write_data_to_csv()
             }
         }
+        */
+        match self {
+            Self {
+                out_path: None,
+                out_type: OutType::csv,
+                ..
+            } => {
+                self.write_data_to_stdout()
+            }
+            Self {
+                out_path: Some(_),
+                out_type: OutType::csv,
+                ..
+            } => {
+                self.write_data_to_csv()
+            }
+        }
     }
 
     pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
@@ -555,15 +576,18 @@ impl<'a> ReadStatData<'a> {
                     pb.enable_steady_tick(120);
                 }
 
-                let mut wtr = csv::WriterBuilder::new()
-                    .quote_style(csv::QuoteStyle::Always)
-                    .from_path(p)?;
+                let file = std::fs::File::create(p).unwrap();
+                let mut wtr = csv::WriterBuilder::new().build(file);
+                    //.quote_style(csv::QuoteStyle::Always)
+                    //.from_path(p)?;
 
                 // write header
                 let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+                wtr.write(&self.batch);
+                /*
                 wtr.serialize(vars)?;
                 wtr.flush()?;
-
+                */
                 Ok(())
             }
         }
@@ -573,11 +597,15 @@ impl<'a> ReadStatData<'a> {
         if let Some(p) = &self.out_path {
             let f = OpenOptions::new().write(true).append(true).open(p)?;
 
+            let file = std::fs::File::create(p).unwrap();
+            let mut wtr = csv::WriterBuilder::new().build(file);
+            /*
             let mut wtr = csv::WriterBuilder::new()
                 .quote_style(csv::QuoteStyle::Always)
                 .from_writer(f);
-
+            */
             // write rows
+            /*
             for r in &self.rows {
                 if let Some(pb) = &self.pb {
                     pb.inc(1)
@@ -586,7 +614,9 @@ impl<'a> ReadStatData<'a> {
                 // std::thread::sleep(std::time::Duration::from_millis(100));
                 wtr.serialize(r)?;
             }
-            wtr.flush()?;
+            */
+            wtr.write(&self.batch);
+            //wtr.flush()?;
 
             Ok(())
         } else {
@@ -601,29 +631,32 @@ impl<'a> ReadStatData<'a> {
             pb.finish_and_clear()
         }
 
-        let mut wtr = csv::WriterBuilder::new()
-            .quote_style(csv::QuoteStyle::Always)
-            .from_writer(stdout());
+        let mut wtr = csv::WriterBuilder::new().build(stdout());
+            // .quote_style(csv::QuoteStyle::Always)
+            //.from_writer(stdout());
 
         // write header
         let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-        wtr.serialize(vars)?;
-        wtr.flush()?;
+        wtr.write(&self.batch);
+        //wtr.serialize(vars)?;
+        //wtr.flush()?;
 
         Ok(())
     }
 
     pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut wtr = csv::WriterBuilder::new()
-            .quote_style(csv::QuoteStyle::Always)
-            .from_writer(stdout());
+        let mut wtr = csv::WriterBuilder::new().build(stdout());
+            //.quote_style(csv::QuoteStyle::Always)
+            //.from_writer(stdout());
 
         // write rows
+        /*
         for r in &self.rows {
             wtr.serialize(r)?;
         }
         wtr.flush()?;
-
+        */
+        wtr.write(&self.batch);
         Ok(())
     }
 
