@@ -325,7 +325,7 @@ pub struct ReadStatData<'a> {
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
     #[serde(skip)]
-    pub row_schema: datatypes::Schema,
+    pub schema: datatypes::Schema,
     #[serde(skip)]
     pub batch: Option<record_batch::RecordBatch>,
     pub wrote_header: bool,
@@ -357,7 +357,7 @@ impl<'a> ReadStatData<'a> {
             cols: Vec::new(),
             row: Vec::new(),
             rows: Vec::new(),
-            row_schema: datatypes::Schema::empty(),
+            schema: datatypes::Schema::empty(),
             batch: None,
             wrote_header: false,
             errors: Vec::new(),
@@ -483,16 +483,16 @@ impl<'a> ReadStatData<'a> {
         Ok(error as u32)
     }
 
-    pub fn get_readstatvarmeta_from_index(&self, var_index: i32) -> &ReadStatVarMetadata {
-        debug!("Path as C string is {:?}", &self.cstring_path);
-
-        let (_, v) = self
+    pub fn get_var_types(&self) -> Vec<ReadStatVarType> {
+        let var_types = self
             .vars
             .iter()
-            .find(|(k, _)| k.var_index == var_index)
-            .unwrap();
+            .map(|(_, q)| {
+                q.var_type.clone()
+            })
+            .collect();
 
-        v
+        var_types
     }
 
     pub fn set_reader(self, reader: Reader) -> Self {

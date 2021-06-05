@@ -15,11 +15,11 @@ use arrow::array::{
     StringBuilder
 };
 use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
 use log::debug;
 use num_traits::FromPrimitive;
 use readstat_sys;
-use std::cmp::min;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::Arc;
@@ -218,25 +218,25 @@ pub extern "C" fn handle_variable(
         ReadStatVarType::Float => DataType::Float32,
         ReadStatVarType::Double => DataType::Float64,
     };
-    d.row_schema =
+
+    d.schema =
         Schema::try_merge(vec![Schema::new(vec![Field::new(
             &var_name, var_dt, true,
         )])])
         .unwrap();
 
-    // Build up cols by allocating Arrow array builders
-    let mut builder = match &var_type {
+    d.cols = Vec::with_capacity(d.row_count as usize);
+    
+    match &var_type {
         ReadStatVarType::String
         | ReadStatVarType::StringRef
-        | ReadStatVarType::Unknown => StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Int8 => Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Int16 => Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Int32 => Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Float => Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Double => Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        | ReadStatVarType::Unknown => d.cols.push(StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
+        ReadStatVarType::Int8 => d.cols.push(Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
+        ReadStatVarType::Int16 => d.cols.push(Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
+        ReadStatVarType::Int32 => d.cols.push(Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
+        ReadStatVarType::Float => d.cols.push(Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
+        ReadStatVarType::Double => d.cols.push(Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
     };
-
-    d.cols.push(builder);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -256,8 +256,7 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    // get variable metadata
-    let v = d.get_readstatvarmeta_from_index(var_index);
+    let var_type = d.get_var_types();
 
     // if first row and first variable, allocate cols
     if obs_index == 0 && var_index == 0 {
@@ -480,40 +479,45 @@ pub extern "C" fn handle_value(
                     .collect();
                 */
 
-                let fields = d.row_schema.fields();
+                // let fields = d.row_schema.fields();
+
+                let var_types = d.get_var_types();
 
                 let arrays: Vec<ArrayRef> = d
                     .cols
-                    .iter()
+                    .iter_mut()
                     .enumerate()
-                    .map(|(i, vec_rsv)| {
-                        let v = d.get_readstatvarmeta_from_index(i as i32);
-                        let array: ArrayRef = match v.var_type {
+                    .map(|(i, c)| {
+                        let array: ArrayRef = match var_types[i] {
                             ReadStatVarType::String
                             | ReadStatVarType::StringRef
                             | ReadStatVarType::Unknown => {
-                                Arc::new(d.cols[i].downcast_mut::<StringBuilder>().unwrap().finish())
+                                Arc::new(c.downcast_mut::<StringBuilder>().unwrap().finish())
                             },
                             ReadStatVarType::Int8 => {
-                                Arc::new(d.cols[i].downcast_mut::<Int8Builder>().unwrap().finish())
+                                Arc::new(c.downcast_mut::<Int8Builder>().unwrap().finish())
                             }
                             ReadStatVarType::Int16 => {
-                                Arc::new(d.cols[i].downcast_mut::<Int16Builder>().unwrap().finish())
+                                Arc::new(c.downcast_mut::<Int16Builder>().unwrap().finish())
                             }
                             ReadStatVarType::Int32 => {
-                                Arc::new(d.cols[i].downcast_mut::<Int32Builder>().unwrap().finish())
+                                Arc::new(c.downcast_mut::<Int32Builder>().unwrap().finish())
                             }
                             ReadStatVarType::Float => {
-                                Arc::new(d.cols[i].downcast_mut::<Float32Builder>().unwrap().finish())
+                                Arc::new(c.downcast_mut::<Float32Builder>().unwrap().finish())
                             }
                             ReadStatVarType::Double => {
-                                Arc::new(d.cols[i].downcast_mut::<Float64Builder>().unwrap().finish())
+                                Arc::new(c.downcast_mut::<Float64Builder>().unwrap().finish())
                             }
                         };
                         array
                     })
                     .collect();
 
+                d.batch = RecordBatch::try_new(
+                    Arc::new(d.schema.clone()),
+                    arrays
+                ).ok();
                 /*
                                         let result = match v.var_type {
                                             ReadStatVar::ReadStat_i8(i)
