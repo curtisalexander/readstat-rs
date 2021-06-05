@@ -8,6 +8,7 @@ use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
 use serde::{Serialize, Serializer};
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
@@ -302,7 +303,7 @@ pub enum ReadStatFormatClass {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ReadStatData {
+pub struct ReadStatData<'a> {
     pub path: PathBuf,
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
@@ -319,6 +320,8 @@ pub struct ReadStatData {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
+    #[serde(skip)]
+    pub cols: Vec<&'a mut dyn Any>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
     #[serde(skip)]
@@ -332,7 +335,7 @@ pub struct ReadStatData {
     pub pb: Option<ProgressBar>,
 }
 
-impl ReadStatData {
+impl<'a> ReadStatData<'a> {
     pub fn new(rsp: ReadStatPath) -> Self {
         Self {
             path: rsp.path,
@@ -351,6 +354,7 @@ impl ReadStatData {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
+            cols: Vec::new(),
             row: Vec::new(),
             rows: Vec::new(),
             row_schema: datatypes::Schema::empty(),

@@ -1,5 +1,20 @@
-use arrow::datatypes;
-use arrow::{array, datatypes::DataType};
+use arrow::array::{
+    Array,
+    ArrayBuilder,
+    ArrayRef,
+    Int8Array,
+    Int8Builder,
+    Int16Array,
+    Int16Builder,
+    Int32Array,
+    Int32Builder,
+    Float32Array,
+    Float32Builder,
+    Float64Array,
+    Float64Builder,
+    StringBuilder
+};
+use arrow::datatypes::{DataType, Field, Schema};
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
 use log::debug;
 use num_traits::FromPrimitive;
@@ -193,6 +208,7 @@ pub extern "C" fn handle_variable(
     debug!("d struct is {:#?}", d);
 
     // Build up Schema
+    // TODO - need to handle Dates, Times, and Datetimes
     let var_dt = match &var_type {
         ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
             DataType::Utf8
@@ -203,10 +219,24 @@ pub extern "C" fn handle_variable(
         ReadStatVarType::Double => DataType::Float64,
     };
     d.row_schema =
-        datatypes::Schema::try_merge(vec![datatypes::Schema::new(vec![datatypes::Field::new(
+        Schema::try_merge(vec![Schema::new(vec![Field::new(
             &var_name, var_dt, true,
         )])])
         .unwrap();
+
+    // Build up cols by allocating Arrow array builders
+    let mut builder = match &var_type {
+        ReadStatVarType::String
+        | ReadStatVarType::StringRef
+        | ReadStatVarType::Unknown => StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Int8 => Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Int16 => Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Int32 => Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Float => Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Double => Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+    };
+
+    d.cols.push(builder);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -242,19 +272,6 @@ pub extern "C" fn handle_value(
         }
     }
 
-    // Build up cols by allocating Arrow arrays
-    /*
-    let mut array = match v.var_type {
-        ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => array::ArrayDataBuilder::new(DataType::Utf8),
-        ReadStatVarType::Int8 | ReadStatVarType::Int16 => array::ArrayDataBuilder::new(DataType::Int16),
-        ReadStatVarType::Int32 => array::ArrayDataBuilder::new(DataType::Int32),
-        ReadStatVarType::Float => array::ArrayDataBuilder::new(DataType::Float32),
-        ReadStatVarType::Double => array::ArrayDataBuilder::new(DataType::Float64),
-    }.len(d.row_count as usize);
-
-    d.cols.push(array);
-    */
-
     debug!("row_count is {}", d.row_count);
     debug!("var_count is {}", d.var_count);
     debug!("obs_index is {}", obs_index);
@@ -262,218 +279,257 @@ pub extern "C" fn handle_value(
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
-    if is_missing == 0 {
-        // get value and push into row
-        let value: ReadStatVar = match value_type {
-            readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
-            | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
-                ReadStatVar::ReadStat_String(unsafe {
-                    CStr::from_ptr(readstat_sys::readstat_string_value(value))
-                        .to_str()
-                        .unwrap()
-                        .to_owned()
-                })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
-                ReadStatVar::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
-                ReadStatVar::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
-                ReadStatVar::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
-                ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-                ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
-            }
-            // exhaustive
-            _ => unreachable!(),
-        };
+    // get value and push into row
+    /*
+    let value: ReadStatVar = match value_type {
+        readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
+        | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
+            ReadStatVar::ReadStat_String(unsafe {
+                CStr::from_ptr(readstat_sys::readstat_string_value(value))
+                    .to_str()
+                    .unwrap()
+                    .to_owned()
+            })
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
+            ReadStatVar::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
+            ReadStatVar::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
+            ReadStatVar::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
+            ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
+            ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
+        }
+        // exhaustive
+        _ => unreachable!(),
+    };
+    */
 
-        debug!("value is {:#?}", value);
-
-        // TODO: check if date/datetime format
-        // Rather than have a massive set of string comparisons, may want to convert the original strings to enums and then match on the enums
-        // Probably can move the date/datetime checks out of the handle_value function and into the handle_variable function
-        // The value conversion, obviously, would still need to occur here within handle_value
-        let v = d.get_readstatvarmeta_from_index(var_index);
-
-        let value = match v.var_format_class {
-            Some(ReadStatFormatClass::Date) => {
-                let f = match value {
-                    ReadStatVar::ReadStat_f64(f) => f as i64,
-                    _ => 0 as i64,
-                };
-                ReadStatVar::ReadStat_Date(
-                    Utc.timestamp(f * SEC_PER_HOUR, 0)
-                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                        .unwrap()
-                        .naive_utc()
-                        .date(),
-                )
+    // get value and push into cols
+    match value_type {
+        readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
+        | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
+            // get value
+            let value = unsafe {
+                CStr::from_ptr(readstat_sys::readstat_string_value(value))
+                    .to_str()
+                    .unwrap()
+                    .to_owned()
+            };
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].downcast_mut::<StringBuilder>().unwrap().append_value(value.clone()).unwrap();
+            } else {
+                d.cols[var_index as usize].downcast_mut::<StringBuilder>().unwrap().append_null().unwrap();
             }
-            Some(ReadStatFormatClass::DateTime) => {
-                let f = match value {
-                    ReadStatVar::ReadStat_f64(f) => f as i64,
-                    _ => 0 as i64,
-                };
-                ReadStatVar::ReadStat_DateTime(
-                    Utc.timestamp(f, 0)
-                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                        .unwrap(),
-                )
+            // debug
+            debug!("value is {:#?}", value);
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
+            // get value
+            let value = unsafe { readstat_sys::readstat_int8_value(value) };
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].downcast_mut::<Int8Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].downcast_mut::<Int8Builder>().unwrap().append_null().unwrap();
             }
-            Some(ReadStatFormatClass::Time) => {
-                let f = match value {
-                    ReadStatVar::ReadStat_f64(f) => f as i64,
-                    _ => 0 as i64,
-                };
-                ReadStatVar::ReadStat_Time(
-                    Utc.timestamp(f, 0)
-                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                        .unwrap()
-                        .naive_utc()
-                        .time(),
-                )
+            // debug
+            debug!("value is {:#?}", value);
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
+            // get value
+            let value = unsafe { readstat_sys::readstat_int16_value(value) };
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].downcast_mut::<Int16Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].downcast_mut::<Int16Builder>().unwrap().append_null().unwrap();
             }
-            None => value,
-        };
+            // debug
+            debug!("value is {:#?}", value);
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
+            // get value
+            let value = unsafe { readstat_sys::readstat_int32_value(value) };
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].downcast_mut::<Int32Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].downcast_mut::<Int32Builder>().unwrap().append_null().unwrap();
+            }
+            // debug
+            debug!("value is {:#?}", value);
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
+            // get value
+            let value = unsafe { readstat_sys::readstat_float_value(value) };
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].downcast_mut::<Float32Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].downcast_mut::<Float32Builder>().unwrap().append_null().unwrap();
+            }
+            // debug
+            debug!("value is {:#?}", value);
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
+            let value = unsafe { readstat_sys::readstat_double_value(value) };
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].downcast_mut::<Float64Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].downcast_mut::<Float64Builder>().unwrap().append_null().unwrap();
+            }
+            // debug
+            debug!("value is {:#?}", value);
+        }
+        // exhaustive
+        _ => unreachable!(),
+    };
 
-        // push into row
-        d.row.push(value);
-    } else {
-        // For now represent missing values as the unit type
-        // When serializing to csv (which is the only output type at the moment),
-        //   the unit type is serialized as a missing value
-        // For example, the following SAS dataset
-        //   | id | name  | age |
-        //   |----|-------|-----|
-        //   | 4  | Alice | .   |
-        //   | 5  | ""    | 30  |
-        // would be serialized as the following in csv
-        //   id,name,age
-        //   4,Alice,,
-        //   5,,30
-        // And thus any missingness treatment is in fact handled by the tool that
-        // consumes the csv file
-        let value = ReadStatVar::ReadStat_Missing(());
-        debug!("value is {:#?}", &value);
 
-        // push into row
-        d.row.push(value);
-    }
+    // TODO: check if date/datetime format
+    // Rather than have a massive set of string comparisons, may want to convert the original strings to enums and then match on the enums
+    // Probably can move the date/datetime checks out of the handle_value function and into the handle_variable function
+    // The value conversion, obviously, would still need to occur here within handle_value
+    //let v = d.get_readstatvarmeta_from_index(var_index);
+
+    /*
+    let value = match v.var_format_class {
+        Some(ReadStatFormatClass::Date) => {
+            let f = match value {
+                ReadStatVar::ReadStat_f64(f) => f as i64,
+                _ => 0 as i64,
+            };
+            ReadStatVar::ReadStat_Date(
+                Utc.timestamp(f * SEC_PER_HOUR, 0)
+                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                    .unwrap()
+                    .naive_utc()
+                    .date(),
+            )
+        }
+        Some(ReadStatFormatClass::DateTime) => {
+            let f = match value {
+                ReadStatVar::ReadStat_f64(f) => f as i64,
+                _ => 0 as i64,
+            };
+            ReadStatVar::ReadStat_DateTime(
+                Utc.timestamp(f, 0)
+                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                    .unwrap(),
+            )
+        }
+        Some(ReadStatFormatClass::Time) => {
+            let f = match value {
+                ReadStatVar::ReadStat_f64(f) => f as i64,
+                _ => 0 as i64,
+            };
+            ReadStatVar::ReadStat_Time(
+                Utc.timestamp(f, 0)
+                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                    .unwrap()
+                    .naive_utc()
+                    .time(),
+            )
+        }
+        None => value,
+    };
+    */
 
     // if last variable for a row, push into rows within ReadStatData struct
     if var_index == d.var_count - 1 {
-        /*
-        // collecting ALL rows into memory before ever writing
-        // TODO: benchmark changes if were to push (for example) 1,000 rows at a time
-        //       into the Vector and then flush to disk in a quasi-streaming fashion
-        let fields = d.row_schema.fields();
-        let arrays = d.row
-            .iter()
-            .map(|rsv|) {
-                let result = match rsv {
-                    ReadStatVar::ReadStat_i8(i)
-                    | ReadStatVar::ReadStat_i16(i) => { arrow::array::Int16Array::into(i) },
-                    ReadStatVar::ReadStat_i32(i) => { arrow::array::Int32Array::into(i) },
-                    ReadStatVar::ReadStat_f32(f) => { arrow::array::Float32Array::into(f) },
-                    ReadStatVar::ReadStat_f64(f) => { arrow::array::Float64Array::into(f) },
-                    ReadStatVar::ReadStat_String(s) => { arrow::array::StringBuilder::into(s) },
-                    ReadStatVar::ReadStat_Date(d) => { arrow::array::Date32Builder::into(d) },
-                    ReadStatVar::ReadStat_DateTime(d) => { arrow::array::Date::into(d) },
 
-                };
-            }.collect();
-
-        d.rows.push(
-            RecordBatch::try_new(
-                Arc::new(d.row_schema),
-
-            )
-        )
-        */
-        d.rows.push(d.row.clone());
-        // clear row after pushing into rows; has no effect on capacity
-        d.row.clear();
-
-        //println!("obs_index is {}", obs_index);
         match d.reader {
             // if rows = buffer limit and last variable then go ahead and write
             Reader::stream
                 if (((obs_index + 1) % ROWS as i32 == 0) && (obs_index != 0))
                     || obs_index == (d.row_count - 1) =>
             {
+                // create record batch
+
+                // first, create a vector of ArrayRefs to Arrays
+
+                /*
+                let array_refs = d
+                    .cols
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &v)|{
+                        let v = d.get_readstatvarmeta_from_index(i as i32);
+
+                        let mut builder = match &v.var_type {
+                            ReadStatVarType::String
+                            | ReadStatVarType::StringRef
+                            | ReadStatVarType::Unknown => StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+                            ReadStatVarType::Int8 => Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+                            ReadStatVarType::Int16 => Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+                            ReadStatVarType::Int32 => Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+                            ReadStatVarType::Float => Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+                            ReadStatVarType::Double => Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+                        };
+                        
+                    })
+                    .collect();
+                */
+
                 let fields = d.row_schema.fields();
-                let arrays = d.rows
+
+                let arrays: Vec<ArrayRef> = d
+                    .cols
                     .iter()
                     .enumerate()
                     .map(|(i, vec_rsv)| {
                         let v = d.get_readstatvarmeta_from_index(i as i32);
-                        match v.var_type {
+                        let array: ArrayRef = match v.var_type {
                             ReadStatVarType::String
                             | ReadStatVarType::StringRef
                             | ReadStatVarType::Unknown => {
-                                let new_vec = vec_rsv
-                                    .iter()
-                                    .map(|v|{
-                                        match &v {
-                                            ReadStatVar::ReadStat_String(s) => Some(s),
-                                            ReadStatVar::ReadStat_Missing(_) => None
-                                        }
-                                    })
-                                    .collect();
-
-                                let b = array::StringArray::from(new_vec);
+                                Arc::new(d.cols[i].downcast_mut::<StringBuilder>().unwrap().finish())
                             },
                             ReadStatVarType::Int8 => {
-                                let b = array::Int8Array::builder(min(obs_index, d.row_count) as usize);
-                                let new_vec = vec_rsv
-                                    .iter()
-                                    .map(|v|{
-                                        match &v {
-                                            ReadStatVar::ReadStat_i8(i) => Some(i),
-                                            ReadStatVar::ReadStat_Missing(_) => None
-                                        }
-                                    })
-                                    .collect();
-                                b.append_slice(new_vec);
-                                b.finish();
-                            },
+                                Arc::new(d.cols[i].downcast_mut::<Int8Builder>().unwrap().finish())
+                            }
                             ReadStatVarType::Int16 => {
-                                let b = array::Int16Array::builder(min(obs_index, d.row_count) as usize);
-                            },
+                                Arc::new(d.cols[i].downcast_mut::<Int16Builder>().unwrap().finish())
+                            }
                             ReadStatVarType::Int32 => {
-                                let b = array::Int32Array::builder(min(obs_index, d.row_count) as usize);
-                            },
+                                Arc::new(d.cols[i].downcast_mut::<Int32Builder>().unwrap().finish())
+                            }
                             ReadStatVarType::Float => {
-                                let b = array::Float32Array::builder(min(obs_index, d.row_count) as usize);
-                            },
+                                Arc::new(d.cols[i].downcast_mut::<Float32Builder>().unwrap().finish())
+                            }
                             ReadStatVarType::Double => {
-                                let b = array::Float64Array::builder(min(obs_index, d.row_count) as usize);
-                            },
+                                Arc::new(d.cols[i].downcast_mut::<Float64Builder>().unwrap().finish())
+                            }
                         };
-                    }).collect();
+                        array
+                    })
+                    .collect();
 
-/*
-                        let result = match v.var_type {
-                            ReadStatVar::ReadStat_i8(i)
-                            | ReadStatVar::ReadStat_i16(i) => { array::Int16Array::into(i) },
-                            ReadStatVar::ReadStat_i32(i) => { array::Int32Array::into(i) },
-                            ReadStatVar::ReadStat_f32(f) => { array::Float32Array::into(f) },
-                            ReadStatVar::ReadStat_f64(f) => { array::Float64Array::into(f) },
-                            ReadStatVar::ReadStat_String(s) => { array::StringBuilder::into(s) },
-                            //ReadStatVar::ReadStat_Date(d) => { arrow::array::Date32Builder::into(d) },
-                            //ReadStatVar::ReadStat_DateTime(d) => { arrow::array::Date::into(d) },
-                            //ReadStatVar::ReadStat_Time(t) => { arrow::array::Time32SecondBuilder::into(t) },
-                        };
-            }.collect();
+                /*
+                                        let result = match v.var_type {
+                                            ReadStatVar::ReadStat_i8(i)
+                                            | ReadStatVar::ReadStat_i16(i) => { array::Int16Array::into(i) },
+                                            ReadStatVar::ReadStat_i32(i) => { array::Int32Array::into(i) },
+                                            ReadStatVar::ReadStat_f32(f) => { array::Float32Array::into(f) },
+                                            ReadStatVar::ReadStat_f64(f) => { array::Float64Array::into(f) },
+                                            ReadStatVar::ReadStat_String(s) => { array::StringBuilder::into(s) },
+                                            //ReadStatVar::ReadStat_Date(d) => { arrow::array::Date32Builder::into(d) },
+                                            //ReadStatVar::ReadStat_DateTime(d) => { arrow::array::Date::into(d) },
+                                            //ReadStatVar::ReadStat_Time(t) => { arrow::array::Time32SecondBuilder::into(t) },
+                                        };
+                            }.collect();
 
-            RecordBatch::try_new(Arc::new(d.row_schema), )
-*/                
+                            RecordBatch::try_new(Arc::new(d.row_schema), )
+                */
                 match d.write() {
                     Ok(()) => (),
                     // Err(e) => d.errors.push(format!("{:#?}", e)),
@@ -502,8 +558,6 @@ pub extern "C" fn handle_value(
             }
             _ => (),
         }
-
-
     }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
