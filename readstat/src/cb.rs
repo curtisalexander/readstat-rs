@@ -224,7 +224,10 @@ pub extern "C" fn handle_variable(
         )])])
         .unwrap();
 
-    d.cols = Vec::with_capacity(d.row_count as usize);
+    d.cols = match d.reader {
+        Reader::stream => Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize)),
+        Reader::mem => Vec::with_capacity(d.row_count as usize),
+    };
     
     match &var_type {
         ReadStatVarType::String
@@ -277,6 +280,7 @@ pub extern "C" fn handle_value(
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
+    debug!("made it here");
     // get value and push into row
     /*
     let value: ReadStatVar = match value_type {
