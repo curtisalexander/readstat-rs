@@ -21,6 +21,7 @@ use num_traits::FromPrimitive;
 use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
+use std::any::Any;
 use std::sync::Arc;
 
 use crate::formats;
@@ -110,6 +111,7 @@ pub extern "C" fn handle_metadata(
         Some(t) => t,
         None => ReadStatEndian::None,
     };
+    let cols: Vec<&mut dyn Any> = Vec::with_capacity(vc as usize);
 
     debug!("row_count is {}", rc);
     debug!("var_count is {}", vc);
@@ -136,7 +138,7 @@ pub extern "C" fn handle_metadata(
     d.compression = compression;
     d.endianness = endianness;
 
-    debug!("d struct is {:#?}", d);
+    // debug!("d struct is {:#?}", d);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -204,7 +206,7 @@ pub extern "C" fn handle_variable(
         ),
     );
 
-    debug!("d struct is {:#?}", d);
+    // debug!("d struct is {:#?}", d);
 
     // Build up Schema
     // TODO - need to handle Dates, Times, and Datetimes
@@ -224,21 +226,40 @@ pub extern "C" fn handle_variable(
         )])])
         .unwrap();
 
-    d.cols = match d.reader {
-        Reader::stream => Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize)),
-        Reader::mem => Vec::with_capacity(d.row_count as usize),
+    /*
+    match d.reader {
+        Reader::stream => d.cols.push(Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize))),
+        Reader::mem => d.cols.push(Vec::with_capacity(d.row_count as usize)),
     };
-    
-    match &var_type {
+    */
+
+    let array: Box<dyn ArrayBuilder> = match &var_type {
         ReadStatVarType::String
         | ReadStatVarType::StringRef
-        | ReadStatVarType::Unknown => d.cols.push(StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
-        ReadStatVarType::Int8 => d.cols.push(Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
-        ReadStatVarType::Int16 => d.cols.push(Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
-        ReadStatVarType::Int32 => d.cols.push(Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
-        ReadStatVarType::Float => d.cols.push(Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
-        ReadStatVarType::Double => d.cols.push(Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut()),
+        | ReadStatVarType::Unknown => Box::new(StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize))),
+        ReadStatVarType::Int8 => Box::new(Int8Builder::new(std::cmp::min(ROWS, d.row_count as usize))),
+        ReadStatVarType::Int16 => Box::new(Int16Builder::new(std::cmp::min(ROWS, d.row_count as usize))),
+        ReadStatVarType::Int32 => Box::new(Int32Builder::new(std::cmp::min(ROWS, d.row_count as usize))),
+        ReadStatVarType::Float => Box::new(Float32Builder::new(std::cmp::min(ROWS, d.row_count as usize))),
+        ReadStatVarType::Double => Box::new(Float64Builder::new(std::cmp::min(ROWS, d.row_count as usize))),
     };
+
+    d.cols.push(array);
+
+    /*
+    let array = match &var_type {
+        ReadStatVarType::String
+        | ReadStatVarType::StringRef
+        | ReadStatVarType::Unknown => StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Int8 => Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Int16 => Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Int32 => Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Float => Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+        ReadStatVarType::Double => Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
+    };
+    */
+
+    // debug!("array is {:#?}", array);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -258,9 +279,10 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    let var_type = d.get_var_types();
+    // let var_type = d.get_var_types();
 
     // if first row and first variable, allocate cols
+    /*
     if obs_index == 0 && var_index == 0 {
         // Vec containing Arrow arrays, needs capacity = number of variables
         // d.cols = Vec::with_capacity(d.var_count as usize);
@@ -272,6 +294,7 @@ pub extern "C" fn handle_value(
             Reader::mem => Vec::with_capacity(d.row_count as usize),
         }
     }
+    */
 
     debug!("row_count is {}", d.row_count);
     debug!("var_count is {}", d.var_count);
@@ -280,7 +303,6 @@ pub extern "C" fn handle_value(
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
-    debug!("made it here");
     // get value and push into row
     /*
     let value: ReadStatVar = match value_type {
@@ -324,74 +346,76 @@ pub extern "C" fn handle_value(
                     .unwrap()
                     .to_owned()
             };
+            // debug
+            debug!("value is {:#?}", &value);
             // append to builder
             if is_missing == 0 {
-                d.cols[var_index as usize].downcast_mut::<StringBuilder>().unwrap().append_value(value.clone()).unwrap();
+                // let b = d.cols[var_index as usize].downcast_mut::<StringBuilder>();
+                // debug!("b is {:#?}", &b);
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<StringBuilder>().unwrap().append_value(value.clone()).unwrap();
             } else {
-                d.cols[var_index as usize].downcast_mut::<StringBuilder>().unwrap().append_null().unwrap();
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<StringBuilder>().unwrap().append_null().unwrap();
             }
-            // debug
-            debug!("value is {:#?}", value);
-        }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int8_value(value) };
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize].downcast_mut::<Int8Builder>().unwrap().append_value(value).unwrap();
-            } else {
-                d.cols[var_index as usize].downcast_mut::<Int8Builder>().unwrap().append_null().unwrap();
-            }
             // debug
             debug!("value is {:#?}", value);
-        }
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Int8Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Int8Builder>().unwrap().append_null().unwrap();
+            }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int16_value(value) };
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize].downcast_mut::<Int16Builder>().unwrap().append_value(value).unwrap();
-            } else {
-                d.cols[var_index as usize].downcast_mut::<Int16Builder>().unwrap().append_null().unwrap();
-            }
             // debug
             debug!("value is {:#?}", value);
-        }
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Int16Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Int16Builder>().unwrap().append_null().unwrap();
+            }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int32_value(value) };
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize].downcast_mut::<Int32Builder>().unwrap().append_value(value).unwrap();
-            } else {
-                d.cols[var_index as usize].downcast_mut::<Int32Builder>().unwrap().append_null().unwrap();
-            }
             // debug
             debug!("value is {:#?}", value);
-        }
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Int32Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Int32Builder>().unwrap().append_null().unwrap();
+            }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
             // get value
             let value = unsafe { readstat_sys::readstat_float_value(value) };
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize].downcast_mut::<Float32Builder>().unwrap().append_value(value).unwrap();
-            } else {
-                d.cols[var_index as usize].downcast_mut::<Float32Builder>().unwrap().append_null().unwrap();
-            }
             // debug
             debug!("value is {:#?}", value);
-        }
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Float32Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Float32Builder>().unwrap().append_null().unwrap();
+            }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
             let value = unsafe { readstat_sys::readstat_double_value(value) };
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize].downcast_mut::<Float64Builder>().unwrap().append_value(value).unwrap();
-            } else {
-                d.cols[var_index as usize].downcast_mut::<Float64Builder>().unwrap().append_null().unwrap();
-            }
             // debug
             debug!("value is {:#?}", value);
-        }
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Float64Builder>().unwrap().append_value(value).unwrap();
+            } else {
+                d.cols[var_index as usize].as_any_mut().downcast_mut::<Float64Builder>().unwrap().append_null().unwrap();
+            }
+        },
         // exhaustive
         _ => unreachable!(),
     };
@@ -484,8 +508,14 @@ pub extern "C" fn handle_value(
 
                 // let fields = d.row_schema.fields();
 
-                let var_types = d.get_var_types();
+                // let var_types = d.get_var_types();
 
+                let arrays: Vec<ArrayRef> = d
+                    .cols
+                    .iter_mut()
+                    .map(|builder| builder.finish())
+                    .collect();
+                /*
                 let arrays: Vec<ArrayRef> = d
                     .cols
                     .iter_mut()
@@ -495,7 +525,7 @@ pub extern "C" fn handle_value(
                             ReadStatVarType::String
                             | ReadStatVarType::StringRef
                             | ReadStatVarType::Unknown => {
-                                Arc::new(c.downcast_mut::<StringBuilder>().unwrap().finish())
+                                Arc::new(c.as_any_mut().downcast_mut::<StringBuilder>().unwrap().finish())
                             },
                             ReadStatVarType::Int8 => {
                                 Arc::new(c.downcast_mut::<Int8Builder>().unwrap().finish())
@@ -516,6 +546,7 @@ pub extern "C" fn handle_value(
                         array
                     })
                     .collect();
+                    */
 
                 d.batch = RecordBatch::try_new(
                     Arc::new(d.schema.clone()),

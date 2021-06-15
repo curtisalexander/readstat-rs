@@ -1,3 +1,4 @@
+use arrow::array::ArrayBuilder;
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
 use arrow::csv;
@@ -305,8 +306,9 @@ pub enum ReadStatFormatClass {
     Time,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ReadStatData<'a> {
+// #[derive(Debug, Serialize)]
+#[derive(Serialize)]
+pub struct ReadStatData {
     pub path: PathBuf,
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
@@ -324,7 +326,7 @@ pub struct ReadStatData<'a> {
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
     #[serde(skip)]
-    pub cols: Vec<&'a mut dyn Any>,
+    pub cols: Vec<Box<dyn ArrayBuilder>>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
     #[serde(skip)]
@@ -338,7 +340,7 @@ pub struct ReadStatData<'a> {
     pub pb: Option<ProgressBar>,
 }
 
-impl<'a> ReadStatData<'a> {
+impl ReadStatData {
     pub fn new(rsp: ReadStatPath) -> Self {
         Self {
             path: rsp.path,
