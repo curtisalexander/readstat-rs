@@ -599,8 +599,8 @@ impl ReadStatData {
         if let Some(p) = &self.out_path {
             let f = OpenOptions::new().write(true).append(true).open(p)?;
 
-            let file = std::fs::File::create(p).unwrap();
-            let mut wtr = csv::WriterBuilder::new().build(file);
+            //let file = std::fs::File::create(p).unwrap();
+            let mut wtr = csv::WriterBuilder::new().build(f);
             /*
             let mut wtr = csv::WriterBuilder::new()
                 .quote_style(csv::QuoteStyle::Always)
