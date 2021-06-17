@@ -1,15 +1,10 @@
 use arrow::array::{
     ArrayBuilder,
     ArrayRef,
-    Int8Array,
     Int8Builder,
-    Int16Array,
     Int16Builder,
-    Int32Array,
     Int32Builder,
-    Float32Array,
     Float32Builder,
-    Float64Array,
     Float64Builder,
     StringBuilder
 };
@@ -31,6 +26,7 @@ use crate::rs::{
 };
 use crate::Reader;
 
+const DIGITS: usize = 14;
 const ROWS: usize = 100000;
 const SEC_SHIFT: i64 = 315619200;
 const SEC_PER_HOUR: i64 = 86400;
@@ -111,7 +107,7 @@ pub extern "C" fn handle_metadata(
         Some(t) => t,
         None => ReadStatEndian::None,
     };
-    let cols: Vec<&mut dyn Any> = Vec::with_capacity(vc as usize);
+    d.cols = Vec::with_capacity(vc as usize);
 
     debug!("row_count is {}", rc);
     debug!("var_count is {}", vc);
@@ -394,8 +390,12 @@ pub extern "C" fn handle_value(
             }
         },
         readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
+            // Format as string to truncate float to only contain 14 decimal digits
+            // Parse back into float so that the trailing zeroes are trimmed when serializing
+            // TODO: Is there an alternative that does not require conversion from and to a float?
             // get value
             let value = unsafe { readstat_sys::readstat_float_value(value) };
+            let value = format!("{1:.0$}", DIGITS, value).parse::<f32>().unwrap();
             // debug
             debug!("value is {:#?}", value);
             // append to builder
@@ -407,6 +407,7 @@ pub extern "C" fn handle_value(
         },
         readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
             let value = unsafe { readstat_sys::readstat_double_value(value) };
+            let value = format!("{1:.0$}", DIGITS, value).parse::<f64>().unwrap();
             // debug
             debug!("value is {:#?}", value);
             // append to builder
@@ -470,7 +471,7 @@ pub extern "C" fn handle_value(
     };
     */
 
-    // if last variable for a row, push into rows within ReadStatData struct
+    // if last variable for a row, check to see if data should be finalized and written
     if var_index == d.var_count - 1 {
 
         match d.reader {
@@ -479,95 +480,17 @@ pub extern "C" fn handle_value(
                 if (((obs_index + 1) % ROWS as i32 == 0) && (obs_index != 0))
                     || obs_index == (d.row_count - 1) =>
             {
-                // create record batch
-
-                // first, create a vector of ArrayRefs to Arrays
-
-                /*
-                let array_refs = d
-                    .cols
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &v)|{
-                        let v = d.get_readstatvarmeta_from_index(i as i32);
-
-                        let mut builder = match &v.var_type {
-                            ReadStatVarType::String
-                            | ReadStatVarType::StringRef
-                            | ReadStatVarType::Unknown => StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-                            ReadStatVarType::Int8 => Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-                            ReadStatVarType::Int16 => Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-                            ReadStatVarType::Int32 => Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-                            ReadStatVarType::Float => Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-                            ReadStatVarType::Double => Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-                        };
-                        
-                    })
-                    .collect();
-                */
-
-                // let fields = d.row_schema.fields();
-
-                // let var_types = d.get_var_types();
-
                 let arrays: Vec<ArrayRef> = d
                     .cols
                     .iter_mut()
                     .map(|builder| builder.finish())
                     .collect();
-                /*
-                let arrays: Vec<ArrayRef> = d
-                    .cols
-                    .iter_mut()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        let array: ArrayRef = match var_types[i] {
-                            ReadStatVarType::String
-                            | ReadStatVarType::StringRef
-                            | ReadStatVarType::Unknown => {
-                                Arc::new(c.as_any_mut().downcast_mut::<StringBuilder>().unwrap().finish())
-                            },
-                            ReadStatVarType::Int8 => {
-                                Arc::new(c.downcast_mut::<Int8Builder>().unwrap().finish())
-                            }
-                            ReadStatVarType::Int16 => {
-                                Arc::new(c.downcast_mut::<Int16Builder>().unwrap().finish())
-                            }
-                            ReadStatVarType::Int32 => {
-                                Arc::new(c.downcast_mut::<Int32Builder>().unwrap().finish())
-                            }
-                            ReadStatVarType::Float => {
-                                Arc::new(c.downcast_mut::<Float32Builder>().unwrap().finish())
-                            }
-                            ReadStatVarType::Double => {
-                                Arc::new(c.downcast_mut::<Float64Builder>().unwrap().finish())
-                            }
-                        };
-                        array
-                    })
-                    .collect();
-                    */
 
                 d.batch = RecordBatch::try_new(
                     Arc::new(d.schema.clone()),
                     arrays
                 ).unwrap();
-                /*
-                                        let result = match v.var_type {
-                                            ReadStatVar::ReadStat_i8(i)
-                                            | ReadStatVar::ReadStat_i16(i) => { array::Int16Array::into(i) },
-                                            ReadStatVar::ReadStat_i32(i) => { array::Int32Array::into(i) },
-                                            ReadStatVar::ReadStat_f32(f) => { array::Float32Array::into(f) },
-                                            ReadStatVar::ReadStat_f64(f) => { array::Float64Array::into(f) },
-                                            ReadStatVar::ReadStat_String(s) => { array::StringBuilder::into(s) },
-                                            //ReadStatVar::ReadStat_Date(d) => { arrow::array::Date32Builder::into(d) },
-                                            //ReadStatVar::ReadStat_DateTime(d) => { arrow::array::Date::into(d) },
-                                            //ReadStatVar::ReadStat_Time(t) => { arrow::array::Time32SecondBuilder::into(t) },
-                                        };
-                            }.collect();
 
-                            RecordBatch::try_new(Arc::new(d.row_schema), )
-                */
                 match d.write() {
                     Ok(()) => (),
                     // Err(e) => d.errors.push(format!("{:#?}", e)),
@@ -579,8 +502,7 @@ pub extern "C" fn handle_value(
                     // For now just swallow any errors when writing
                     Err(_) => (),
                 };
-                d.rows.clear();
-            }
+            },
             Reader::mem if obs_index == (d.row_count - 1) => {
                 match d.write() {
                     Ok(()) => (),

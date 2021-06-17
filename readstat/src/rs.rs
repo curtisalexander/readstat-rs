@@ -11,7 +11,6 @@ use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
 use serde::{Serialize, Serializer};
-use std::any::Any;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
