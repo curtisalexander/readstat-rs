@@ -266,7 +266,7 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
     }
 }
 
-#[derive(Debug, FromPrimitive, Serialize, Clone, Copy)]
+#[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatVarType {
     String = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING as isize,
     Int8 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 as isize,
@@ -292,7 +292,7 @@ pub enum ReadStatEndian {
     Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
 }
 
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatVarTypeClass {
     String = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_STRING as isize,
     Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
@@ -324,6 +324,9 @@ pub struct ReadStatData {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
+    pub var_format_classes: Vec<Option<ReadStatFormatClass>>,
+    // pub var_types: Vec<ReadStatVarType>,
+    // pub var_type_classes: Vec<ReadStatVarTypeClass>,
     #[serde(skip)]
     pub cols: Vec<Box<dyn ArrayBuilder>>,
     pub row: Vec<ReadStatVar>,
@@ -358,6 +361,9 @@ impl ReadStatData {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
+            var_format_classes: Vec::new(),
+            // var_types: Vec::new(),
+            // var_type_classes: Vec::new(),
             cols: Vec::new(),
             row: Vec::new(),
             rows: Vec::new(),
@@ -486,21 +492,48 @@ impl ReadStatData {
 
         Ok(error as u32)
     }
+    pub fn set_reader(self, reader: Reader) -> Self {
+        Self { reader, ..self }
+    }
 
-    pub fn get_var_types(&self) -> Vec<ReadStatVarType> {
+    /*
+    pub fn set_var_types(self) -> Self {
         let var_types = self
             .vars
             .iter()
             .map(|(_, q)| {
-                q.var_type.clone()
+                q.var_type
             })
             .collect();
 
-        var_types
+        Self { var_types, ..self }
     }
+    */
 
-    pub fn set_reader(self, reader: Reader) -> Self {
-        Self { reader, ..self }
+    /*
+    pub fn set_var_type_classes(self) -> Self {
+        let var_type_classes = self
+            .vars
+            .iter()
+            .map(|(_, q)| {
+                q.var_type_class
+            })
+            .collect();
+
+        Self { var_type_classes, ..self }
+    }
+    */
+
+    pub fn set_var_format_classes(self) -> Self {
+        let var_format_classes = self
+            .vars
+            .iter()
+            .map(|(_, q)| {
+                q.var_format_class
+            })
+            .collect();
+
+        Self { var_format_classes, ..self }
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
