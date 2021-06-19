@@ -9,13 +9,14 @@ repository = "https://github.com/curtisalexander/readstat-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-arrow = "4"
+arrow = "4.2"
 csv = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 colored = "2.0"
 env_logger = "0.8"
 indicatif = "0.16"
 lazy_static = "1.4"
+lexical = "5.2"
 log = "0.4"
 num-derive = "0.3"
 num-format = "0.4"

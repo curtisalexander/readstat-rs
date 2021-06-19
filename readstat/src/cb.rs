@@ -11,12 +11,12 @@ use arrow::array::{
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
+use lexical::{to_string, parse};
 use log::debug;
 use num_traits::FromPrimitive;
 use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
-use std::any::Any;
 use std::sync::Arc;
 
 use crate::formats;
@@ -202,7 +202,6 @@ pub extern "C" fn handle_variable(
         ),
     );
 
-    // debug!("d struct is {:#?}", d);
 
     // Build up Schema
     // TODO - need to handle Dates, Times, and Datetimes
@@ -240,22 +239,12 @@ pub extern "C" fn handle_variable(
         ReadStatVarType::Double => Box::new(Float64Builder::new(std::cmp::min(ROWS, d.row_count as usize))),
     };
 
+    // TODO - implement Debug for array
+    // debug!("array is {:#?}", array);
+    
     d.cols.push(array);
 
-    /*
-    let array = match &var_type {
-        ReadStatVarType::String
-        | ReadStatVarType::StringRef
-        | ReadStatVarType::Unknown => StringBuilder::new(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Int8 => Int8Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Int16 => Int16Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Int32 => Int32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Float => Float32Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-        ReadStatVarType::Double => Float64Array::builder(std::cmp::min(ROWS, d.row_count as usize)).as_any_mut(),
-    };
-    */
-
-    // debug!("array is {:#?}", array);
+    // debug!("d struct is {:#?}", d);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -275,61 +264,12 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    // let var_type = d.get_var_types();
-
-    // if first row and first variable, allocate cols
-    /*
-    if obs_index == 0 && var_index == 0 {
-        // Vec containing Arrow arrays, needs capacity = number of variables
-        // d.cols = Vec::with_capacity(d.var_count as usize);
-        // Vec containing a single row, needs capacity = number of variables
-        d.row = Vec::with_capacity(d.var_count as usize);
-        // Vec containing all rows, needs capacity = number of rows
-        d.rows = match d.reader {
-            Reader::stream => Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize)),
-            Reader::mem => Vec::with_capacity(d.row_count as usize),
-        }
-    }
-    */
-
     debug!("row_count is {}", d.row_count);
     debug!("var_count is {}", d.var_count);
     debug!("obs_index is {}", obs_index);
     debug!("var_index is {}", var_index);
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
-
-    // get value and push into row
-    /*
-    let value: ReadStatVar = match value_type {
-        readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
-        | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
-            ReadStatVar::ReadStat_String(unsafe {
-                CStr::from_ptr(readstat_sys::readstat_string_value(value))
-                    .to_str()
-                    .unwrap()
-                    .to_owned()
-            })
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
-            ReadStatVar::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
-            ReadStatVar::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
-            ReadStatVar::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
-            ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-            ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
-        }
-        // exhaustive
-        _ => unreachable!(),
-    };
-    */
 
     // get value and push into cols
     match value_type {
@@ -346,8 +286,6 @@ pub extern "C" fn handle_value(
             debug!("value is {:#?}", &value);
             // append to builder
             if is_missing == 0 {
-                // let b = d.cols[var_index as usize].downcast_mut::<StringBuilder>();
-                // debug!("b is {:#?}", &b);
                 d.cols[var_index as usize].as_any_mut().downcast_mut::<StringBuilder>().unwrap().append_value(value.clone()).unwrap();
             } else {
                 d.cols[var_index as usize].as_any_mut().downcast_mut::<StringBuilder>().unwrap().append_null().unwrap();
@@ -392,10 +330,9 @@ pub extern "C" fn handle_value(
         readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
             // Format as string to truncate float to only contain 14 decimal digits
             // Parse back into float so that the trailing zeroes are trimmed when serializing
-            // TODO: Is there an alternative that does not require conversion from and to a float?
-            // get value
+            // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
             let value = unsafe { readstat_sys::readstat_float_value(value) };
-            let value = format!("{1:.0$}", DIGITS, value).parse::<f32>().unwrap();
+            let value = lexical::parse::<f32, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value))).unwrap();
             // debug
             debug!("value is {:#?}", value);
             // append to builder
@@ -407,7 +344,7 @@ pub extern "C" fn handle_value(
         },
         readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
             let value = unsafe { readstat_sys::readstat_double_value(value) };
-            let value = format!("{1:.0$}", DIGITS, value).parse::<f64>().unwrap();
+            let value = lexical::parse::<f64, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value))).unwrap();
             // debug
             debug!("value is {:#?}", value);
             // append to builder
