@@ -242,3 +242,4 @@ The following have been **_incredibly_** helpful while developing!
 - Stack Overflow answers by [Jake Goulding](https://stackoverflow.com/users/155423/shepmaster)
 - ReadStat pull request to add [MSVC/Windows support](https://github.com/WizardMac/ReadStat/pull/214)
 - [jamovi-readstat](https://github.com/jamovi/jamovi-readstat) [appveyor.yml](https://github.com/jamovi/jamovi-readstat/blob/master/appveyor.yml) file to build ReadStat on Windows
+- [Arrow documentation for utilizing ArrayBuilders](https://docs.rs/arrow/4.3.0/arrow/array/trait.ArrayBuilder.html#example)
