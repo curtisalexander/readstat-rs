@@ -1,6 +1,7 @@
 use arrow::array::ArrayBuilder;
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
+use arrow::error::ArrowError;
 use arrow::csv;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
@@ -639,8 +640,9 @@ impl ReadStatData {
 
     pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(p) = &self.out_path {
-            let f = OpenOptions::new().write(true).append(true).open(p)?;
+            let f = OpenOptions::new().write(true).create(true).append(true).open(p)?;
 
+            println!("batch is: {}", format!("{:#?}", &self.batch));
             //let file = std::fs::File::create(p).unwrap();
             let mut wtr = csv::WriterBuilder::new().build(f);
             /*
@@ -689,7 +691,10 @@ impl ReadStatData {
     }
 
     pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut wtr = csv::WriterBuilder::new().build(stdout());
+        // let mut wtr = csv::WriterBuilder::new().build(stdout());
+        let stdout = stdout();
+        let handle = stdout.lock();
+        let mut wtr = csv::Writer::new(handle);
             //.quote_style(csv::QuoteStyle::Always)
             //.from_writer(stdout());
 
@@ -700,7 +705,8 @@ impl ReadStatData {
         }
         wtr.flush()?;
         */
-        wtr.write(&self.batch).unwrap();
+        // println!("batch is: {}", format!("{:#?}", &self.batch));
+        wtr.write(&self.batch).unwrap_or(());
         Ok(())
     }
 

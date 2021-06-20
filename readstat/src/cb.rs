@@ -20,6 +20,7 @@ use crate::Reader;
 
 const DIGITS: usize = 14;
 const ROWS: usize = 100000;
+const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
 const SEC_PER_HOUR: i64 = 86400;
 
@@ -293,7 +294,8 @@ pub extern "C" fn handle_variable(
 }
 
 pub extern "C" fn handle_value(
-    #[allow(unused_variables)] obs_index: c_int,
+    obs_index: c_int,
+    // #[allow(unused_variables)] obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     value: readstat_sys::readstat_value_t,
     ctx: *mut c_void,
@@ -460,7 +462,7 @@ pub extern "C" fn handle_value(
                             .naive_utc()
                             .date()
                         */
-                        value as i32
+                        (value as i32).checked_sub(DAY_SHIFT).unwrap()
                     )
                 },
                 Some(ReadStatFormatClass::DateTime) => {
@@ -529,7 +531,7 @@ pub extern "C" fn handle_value(
                 }
             } else {
                 match value {
-                    ReadStatVar::ReadStat_Date(v) => {
+                    ReadStatVar::ReadStat_Date(_) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<Date32Builder>()
@@ -537,7 +539,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     },
-                    ReadStatVar::ReadStat_DateTime(v) => {
+                    ReadStatVar::ReadStat_DateTime(_) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<TimestampSecondBuilder>()
@@ -545,7 +547,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     },
-                    ReadStatVar::ReadStat_Time(v) => {
+                    ReadStatVar::ReadStat_Time(_) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<Time32SecondBuilder>()
@@ -554,7 +556,7 @@ pub extern "C" fn handle_value(
                             .unwrap();
 
                     },
-                    ReadStatVar::ReadStat_f64(v) => {
+                    ReadStatVar::ReadStat_f64(_) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<Float64Builder>()
@@ -620,7 +622,7 @@ pub extern "C" fn handle_value(
     */
 
     // if last variable for a row, check to see if data should be finalized and written
-    if var_index == d.var_count - 1 {
+    if var_index == (d.var_count - 1) {
         match d.reader {
             // if rows = buffer limit and last variable then go ahead and write
             Reader::stream
@@ -632,6 +634,8 @@ pub extern "C" fn handle_value(
 
                 d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
 
+                d.write().unwrap_or(());
+                /*
                 match d.write() {
                     Ok(()) => (),
                     // Err(e) => d.errors.push(format!("{:#?}", e)),
@@ -643,6 +647,7 @@ pub extern "C" fn handle_value(
                     // For now just swallow any errors when writing
                     Err(_) => (),
                 };
+                */
             }
             Reader::mem if obs_index == (d.row_count - 1) => {
                 match d.write() {
