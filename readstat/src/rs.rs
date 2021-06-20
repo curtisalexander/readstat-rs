@@ -214,7 +214,7 @@ pub enum ReadStatVar {
     ReadStat_f32(f32),
     ReadStat_f64(f64),
     ReadStat_Missing(()),
-    ReadStat_Date(i64),
+    ReadStat_Date(i32),
     ReadStat_DateTime(i64),
     ReadStat_Time(i32),
 }

@@ -1,4 +1,4 @@
-use arrow::array::{ArrayBuilder, ArrayRef, Date64Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder};
+use arrow::array::{ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
@@ -198,7 +198,7 @@ pub extern "C" fn handle_variable(
     );
 
     // create var_types if last variable to process
-    if index == d.var_count {
+    if index == d.var_count - 1 {
         d.set_var_format_classes();
     }
 
@@ -211,7 +211,12 @@ pub extern "C" fn handle_variable(
         ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
         ReadStatVarType::Int32 => DataType::Int32,
         ReadStatVarType::Float => DataType::Float32,
-        ReadStatVarType::Double => DataType::Float64,
+        ReadStatVarType::Double => match var_format_class {
+            Some(ReadStatFormatClass::Date) => DataType::Date32,
+            Some(ReadStatFormatClass::DateTime) => DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None),
+            Some(ReadStatFormatClass::Time) => DataType::Time32(arrow::datatypes::TimeUnit::Second),
+            None => DataType::Float64
+        }
     };
 
     d.schema = Schema::try_merge(vec![
@@ -247,7 +252,7 @@ pub extern "C" fn handle_variable(
         ReadStatVarType::Double => {
             match var_format_class {
                 Some(ReadStatFormatClass::Date) => {
-                    Box::new(Date64Builder::new(match d.reader {
+                    Box::new(Date32Builder::new(match d.reader {
                         Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
                         Reader::mem => d.row_count as usize
                         }
@@ -455,7 +460,7 @@ pub extern "C" fn handle_value(
                             .naive_utc()
                             .date()
                         */
-                        (value as i64 * SEC_PER_HOUR).checked_sub(SEC_SHIFT).unwrap()
+                        value as i32
                     )
                 },
                 Some(ReadStatFormatClass::DateTime) => {
@@ -489,7 +494,7 @@ pub extern "C" fn handle_value(
                     ReadStatVar::ReadStat_Date(v) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
-                            .downcast_mut::<Date64Builder>()
+                            .downcast_mut::<Date32Builder>()
                             .unwrap()
                             .append_value(v)
                             .unwrap();
@@ -527,7 +532,7 @@ pub extern "C" fn handle_value(
                     ReadStatVar::ReadStat_Date(v) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
-                            .downcast_mut::<Date64Builder>()
+                            .downcast_mut::<Date32Builder>()
                             .unwrap()
                             .append_null()
                             .unwrap();
