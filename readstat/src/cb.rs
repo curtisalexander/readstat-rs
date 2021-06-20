@@ -441,8 +441,11 @@ pub extern "C" fn handle_value(
             debug!("value is {:#?}", value);
 
             // is float actually a date?
-            let fc = d.var_format_classes[var_index as usize];
-            let value = match fc {
+            let value = if d.var_format_classes.len() == 0 {
+                ReadStatVar::ReadStat_f64(value)
+            } else {
+                let fc = d.var_format_classes[var_index as usize];
+                match fc {
                 Some(ReadStatFormatClass::Date) => {
                     ReadStatVar::ReadStat_Date(
                         /*
@@ -478,7 +481,7 @@ pub extern "C" fn handle_value(
                     )
                 },
                 None => ReadStatVar::ReadStat_f64(value)
-            };
+            }};
 
             // append to builder
             if is_missing == 0 {
