@@ -1,13 +1,11 @@
-use arrow::array::{
-    ArrayBuilder, ArrayRef, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder,
-};
+use arrow::array::{ArrayBuilder, ArrayRef, Date64Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
+use colored::control::unset_override;
 use lexical;
 use log::debug;
-use num_traits::FromPrimitive;
+use num_traits::{CheckedSub, FromPrimitive};
 use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
@@ -249,13 +247,25 @@ pub extern "C" fn handle_variable(
         ReadStatVarType::Double => {
             match var_format_class {
                 Some(ReadStatFormatClass::Date) => {
-                    unimplemented!()
+                    Box::new(Date64Builder::new(match d.reader {
+                        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
+                        Reader::mem => d.row_count as usize
+                        }
+                    ))
                 },
                 Some(ReadStatFormatClass::DateTime) => {
-                    unimplemented!()
+                    Box::new(TimestampSecondBuilder::new(match d.reader {
+                        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
+                        Reader::mem => d.row_count as usize
+                        }
+                    ))
                 },
                 Some(ReadStatFormatClass::Time) => {
-                    unimplemented!()
+                    Box::new(Time32SecondBuilder::new(match d.reader {
+                        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
+                        Reader::mem => d.row_count as usize
+                        }
+                    ))
                 },
                 None => {
                     Box::new(Float64Builder::new(match d.reader {
@@ -435,47 +445,118 @@ pub extern "C" fn handle_value(
             let value = match fc {
                 Some(ReadStatFormatClass::Date) => {
                     ReadStatVar::ReadStat_Date(
+                        /*
                         Utc.timestamp(value as i64 * SEC_PER_HOUR, 0)
                             .checked_sub_signed(Duration::seconds(SEC_SHIFT))
                             .unwrap()
                             .naive_utc()
-                            .date(),
+                            .date()
+                        */
+                        (value as i64 * SEC_PER_HOUR).checked_sub(SEC_SHIFT).unwrap()
                     )
                 },
                 Some(ReadStatFormatClass::DateTime) => {
                     ReadStatVar::ReadStat_DateTime(
+                    /*
                         Utc.timestamp(value as i64, 0)
                             .checked_sub_signed(Duration::seconds(SEC_SHIFT))
                             .unwrap(),
+                    */
+                        (value as i64).checked_sub(SEC_SHIFT).unwrap()
                     )
                 },
                 Some(ReadStatFormatClass::Time) => {
                     ReadStatVar::ReadStat_Time(
+                        /*
                         Utc.timestamp(value as i64, 0)
                             .checked_sub_signed(Duration::seconds(SEC_SHIFT))
                             .unwrap()
                             .naive_utc()
                             .time(),
+                        */
+                        value as i32
                     )
                 },
-                None => value
+                None => ReadStatVar::ReadStat_f64(value)
             };
 
             // append to builder
             if is_missing == 0 {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Float64Builder>()
-                    .unwrap()
-                    .append_value(value)
-                    .unwrap();
+                match value {
+                    ReadStatVar::ReadStat_Date(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Date64Builder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    },
+                    ReadStatVar::ReadStat_DateTime(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampSecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    },
+                    ReadStatVar::ReadStat_Time(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Time32SecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+
+                    },
+                    ReadStatVar::ReadStat_f64(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Float64Builder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    },
+                    // exhaustive
+                    _ => unreachable!()
+                }
             } else {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Float64Builder>()
-                    .unwrap()
-                    .append_null()
-                    .unwrap();
+                match value {
+                    ReadStatVar::ReadStat_Date(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Date64Builder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    },
+                    ReadStatVar::ReadStat_DateTime(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampSecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    },
+                    ReadStatVar::ReadStat_Time(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Time32SecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+
+                    },
+                    ReadStatVar::ReadStat_f64(v) => {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Float64Builder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    },
+                    // exhaustive
+                    _ => unreachable!()
+                }
             }
         }
         // exhaustive

@@ -214,11 +214,12 @@ pub enum ReadStatVar {
     ReadStat_f32(f32),
     ReadStat_f64(f64),
     ReadStat_Missing(()),
-    ReadStat_Date(NaiveDate),
-    ReadStat_DateTime(DateTime<Utc>),
-    ReadStat_Time(NaiveTime),
+    ReadStat_Date(i64),
+    ReadStat_DateTime(i64),
+    ReadStat_Time(i32),
 }
 
+/*
 impl Serialize for ReadStatVar {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
@@ -227,7 +228,9 @@ impl Serialize for ReadStatVar {
         ReadStatVarTrunc::from(self).serialize(s)
     }
 }
+*/
 
+/*
 #[derive(Debug, Clone, Serialize)]
 pub enum ReadStatVarTrunc {
     ReadStat_String(String),
@@ -241,7 +244,9 @@ pub enum ReadStatVarTrunc {
     ReadStat_DateTime(DateTime<Utc>),
     ReadStat_Time(NaiveTime),
 }
+*/
 
+/*
 impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
     fn from(other: &'a ReadStatVar) -> Self {
         match other {
@@ -265,6 +270,7 @@ impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
         }
     }
 }
+*/
 
 #[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatVarType {
@@ -298,7 +304,7 @@ pub enum ReadStatVarTypeClass {
     Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub enum ReadStatFormatClass {
     Date,
     DateTime,
@@ -306,7 +312,7 @@ pub enum ReadStatFormatClass {
 }
 
 // #[derive(Debug, Serialize)]
-#[derive(Serialize)]
+// #[derive(Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
     pub cstring_path: CString,
@@ -327,18 +333,18 @@ pub struct ReadStatData {
     pub var_format_classes: Vec<Option<ReadStatFormatClass>>,
     // pub var_types: Vec<ReadStatVarType>,
     // pub var_type_classes: Vec<ReadStatVarTypeClass>,
-    #[serde(skip)]
+    // #[serde(skip)]
     pub cols: Vec<Box<dyn ArrayBuilder>>,
     pub row: Vec<ReadStatVar>,
     pub rows: Vec<Vec<ReadStatVar>>,
-    #[serde(skip)]
+    // #[serde(skip)]
     pub schema: datatypes::Schema,
-    #[serde(skip)]
+    // #[serde(skip)]
     pub batch: record_batch::RecordBatch,
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
-    #[serde(skip)]
+    // #[serde(skip)]
     pub pb: Option<ProgressBar>,
 }
 
@@ -524,16 +530,20 @@ impl ReadStatData {
     }
     */
 
-    pub fn set_var_format_classes(self) -> Self {
+    pub fn set_var_format_classes(&mut self) -> () {
         let var_format_classes = self
             .vars
             .iter()
             .map(|(_, q)| {
-                q.var_format_class
+                match q.var_format_class {
+                    None => None,
+                    Some(fc) => Some(fc.clone())
+                }
             })
             .collect();
 
-        Self { var_format_classes, ..self }
+        self.var_format_classes = var_format_classes;
+        ()
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {

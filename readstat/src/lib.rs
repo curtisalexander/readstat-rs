@@ -16,7 +16,7 @@ mod formats;
 mod rs;
 
 pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarTrunc,
+    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, /*ReadStatVarTrunc,*/
     ReadStatVarType,
 };
 
