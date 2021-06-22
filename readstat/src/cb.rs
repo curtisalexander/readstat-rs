@@ -650,6 +650,8 @@ pub extern "C" fn handle_value(
                 */
             }
             Reader::mem if obs_index == (d.row_count - 1) => {
+                d.write().unwrap_or(());
+                /*
                 match d.write() {
                     Ok(()) => (),
                     // Err(e) => d.errors.push(format!("{:#?}", e)),
@@ -661,6 +663,7 @@ pub extern "C" fn handle_value(
                     // For now just swallow any errors when writing
                     Err(_) => (),
                 };
+                */
             }
             _ => (),
         }

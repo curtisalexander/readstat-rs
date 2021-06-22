@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
 use std::fs::OpenOptions;
-use std::io::stdout;
+use std::io::{self, stdout, Write};
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -642,7 +642,7 @@ impl ReadStatData {
         if let Some(p) = &self.out_path {
             let f = OpenOptions::new().write(true).create(true).append(true).open(p)?;
 
-            println!("batch is: {}", format!("{:#?}", &self.batch));
+            //println!("batch is: {}", format!("{:#?}", &self.batch));
             //let file = std::fs::File::create(p).unwrap();
             let mut wtr = csv::WriterBuilder::new().build(f);
             /*
@@ -691,10 +691,10 @@ impl ReadStatData {
     }
 
     pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        // let mut wtr = csv::WriterBuilder::new().build(stdout());
-        let stdout = stdout();
-        let handle = stdout.lock();
-        let mut wtr = csv::Writer::new(handle);
+        //let mut wtr = csv::WriterBuilder::new().build(stdout());
+        //let stdout = stdout();
+        //let mut handle = stdout.lock();
+        let mut wtr = csv::WriterBuilder::new().build(stdout());
             //.quote_style(csv::QuoteStyle::Always)
             //.from_writer(stdout());
 
@@ -706,7 +706,18 @@ impl ReadStatData {
         wtr.flush()?;
         */
         // println!("batch is: {}", format!("{:#?}", &self.batch));
+        //println!("batch num rows is: {}", self.batch.num_rows());
+        
+        // Finish progress bar before writing to std out 
+        /*
+        if let Some(pb) = &self.pb {
+            pb.finish_at_current_pos()
+        };
+        */
         wtr.write(&self.batch).unwrap_or(());
+
+        //handle = stdout.lock();
+        //stdout().write_all(b"").unwrap_or(());
         Ok(())
     }
 
