@@ -691,6 +691,9 @@ impl ReadStatData {
     }
 
     pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear()
+        }
         //let mut wtr = csv::WriterBuilder::new().build(stdout());
         //let stdout = stdout();
         //let mut handle = stdout.lock();
