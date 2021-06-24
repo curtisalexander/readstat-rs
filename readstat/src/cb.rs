@@ -5,7 +5,6 @@ use arrow::array::{
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
-use colored::control::unset_override;
 use lexical;
 use log::debug;
 use num_traits::{CheckedSub, FromPrimitive};
