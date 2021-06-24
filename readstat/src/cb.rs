@@ -394,6 +394,9 @@ pub extern "C" fn handle_value(
             }
         }
         readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
+            // Format as string to truncate float to only contain 14 decimal digits
+            // Parse back into float so that the trailing zeroes are trimmed when serializing
+            // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
             let value = unsafe { readstat_sys::readstat_double_value(value) };
             let value =
                 lexical::parse::<f64, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
