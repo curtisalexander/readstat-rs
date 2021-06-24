@@ -1,4 +1,7 @@
-use arrow::array::{ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder};
+use arrow::array::{
+    ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
+    Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
@@ -19,7 +22,8 @@ use crate::rs::{
 use crate::Reader;
 
 const DIGITS: usize = 14;
-const ROWS: usize = 100000;
+const ROWS: usize = 3;
+//const ROWS: usize = 100000;
 const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
 const SEC_PER_HOUR: i64 = 86400;
@@ -198,13 +202,13 @@ pub extern "C" fn handle_variable(
         ),
     );
 
-    // create var_types if last variable to process
+    // create var_types and var_format_classes if last variable to process
     if index == d.var_count - 1 {
+        d.set_var_types();
         d.set_var_format_classes();
     }
 
     // build up Schema
-    // TODO - need to handle Dates, Times, and Datetimes
     let var_dt = match &var_type {
         ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
             DataType::Utf8
@@ -214,10 +218,12 @@ pub extern "C" fn handle_variable(
         ReadStatVarType::Float => DataType::Float32,
         ReadStatVarType::Double => match var_format_class {
             Some(ReadStatFormatClass::Date) => DataType::Date32,
-            Some(ReadStatFormatClass::DateTime) => DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None),
+            Some(ReadStatFormatClass::DateTime) => {
+                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+            }
             Some(ReadStatFormatClass::Time) => DataType::Time32(arrow::datatypes::TimeUnit::Second),
-            None => DataType::Float64
-        }
+            None => DataType::Float64,
+        },
     };
 
     d.schema = Schema::try_merge(vec![
@@ -225,68 +231,6 @@ pub extern "C" fn handle_variable(
         Schema::new(vec![Field::new(&var_name, var_dt, true)]),
     ])
     .unwrap();
-
-    // Allocate space for ArrayBuilder
-    let array: Box<dyn ArrayBuilder> = match var_type {
-        ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-            Box::new(StringBuilder::new(match d.reader {
-                Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-                Reader::mem => d.row_count as usize,
-            }))
-        }
-        ReadStatVarType::Int8 => Box::new(Int8Builder::new(match d.reader {
-            Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-            Reader::mem => d.row_count as usize,
-        })),
-        ReadStatVarType::Int16 => Box::new(Int16Builder::new(match d.reader {
-            Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-            Reader::mem => d.row_count as usize,
-        })),
-        ReadStatVarType::Int32 => Box::new(Int32Builder::new(match d.reader {
-            Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-            Reader::mem => d.row_count as usize,
-        })),
-        ReadStatVarType::Float => Box::new(Float32Builder::new(match d.reader {
-            Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-            Reader::mem => d.row_count as usize,
-        })),
-        ReadStatVarType::Double => {
-            match var_format_class {
-                Some(ReadStatFormatClass::Date) => {
-                    Box::new(Date32Builder::new(match d.reader {
-                        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-                        Reader::mem => d.row_count as usize
-                        }
-                    ))
-                },
-                Some(ReadStatFormatClass::DateTime) => {
-                    Box::new(TimestampSecondBuilder::new(match d.reader {
-                        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-                        Reader::mem => d.row_count as usize
-                        }
-                    ))
-                },
-                Some(ReadStatFormatClass::Time) => {
-                    Box::new(Time32SecondBuilder::new(match d.reader {
-                        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-                        Reader::mem => d.row_count as usize
-                        }
-                    ))
-                },
-                None => {
-                    Box::new(Float64Builder::new(match d.reader {
-                        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
-                        Reader::mem => d.row_count as usize,
-                    }))
-                }
-            }
-        }
-    };
-
-    // TODO - implement Debug for array
-    // debug!("array is {:#?}", array);
-
-    d.cols.push(array);
 
     // debug!("d struct is {:#?}", d);
 
@@ -315,6 +259,17 @@ pub extern "C" fn handle_value(
     debug!("var_index is {}", var_index);
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
+
+    // rows determined based on type of Reader
+    let rows = match d.reader {
+        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
+        Reader::mem => d.row_count as usize,
+    };
+
+    // allocate columns
+    if obs_index == 0 && var_index == 0 {
+        d.allocate_cols(rows);
+    };
 
     // get value and push into cols
     match value_type {
@@ -453,42 +408,43 @@ pub extern "C" fn handle_value(
             } else {
                 let fc = d.var_format_classes[var_index as usize];
                 match fc {
-                Some(ReadStatFormatClass::Date) => {
-                    ReadStatVar::ReadStat_Date(
-                        /*
-                        Utc.timestamp(value as i64 * SEC_PER_HOUR, 0)
-                            .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                            .unwrap()
-                            .naive_utc()
-                            .date()
-                        */
-                        (value as i32).checked_sub(DAY_SHIFT).unwrap()
-                    )
-                },
-                Some(ReadStatFormatClass::DateTime) => {
-                    ReadStatVar::ReadStat_DateTime(
-                    /*
-                        Utc.timestamp(value as i64, 0)
-                            .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                            .unwrap(),
-                    */
-                        (value as i64).checked_sub(SEC_SHIFT).unwrap()
-                    )
-                },
-                Some(ReadStatFormatClass::Time) => {
-                    ReadStatVar::ReadStat_Time(
-                        /*
-                        Utc.timestamp(value as i64, 0)
-                            .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                            .unwrap()
-                            .naive_utc()
-                            .time(),
-                        */
-                        value as i32
-                    )
-                },
-                None => ReadStatVar::ReadStat_f64(value)
-            }};
+                    Some(ReadStatFormatClass::Date) => {
+                        ReadStatVar::ReadStat_Date(
+                            /*
+                            Utc.timestamp(value as i64 * SEC_PER_HOUR, 0)
+                                .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                                .unwrap()
+                                .naive_utc()
+                                .date()
+                            */
+                            (value as i32).checked_sub(DAY_SHIFT).unwrap(),
+                        )
+                    }
+                    Some(ReadStatFormatClass::DateTime) => {
+                        ReadStatVar::ReadStat_DateTime(
+                            /*
+                                Utc.timestamp(value as i64, 0)
+                                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                                    .unwrap(),
+                            */
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                        )
+                    }
+                    Some(ReadStatFormatClass::Time) => {
+                        ReadStatVar::ReadStat_Time(
+                            /*
+                            Utc.timestamp(value as i64, 0)
+                                .checked_sub_signed(Duration::seconds(SEC_SHIFT))
+                                .unwrap()
+                                .naive_utc()
+                                .time(),
+                            */
+                            value as i32,
+                        )
+                    }
+                    None => ReadStatVar::ReadStat_f64(value),
+                }
+            };
 
             // append to builder
             if is_missing == 0 {
@@ -500,7 +456,7 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_value(v)
                             .unwrap();
-                    },
+                    }
                     ReadStatVar::ReadStat_DateTime(v) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
@@ -508,7 +464,7 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_value(v)
                             .unwrap();
-                    },
+                    }
                     ReadStatVar::ReadStat_Time(v) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
@@ -516,8 +472,7 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_value(v)
                             .unwrap();
-
-                    },
+                    }
                     ReadStatVar::ReadStat_f64(v) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
@@ -525,9 +480,9 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_value(v)
                             .unwrap();
-                    },
+                    }
                     // exhaustive
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             } else {
                 match value {
@@ -538,7 +493,7 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_null()
                             .unwrap();
-                    },
+                    }
                     ReadStatVar::ReadStat_DateTime(_) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
@@ -546,7 +501,7 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_null()
                             .unwrap();
-                    },
+                    }
                     ReadStatVar::ReadStat_Time(_) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
@@ -554,8 +509,7 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_null()
                             .unwrap();
-
-                    },
+                    }
                     ReadStatVar::ReadStat_f64(_) => {
                         d.cols[var_index as usize]
                             .as_any_mut()
@@ -563,9 +517,9 @@ pub extern "C" fn handle_value(
                             .unwrap()
                             .append_null()
                             .unwrap();
-                    },
+                    }
                     // exhaustive
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
         }
@@ -635,6 +589,9 @@ pub extern "C" fn handle_value(
                 d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
 
                 d.write().unwrap_or(());
+
+                d.cols.clear();
+                d.allocate_cols(rows);
                 /*
                 match d.write() {
                     Ok(()) => (),

@@ -1,4 +1,7 @@
-use arrow::array::ArrayBuilder;
+use arrow::array::{
+    ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
+    Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+};
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
 use arrow::error::ArrowError;
@@ -331,8 +334,8 @@ pub struct ReadStatData {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
+    pub var_types: Vec<ReadStatVarType>,
     pub var_format_classes: Vec<Option<ReadStatFormatClass>>,
-    // pub var_types: Vec<ReadStatVarType>,
     // pub var_type_classes: Vec<ReadStatVarTypeClass>,
     // #[serde(skip)]
     pub cols: Vec<Box<dyn ArrayBuilder>>,
@@ -368,8 +371,8 @@ impl ReadStatData {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
+            var_types: Vec::new(),
             var_format_classes: Vec::new(),
-            // var_types: Vec::new(),
             // var_type_classes: Vec::new(),
             cols: Vec::new(),
             row: Vec::new(),
@@ -381,6 +384,32 @@ impl ReadStatData {
             reader: Reader::stream,
             pb: None,
         }
+    }
+
+    pub fn allocate_cols(&mut self, rows: usize) -> () {
+        for i in 0..self.var_count {
+            // Allocate space for ArrayBuilder
+            let array: Box<dyn ArrayBuilder> = match self.var_types[i as usize] {
+                ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => Box::new(StringBuilder::new(rows)),
+                ReadStatVarType::Int8 => Box::new(Int8Builder::new(rows)),
+                ReadStatVarType::Int16 => Box::new(Int16Builder::new(rows)),
+                ReadStatVarType::Int32 => Box::new(Int32Builder::new(rows)),
+                ReadStatVarType::Float => Box::new(Float32Builder::new(rows)),
+                ReadStatVarType::Double => match self.var_format_classes[i as usize] {
+                    Some(ReadStatFormatClass::Date) => Box::new(Date32Builder::new(rows)),
+                    Some(ReadStatFormatClass::DateTime) => {
+                        Box::new(TimestampSecondBuilder::new(rows))
+                    },
+                    Some(ReadStatFormatClass::Time) => {
+                        Box::new(Time32SecondBuilder::new(rows))
+                    },
+                    None => Box::new(Float64Builder::new(rows))
+                },
+            };
+
+            self.cols.push(array);
+        }
+        ()
     }
 
     pub fn get_data(&mut self, row_limit: Option<u32>) -> Result<u32, Box<dyn Error>> {
@@ -503,19 +532,18 @@ impl ReadStatData {
         Self { reader, ..self }
     }
 
-    /*
-    pub fn set_var_types(self) -> Self {
+    pub fn set_var_types(&mut self) -> () {
         let var_types = self
             .vars
             .iter()
             .map(|(_, q)| {
-                q.var_type
+                q.var_type.clone()
             })
             .collect();
 
-        Self { var_types, ..self }
+        self.var_types = var_types;
+        ()
     }
-    */
 
     /*
     pub fn set_var_type_classes(self) -> Self {
@@ -757,9 +785,9 @@ impl ReadStatData {
         println!("{}: {:#?}", "Compression".yellow(), self.compression);
         println!("{}: {:#?}", "Byte order".green(), self.endianness);
         println!("{}:", "Variable names".purple());
-        for (k, v) in self.vars.iter() {
+        for (i, (k, v)) in self.vars.iter().enumerate() {
             println!(
-                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {} }}",
+                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow data type: {} }}",
                 k.var_index.to_formatted_string(&Locale::en),
                 k.var_name.bright_purple(),
                 format!("{:#?}", v.var_type_class).bright_green(),
@@ -775,6 +803,7 @@ impl ReadStatData {
                 })
                 .bright_cyan(),
                 v.var_format.bright_yellow(),
+                self.schema.field(i).data_type().to_string().bright_green()
             );
         }
 
