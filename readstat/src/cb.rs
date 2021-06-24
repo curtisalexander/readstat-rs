@@ -447,46 +447,16 @@ pub extern "C" fn handle_value(
             };
 
             // append to builder
-            if is_missing == 0 {
-                match value {
-                    ReadStatVar::ReadStat_Date(v) => {
+            match value {
+                ReadStatVar::ReadStat_Date(v) => {
+                    if is_missing == 0 {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<Date32Builder>()
                             .unwrap()
                             .append_value(v)
                             .unwrap();
-                    }
-                    ReadStatVar::ReadStat_DateTime(v) => {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampSecondBuilder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    }
-                    ReadStatVar::ReadStat_Time(v) => {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Time32SecondBuilder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    }
-                    ReadStatVar::ReadStat_f64(v) => {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Float64Builder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    }
-                    // exhaustive
-                    _ => unreachable!(),
-                }
-            } else {
-                match value {
-                    ReadStatVar::ReadStat_Date(_) => {
+                    } else {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<Date32Builder>()
@@ -494,7 +464,16 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                    ReadStatVar::ReadStat_DateTime(_) => {
+                }
+                ReadStatVar::ReadStat_DateTime(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampSecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<TimestampSecondBuilder>()
@@ -502,7 +481,16 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                    ReadStatVar::ReadStat_Time(_) => {
+                }
+                ReadStatVar::ReadStat_Time(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Time32SecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<Time32SecondBuilder>()
@@ -510,7 +498,16 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                    ReadStatVar::ReadStat_f64(_) => {
+                }
+                ReadStatVar::ReadStat_f64(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Float64Builder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<Float64Builder>()
@@ -518,14 +515,14 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                    // exhaustive
-                    _ => unreachable!(),
                 }
+                // exhaustive
+                _ => unreachable!(),
             }
         }
         // exhaustive
         _ => unreachable!(),
-    };
+    }
 
     // TODO: check if date/datetime format
     // Rather than have a massive set of string comparisons, may want to convert the original strings to enums and then match on the enums
@@ -590,8 +587,10 @@ pub extern "C" fn handle_value(
 
                 d.write().unwrap_or(());
 
-                d.cols.clear();
-                d.allocate_cols(rows);
+                if obs_index != (d.row_count - 1) {
+                    d.cols.clear();
+                    d.allocate_cols(rows);
+                };
                 /*
                 match d.write() {
                     Ok(()) => (),
