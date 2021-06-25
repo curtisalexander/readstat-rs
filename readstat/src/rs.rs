@@ -5,9 +5,10 @@ use arrow::array::{
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
 use arrow::error::ArrowError;
-use arrow::csv;
+use arrow::csv as csv_arrow;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
+use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use num_derive::FromPrimitive;
@@ -576,7 +577,6 @@ impl ReadStatData {
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
-        /*
         match self {
             Self {
                 out_path: None,
@@ -607,31 +607,10 @@ impl ReadStatData {
                 self.write_data_to_csv()
             }
         }
-        */
-        match self {
-            Self {
-                out_path: None,
-                out_type: OutType::csv,
-                ..
-            } => {
-                self.write_data_to_stdout()
-            }
-            Self {
-                out_path: Some(_),
-                out_type: OutType::csv,
-                ..
-            } => {
-                self.write_data_to_csv()
-            }
-        }
     }
 
     pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        match &self.out_path {
-            None => Err(From::from(
-                "Error writing csv as output path is set to None",
-            )),
-            Some(p) => {
+        if let Some(p) = &self.out_path {
                 // spinner
                 if let Some(pb) = &self.pb {
                     pb.finish_at_current_pos();
@@ -641,58 +620,33 @@ impl ReadStatData {
                 self.pb = Some(ProgressBar::new(self.row_count as u64));
                 if let Some(pb) = &self.pb {
                     pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
-                        .progress_chars("##-"),
+                        ProgressStyle::default_bar()
+                            .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
+                            .progress_chars("##-"),
                     );
                     pb.set_message("Rows processed");
                     pb.enable_steady_tick(120);
                 }
 
-                let file = std::fs::File::create(p).unwrap();
-                let mut wtr = csv::WriterBuilder::new().build(file);
-                    //.quote_style(csv::QuoteStyle::Always)
-                    //.from_path(p)?;
+                let file = std::fs::File::create(p)?;
+                let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
 
                 // write header
-                let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-                wtr.write(&self.batch).unwrap();
-                /*
-                wtr.serialize(vars)?;
+                let vars: Vec<String> = self
+                    .batch
+                    .schema()
+                    .fields()
+                    .iter()
+                    .map(|field| field.name().to_string())
+                    .collect();
+
+                // Alternate way to get variable names
+                // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+
+                wtr.write_record(&vars)?;
                 wtr.flush()?;
-                */
+
                 Ok(())
-            }
-        }
-    }
-
-    pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
-            let f = OpenOptions::new().write(true).create(true).append(true).open(p)?;
-
-            //println!("batch is: {}", format!("{:#?}", &self.batch));
-            //let file = std::fs::File::create(p).unwrap();
-            let mut wtr = csv::WriterBuilder::new().build(f);
-            /*
-            let mut wtr = csv::WriterBuilder::new()
-                .quote_style(csv::QuoteStyle::Always)
-                .from_writer(f);
-            */
-            // write rows
-            /*
-            for r in &self.rows {
-                if let Some(pb) = &self.pb {
-                    pb.inc(1)
-                }
-                // Only used to observe progress bar
-                // std::thread::sleep(std::time::Duration::from_millis(100));
-                wtr.serialize(r)?;
-            }
-            */
-            wtr.write(&self.batch).unwrap();
-            //wtr.flush()?;
-
-            Ok(())
         } else {
             Err(From::from(
                 "Error writing csv as output path is set to None",
@@ -705,50 +659,60 @@ impl ReadStatData {
             pb.finish_and_clear()
         }
 
-        let mut wtr = csv::WriterBuilder::new().build(stdout());
-            // .quote_style(csv::QuoteStyle::Always)
-            //.from_writer(stdout());
+        let mut wtr = csv_crate::WriterBuilder::new().from_writer(stdout());
 
         // write header
-        let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-        wtr.write(&self.batch).unwrap();
-        //wtr.serialize(vars)?;
-        //wtr.flush()?;
+        let vars: Vec<String> = self
+            .batch
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.name().to_string())
+            .collect();
+
+        // Alternate way to get variable names
+        // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+
+        wtr.write_record(&vars)?;
+        wtr.flush()?;
 
         Ok(())
+    }
+
+    pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(p) = &self.out_path {
+            let f = OpenOptions::new().write(true).create(true).append(true).open(p)?;
+            if let Some(pb) = &self.pb {
+                let pb_wtr = pb.wrap_write(f);
+                let mut wtr = csv_arrow::WriterBuilder::new()
+                        .has_headers(false)
+                        .build(pb_wtr);
+                wtr.write(&self.batch)?;
+            } else {
+                let mut wtr = csv_arrow::WriterBuilder::new()
+                        .has_headers(false)
+                        .build(f);
+                wtr.write(&self.batch)?;
+            };
+
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing csv as output path is set to None",
+            ))
+        }
     }
 
     pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(pb) = &self.pb {
             pb.finish_and_clear()
         }
-        //let mut wtr = csv::WriterBuilder::new().build(stdout());
-        //let stdout = stdout();
-        //let mut handle = stdout.lock();
-        let mut wtr = csv::WriterBuilder::new().build(stdout());
-            //.quote_style(csv::QuoteStyle::Always)
-            //.from_writer(stdout());
 
-        // write rows
-        /*
-        for r in &self.rows {
-            wtr.serialize(r)?;
-        }
-        wtr.flush()?;
-        */
-        // println!("batch is: {}", format!("{:#?}", &self.batch));
-        //println!("batch num rows is: {}", self.batch.num_rows());
-        
-        // Finish progress bar before writing to std out 
-        /*
-        if let Some(pb) = &self.pb {
-            pb.finish_at_current_pos()
-        };
-        */
-        wtr.write(&self.batch).unwrap_or(());
+        let mut wtr = csv_arrow::WriterBuilder::new()
+            .has_headers(false)
+            .build(stdout());
+        wtr.write(&self.batch)?;
 
-        //handle = stdout.lock();
-        //stdout().write_all(b"").unwrap_or(());
         Ok(())
     }
 
