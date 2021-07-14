@@ -1,12 +1,11 @@
 use arrow::array::{
-    ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
+    ArrayBuilder, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
     Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
+use arrow::csv as csv_arrow;
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
-use arrow::error::ArrowError;
-use arrow::csv as csv_arrow;
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+// use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
 use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -15,12 +14,12 @@ use num_derive::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
-use serde::{Serialize, Serializer};
+use serde::{Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
 use std::fs::OpenOptions;
-use std::io::{self, stdout, Write};
+use std::io::{stdout};
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -29,7 +28,6 @@ use crate::cb;
 use crate::err::ReadStatError;
 use crate::{OutType, Reader};
 
-const DIGITS: usize = 14;
 const EXTENSIONS: &'static [&'static str] = &["sas7bdat", "sas7bcat"];
 
 #[derive(Debug, Clone)]
@@ -391,7 +389,9 @@ impl ReadStatData {
         for i in 0..self.var_count {
             // Allocate space for ArrayBuilder
             let array: Box<dyn ArrayBuilder> = match self.var_types[i as usize] {
-                ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => Box::new(StringBuilder::new(rows)),
+                ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
+                    Box::new(StringBuilder::new(rows))
+                }
                 ReadStatVarType::Int8 => Box::new(Int8Builder::new(rows)),
                 ReadStatVarType::Int16 => Box::new(Int16Builder::new(rows)),
                 ReadStatVarType::Int32 => Box::new(Int32Builder::new(rows)),
@@ -400,11 +400,9 @@ impl ReadStatData {
                     Some(ReadStatFormatClass::Date) => Box::new(Date32Builder::new(rows)),
                     Some(ReadStatFormatClass::DateTime) => {
                         Box::new(TimestampSecondBuilder::new(rows))
-                    },
-                    Some(ReadStatFormatClass::Time) => {
-                        Box::new(Time32SecondBuilder::new(rows))
-                    },
-                    None => Box::new(Float64Builder::new(rows))
+                    }
+                    Some(ReadStatFormatClass::Time) => Box::new(Time32SecondBuilder::new(rows)),
+                    None => Box::new(Float64Builder::new(rows)),
                 },
             };
 
@@ -425,7 +423,7 @@ impl ReadStatData {
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
             );
             let msg = format!(
-                "Parsing sas7bdat file {}",
+                "Parsing sas7bdat data from file {}",
                 &self.path.to_string_lossy().bright_red()
             );
             pb.set_message(msg);
@@ -505,7 +503,7 @@ impl ReadStatData {
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
             );
             let msg = format!(
-                "Parsing sas7bdat file {}",
+                "Parsing sas7bdat data from file {}",
                 &self.path.to_string_lossy().bright_red()
             );
             pb.set_message(msg);
@@ -534,13 +532,7 @@ impl ReadStatData {
     }
 
     pub fn set_var_types(&mut self) -> () {
-        let var_types = self
-            .vars
-            .iter()
-            .map(|(_, q)| {
-                q.var_type.clone()
-            })
-            .collect();
+        let var_types = self.vars.iter().map(|(_, q)| q.var_type.clone()).collect();
 
         self.var_types = var_types;
         ()
@@ -564,11 +556,9 @@ impl ReadStatData {
         let var_format_classes = self
             .vars
             .iter()
-            .map(|(_, q)| {
-                match q.var_format_class {
-                    None => None,
-                    Some(fc) => Some(fc.clone())
-                }
+            .map(|(_, q)| match q.var_format_class {
+                None => None,
+                Some(fc) => Some(fc.clone()),
             })
             .collect();
 
@@ -611,42 +601,73 @@ impl ReadStatData {
 
     pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(p) = &self.out_path {
-                // spinner
-                if let Some(pb) = &self.pb {
-                    pb.finish_at_current_pos();
-                }
+            // spinner
+            if let Some(pb) = &self.pb {
+                pb.finish_at_current_pos();
+            }
 
-                // progress bar
-                self.pb = Some(ProgressBar::new(self.row_count as u64));
-                if let Some(pb) = &self.pb {
-                    pb.set_style(
-                        ProgressStyle::default_bar()
-                            .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
-                            .progress_chars("##-"),
-                    );
-                    pb.set_message("Rows processed");
-                    pb.enable_steady_tick(120);
-                }
+            // spinner
+            self.pb = Some(ProgressBar::new(!0));
+            if let Some(pb) = &self.pb {
+                pb.set_style(
+                    ProgressStyle::default_spinner().template("[{spinner:.green} {bytes}] {msg}"),
+                );
 
-                let file = std::fs::File::create(p)?;
-                let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
+                let in_f = if let Some(f) = &self.path.file_name() {
+                    f.to_string_lossy().bright_red()
+                } else {
+                    String::from("___").bright_red()
+                };
 
-                // write header
-                let vars: Vec<String> = self
-                    .batch
-                    .schema()
-                    .fields()
-                    .iter()
-                    .map(|field| field.name().to_string())
-                    .collect();
+                let out_f = if let Some(p) = &self.out_path {
+                    if let Some(f) = p.file_name() {
+                        f.to_string_lossy().bright_green()
+                    } else {
+                        String::from("___").bright_green()
+                    }
+                } else {
+                    String::from("___").bright_green()
+                };
 
-                // Alternate way to get variable names
-                // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+                let msg = format!("Writing file {} as {}", in_f, out_f);
 
-                wtr.write_record(&vars)?;
-                wtr.flush()?;
+                pb.set_message(msg);
+                pb.enable_steady_tick(120);
+            }
 
-                Ok(())
+            // progress bar
+            /*
+            self.pb = Some(ProgressBar::new(self.row_count as u64));
+            if let Some(pb) = &self.pb {
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
+                        .progress_chars("##-"),
+                );
+                pb.set_message("Rows processed");
+                pb.enable_steady_tick(120);
+            }
+            */
+
+            let file = std::fs::File::create(p)?;
+            let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
+
+            // write header
+            let vars: Vec<String> = self
+                .batch
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().to_string())
+                .collect();
+
+            // Alternate way to get variable names
+            // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+
+            wtr.write_record(&vars)?;
+            wtr.flush()?;
+
+            Ok(())
         } else {
             Err(From::from(
                 "Error writing csv as output path is set to None",
@@ -681,17 +702,19 @@ impl ReadStatData {
 
     pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(p) = &self.out_path {
-            let f = OpenOptions::new().write(true).create(true).append(true).open(p)?;
+            let f = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(p)?;
             if let Some(pb) = &self.pb {
                 let pb_wtr = pb.wrap_write(f);
                 let mut wtr = csv_arrow::WriterBuilder::new()
-                        .has_headers(false)
-                        .build(pb_wtr);
+                    .has_headers(false)
+                    .build(pb_wtr);
                 wtr.write(&self.batch)?;
             } else {
-                let mut wtr = csv_arrow::WriterBuilder::new()
-                        .has_headers(false)
-                        .build(f);
+                let mut wtr = csv_arrow::WriterBuilder::new().has_headers(false).build(f);
                 wtr.write(&self.batch)?;
             };
 

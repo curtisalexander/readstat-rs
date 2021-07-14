@@ -1,13 +1,14 @@
 use arrow::array::{
-    ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
+    ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
     Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
-use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
+// use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
+use chrono::NaiveDateTime;
 use lexical;
 use log::debug;
-use num_traits::{CheckedSub, FromPrimitive};
+use num_traits::FromPrimitive;
 use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
@@ -21,11 +22,11 @@ use crate::rs::{
 use crate::Reader;
 
 const DIGITS: usize = 14;
-const ROWS: usize = 3;
+const ROWS: usize = 100;
 //const ROWS: usize = 100000;
 const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
-const SEC_PER_HOUR: i64 = 86400;
+// const SEC_PER_HOUR: i64 = 86400;
 
 // C types
 #[allow(dead_code)]
