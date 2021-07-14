@@ -610,7 +610,7 @@ impl ReadStatData {
             self.pb = Some(ProgressBar::new(!0));
             if let Some(pb) = &self.pb {
                 pb.set_style(
-                    ProgressStyle::default_spinner().template("[{spinner:.green} {bytes}] {msg}"),
+                    ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise} | {bytes}] {msg}"),
                 );
 
                 let in_f = if let Some(f) = &self.path.file_name() {
