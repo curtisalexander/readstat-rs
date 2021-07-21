@@ -38,7 +38,7 @@ pub enum ReadStat {
         /// Path to sas7bdat file
         input: PathBuf,
         /// Number of rows to write
-        #[structopt(long, default_value = "10")]
+        #[structopt(long, default_value="10")]
         rows: u32,
         /// Type of reader
         #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
@@ -50,10 +50,10 @@ pub enum ReadStat {
         /// Path to sas7bdat file
         input: PathBuf,
         /// Output file path
-        #[structopt(short, long, parse(from_os_str))]
+        #[structopt(short="o", long, parse(from_os_str))]
         output: Option<PathBuf>,
         /// Output file type, defaults to csv
-        #[structopt(long, possible_values=&OutType::variants(), case_insensitive=true)]
+        #[structopt(short="t", long, possible_values=&OutType::variants(), case_insensitive=true)]
         out_type: Option<OutType>,
         /// Number of rows to write
         #[structopt(long)]

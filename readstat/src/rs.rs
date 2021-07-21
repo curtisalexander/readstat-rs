@@ -608,8 +608,7 @@ impl ReadStatData {
                 out_type: OutType::parquet,
                 ..
             } => {
-                unimplemented!()
-                //self.write_data_to_parquet()
+                self.write_data_to_parquet()
             }
             
         }
