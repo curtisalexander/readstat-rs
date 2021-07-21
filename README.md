@@ -17,14 +17,14 @@ The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as 
 Building is as straightforward as `cargo build`.
 
 ### Windows
-Building on Windows requires [LLVM 11](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
+Building on Windows requires [LLVM 12](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
 
 For details see the following.
-- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L83)
-- [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L77-L79)
+- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L82)
+- [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L70-L79)
 
 ## Run
-After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/structopt/0.3.21/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
+After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/structopt/0.3.22/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out
     - row count
     - variable count
