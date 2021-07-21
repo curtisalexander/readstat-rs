@@ -21,6 +21,7 @@ log = "0.4"
 num-derive = "0.3"
 num-format = "0.4"
 num-traits = "0.2"
+parquet = "5.0.0"
 path_abs = "0.5"
 regex = "1.4"
 readstat-sys = { path = "../readstat-sys", version = "0.1.0" }

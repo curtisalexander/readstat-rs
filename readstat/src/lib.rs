@@ -69,6 +69,7 @@ arg_enum! {
     #[allow(non_camel_case_types)]
     pub enum OutType {
         csv,
+        parquet
     }
 }
 
@@ -161,7 +162,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             match &d {
                 ReadStatData {
                     out_path: None,
-                    out_type: OutType::csv,
                     ..
                 } => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
@@ -181,7 +181,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 }
                 ReadStatData {
                     out_path: Some(p),
-                    out_type: OutType::csv,
                     ..
                 } => {
                     println!(

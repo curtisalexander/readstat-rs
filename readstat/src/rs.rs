@@ -13,6 +13,8 @@ use log::debug;
 use num_derive::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
+use parquet::arrow::arrow_writer::ArrowWriter;
+use parquet::file::properties::WriterProperties;
 use path_abs::{PathAbs, PathInfo};
 use serde::{Serialize};
 use std::collections::BTreeMap;
@@ -28,7 +30,7 @@ use crate::cb;
 use crate::err::ReadStatError;
 use crate::{OutType, Reader};
 
-const EXTENSIONS: &'static [&'static str] = &["sas7bdat", "sas7bcat"];
+const IN_EXTENSIONS: &'static [&'static str] = &["sas7bdat", "sas7bcat"];
 
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
@@ -87,7 +89,7 @@ impl ReadStatPath {
                     path.to_string_lossy().bright_yellow()
                 ))),
                 |e|
-                    if EXTENSIONS.iter().any(|&ext| ext == e) {
+                    if IN_EXTENSIONS.iter().any(|&ext| ext == e) {
                         Ok(e)
                     } else {
                         Err(From::from(format!("Expecting extension {} or {}.\nFile {} does not have expected extension!", String::from("sas7bdat").bright_green(), String::from("sas7bcat").bright_blue(), path.to_string_lossy().bright_yellow())))
@@ -108,9 +110,10 @@ impl ReadStatPath {
                     path.to_string_lossy().bright_yellow(),
                     out_type.to_string().bright_green()
                 ))),
-                |e| match out_type {
-                    OutType::csv => {
-                        if e == String::from("csv") {
+                |e| 
+                    match out_type {
+                        OutType::csv | OutType::parquet =>  {
+                        if e == out_type.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
                             Err(From::from(format!(
@@ -121,7 +124,7 @@ impl ReadStatPath {
                             )))
                         }
                     }
-                },
+                }
             )
     }
 
@@ -568,11 +571,13 @@ impl ReadStatData {
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
         match self {
+            // Write data to standard out
             Self {
                 out_path: None,
                 out_type: OutType::csv,
                 ..
             } if self.wrote_header => self.write_data_to_stdout(),
+            // Write header to standard out
             Self {
                 out_path: None,
                 out_type: OutType::csv,
@@ -582,11 +587,13 @@ impl ReadStatData {
                 self.wrote_header = true;
                 self.write_data_to_stdout()
             }
+            // Write data to file 
             Self {
                 out_path: Some(_),
                 out_type: OutType::csv,
                 ..
             } if self.wrote_header => self.write_data_to_csv(),
+            // Write header to file
             Self {
                 out_path: Some(_),
                 out_type: OutType::csv,
@@ -596,6 +603,15 @@ impl ReadStatData {
                 self.wrote_header = true;
                 self.write_data_to_csv()
             }
+            // Write parquet data to file
+            Self {
+                out_type: OutType::parquet,
+                ..
+            } => {
+                unimplemented!()
+                //self.write_data_to_parquet()
+            }
+            
         }
     }
 
@@ -708,10 +724,10 @@ impl ReadStatData {
                 .append(true)
                 .open(p)?;
             if let Some(pb) = &self.pb {
-                let pb_wtr = pb.wrap_write(f);
+                let pb_f = pb.wrap_write(f);
                 let mut wtr = csv_arrow::WriterBuilder::new()
                     .has_headers(false)
-                    .build(pb_wtr);
+                    .build(pb_f);
                 wtr.write(&self.batch)?;
             } else {
                 let mut wtr = csv_arrow::WriterBuilder::new().has_headers(false).build(f);
@@ -722,6 +738,36 @@ impl ReadStatData {
         } else {
             Err(From::from(
                 "Error writing csv as output path is set to None",
+            ))
+        }
+    }
+
+    pub fn write_data_to_parquet(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(p) = &self.out_path {
+            let f = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(p)?;
+            if let Some(_) = &self.pb {
+                // let pb_f = pb.wrap_write(f);
+                let props = WriterProperties::builder().build();
+                let mut wtr = ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?;
+                // let schema = Arc::new(arrow_to_parquet_schema(&self.schema).unwrap());
+                //let serialized_wtr = SerializedFileWriter::new(f, schema, props)?;
+                // let serialized_wtr = SerializedFileWriter::new(pb_f, schema, props)?;
+
+                wtr.write(&self.batch)?;
+            } else {
+                let props = WriterProperties::builder().build();
+                let mut wtr = ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?;
+                wtr.write(&self.batch)?;
+            };
+
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing parquet file as output path is set to None",
             ))
         }
     }
