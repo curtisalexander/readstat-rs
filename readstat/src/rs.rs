@@ -169,7 +169,7 @@ impl ReadStatPath {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
+#[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub struct ReadStatVarIndexAndName {
     pub var_index: c_int,
     pub var_name: String,
@@ -184,7 +184,7 @@ impl ReadStatVarIndexAndName {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct ReadStatVarMetadata {
     pub var_type: ReadStatVarType,
     pub var_type_class: ReadStatVarTypeClass,
@@ -225,60 +225,7 @@ pub enum ReadStatVar {
     ReadStat_Time(i32),
 }
 
-/*
-impl Serialize for ReadStatVar {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        ReadStatVarTrunc::from(self).serialize(s)
-    }
-}
-*/
-
-/*
-#[derive(Debug, Clone, Serialize)]
-pub enum ReadStatVarTrunc {
-    ReadStat_String(String),
-    ReadStat_i8(i8),
-    ReadStat_i16(i16),
-    ReadStat_i32(i32),
-    ReadStat_f32(f32),
-    ReadStat_f64(f64),
-    ReadStat_Missing(()),
-    ReadStat_Date(NaiveDate),
-    ReadStat_DateTime(DateTime<Utc>),
-    ReadStat_Time(NaiveTime),
-}
-*/
-
-/*
-impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
-    fn from(other: &'a ReadStatVar) -> Self {
-        match other {
-            ReadStatVar::ReadStat_String(s) => Self::ReadStat_String(s.to_owned()),
-            ReadStatVar::ReadStat_i8(i) => Self::ReadStat_i8(*i),
-            ReadStatVar::ReadStat_i16(i) => Self::ReadStat_i16(*i),
-            ReadStatVar::ReadStat_i32(i) => Self::ReadStat_i32(*i),
-            // Format as string to truncate float to only contain 14 decimal digits
-            // Parse back into float so that the trailing zeroes are trimmed when serializing
-            // TODO: Is there an alternative that does not require conversion from and to a float?
-            ReadStatVar::ReadStat_f32(f) => {
-                Self::ReadStat_f32(format!("{1:.0$}", DIGITS, f).parse::<f32>().unwrap())
-            }
-            ReadStatVar::ReadStat_f64(f) => {
-                Self::ReadStat_f64(format!("{1:.0$}", DIGITS, f).parse::<f64>().unwrap())
-            }
-            ReadStatVar::ReadStat_Missing(_) => Self::ReadStat_Missing(()),
-            ReadStatVar::ReadStat_Date(d) => Self::ReadStat_Date(*d),
-            ReadStatVar::ReadStat_DateTime(dt) => Self::ReadStat_DateTime(*dt),
-            ReadStatVar::ReadStat_Time(t) => Self::ReadStat_Time(*t),
-        }
-    }
-}
-*/
-
-#[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Copy, Debug, FromPrimitive)]
 pub enum ReadStatVarType {
     String = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING as isize,
     Int8 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 as isize,
@@ -317,8 +264,6 @@ pub enum ReadStatFormatClass {
     Time,
 }
 
-// #[derive(Debug, Serialize)]
-// #[derive(Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
     pub cstring_path: CString,
@@ -338,19 +283,12 @@ pub struct ReadStatData {
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
     pub var_types: Vec<ReadStatVarType>,
     pub var_format_classes: Vec<Option<ReadStatFormatClass>>,
-    // pub var_type_classes: Vec<ReadStatVarTypeClass>,
-    // #[serde(skip)]
     pub cols: Vec<Box<dyn ArrayBuilder>>,
-    pub row: Vec<ReadStatVar>,
-    pub rows: Vec<Vec<ReadStatVar>>,
-    // #[serde(skip)]
     pub schema: datatypes::Schema,
-    // #[serde(skip)]
     pub batch: record_batch::RecordBatch,
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
-    // #[serde(skip)]
     pub pb: Option<ProgressBar>,
 }
 
@@ -375,10 +313,7 @@ impl ReadStatData {
             vars: BTreeMap::new(),
             var_types: Vec::new(),
             var_format_classes: Vec::new(),
-            // var_type_classes: Vec::new(),
             cols: Vec::new(),
-            row: Vec::new(),
-            rows: Vec::new(),
             schema: datatypes::Schema::empty(),
             batch: RecordBatch::new_empty(Arc::new(datatypes::Schema::empty())),
             wrote_header: false,
@@ -540,20 +475,6 @@ impl ReadStatData {
         self.var_types = var_types;
         ()
     }
-
-    /*
-    pub fn set_var_type_classes(self) -> Self {
-        let var_type_classes = self
-            .vars
-            .iter()
-            .map(|(_, q)| {
-                q.var_type_class
-            })
-            .collect();
-
-        Self { var_type_classes, ..self }
-    }
-    */
 
     pub fn set_var_format_classes(&mut self) -> () {
         let var_format_classes = self
@@ -748,19 +669,38 @@ impl ReadStatData {
                 .create(true)
                 .append(true)
                 .open(p)?;
-            if let Some(_) = &self.pb {
+            if let Some(pb) = &self.pb {
+                let in_f = if let Some(f) = &self.path.file_name() {
+                    f.to_string_lossy().bright_red()
+                } else {
+                    String::from("___").bright_red()
+                };
+
+                let out_f = if let Some(p) = &self.out_path {
+                    if let Some(f) = p.file_name() {
+                        f.to_string_lossy().bright_green()
+                    } else {
+                        String::from("___").bright_green()
+                    }
+                } else {
+                    String::from("___").bright_green()
+                };
+
+                let msg = format!("Writing file {} as {}", in_f, out_f);
+
+                pb.set_message(msg);
+                // Does not implement TryClone
                 // let pb_f = pb.wrap_write(f);
                 let props = WriterProperties::builder().build();
                 let mut wtr = ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?;
-                // let schema = Arc::new(arrow_to_parquet_schema(&self.schema).unwrap());
-                //let serialized_wtr = SerializedFileWriter::new(f, schema, props)?;
-                // let serialized_wtr = SerializedFileWriter::new(pb_f, schema, props)?;
 
                 wtr.write(&self.batch)?;
+                wtr.close()?;
             } else {
                 let props = WriterProperties::builder().build();
                 let mut wtr = ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?;
                 wtr.write(&self.batch)?;
+                wtr.close()?;
             };
 
             Ok(())

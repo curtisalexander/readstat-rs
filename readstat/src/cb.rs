@@ -4,7 +4,6 @@ use arrow::array::{
 };
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
-// use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
 use chrono::NaiveDateTime;
 use lexical;
 use log::debug;
@@ -30,7 +29,7 @@ const SEC_SHIFT: i64 = 315619200;
 
 // C types
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 #[repr(C)]
 enum ReadStatHandler {
     READSTAT_HANDLER_OK,
@@ -232,8 +231,6 @@ pub extern "C" fn handle_variable(
     ])
     .unwrap();
 
-    // debug!("d struct is {:#?}", d);
-
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
@@ -413,35 +410,16 @@ pub extern "C" fn handle_value(
                 match fc {
                     Some(ReadStatFormatClass::Date) => {
                         ReadStatVar::ReadStat_Date(
-                            /*
-                            Utc.timestamp(value as i64 * SEC_PER_HOUR, 0)
-                                .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                                .unwrap()
-                                .naive_utc()
-                                .date()
-                            */
                             (value as i32).checked_sub(DAY_SHIFT).unwrap(),
                         )
                     }
                     Some(ReadStatFormatClass::DateTime) => {
                         ReadStatVar::ReadStat_DateTime(
-                            /*
-                                Utc.timestamp(value as i64, 0)
-                                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                                    .unwrap(),
-                            */
                             (value as i64).checked_sub(SEC_SHIFT).unwrap(),
                         )
                     }
                     Some(ReadStatFormatClass::Time) => {
                         ReadStatVar::ReadStat_Time(
-                            /*
-                            Utc.timestamp(value as i64, 0)
-                                .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                                .unwrap()
-                                .naive_utc()
-                                .time(),
-                            */
                             value as i32,
                         )
                     }
@@ -526,54 +504,6 @@ pub extern "C" fn handle_value(
         // exhaustive
         _ => unreachable!(),
     }
-
-    // TODO: check if date/datetime format
-    // Rather than have a massive set of string comparisons, may want to convert the original strings to enums and then match on the enums
-    // Probably can move the date/datetime checks out of the handle_value function and into the handle_variable function
-    // The value conversion, obviously, would still need to occur here within handle_value
-
-    /*
-    let value = match v.var_format_class {
-        Some(ReadStatFormatClass::Date) => {
-            let f = match value {
-                ReadStatVar::ReadStat_f64(f) => f as i64,
-                _ => 0 as i64,
-            };
-            ReadStatVar::ReadStat_Date(
-                Utc.timestamp(f * SEC_PER_HOUR, 0)
-                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                    .unwrap()
-                    .naive_utc()
-                    .date(),
-            )
-        }
-        Some(ReadStatFormatClass::DateTime) => {
-            let f = match value {
-                ReadStatVar::ReadStat_f64(f) => f as i64,
-                _ => 0 as i64,
-            };
-            ReadStatVar::ReadStat_DateTime(
-                Utc.timestamp(f, 0)
-                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                    .unwrap(),
-            )
-        }
-        Some(ReadStatFormatClass::Time) => {
-            let f = match value {
-                ReadStatVar::ReadStat_f64(f) => f as i64,
-                _ => 0 as i64,
-            };
-            ReadStatVar::ReadStat_Time(
-                Utc.timestamp(f, 0)
-                    .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                    .unwrap()
-                    .naive_utc()
-                    .time(),
-            )
-        }
-        None => value,
-    };
-    */
 
     // if last variable for a row, check to see if data should be finalized and written
     if var_index == (d.var_count - 1) {
