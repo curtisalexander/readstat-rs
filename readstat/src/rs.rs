@@ -1,6 +1,6 @@
 use arrow::array::{
-    ArrayBuilder, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
-    Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+    ArrayBuilder, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
+    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
 use arrow::csv as csv_arrow;
 use arrow::record_batch::RecordBatch;
@@ -16,21 +16,21 @@ use num_traits::FromPrimitive;
 use parquet::arrow::arrow_writer::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use path_abs::{PathAbs, PathInfo};
-use serde::{Serialize};
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
 use std::fs::OpenOptions;
-use std::io::{stdout};
+use std::io::stdout;
 use std::os::raw::{c_char, c_int, c_long, c_void};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::cb;
 use crate::err::ReadStatError;
 use crate::{OutType, Reader};
 
-const IN_EXTENSIONS: &'static [&'static str] = &["sas7bdat", "sas7bcat"];
+const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
@@ -74,15 +74,15 @@ impl ReadStatPath {
     }
 
     #[cfg(not(unix))]
-    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
+    pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error>> {
         let rust_str = path.as_os_str().to_str().ok_or("Invalid path")?;
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
     }
 
-    fn validate_in_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
+    fn validate_in_extension(path: &Path) -> Result<String, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
-            .and_then(|e| Some(e.to_owned()))
+            .map(|e| e.to_owned())
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!",
@@ -98,21 +98,20 @@ impl ReadStatPath {
     }
 
     fn validate_out_extension(
-        path: &PathBuf,
+        path: &Path,
         out_type: OutType,
     ) -> Result<Option<PathBuf>, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
-            .and_then(|e| Some(e.to_owned()))
+            .map(|e| e.to_owned())
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!  Expecting extension {}.",
                     path.to_string_lossy().bright_yellow(),
                     out_type.to_string().bright_green()
                 ))),
-                |e| 
-                    match out_type {
-                        OutType::csv | OutType::parquet =>  {
+                |e| match out_type {
+                    OutType::csv | OutType::parquet => {
                         if e == out_type.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
@@ -124,7 +123,7 @@ impl ReadStatPath {
                             )))
                         }
                     }
-                }
+                },
             )
     }
 
@@ -323,7 +322,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn allocate_cols(&mut self, rows: usize) -> () {
+    pub fn allocate_cols(&mut self, rows: usize) {
         for i in 0..self.var_count {
             // Allocate space for ArrayBuilder
             let array: Box<dyn ArrayBuilder> = match self.var_types[i as usize] {
@@ -346,7 +345,6 @@ impl ReadStatData {
 
             self.cols.push(array);
         }
-        ()
     }
 
     pub fn get_data(&mut self, row_limit: Option<u32>) -> Result<u32, Box<dyn Error>> {
@@ -469,25 +467,16 @@ impl ReadStatData {
         Self { reader, ..self }
     }
 
-    pub fn set_var_types(&mut self) -> () {
-        let var_types = self.vars.iter().map(|(_, q)| q.var_type.clone()).collect();
+    pub fn set_var_types(&mut self) {
+        let var_types = self.vars.iter().map(|(_, q)| q.var_type).collect();
 
         self.var_types = var_types;
-        ()
     }
 
-    pub fn set_var_format_classes(&mut self) -> () {
-        let var_format_classes = self
-            .vars
-            .iter()
-            .map(|(_, q)| match q.var_format_class {
-                None => None,
-                Some(fc) => Some(fc.clone()),
-            })
-            .collect();
+    pub fn set_var_format_classes(&mut self) {
+        let var_format_classes = self.vars.iter().map(|(_, q)| q.var_format_class).collect();
 
         self.var_format_classes = var_format_classes;
-        ()
     }
 
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
@@ -508,7 +497,7 @@ impl ReadStatData {
                 self.wrote_header = true;
                 self.write_data_to_stdout()
             }
-            // Write data to file 
+            // Write data to file
             Self {
                 out_path: Some(_),
                 out_type: OutType::csv,
@@ -528,10 +517,7 @@ impl ReadStatData {
             Self {
                 out_type: OutType::parquet,
                 ..
-            } => {
-                self.write_data_to_parquet()
-            }
-            
+            } => self.write_data_to_parquet(),
         }
     }
 
@@ -546,7 +532,8 @@ impl ReadStatData {
             self.pb = Some(ProgressBar::new(!0));
             if let Some(pb) = &self.pb {
                 pb.set_style(
-                    ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise} | {bytes}] {msg}"),
+                    ProgressStyle::default_spinner()
+                        .template("[{spinner:.green} {elapsed_precise} | {bytes}] {msg}"),
                 );
 
                 let in_f = if let Some(f) = &self.path.file_name() {

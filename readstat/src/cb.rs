@@ -1,14 +1,12 @@
 use arrow::array::{
-    ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
-    Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+    ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
+    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use chrono::NaiveDateTime;
-use lexical;
 use log::debug;
 use num_traits::FromPrimitive;
-use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::Arc;
@@ -55,19 +53,19 @@ pub extern "C" fn handle_metadata(
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     let vc: c_int = unsafe { readstat_sys::readstat_get_var_count(metadata) };
     let table_name_ptr = unsafe { readstat_sys::readstat_get_table_name(metadata) };
-    let table_name = if table_name_ptr == std::ptr::null() {
+    let table_name = if table_name_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(table_name_ptr).to_str().unwrap().to_owned() }
     };
     let file_label_ptr = unsafe { readstat_sys::readstat_get_file_label(metadata) };
-    let file_label = if file_label_ptr == std::ptr::null() {
+    let file_label = if file_label_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(file_label_ptr).to_str().unwrap().to_owned() }
     };
     let file_encoding_ptr = unsafe { readstat_sys::readstat_get_file_encoding(metadata) };
-    let file_encoding = if file_encoding_ptr == std::ptr::null() {
+    let file_encoding = if file_encoding_ptr.is_null() {
         String::new()
     } else {
         unsafe {
@@ -160,21 +158,21 @@ pub extern "C" fn handle_variable(
     };
 
     let var_name_ptr = unsafe { readstat_sys::readstat_variable_get_name(variable) };
-    let var_name = if var_name_ptr == std::ptr::null() {
+    let var_name = if var_name_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(var_name_ptr).to_str().unwrap().to_owned() }
     };
 
     let var_label_ptr = unsafe { readstat_sys::readstat_variable_get_label(variable) };
-    let var_label = if var_label_ptr == std::ptr::null() {
+    let var_label = if var_label_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(var_label_ptr).to_str().unwrap().to_owned() }
     };
 
     let var_format_ptr = unsafe { readstat_sys::readstat_variable_get_format(variable) };
-    let var_format = if var_format_ptr == std::ptr::null() {
+    let var_format = if var_format_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(var_format_ptr).to_str().unwrap().to_owned() }
@@ -287,7 +285,7 @@ pub extern "C" fn handle_value(
                     .as_any_mut()
                     .downcast_mut::<StringBuilder>()
                     .unwrap()
-                    .append_value(value.clone())
+                    .append_value(value)
                     .unwrap();
             } else {
                 d.cols[var_index as usize]
@@ -403,26 +401,18 @@ pub extern "C" fn handle_value(
             debug!("value is {:#?}", value);
 
             // is float actually a date?
-            let value = if d.var_format_classes.len() == 0 {
+            let value = if d.var_format_classes.is_empty() {
                 ReadStatVar::ReadStat_f64(value)
             } else {
                 let fc = d.var_format_classes[var_index as usize];
                 match fc {
                     Some(ReadStatFormatClass::Date) => {
-                        ReadStatVar::ReadStat_Date(
-                            (value as i32).checked_sub(DAY_SHIFT).unwrap(),
-                        )
+                        ReadStatVar::ReadStat_Date((value as i32).checked_sub(DAY_SHIFT).unwrap())
                     }
-                    Some(ReadStatFormatClass::DateTime) => {
-                        ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap(),
-                        )
-                    }
-                    Some(ReadStatFormatClass::Time) => {
-                        ReadStatVar::ReadStat_Time(
-                            value as i32,
-                        )
-                    }
+                    Some(ReadStatFormatClass::DateTime) => ReadStatVar::ReadStat_DateTime(
+                        (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                    ),
+                    Some(ReadStatFormatClass::Time) => ReadStatVar::ReadStat_Time(value as i32),
                     None => ReadStatVar::ReadStat_f64(value),
                 }
             };

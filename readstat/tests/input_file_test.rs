@@ -1,6 +1,4 @@
 use path_abs::PathAbs;
-// use path_abs::{PathAbs, PathInfo};
-use readstat;
 use std::env;
 
 #[test]

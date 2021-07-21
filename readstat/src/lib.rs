@@ -38,7 +38,7 @@ pub enum ReadStat {
         /// Path to sas7bdat file
         input: PathBuf,
         /// Number of rows to write
-        #[structopt(long, default_value="10")]
+        #[structopt(long, default_value = "10")]
         rows: u32,
         /// Type of reader
         #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
@@ -50,7 +50,7 @@ pub enum ReadStat {
         /// Path to sas7bdat file
         input: PathBuf,
         /// Output file path
-        #[structopt(short="o", long, parse(from_os_str))]
+        #[structopt(short = "o", long, parse(from_os_str))]
         output: Option<PathBuf>,
         /// Output file type, defaults to csv
         #[structopt(short="t", long, possible_values=&OutType::variants(), case_insensitive=true)]
@@ -160,10 +160,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             };
 
             match &d {
-                ReadStatData {
-                    out_path: None,
-                    ..
-                } => {
+                ReadStatData { out_path: None, .. } => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
                     let error = d.get_metadata()?;
@@ -180,8 +177,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     }
                 }
                 ReadStatData {
-                    out_path: Some(p),
-                    ..
+                    out_path: Some(p), ..
                 } => {
                     println!(
                         "Writing parsed data to file {}",
