@@ -289,6 +289,9 @@ pub struct ReadStatData {
     pub errors: Vec<String>,
     pub reader: Reader,
     pub pb: Option<ProgressBar>,
+    pub wrote_start: bool,
+    pub finish: bool,
+    pub wtr: Option<ArrowWriter<std::fs::File>>,
 }
 
 impl ReadStatData {
@@ -319,6 +322,9 @@ impl ReadStatData {
             errors: Vec::new(),
             reader: Reader::stream,
             pb: None,
+            wrote_start: false,
+            finish: false,
+            wtr: None,
         }
     }
 
@@ -651,11 +657,16 @@ impl ReadStatData {
 
     pub fn write_data_to_parquet(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(p) = &self.out_path {
-            let f = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .open(p)?;
+            let f = if self.wrote_start {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(p)?
+            } else {
+                std::fs::File::create(p)?
+            };
+
             if let Some(pb) = &self.pb {
                 let in_f = if let Some(f) = &self.path.file_name() {
                     f.to_string_lossy().bright_red()
@@ -676,20 +687,18 @@ impl ReadStatData {
                 let msg = format!("Writing file {} as {}", in_f, out_f);
 
                 pb.set_message(msg);
-                // Does not implement TryClone
-                // let pb_f = pb.wrap_write(f);
-                let props = WriterProperties::builder().build();
-                let mut wtr = ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?;
+            }
 
-                wtr.write(&self.batch)?;
-                wtr.close()?;
-            } else {
+            if !self.wrote_start {
                 let props = WriterProperties::builder().build();
-                let mut wtr = ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?;
+                self.wtr = Some(ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?);
+            }
+            if let Some(wtr) = &mut self.wtr {
                 wtr.write(&self.batch)?;
-                wtr.close()?;
-            };
-
+                if self.finish {
+                    wtr.close()?;
+                }
+            }
             Ok(())
         } else {
             Err(From::from(

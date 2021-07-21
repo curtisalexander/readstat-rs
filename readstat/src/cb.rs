@@ -19,11 +19,9 @@ use crate::rs::{
 use crate::Reader;
 
 const DIGITS: usize = 14;
-const ROWS: usize = 100;
-//const ROWS: usize = 100000;
+const ROWS: usize = 10000;
 const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
-// const SEC_PER_HOUR: i64 = 86400;
 
 // C types
 #[allow(dead_code)]
@@ -508,10 +506,15 @@ pub extern "C" fn handle_value(
 
                 d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
 
+                if obs_index == (d.row_count - 1) {
+                    d.finish = true;
+                }
                 d.write().unwrap_or(());
 
+                d.wrote_start = true;
+                d.cols.clear();
+
                 if obs_index != (d.row_count - 1) {
-                    d.cols.clear();
                     d.allocate_cols(rows);
                 };
                 /*
@@ -529,7 +532,14 @@ pub extern "C" fn handle_value(
                 */
             }
             Reader::mem if obs_index == (d.row_count - 1) => {
+                let arrays: Vec<ArrayRef> =
+                    d.cols.iter_mut().map(|builder| builder.finish()).collect();
+
+                d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
+
+                d.finish = true;
                 d.write().unwrap_or(());
+                d.wrote_start = true;
                 /*
                 match d.write() {
                     Ok(()) => (),
