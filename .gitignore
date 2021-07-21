@@ -1,5 +1,7 @@
 # data
 /readstat/tests/data/*.csv
+/readstat/tests/data/*.ipc
+/readstat/tests/data/*.parquet
 # starts with _ are larger files to exclude
 /readstat/tests/data/_*.sas7bdat
 # target
