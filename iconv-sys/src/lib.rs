@@ -1,3 +1,4 @@
+#![allow(clippy::redundant_static_lifetimes)]
 #![allow(dead_code)]
 #![allow(deref_nullptr)]
 #![allow(non_upper_case_globals)]

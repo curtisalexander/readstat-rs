@@ -1,6 +1,5 @@
 extern crate bindgen;
 
-use cc;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -30,7 +29,7 @@ fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // Linking
-    if let Some(_) = env::var_os("LIBCLANG_PATH") {
+    if env::var_os("LIBCLANG_PATH").is_some() {
     } else {
         println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
     }
@@ -41,7 +40,11 @@ fn main() {
     );
 
     fs::create_dir_all(out_path.join("include")).unwrap();
-    fs::copy(include.join("iconv.h"), out_path.join("include").join("iconv.h")).unwrap();
+    fs::copy(
+        include.join("iconv.h"),
+        out_path.join("include").join("iconv.h"),
+    )
+    .unwrap();
 
     println!("cargo:include={}/include", out_path.to_str().unwrap());
 
