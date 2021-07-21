@@ -1,6 +1,5 @@
 extern crate bindgen;
 
-use cc;
 use std::env;
 use std::path::PathBuf;
 
@@ -77,7 +76,7 @@ fn main() {
     // Linking
     if target.contains("windows-msvc") {
         // Path to libclang
-        if let Some(_) = env::var_os("LIBCLANG_PATH") {
+        if env::var_os("LIBCLANG_PATH").is_some() {
         } else {
             println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
         }

@@ -16,7 +16,7 @@ mod formats;
 mod rs;
 
 pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarTrunc,
+    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, /*ReadStatVarTrunc,*/
     ReadStatVarType,
 };
 
@@ -50,10 +50,10 @@ pub enum ReadStat {
         /// Path to sas7bdat file
         input: PathBuf,
         /// Output file path
-        #[structopt(short, long, parse(from_os_str))]
+        #[structopt(short = "o", long, parse(from_os_str))]
         output: Option<PathBuf>,
         /// Output file type, defaults to csv
-        #[structopt(long, possible_values=&OutType::variants(), case_insensitive=true)]
+        #[structopt(short="t", long, possible_values=&OutType::variants(), case_insensitive=true)]
         out_type: Option<OutType>,
         /// Number of rows to write
         #[structopt(long)]
@@ -69,6 +69,7 @@ arg_enum! {
     #[allow(non_camel_case_types)]
     pub enum OutType {
         csv,
+        parquet
     }
 }
 
@@ -159,11 +160,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             };
 
             match &d {
-                ReadStatData {
-                    out_path: None,
-                    out_type: OutType::csv,
-                    ..
-                } => {
+                ReadStatData { out_path: None, .. } => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
                     let error = d.get_metadata()?;
@@ -180,9 +177,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     }
                 }
                 ReadStatData {
-                    out_path: Some(p),
-                    out_type: OutType::csv,
-                    ..
+                    out_path: Some(p), ..
                 } => {
                     println!(
                         "Writing parsed data to file {}",
@@ -195,7 +190,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     if let Some(pb) = &d.pb {
                         pb.finish_at_current_pos()
                     };
-
                     match FromPrimitive::from_i32(error as i32) {
                         Some(ReadStatError::READSTAT_OK) => Ok(()),
                         // Some(ReadStatError::READSTAT_OK) => d.write(),

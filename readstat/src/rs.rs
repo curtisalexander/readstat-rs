@@ -1,26 +1,36 @@
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+use arrow::array::{
+    ArrayBuilder, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
+    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+};
+use arrow::csv as csv_arrow;
+use arrow::record_batch::RecordBatch;
+use arrow::{datatypes, record_batch};
+// use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
+use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use num_derive::FromPrimitive;
 use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
+use parquet::arrow::arrow_writer::ArrowWriter;
+use parquet::file::properties::WriterProperties;
 use path_abs::{PathAbs, PathInfo};
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
 use std::fs::OpenOptions;
 use std::io::stdout;
 use std::os::raw::{c_char, c_int, c_long, c_void};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::cb;
 use crate::err::ReadStatError;
 use crate::{OutType, Reader};
 
-const DIGITS: usize = 14;
-const EXTENSIONS: &'static [&'static str] = &["sas7bdat", "sas7bcat"];
+const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
@@ -64,22 +74,22 @@ impl ReadStatPath {
     }
 
     #[cfg(not(unix))]
-    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
+    pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error>> {
         let rust_str = path.as_os_str().to_str().ok_or("Invalid path")?;
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
     }
 
-    fn validate_in_extension(path: &PathBuf) -> Result<String, Box<dyn Error>> {
+    fn validate_in_extension(path: &Path) -> Result<String, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
-            .and_then(|e| Some(e.to_owned()))
+            .map(|e| e.to_owned())
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!",
                     path.to_string_lossy().bright_yellow()
                 ))),
                 |e|
-                    if EXTENSIONS.iter().any(|&ext| ext == e) {
+                    if IN_EXTENSIONS.iter().any(|&ext| ext == e) {
                         Ok(e)
                     } else {
                         Err(From::from(format!("Expecting extension {} or {}.\nFile {} does not have expected extension!", String::from("sas7bdat").bright_green(), String::from("sas7bcat").bright_blue(), path.to_string_lossy().bright_yellow())))
@@ -88,12 +98,12 @@ impl ReadStatPath {
     }
 
     fn validate_out_extension(
-        path: &PathBuf,
+        path: &Path,
         out_type: OutType,
     ) -> Result<Option<PathBuf>, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
-            .and_then(|e| Some(e.to_owned()))
+            .map(|e| e.to_owned())
             .map_or(
                 Err(From::from(format!(
                     "File {} does not have an extension!  Expecting extension {}.",
@@ -101,8 +111,8 @@ impl ReadStatPath {
                     out_type.to_string().bright_green()
                 ))),
                 |e| match out_type {
-                    OutType::csv => {
-                        if e == String::from("csv") {
+                    OutType::csv | OutType::parquet => {
+                        if e == out_type.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
                             Err(From::from(format!(
@@ -158,7 +168,7 @@ impl ReadStatPath {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Serialize)]
+#[derive(Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub struct ReadStatVarIndexAndName {
     pub var_index: c_int,
     pub var_name: String,
@@ -173,7 +183,7 @@ impl ReadStatVarIndexAndName {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct ReadStatVarMetadata {
     pub var_type: ReadStatVarType,
     pub var_type_class: ReadStatVarTypeClass,
@@ -209,59 +219,12 @@ pub enum ReadStatVar {
     ReadStat_f32(f32),
     ReadStat_f64(f64),
     ReadStat_Missing(()),
-    ReadStat_Date(NaiveDate),
-    ReadStat_DateTime(DateTime<Utc>),
-    ReadStat_Time(NaiveTime),
+    ReadStat_Date(i32),
+    ReadStat_DateTime(i64),
+    ReadStat_Time(i32),
 }
 
-impl Serialize for ReadStatVar {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        ReadStatVarTrunc::from(self).serialize(s)
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub enum ReadStatVarTrunc {
-    ReadStat_String(String),
-    ReadStat_i8(i8),
-    ReadStat_i16(i16),
-    ReadStat_i32(i32),
-    ReadStat_f32(f32),
-    ReadStat_f64(f64),
-    ReadStat_Missing(()),
-    ReadStat_Date(NaiveDate),
-    ReadStat_DateTime(DateTime<Utc>),
-    ReadStat_Time(NaiveTime),
-}
-
-impl<'a> From<&'a ReadStatVar> for ReadStatVarTrunc {
-    fn from(other: &'a ReadStatVar) -> Self {
-        match other {
-            ReadStatVar::ReadStat_String(s) => Self::ReadStat_String(s.to_owned()),
-            ReadStatVar::ReadStat_i8(i) => Self::ReadStat_i8(*i),
-            ReadStatVar::ReadStat_i16(i) => Self::ReadStat_i16(*i),
-            ReadStatVar::ReadStat_i32(i) => Self::ReadStat_i32(*i),
-            // Format as string to truncate float to only contain 14 decimal digits
-            // Parse back into float so that the trailing zeroes are trimmed when serializing
-            // TODO: Is there an alternative that does not require conversion from and to a float?
-            ReadStatVar::ReadStat_f32(f) => {
-                Self::ReadStat_f32(format!("{1:.0$}", DIGITS, f).parse::<f32>().unwrap())
-            }
-            ReadStatVar::ReadStat_f64(f) => {
-                Self::ReadStat_f64(format!("{1:.0$}", DIGITS, f).parse::<f64>().unwrap())
-            }
-            ReadStatVar::ReadStat_Missing(_) => Self::ReadStat_Missing(()),
-            ReadStatVar::ReadStat_Date(d) => Self::ReadStat_Date(*d),
-            ReadStatVar::ReadStat_DateTime(dt) => Self::ReadStat_DateTime(*dt),
-            ReadStatVar::ReadStat_Time(t) => Self::ReadStat_Time(*t),
-        }
-    }
-}
-
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Copy, Debug, FromPrimitive)]
 pub enum ReadStatVarType {
     String = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING as isize,
     Int8 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 as isize,
@@ -287,20 +250,19 @@ pub enum ReadStatEndian {
     Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
 }
 
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatVarTypeClass {
     String = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_STRING as isize,
     Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub enum ReadStatFormatClass {
     Date,
     DateTime,
     Time,
 }
 
-#[derive(Debug, Serialize)]
 pub struct ReadStatData {
     pub path: PathBuf,
     pub cstring_path: CString,
@@ -318,13 +280,18 @@ pub struct ReadStatData {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<ReadStatVarIndexAndName, ReadStatVarMetadata>,
-    pub row: Vec<ReadStatVar>,
-    pub rows: Vec<Vec<ReadStatVar>>,
+    pub var_types: Vec<ReadStatVarType>,
+    pub var_format_classes: Vec<Option<ReadStatFormatClass>>,
+    pub cols: Vec<Box<dyn ArrayBuilder>>,
+    pub schema: datatypes::Schema,
+    pub batch: record_batch::RecordBatch,
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
-    #[serde(skip)]
     pub pb: Option<ProgressBar>,
+    pub wrote_start: bool,
+    pub finish: bool,
+    pub wtr: Option<ArrowWriter<std::fs::File>>,
 }
 
 impl ReadStatData {
@@ -346,12 +313,43 @@ impl ReadStatData {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
-            row: Vec::new(),
-            rows: Vec::new(),
+            var_types: Vec::new(),
+            var_format_classes: Vec::new(),
+            cols: Vec::new(),
+            schema: datatypes::Schema::empty(),
+            batch: RecordBatch::new_empty(Arc::new(datatypes::Schema::empty())),
             wrote_header: false,
             errors: Vec::new(),
             reader: Reader::stream,
             pb: None,
+            wrote_start: false,
+            finish: false,
+            wtr: None,
+        }
+    }
+
+    pub fn allocate_cols(&mut self, rows: usize) {
+        for i in 0..self.var_count {
+            // Allocate space for ArrayBuilder
+            let array: Box<dyn ArrayBuilder> = match self.var_types[i as usize] {
+                ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
+                    Box::new(StringBuilder::new(rows))
+                }
+                ReadStatVarType::Int8 => Box::new(Int8Builder::new(rows)),
+                ReadStatVarType::Int16 => Box::new(Int16Builder::new(rows)),
+                ReadStatVarType::Int32 => Box::new(Int32Builder::new(rows)),
+                ReadStatVarType::Float => Box::new(Float32Builder::new(rows)),
+                ReadStatVarType::Double => match self.var_format_classes[i as usize] {
+                    Some(ReadStatFormatClass::Date) => Box::new(Date32Builder::new(rows)),
+                    Some(ReadStatFormatClass::DateTime) => {
+                        Box::new(TimestampSecondBuilder::new(rows))
+                    }
+                    Some(ReadStatFormatClass::Time) => Box::new(Time32SecondBuilder::new(rows)),
+                    None => Box::new(Float64Builder::new(rows)),
+                },
+            };
+
+            self.cols.push(array);
         }
     }
 
@@ -367,10 +365,10 @@ impl ReadStatData {
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
             );
             let msg = format!(
-                "Parsing sas7bdat file {}",
+                "Parsing sas7bdat data from file {}",
                 &self.path.to_string_lossy().bright_red()
             );
-            pb.set_message(&msg);
+            pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
 
@@ -414,7 +412,7 @@ impl ReadStatData {
                 "Parsing sas7bdat metadata from file {}",
                 &self.path.to_string_lossy().bright_red()
             );
-            pb.set_message(&msg);
+            pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
 
@@ -447,10 +445,10 @@ impl ReadStatData {
                     .template("[{spinner:.green} {elapsed_precise}] {msg}"),
             );
             let msg = format!(
-                "Parsing sas7bdat file {}",
+                "Parsing sas7bdat data from file {}",
                 &self.path.to_string_lossy().bright_red()
             );
-            pb.set_message(&msg);
+            pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
 
@@ -471,18 +469,31 @@ impl ReadStatData {
 
         Ok(error as u32)
     }
-
     pub fn set_reader(self, reader: Reader) -> Self {
         Self { reader, ..self }
     }
 
+    pub fn set_var_types(&mut self) {
+        let var_types = self.vars.iter().map(|(_, q)| q.var_type).collect();
+
+        self.var_types = var_types;
+    }
+
+    pub fn set_var_format_classes(&mut self) {
+        let var_format_classes = self.vars.iter().map(|(_, q)| q.var_format_class).collect();
+
+        self.var_format_classes = var_format_classes;
+    }
+
     pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
         match self {
+            // Write data to standard out
             Self {
                 out_path: None,
                 out_type: OutType::csv,
                 ..
             } if self.wrote_header => self.write_data_to_stdout(),
+            // Write header to standard out
             Self {
                 out_path: None,
                 out_type: OutType::csv,
@@ -492,11 +503,13 @@ impl ReadStatData {
                 self.wrote_header = true;
                 self.write_data_to_stdout()
             }
+            // Write data to file
             Self {
                 out_path: Some(_),
                 out_type: OutType::csv,
                 ..
             } if self.wrote_header => self.write_data_to_csv(),
+            // Write header to file
             Self {
                 out_path: Some(_),
                 out_type: OutType::csv,
@@ -506,63 +519,81 @@ impl ReadStatData {
                 self.wrote_header = true;
                 self.write_data_to_csv()
             }
+            // Write parquet data to file
+            Self {
+                out_type: OutType::parquet,
+                ..
+            } => self.write_data_to_parquet(),
         }
     }
 
     pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        match &self.out_path {
-            None => Err(From::from(
-                "Error writing csv as output path is set to None",
-            )),
-            Some(p) => {
-                // spinner
-                if let Some(pb) = &self.pb {
-                    pb.finish_at_current_pos();
-                }
+        if let Some(p) = &self.out_path {
+            // spinner
+            if let Some(pb) = &self.pb {
+                pb.finish_at_current_pos();
+            }
 
-                // progress bar
-                self.pb = Some(ProgressBar::new(self.row_count as u64));
-                if let Some(pb) = &self.pb {
-                    pb.set_style(
+            // spinner
+            self.pb = Some(ProgressBar::new(!0));
+            if let Some(pb) = &self.pb {
+                pb.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("[{spinner:.green} {elapsed_precise} | {bytes}] {msg}"),
+                );
+
+                let in_f = if let Some(f) = &self.path.file_name() {
+                    f.to_string_lossy().bright_red()
+                } else {
+                    String::from("___").bright_red()
+                };
+
+                let out_f = if let Some(p) = &self.out_path {
+                    if let Some(f) = p.file_name() {
+                        f.to_string_lossy().bright_green()
+                    } else {
+                        String::from("___").bright_green()
+                    }
+                } else {
+                    String::from("___").bright_green()
+                };
+
+                let msg = format!("Writing file {} as {}", in_f, out_f);
+
+                pb.set_message(msg);
+                pb.enable_steady_tick(120);
+            }
+
+            // progress bar
+            /*
+            self.pb = Some(ProgressBar::new(self.row_count as u64));
+            if let Some(pb) = &self.pb {
+                pb.set_style(
                     ProgressStyle::default_bar()
                         .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
                         .progress_chars("##-"),
-                    );
-                    pb.set_message("Rows processed");
-                    pb.enable_steady_tick(120);
-                }
-
-                let mut wtr = csv::WriterBuilder::new()
-                    .quote_style(csv::QuoteStyle::Always)
-                    .from_path(p)?;
-
-                // write header
-                let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-                wtr.serialize(vars)?;
-                wtr.flush()?;
-
-                Ok(())
+                );
+                pb.set_message("Rows processed");
+                pb.enable_steady_tick(120);
             }
-        }
-    }
+            */
 
-    pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
-            let f = OpenOptions::new().write(true).append(true).open(p)?;
+            let file = std::fs::File::create(p)?;
+            let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
 
-            let mut wtr = csv::WriterBuilder::new()
-                .quote_style(csv::QuoteStyle::Always)
-                .from_writer(f);
+            // write header
+            let vars: Vec<String> = self
+                .batch
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().to_string())
+                .collect();
 
-            // write rows
-            for r in &self.rows {
-                if let Some(pb) = &self.pb {
-                    pb.inc(1)
-                }
-                // Only used to observe progress bar
-                // std::thread::sleep(std::time::Duration::from_millis(100));
-                wtr.serialize(r)?;
-            }
+            // Alternate way to get variable names
+            // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+
+            wtr.write_record(&vars)?;
             wtr.flush()?;
 
             Ok(())
@@ -578,28 +609,113 @@ impl ReadStatData {
             pb.finish_and_clear()
         }
 
-        let mut wtr = csv::WriterBuilder::new()
-            .quote_style(csv::QuoteStyle::Always)
-            .from_writer(stdout());
+        let mut wtr = csv_crate::WriterBuilder::new().from_writer(stdout());
 
         // write header
-        let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-        wtr.serialize(vars)?;
+        let vars: Vec<String> = self
+            .batch
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.name().to_string())
+            .collect();
+
+        // Alternate way to get variable names
+        // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+
+        wtr.write_record(&vars)?;
         wtr.flush()?;
 
         Ok(())
     }
 
-    pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut wtr = csv::WriterBuilder::new()
-            .quote_style(csv::QuoteStyle::Always)
-            .from_writer(stdout());
+    pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(p) = &self.out_path {
+            let f = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(p)?;
+            if let Some(pb) = &self.pb {
+                let pb_f = pb.wrap_write(f);
+                let mut wtr = csv_arrow::WriterBuilder::new()
+                    .has_headers(false)
+                    .build(pb_f);
+                wtr.write(&self.batch)?;
+            } else {
+                let mut wtr = csv_arrow::WriterBuilder::new().has_headers(false).build(f);
+                wtr.write(&self.batch)?;
+            };
 
-        // write rows
-        for r in &self.rows {
-            wtr.serialize(r)?;
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing csv as output path is set to None",
+            ))
         }
-        wtr.flush()?;
+    }
+
+    pub fn write_data_to_parquet(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(p) = &self.out_path {
+            let f = if self.wrote_start {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(p)?
+            } else {
+                std::fs::File::create(p)?
+            };
+
+            if let Some(pb) = &self.pb {
+                let in_f = if let Some(f) = &self.path.file_name() {
+                    f.to_string_lossy().bright_red()
+                } else {
+                    String::from("___").bright_red()
+                };
+
+                let out_f = if let Some(p) = &self.out_path {
+                    if let Some(f) = p.file_name() {
+                        f.to_string_lossy().bright_green()
+                    } else {
+                        String::from("___").bright_green()
+                    }
+                } else {
+                    String::from("___").bright_green()
+                };
+
+                let msg = format!("Writing file {} as {}", in_f, out_f);
+
+                pb.set_message(msg);
+            }
+
+            if !self.wrote_start {
+                let props = WriterProperties::builder().build();
+                self.wtr = Some(ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?);
+            }
+            if let Some(wtr) = &mut self.wtr {
+                wtr.write(&self.batch)?;
+                if self.finish {
+                    wtr.close()?;
+                }
+            }
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing parquet file as output path is set to None",
+            ))
+        }
+    }
+
+    pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear()
+        }
+
+        let mut wtr = csv_arrow::WriterBuilder::new()
+            .has_headers(false)
+            .build(stdout());
+        wtr.write(&self.batch)?;
 
         Ok(())
     }
@@ -637,9 +753,9 @@ impl ReadStatData {
         println!("{}: {:#?}", "Compression".yellow(), self.compression);
         println!("{}: {:#?}", "Byte order".green(), self.endianness);
         println!("{}:", "Variable names".purple());
-        for (k, v) in self.vars.iter() {
+        for (i, (k, v)) in self.vars.iter().enumerate() {
             println!(
-                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {} }}",
+                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow data type: {} }}",
                 k.var_index.to_formatted_string(&Locale::en),
                 k.var_name.bright_purple(),
                 format!("{:#?}", v.var_type_class).bright_green(),
@@ -655,6 +771,7 @@ impl ReadStatData {
                 })
                 .bright_cyan(),
                 v.var_format.bright_yellow(),
+                self.schema.field(i).data_type().to_string().bright_green()
             );
         }
 

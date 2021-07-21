@@ -1,9 +1,15 @@
-use chrono::{Duration, NaiveDateTime, TimeZone, Utc};
+use arrow::array::{
+    ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
+    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
-use readstat_sys;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
+use std::sync::Arc;
 
 use crate::formats;
 use crate::rs::{
@@ -12,13 +18,14 @@ use crate::rs::{
 };
 use crate::Reader;
 
+const DIGITS: usize = 14;
 const ROWS: usize = 10000;
+const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
-const SEC_PER_HOUR: i64 = 86400;
 
 // C types
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 #[repr(C)]
 enum ReadStatHandler {
     READSTAT_HANDLER_OK,
@@ -44,19 +51,19 @@ pub extern "C" fn handle_metadata(
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     let vc: c_int = unsafe { readstat_sys::readstat_get_var_count(metadata) };
     let table_name_ptr = unsafe { readstat_sys::readstat_get_table_name(metadata) };
-    let table_name = if table_name_ptr == std::ptr::null() {
+    let table_name = if table_name_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(table_name_ptr).to_str().unwrap().to_owned() }
     };
     let file_label_ptr = unsafe { readstat_sys::readstat_get_file_label(metadata) };
-    let file_label = if file_label_ptr == std::ptr::null() {
+    let file_label = if file_label_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(file_label_ptr).to_str().unwrap().to_owned() }
     };
     let file_encoding_ptr = unsafe { readstat_sys::readstat_get_file_encoding(metadata) };
-    let file_encoding = if file_encoding_ptr == std::ptr::null() {
+    let file_encoding = if file_encoding_ptr.is_null() {
         String::new()
     } else {
         unsafe {
@@ -92,6 +99,7 @@ pub extern "C" fn handle_metadata(
         Some(t) => t,
         None => ReadStatEndian::None,
     };
+    d.cols = Vec::with_capacity(vc as usize);
 
     debug!("row_count is {}", rc);
     debug!("var_count is {}", vc);
@@ -118,7 +126,7 @@ pub extern "C" fn handle_metadata(
     d.compression = compression;
     d.endianness = endianness;
 
-    debug!("d struct is {:#?}", d);
+    // debug!("d struct is {:#?}", d);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -139,40 +147,36 @@ pub extern "C" fn handle_variable(
         Some(t) => t,
         None => ReadStatVarType::Unknown,
     };
+
     let var_type_class = match FromPrimitive::from_i32(unsafe {
         readstat_sys::readstat_variable_get_type_class(variable) as i32
     }) {
         Some(t) => t,
         None => ReadStatVarTypeClass::Numeric,
     };
+
     let var_name_ptr = unsafe { readstat_sys::readstat_variable_get_name(variable) };
-    let var_name = if var_name_ptr == std::ptr::null() {
+    let var_name = if var_name_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(var_name_ptr).to_str().unwrap().to_owned() }
     };
+
     let var_label_ptr = unsafe { readstat_sys::readstat_variable_get_label(variable) };
-    let var_label = if var_label_ptr == std::ptr::null() {
+    let var_label = if var_label_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(var_label_ptr).to_str().unwrap().to_owned() }
     };
 
     let var_format_ptr = unsafe { readstat_sys::readstat_variable_get_format(variable) };
-    let var_format = if var_format_ptr == std::ptr::null() {
+    let var_format = if var_format_ptr.is_null() {
         String::new()
     } else {
         unsafe { CStr::from_ptr(var_format_ptr).to_str().unwrap().to_owned() }
     };
 
     let var_format_class = formats::match_var_format(&var_format);
-    //let var_format_class = if var_format.starts_with("YYMMDD") {
-    //    Some(ReadStatFormatClass::Date)
-    //} else if var_format.starts_with("DATETIME") {
-    //    Some(ReadStatFormatClass::DateTime)
-    //} else {
-    //    None
-    //};
 
     debug!("var_type is {:#?}", &var_type);
     debug!("var_type_class is {:#?}", &var_type_class);
@@ -183,7 +187,7 @@ pub extern "C" fn handle_variable(
 
     // insert into BTreeMap within ReadStatData struct
     d.vars.insert(
-        ReadStatVarIndexAndName::new(index, var_name),
+        ReadStatVarIndexAndName::new(index, var_name.clone()),
         ReadStatVarMetadata::new(
             var_type,
             var_type_class,
@@ -193,13 +197,42 @@ pub extern "C" fn handle_variable(
         ),
     );
 
-    debug!("d struct is {:#?}", d);
+    // create var_types and var_format_classes if last variable to process
+    if index == d.var_count - 1 {
+        d.set_var_types();
+        d.set_var_format_classes();
+    }
+
+    // build up Schema
+    let var_dt = match &var_type {
+        ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
+            DataType::Utf8
+        }
+        ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
+        ReadStatVarType::Int32 => DataType::Int32,
+        ReadStatVarType::Float => DataType::Float32,
+        ReadStatVarType::Double => match var_format_class {
+            Some(ReadStatFormatClass::Date) => DataType::Date32,
+            Some(ReadStatFormatClass::DateTime) => {
+                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+            }
+            Some(ReadStatFormatClass::Time) => DataType::Time32(arrow::datatypes::TimeUnit::Second),
+            None => DataType::Float64,
+        },
+    };
+
+    d.schema = Schema::try_merge(vec![
+        d.schema.clone(),
+        Schema::new(vec![Field::new(&var_name, var_dt, true)]),
+    ])
+    .unwrap();
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
 pub extern "C" fn handle_value(
-    #[allow(unused_variables)] obs_index: c_int,
+    obs_index: c_int,
+    // #[allow(unused_variables)] obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     value: readstat_sys::readstat_value_t,
     ctx: *mut c_void,
@@ -213,19 +246,6 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    // if first row and first variable, allocate row and rows
-    if obs_index == 0 && var_index == 0 {
-        // Vec containing a single row, needs capacity = number of variables
-        d.row = Vec::with_capacity(d.var_count as usize);
-        // Vec containing all rows, needs capacity = number of rows
-        // d.rows = Vec::with_capacity(d.row_count as usize);
-        // Allocate rows
-        d.rows = match d.reader {
-            Reader::stream => Vec::with_capacity(std::cmp::min(ROWS, d.row_count as usize)),
-            Reader::mem => Vec::with_capacity(d.row_count as usize),
-        }
-    }
-
     debug!("row_count is {}", d.row_count);
     debug!("var_count is {}", d.var_count);
     debug!("obs_index is {}", obs_index);
@@ -233,130 +253,271 @@ pub extern "C" fn handle_value(
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
-    // get value and push into row within ReadStatData struct
-    if is_missing == 0 {
-        let value: ReadStatVar = match value_type {
-            readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
-            | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
-                ReadStatVar::ReadStat_String(unsafe {
-                    CStr::from_ptr(readstat_sys::readstat_string_value(value))
-                        .to_str()
-                        .unwrap()
-                        .to_owned()
-                })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
-                ReadStatVar::ReadStat_i8(unsafe { readstat_sys::readstat_int8_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
-                ReadStatVar::ReadStat_i16(unsafe { readstat_sys::readstat_int16_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
-                ReadStatVar::ReadStat_i32(unsafe { readstat_sys::readstat_int32_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
-                ReadStatVar::ReadStat_f32(unsafe { readstat_sys::readstat_float_value(value) })
-            }
-            readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-                ReadStatVar::ReadStat_f64(unsafe { readstat_sys::readstat_double_value(value) })
-            }
-            // exhaustive
-            _ => unreachable!(),
-        };
+    // rows determined based on type of Reader
+    let rows = match d.reader {
+        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
+        Reader::mem => d.row_count as usize,
+    };
 
-        debug!("value is {:#?}", value);
+    // allocate columns
+    if obs_index == 0 && var_index == 0 {
+        d.allocate_cols(rows);
+    };
 
-        // TODO: check if date/datetime format
-        // Rather than have a massive set of string comparisons, may want to convert the original strings to enums and then match on the enums
-        // Probably can move the date/datetime checks out of the handle_value function and into the handle_variable function
-        // The value conversion, obviously, would still need to occur here within handle_value
-        let (_, v) = d
-            .vars
-            .iter()
-            .find(|(k, _)| k.var_index == var_index)
-            .unwrap();
-
-        let value = match v.var_format_class {
-            Some(ReadStatFormatClass::Date) => {
-                let f = match value {
-                    ReadStatVar::ReadStat_f64(f) => f as i64,
-                    _ => 0 as i64,
-                };
-                ReadStatVar::ReadStat_Date(
-                    Utc.timestamp(f * SEC_PER_HOUR, 0)
-                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                        .unwrap()
-                        .naive_utc()
-                        .date(),
-                )
+    // get value and push into cols
+    match value_type {
+        readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
+        | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
+            // get value
+            let value = unsafe {
+                CStr::from_ptr(readstat_sys::readstat_string_value(value))
+                    .to_str()
+                    .unwrap()
+                    .to_owned()
+            };
+            // debug
+            debug!("value is {:#?}", &value);
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<StringBuilder>()
+                    .unwrap()
+                    .append_value(value)
+                    .unwrap();
+            } else {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<StringBuilder>()
+                    .unwrap()
+                    .append_null()
+                    .unwrap();
             }
-            Some(ReadStatFormatClass::DateTime) => {
-                let f = match value {
-                    ReadStatVar::ReadStat_f64(f) => f as i64,
-                    _ => 0 as i64,
-                };
-                ReadStatVar::ReadStat_DateTime(
-                    Utc.timestamp(f, 0)
-                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                        .unwrap(),
-                )
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
+            // get value
+            let value = unsafe { readstat_sys::readstat_int8_value(value) };
+            // debug
+            debug!("value is {:#?}", value);
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Int8Builder>()
+                    .unwrap()
+                    .append_value(value)
+                    .unwrap();
+            } else {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Int8Builder>()
+                    .unwrap()
+                    .append_null()
+                    .unwrap();
             }
-            Some(ReadStatFormatClass::Time) => {
-                let f = match value {
-                    ReadStatVar::ReadStat_f64(f) => f as i64,
-                    _ => 0 as i64,
-                };
-                ReadStatVar::ReadStat_Time(
-                    Utc.timestamp(f, 0)
-                        .checked_sub_signed(Duration::seconds(SEC_SHIFT))
-                        .unwrap()
-                        .naive_utc()
-                        .time(),
-                )
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
+            // get value
+            let value = unsafe { readstat_sys::readstat_int16_value(value) };
+            // debug
+            debug!("value is {:#?}", value);
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Int16Builder>()
+                    .unwrap()
+                    .append_value(value)
+                    .unwrap();
+            } else {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Int16Builder>()
+                    .unwrap()
+                    .append_null()
+                    .unwrap();
             }
-            None => value,
-        };
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
+            // get value
+            let value = unsafe { readstat_sys::readstat_int32_value(value) };
+            // debug
+            debug!("value is {:#?}", value);
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Int32Builder>()
+                    .unwrap()
+                    .append_value(value)
+                    .unwrap();
+            } else {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Int32Builder>()
+                    .unwrap()
+                    .append_null()
+                    .unwrap();
+            }
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
+            // Format as string to truncate float to only contain 14 decimal digits
+            // Parse back into float so that the trailing zeroes are trimmed when serializing
+            // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
+            let value = unsafe { readstat_sys::readstat_float_value(value) };
+            let value =
+                lexical::parse::<f32, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
+                    .unwrap();
+            // debug
+            debug!("value is {:#?}", value);
+            // append to builder
+            if is_missing == 0 {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Float32Builder>()
+                    .unwrap()
+                    .append_value(value)
+                    .unwrap();
+            } else {
+                d.cols[var_index as usize]
+                    .as_any_mut()
+                    .downcast_mut::<Float32Builder>()
+                    .unwrap()
+                    .append_null()
+                    .unwrap();
+            }
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
+            // Format as string to truncate float to only contain 14 decimal digits
+            // Parse back into float so that the trailing zeroes are trimmed when serializing
+            // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
+            let value = unsafe { readstat_sys::readstat_double_value(value) };
+            let value =
+                lexical::parse::<f64, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
+                    .unwrap();
+            // debug
+            debug!("value is {:#?}", value);
 
-        // push into row
-        d.row.push(value);
-    } else {
-        // For now represent missing values as the unit type
-        // When serializing to csv (which is the only output type at the moment),
-        //   the unit type is serialized as a missing value
-        // For example, the following SAS dataset
-        //   | id | name  | age |
-        //   |----|-------|-----|
-        //   | 4  | Alice | .   |
-        //   | 5  | ""    | 30  |
-        // would be serialized as the following in csv
-        //   id,name,age
-        //   4,Alice,,
-        //   5,,30
-        // And thus any missingness treatment is in fact handled by the tool that
-        // consumes the csv file
-        let value = ReadStatVar::ReadStat_Missing(());
-        debug!("value is {:#?}", &value);
+            // is float actually a date?
+            let value = if d.var_format_classes.is_empty() {
+                ReadStatVar::ReadStat_f64(value)
+            } else {
+                let fc = d.var_format_classes[var_index as usize];
+                match fc {
+                    Some(ReadStatFormatClass::Date) => {
+                        ReadStatVar::ReadStat_Date((value as i32).checked_sub(DAY_SHIFT).unwrap())
+                    }
+                    Some(ReadStatFormatClass::DateTime) => ReadStatVar::ReadStat_DateTime(
+                        (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                    ),
+                    Some(ReadStatFormatClass::Time) => ReadStatVar::ReadStat_Time(value as i32),
+                    None => ReadStatVar::ReadStat_f64(value),
+                }
+            };
 
-        // push into row
-        d.row.push(value);
+            // append to builder
+            match value {
+                ReadStatVar::ReadStat_Date(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Date32Builder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Date32Builder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_DateTime(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampSecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampSecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_Time(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Time32SecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Time32SecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_f64(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Float64Builder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<Float64Builder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                // exhaustive
+                _ => unreachable!(),
+            }
+        }
+        // exhaustive
+        _ => unreachable!(),
     }
 
-    // if last variable for a row, push into rows within ReadStatData struct
-    if var_index == d.var_count - 1 {
-        // collecting ALL rows into memory before ever writing
-        // TODO: benchmark changes if were to push (for example) 1,000 rows at a time
-        //       into the Vector and then flush to disk in a quasi-streaming fashion
-        d.rows.push(d.row.clone());
-        // clear row after pushing into rows; has no effect on capacity
-        d.row.clear();
-
-        //println!("obs_index is {}", obs_index);
+    // if last variable for a row, check to see if data should be finalized and written
+    if var_index == (d.var_count - 1) {
         match d.reader {
             // if rows = buffer limit and last variable then go ahead and write
             Reader::stream
                 if (((obs_index + 1) % ROWS as i32 == 0) && (obs_index != 0))
                     || obs_index == (d.row_count - 1) =>
             {
+                let arrays: Vec<ArrayRef> =
+                    d.cols.iter_mut().map(|builder| builder.finish()).collect();
+
+                d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
+
+                if obs_index == (d.row_count - 1) {
+                    d.finish = true;
+                }
+                d.write().unwrap_or(());
+
+                d.wrote_start = true;
+                d.cols.clear();
+
+                if obs_index != (d.row_count - 1) {
+                    d.allocate_cols(rows);
+                };
+                /*
                 match d.write() {
                     Ok(()) => (),
                     // Err(e) => d.errors.push(format!("{:#?}", e)),
@@ -368,9 +529,18 @@ pub extern "C" fn handle_value(
                     // For now just swallow any errors when writing
                     Err(_) => (),
                 };
-                d.rows.clear();
+                */
             }
             Reader::mem if obs_index == (d.row_count - 1) => {
+                let arrays: Vec<ArrayRef> =
+                    d.cols.iter_mut().map(|builder| builder.finish()).collect();
+
+                d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
+
+                d.finish = true;
+                d.write().unwrap_or(());
+                d.wrote_start = true;
+                /*
                 match d.write() {
                     Ok(()) => (),
                     // Err(e) => d.errors.push(format!("{:#?}", e)),
@@ -382,6 +552,7 @@ pub extern "C" fn handle_value(
                     // For now just swallow any errors when writing
                     Err(_) => (),
                 };
+                */
             }
             _ => (),
         }
