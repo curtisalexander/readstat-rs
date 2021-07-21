@@ -78,7 +78,20 @@ To write the first 100 rows of parsed data (as a `csv`) to a file, invoke the fo
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --rows 100
 ```
 
-:memo: The `data` subcommand includes a parameter for `--out-type`, which is the type of file that is to be written.  Currently the only available file type for `--out-type` is `csv` and thus the parameter is elided from the above examples.
+:memo: The `data` subcommand includes a parameter for `--out-type`, which is the type of file that is to be written.  Currently the only available file types for `--out-type` are `csv` and `parquet` with the default being `csv`.  Thus the parameter is elided from the above examples.
+
+To write parsed data (as a `parquet`) to a file, invoke the following (default is to write all parsed data to the specified file).
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --output-type parquet
+```
+
+To write the first 100 rows of parsed data (as a `parquet`) to a file, invoke the following.
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --output-type parquet --rows 100
+```
+
 
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
@@ -224,12 +237,12 @@ The long term goals of this repository are uncertain.  Possibilities include:
     - Could implement a custom [serde data format](https://serde.rs/data-format.html) for `sas7bdat` files (implement serialize first and deserialize later (if possible))
 - Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
 - Developing a command line tool that performs transformations from `sas7bdat` to other file types (via [serde](https://serde.rs/))
-    - text
-        - `csv`
-        - `ndjson`
+    - [ ] text
+        - [X] `csv`
+        - [ ] `ndjson`
     - binary
-        - `arrow`
-        - `parquet`
+        - [ ] `arrow`
+        - [X] `parquet`
 
 ## Resources
 The following have been **_incredibly_** helpful while developing!
