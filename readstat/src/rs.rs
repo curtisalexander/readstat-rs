@@ -116,10 +116,10 @@ impl ReadStatPath {
                             Ok(Some(path.to_owned()))
                         } else {
                             Err(From::from(format!(
-                                "Expecting extension `{}`.  Instead, file {} has extension {}.",
-                                out_type,
+                                "Expecting extension {}.  Instead, file {} has extension {}.",
+                                out_type.to_string().bright_green(),
                                 path.to_string_lossy().bright_yellow(),
-                                e
+                                e.bright_red()
                             )))
                         }
                     }
