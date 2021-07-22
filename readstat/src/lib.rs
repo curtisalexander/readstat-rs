@@ -15,16 +15,12 @@ mod err;
 mod formats;
 mod rs;
 
-pub use rs::{
-    ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, /*ReadStatVarTrunc,*/
-    ReadStatVarType,
-};
+pub use rs::{ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarType};
 
 pub use err::ReadStatError;
 
 // StructOpt
 #[derive(StructOpt, Debug)]
-#[structopt(no_version)]
 pub enum ReadStat {
     /// Display sas7bdat metadata
     Metadata {
