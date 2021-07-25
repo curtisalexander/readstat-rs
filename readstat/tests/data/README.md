@@ -3,7 +3,24 @@ Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) b
 
 
 ## Sources
-- `ahs2019n.sas7bdat` &rarr; http://www2.census.gov/programs-surveys/ahs/2019/AHS%202019%20National%20PUF%20v1.1%20Flat%20SAS.zip
+- `ahs2019n.sas7bdat` &rarr; US Census data
+  - http://www2.census.gov/programs-surveys/ahs/2019/AHS%202019%20National%20PUF%20v1.1%20Flat%20SAS.zip
   - Must be downloaded manually as currently ignored by `git` (i.e. has been added to the repository `.gitignore` file)
   - Renamed to be `_ahs2019n.sas7bdat` in order to be picked up by the `_*.sas7bdat` pattern in the `.gitignore` file
-- All other `sas7bdat` files &rarr; https://www.alanelliott.com/sas/ED2_FILES.html
+- `all_types.sas7bdat` &rarr; SAS dataset containing all SAS types
+- `cars.sas7bdat` &rarr; SAS cars dataset
+  - https://www.alanelliott.com/sas/ED2_FILES.html
+- `hasmissing.sas7bdat` &rarr; SAS dataset containing missing values
+  - https://www.alanelliott.com/sas/ED2_FILES.html
+- `intel.sas7bdat`
+  - https://www.alanelliott.com/sas/ED2_FILES.html
+- `messydata.sas7bdat`
+  - https://www.alanelliott.com/sas/ED2_FILES.html
+- `rand_ds_largepage_err.sas7bdat` &rarr; Randomly created (using [create_rand_ds.sas](../util/create_rand_ds.sas)) dataset with [BUFSIZE]() set to `2M`
+  - Does not parse with version 1.1.6 of [ReadStat](https://github.com/WizardMac/ReadStat)
+- `rand_ds_largepage_ok.sas7bdat` &rarr; Randomly created (using [create_rand_ds.sas](../util/create_rand_ds.sas)) dataset with [BUFSIZE]() set to `1M`
+  - Parses with version 1.1.6 of [ReadStat](https://github.com/WizardMac/ReadStat)
+- `somedata.sas7bdat`
+  - https://www.alanelliott.com/sas/ED2_FILES.html
+- `somemiss.sas7bdat`
+  - https://www.alanelliott.com/sas/ED2_FILES.html
