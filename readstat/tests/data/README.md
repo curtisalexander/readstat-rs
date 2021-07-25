@@ -16,9 +16,9 @@ Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) b
   - https://www.alanelliott.com/sas/ED2_FILES.html
 - `messydata.sas7bdat`
   - https://www.alanelliott.com/sas/ED2_FILES.html
-- `rand_ds_largepage_err.sas7bdat` &rarr; Randomly created (using [create_rand_ds.sas](../util/create_rand_ds.sas)) dataset with [BUFSIZE]() set to `2M`
+- `rand_ds_largepage_err.sas7bdat` &rarr; Randomly created (using [create_rand_ds.sas](../util/create_rand_ds.sas)) dataset with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `2M`
   - Does not parse with version 1.1.6 of [ReadStat](https://github.com/WizardMac/ReadStat)
-- `rand_ds_largepage_ok.sas7bdat` &rarr; Randomly created (using [create_rand_ds.sas](../util/create_rand_ds.sas)) dataset with [BUFSIZE]() set to `1M`
+- `rand_ds_largepage_ok.sas7bdat` &rarr; Randomly created (using [create_rand_ds.sas](../util/create_rand_ds.sas)) dataset with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `1M`
   - Parses with version 1.1.6 of [ReadStat](https://github.com/WizardMac/ReadStat)
 - `somedata.sas7bdat`
   - https://www.alanelliott.com/sas/ED2_FILES.html
