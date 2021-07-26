@@ -41,9 +41,11 @@ After [building](#build) or [installing](#install), the binary is invoked using 
     - variable type classes
     - variable types
     - variable labels
+    - variable format classes
     - variable formats
+    - arrow data types
 - `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
-- `data` &rarr; writes parsed data in `csv` format to a file
+- `data` &rarr; writes parsed data in `csv` or `parquet` format to a file
 
 ### Metadata
 To write metadata to standard out, invoke the following.
@@ -91,7 +93,6 @@ To write the first 100 rows of parsed data (as a `parquet`) to a file, invoke th
 ```sh
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --output-type parquet --rows 100
 ```
-
 
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
@@ -168,6 +169,28 @@ Finally, SAS represents all numeric values in floating-point representation whic
     - SAS on Windows with x64 processors can only represent 15 digits
 - [Floating-point arithmetic may give inaccurate results in Excel](https://docs.microsoft.com/en-us/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result)
 
+## Date, Time, and Datetimes
+Currently any dates, times, or datetimes in the following SAS formats are parsed and read as dates, times, or datetimes.
+- Dates
+    - [`DATEw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n16vcb736tge20n1ex3yxx49fzqa.htm)
+    - [`YYMMDDw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n00fxkkwqijasxn1580tkw8mh5ob.htm)
+- Times
+    - [`TIMEw.d`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/p0b2xn5ovzhtjnn1db5g1gg64yhf.htm)
+- Datetimes
+    - [`DATETIMEw.d`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n0av4h8lmnktm4n1i33et4wyz5yy.htm)
+
+### Details
+SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lrcon/p1wj0wt2ebe2a0n1lv4lem9hdc0v.htm) internally as numeric values.  To distinguish between dates, times, or datetimes and numeric values, a SAS format is read from the variable metadata.  If the format matches one of the above SAS formats then the numeric value is converted and read into memory using one of the Arrow types:
+- [Date32Type](https://docs.rs/arrow/latest/arrow/datatypes/struct.Date32Type.html)
+- [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
+- [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
+
+:warning: If the format does not match one of the above SAS formats, or if the value does not have a format applied, then the value will be parsed and read as a numeric value.
+
+If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv` or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
+
+Finally, [more work is planned](https://github.com/curtisalexander/readstat-rs/issues/21) to handle other SAS dates, times, and datetimes that have SAS formats other than those listed above.
+
 ## Benchmarking
 Benchmarking performed with [hyperfine](https://github.com/sharkdp/hyperfine).
 
@@ -209,7 +232,7 @@ Below is the rough `git tag` dance to delete and/or add tags to [trigger Github 
 git tag --delete v0.1.0
 
 # delete remote tag
-git push --delete origin v0.1.0
+git push origin --delete v0.1.0
 
 # add and commit local changes
 git add .
@@ -255,4 +278,4 @@ The following have been **_incredibly_** helpful while developing!
 - Stack Overflow answers by [Jake Goulding](https://stackoverflow.com/users/155423/shepmaster)
 - ReadStat pull request to add [MSVC/Windows support](https://github.com/WizardMac/ReadStat/pull/214)
 - [jamovi-readstat](https://github.com/jamovi/jamovi-readstat) [appveyor.yml](https://github.com/jamovi/jamovi-readstat/blob/master/appveyor.yml) file to build ReadStat on Windows
-- [Arrow documentation for utilizing ArrayBuilders](https://docs.rs/arrow/4.3.0/arrow/array/trait.ArrayBuilder.html#example)
+- [Arrow documentation for utilizing ArrayBuilders](https://docs.rs/arrow/latest/arrow/array/trait.ArrayBuilder.html#example)
