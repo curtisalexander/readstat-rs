@@ -3,6 +3,8 @@
 # readstat-rs
 Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
 
+Get [metadata](#metadata), [preview data](#preview-data), or [convert](#data) to `csv` or `parquet` formats.
+
 ## ReadStat
 The command-line tool is developed in Rust and is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
 
