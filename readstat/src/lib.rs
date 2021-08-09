@@ -15,9 +15,8 @@ mod err;
 mod formats;
 mod rs;
 
-pub use rs::{ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarType};
-
 pub use err::ReadStatError;
+pub use rs::{ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarType};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -65,6 +64,7 @@ arg_enum! {
     #[allow(non_camel_case_types)]
     pub enum OutType {
         csv,
+        feather,
         parquet
     }
 }
