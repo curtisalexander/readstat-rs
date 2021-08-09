@@ -5,6 +5,7 @@ use arrow::array::{
 use arrow::csv as csv_arrow;
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
+use arrow::ipc::writer::FileWriter;
 // use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
 use csv as csv_crate;
@@ -28,7 +29,7 @@ use std::sync::Arc;
 
 use crate::cb;
 use crate::err::ReadStatError;
-use crate::{OutType, Reader};
+use crate::{Format, Reader};
 
 const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
@@ -38,23 +39,23 @@ pub struct ReadStatPath {
     pub extension: String,
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
-    pub out_type: OutType,
+    pub format: Format,
 }
 
 impl ReadStatPath {
     pub fn new(
         path: PathBuf,
         out_path: Option<PathBuf>,
-        out_type: Option<OutType>,
+        format: Option<Format>,
     ) -> Result<Self, Box<dyn Error>> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
         let op: Option<PathBuf> = Self::validate_out_path(out_path)?;
-        let ot = Self::validate_out_type(out_type)?;
+        let f = Self::validate_format(format)?;
         let op = match op {
             None => op,
-            Some(op) => Self::validate_out_extension(&op, ot)?,
+            Some(op) => Self::validate_out_extension(&op, f)?,
         };
 
         Ok(Self {
@@ -62,7 +63,7 @@ impl ReadStatPath {
             extension: ext,
             cstring_path: csp,
             out_path: op,
-            out_type: ot,
+            format: f,
         })
     }
 
@@ -99,7 +100,7 @@ impl ReadStatPath {
 
     fn validate_out_extension(
         path: &Path,
-        out_type: OutType,
+        format: Format,
     ) -> Result<Option<PathBuf>, Box<dyn Error>> {
         path.extension()
             .and_then(|e| e.to_str())
@@ -108,16 +109,16 @@ impl ReadStatPath {
                 Err(From::from(format!(
                     "File {} does not have an extension!  Expecting extension {}.",
                     path.to_string_lossy().bright_yellow(),
-                    out_type.to_string().bright_green()
+                    format.to_string().bright_green()
                 ))),
-                |e| match out_type {
-                    OutType::csv | OutType::parquet => {
-                        if e == out_type.to_string() {
+                |e| match format {
+                    Format::csv | Format::feather | Format::parquet => {
+                        if e == format.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
                             Err(From::from(format!(
                                 "Expecting extension {}.  Instead, file {} has extension {}.",
-                                out_type.to_string().bright_green(),
+                                format.to_string().bright_green(),
                                 path.to_string_lossy().bright_yellow(),
                                 e.bright_red()
                             )))
@@ -160,10 +161,10 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_out_type(out_type: Option<OutType>) -> Result<OutType, Box<dyn Error>> {
-        match out_type {
-            None => Ok(OutType::csv),
-            Some(t) => Ok(t),
+    fn validate_format(format: Option<Format>) -> Result<Format, Box<dyn Error>> {
+        match format {
+            None => Ok(Format::csv),
+            Some(f) => Ok(f),
         }
     }
 }
@@ -263,11 +264,18 @@ pub enum ReadStatFormatClass {
     Time,
 }
 
+pub enum ReadStatWriter {
+    // parquet
+    Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
+    // feather
+    Feather(arrow::ipc::writer::FileWriter<std::fs::File>)
+}
+
 pub struct ReadStatData {
     pub path: PathBuf,
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
-    pub out_type: OutType,
+    pub format: Format,
     pub row_count: c_int,
     pub var_count: c_int,
     pub table_name: String,
@@ -291,7 +299,8 @@ pub struct ReadStatData {
     pub pb: Option<ProgressBar>,
     pub wrote_start: bool,
     pub finish: bool,
-    pub wtr: Option<ArrowWriter<std::fs::File>>,
+    // should probably be declared with a trait but just utilizing enum for the time being
+    pub wtr: Option<ReadStatWriter>,
 }
 
 impl ReadStatData {
@@ -300,7 +309,7 @@ impl ReadStatData {
             path: rsp.path,
             cstring_path: rsp.cstring_path,
             out_path: rsp.out_path,
-            out_type: rsp.out_type,
+            format: rsp.format,
             row_count: 0,
             var_count: 0,
             table_name: String::new(),
@@ -490,29 +499,29 @@ impl ReadStatData {
             // Write data to standard out
             Self {
                 out_path: None,
-                out_type: OutType::csv,
+                format: Format::csv,
                 ..
             } if self.wrote_header => self.write_data_to_stdout(),
             // Write header to standard out
             Self {
                 out_path: None,
-                out_type: OutType::csv,
+                format: Format::csv,
                 ..
             } => {
                 self.write_header_to_stdout()?;
                 self.wrote_header = true;
                 self.write_data_to_stdout()
             }
-            // Write data to file
+            // Write csv data to file
             Self {
                 out_path: Some(_),
-                out_type: OutType::csv,
+                format: Format::csv,
                 ..
             } if self.wrote_header => self.write_data_to_csv(),
-            // Write header to file
+            // Write csv header to file
             Self {
                 out_path: Some(_),
-                out_type: OutType::csv,
+                format: Format::csv,
                 ..
             } => {
                 self.write_header_to_csv()?;
@@ -521,9 +530,14 @@ impl ReadStatData {
             }
             // Write parquet data to file
             Self {
-                out_type: OutType::parquet,
+                format: Format::parquet,
                 ..
             } => self.write_data_to_parquet(),
+            // Write feather data to file
+            Self {
+                format: Format::feather,
+                ..
+            } => self.write_data_to_feather(),
         }
     }
 
@@ -655,6 +669,62 @@ impl ReadStatData {
         }
     }
 
+    pub fn write_data_to_feather(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(p) = &self.out_path {
+            let f = if self.wrote_start {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(p)?
+            } else {
+                std::fs::File::create(p)?
+            };
+
+            if let Some(pb) = &self.pb {
+                let in_f = if let Some(f) = &self.path.file_name() {
+                    f.to_string_lossy().bright_red()
+                } else {
+                    String::from("___").bright_red()
+                };
+
+                let out_f = if let Some(p) = &self.out_path {
+                    if let Some(f) = p.file_name() {
+                        f.to_string_lossy().bright_green()
+                    } else {
+                        String::from("___").bright_green()
+                    }
+                } else {
+                    String::from("___").bright_green()
+                };
+
+                let msg = format!("Writing file {} as {}", in_f, out_f);
+
+                pb.set_message(msg);
+            }
+
+            if !self.wrote_start {
+                self.wtr = Some(ReadStatWriter::Feather(FileWriter::try_new(f, &self.schema)?));
+            }
+            if let Some(wtr) = &mut self.wtr {
+                match wtr {
+                    ReadStatWriter::Feather(w) => {
+                        w.write(&self.batch)?;
+                        if self.finish {
+                            w.finish()?;
+                        }
+                    },
+                    _ => unreachable!()
+                }
+            }
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing feather file as output path is set to None",
+            ))
+        }
+    }
+
     pub fn write_data_to_parquet(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(p) = &self.out_path {
             let f = if self.wrote_start {
@@ -691,12 +761,17 @@ impl ReadStatData {
 
             if !self.wrote_start {
                 let props = WriterProperties::builder().build();
-                self.wtr = Some(ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?);
+                self.wtr = Some(ReadStatWriter::Parquet(ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?));
             }
             if let Some(wtr) = &mut self.wtr {
-                wtr.write(&self.batch)?;
-                if self.finish {
-                    wtr.close()?;
+                match wtr {
+                    ReadStatWriter::Parquet(w) => {
+                        w.write(&self.batch)?;
+                        if self.finish {
+                            w.close()?;
+                        }
+                    },
+                    _ => unreachable!()
                 }
             }
             Ok(())

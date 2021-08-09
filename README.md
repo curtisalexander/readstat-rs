@@ -3,7 +3,7 @@
 # readstat-rs
 Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
 
-Get [metadata](#metadata), [preview data](#preview-data), or [convert](#data) to `csv` or `parquet` formats.
+Get [metadata](#metadata), [preview data](#preview-data), or [convert](#data) to `csv`, `feather`, or `parquet` formats.
 
 ## ReadStat
 The command-line tool is developed in Rust and is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
@@ -11,14 +11,16 @@ The command-line tool is developed in Rust and is only possible due to the excel
 The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
 
 ## Install
+
+### Download a Release
 \[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
 
-## Build
+### Build
 
-### Linux and macOS
+#### Linux and macOS
 Building is as straightforward as `cargo build`.
 
-### Windows
+#### Windows
 Building on Windows requires [LLVM 12](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
 
 For details see the following.
@@ -26,7 +28,7 @@ For details see the following.
 - [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L70-L79)
 
 ## Run
-After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/structopt/0.3.22/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
+After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/structopt/latest/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out
     - row count
     - variable count
@@ -47,7 +49,7 @@ After [building](#build) or [installing](#install), the binary is invoked using 
     - variable formats
     - arrow data types
 - `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
-- `data` &rarr; writes parsed data in `csv` or `parquet` format to a file
+- `data` &rarr; writes parsed data in `csv`, `feather`, or `parquet` format to a file
 
 ### Metadata
 To write metadata to standard out, invoke the following.
@@ -70,30 +72,50 @@ readstat preview /some/dir/to/example.sas7bdat --rows 100
 ```
 
 ### Data
-To write parsed data (as a `csv`) to a file, invoke the following (default is to write all parsed data to the specified file).
+:memo: The `data` subcommand includes a parameter for `--format`, which is the file format that is to be written.  Currently, the following formats have been implemented:
+- `csv`
+- `feather`
+- `parquet`
+
+#### `csv`
+To write parsed data (as `csv`) to a file, invoke the following (default is to write all parsed data to the specified file).
+
+The default `--format` is `csv`.  Thus the parameter is elided from the below examples.
 
 ```sh
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv
 ```
 
-To write the first 100 rows of parsed data (as a `csv`) to a file, invoke the following.
+To write the first 100 rows of parsed data (as `csv`) to a file, invoke the following.
 
 ```sh
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --rows 100
 ```
 
-:memo: The `data` subcommand includes a parameter for `--out-type`, which is the type of file that is to be written.  Currently the only available file types for `--out-type` are `csv` and `parquet` with the default being `csv`.  Thus the parameter is elided from the above examples.
-
-To write parsed data (as a `parquet`) to a file, invoke the following (default is to write all parsed data to the specified file).
+#### `feather`
+To write parsed data (as `feather`) to a file, invoke the following (default is to write all parsed data to the specified file).
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --output-type parquet
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather --format feather
 ```
 
-To write the first 100 rows of parsed data (as a `parquet`) to a file, invoke the following.
+To write the first 100 rows of parsed data (as `feather`) to a file, invoke the following.
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --output-type parquet --rows 100
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather --format feather --rows 100
+```
+
+#### `parquet`
+To write parsed data (as `parquet`) to a file, invoke the following (default is to write all parsed data to the specified file).
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet
+```
+
+To write the first 100 rows of parsed data (as `parquet`) to a file, invoke the following.
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 100
 ```
 
 ### Reader
@@ -130,28 +152,6 @@ readstat preview --help
 readstat data --help
 ```
 
-## Testing
-To perform unit / integration tests, run the following within the `readstat` directory.
-
-```
-cargo test
-```
-
-### Valgrind
-To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `parse_file_metadata_test`, run the following from within the `readstat` directory.
-
-```
-valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
-```
-
-## Platform Support
-- :heavy_check_mark: Linux   &rarr; successfully builds and runs
-    - Principal development environment
-- :heavy_check_mark: macOS   &rarr; successfully builds and runs
-- :heavy_check_mark: Windows &rarr; successfully builds and runs
-    - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
-    - [Requires `libclang`](#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
-
 ## Floating Point Truncation
 :warning: Decimal values are truncated to contain only 14 decimal digits!
 
@@ -181,17 +181,39 @@ Currently any dates, times, or datetimes in the following SAS formats are parsed
 - Datetimes
     - [`DATETIMEw.d`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n0av4h8lmnktm4n1i33et4wyz5yy.htm)
 
+:warning: If the format does not match one of the above SAS formats, or if the value does not have a format applied, then the value will be parsed and read as a numeric value!
+
 ### Details
 SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lrcon/p1wj0wt2ebe2a0n1lv4lem9hdc0v.htm) internally as numeric values.  To distinguish between dates, times, or datetimes and numeric values, a SAS format is read from the variable metadata.  If the format matches one of the above SAS formats then the numeric value is converted and read into memory using one of the Arrow types:
 - [Date32Type](https://docs.rs/arrow/latest/arrow/datatypes/struct.Date32Type.html)
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
 
-:warning: If the format does not match one of the above SAS formats, or if the value does not have a format applied, then the value will be parsed and read as a numeric value.
-
-If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv` or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
+If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
 
 Finally, [more work is planned](https://github.com/curtisalexander/readstat-rs/issues/21) to handle other SAS dates, times, and datetimes that have SAS formats other than those listed above.
+
+## Testing
+To perform unit / integration tests, run the following within the `readstat` directory.
+
+```
+cargo test
+```
+
+### Valgrind
+To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `parse_file_metadata_test`, run the following from within the `readstat` directory.
+
+```
+valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
+```
+
+## Platform Support
+- :heavy_check_mark: Linux   &rarr; successfully builds and runs
+    - Principal development environment
+- :heavy_check_mark: macOS   &rarr; successfully builds and runs
+- :heavy_check_mark: Windows &rarr; successfully builds and runs
+    - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
+    - [Requires `libclang`](#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
 
 ## Benchmarking
 Benchmarking performed with [hyperfine](https://github.com/sharkdp/hyperfine).
@@ -261,12 +283,12 @@ The long term goals of this repository are uncertain.  Possibilities include:
 - Developing and publishing a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
     - Could implement a custom [serde data format](https://serde.rs/data-format.html) for `sas7bdat` files (implement serialize first and deserialize later (if possible))
 - Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
-- Developing a command line tool that performs transformations from `sas7bdat` to other file types (via [serde](https://serde.rs/))
+- Developing a command line tool that performs transformations from `sas7bdat` to other file types
     - [ ] text
         - [X] `csv`
         - [ ] `ndjson`
     - binary
-        - [ ] `arrow`
+        - [X] `feather`
         - [X] `parquet`
 
 ## Resources
