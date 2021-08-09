@@ -47,9 +47,9 @@ pub enum ReadStat {
         /// Output file path
         #[structopt(short = "o", long, parse(from_os_str))]
         output: Option<PathBuf>,
-        /// Output file type, defaults to csv
-        #[structopt(short="t", long, possible_values=&OutType::variants(), case_insensitive=true)]
-        out_type: Option<OutType>,
+        /// Output file format, defaults to csv
+        #[structopt(short="f", long, possible_values=&Format::variants(), case_insensitive=true)]
+        format: Option<Format>,
         /// Number of rows to write
         #[structopt(long)]
         rows: Option<u32>,
@@ -62,7 +62,7 @@ pub enum ReadStat {
 arg_enum! {
     #[derive(Debug, Clone, Copy, Serialize)]
     #[allow(non_camel_case_types)]
-    pub enum OutType {
+    pub enum Format {
         csv,
         feather,
         parquet
@@ -89,7 +89,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 &sas_path.to_string_lossy()
             );
 
-            // out_path and out_type determine the type of writing performed
+            // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, None)?;
             let mut d = ReadStatData::new(rsp);
             let error = d.get_metadata()?;
@@ -116,8 +116,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 &sas_path.to_string_lossy()
             );
 
-            // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(OutType::csv))?;
+            // out_path and format determine the type of writing performed
+            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv))?;
             let mut d = match reader {
                 None => ReadStatData::new(rsp),
                 Some(r) => ReadStatData::new(rsp).set_reader(r),
@@ -138,7 +138,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
         ReadStat::Data {
             input,
             output,
-            out_type,
+            format,
             rows,
             reader,
         } => {
@@ -149,7 +149,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             );
 
             // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, output, out_type)?;
+            let rsp = ReadStatPath::new(sas_path, output, format)?;
             let mut d = match reader {
                 None => ReadStatData::new(rsp),
                 Some(r) => ReadStatData::new(rsp).set_reader(r),
