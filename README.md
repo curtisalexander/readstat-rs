@@ -175,7 +175,12 @@ Finally, SAS represents all numeric values in floating-point representation whic
 Currently any dates, times, or datetimes in the following SAS formats are parsed and read as dates, times, or datetimes.
 - Dates
     - [`DATEw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n16vcb736tge20n1ex3yxx49fzqa.htm)
+    - [`DDMMYYw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n1o9q2mkgoey0sn1uegfwwnm2xwi.htm)
+    - [`DDMMYYxw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n15jgpgn7b87scn1ugjiwnvdag3h.htm)
+    - [`MMDDYYw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n08s3dzq3m0shgn12gtwgdralakv.htm)
+    - [`MMDDYYxw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/p1og22ny80wqj5n1a1oxayemz4bt.htm)
     - [`YYMMDDw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/n00fxkkwqijasxn1580tkw8mh5ob.htm)
+    - [`YYMMDDxw.`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/p0iptsg6780kzfn1k5f0b8s7k7dq.htm)
 - Times
     - [`TIMEw.d`](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/leforinforref/p0b2xn5ovzhtjnn1db5g1gg64yhf.htm)
 - Datetimes

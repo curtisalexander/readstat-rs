@@ -7,7 +7,9 @@ pub fn match_var_format(v: &str) -> Option<ReadStatFormatClass> {
         static ref RE_DATE: Regex = Regex::new(
             r#"(?xi)
             (^DATE[0-9]*$) |
-            (^YYMMDD[0-9]*$)
+            (^DDMMYY[BCDNPS]?[0-9]*$) |
+            (^MMDDYY[BCDNPS]?[0-9]*$) |
+            (^YYMMDD[BCDNPS]?[0-9]*$) |
             "#
         )
         .unwrap();
