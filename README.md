@@ -292,7 +292,7 @@ The long term goals of this repository are uncertain.  Possibilities include:
     - [ ] text
         - [X] `csv`
         - [ ] `ndjson`
-    - binary
+    - [X] binary
         - [X] `feather`
         - [X] `parquet`
 
