@@ -189,7 +189,7 @@ Currently any dates, times, or datetimes in the following SAS formats are parsed
 :warning: If the format does not match one of the above SAS formats, or if the value does not have a format applied, then the value will be parsed and read as a numeric value!
 
 ### Details
-SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lrcon/p1wj0wt2ebe2a0n1lv4lem9hdc0v.htm) internally as numeric values.  To distinguish between dates, times, or datetimes and numeric values, a SAS format is read from the variable metadata.  If the format matches one of the above SAS formats then the numeric value is converted and read into memory using one of the Arrow types:
+SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lrcon/p1wj0wt2ebe2a0n1lv4lem9hdc0v.htm) internally as numeric values.  To distinguish among dates, times, datetimes, or numeric values, a SAS format is read from the variable metadata.  If the format matches one of the above SAS formats then the numeric value is converted and read into memory using one of the Arrow types:
 - [Date32Type](https://docs.rs/arrow/latest/arrow/datatypes/struct.Date32Type.html)
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
