@@ -16,5 +16,5 @@ bindgen = "0.59"
 cc = "1.0"
 
 [target.'cfg(windows)'.dependencies]
-iconv-sys = { path = "../iconv-sys", version = "0.1.0" }
+iconv-sys = { path = "../iconv-sys", version = "0.2.0" }
 libz-sys = "1.1"
