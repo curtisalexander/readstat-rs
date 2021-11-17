@@ -51,16 +51,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrayvec"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
-
-[[package]]
 name = "arrow"
-version = "5.4.0"
+version = "6.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ccbff9be24b395041803b16ff3a0e5059fcbb791a7b35479ce5969957069f67"
+checksum = "e51260693135be6ab1e4f5684ec8426e9155894671489617558584c45fc26ecd"
 dependencies = [
  "bitflags",
  "chrono",
@@ -69,7 +63,7 @@ dependencies = [
  "hex",
  "indexmap",
  "lazy_static",
- "lexical-core 0.7.6",
+ "lexical-core",
  "multiversion",
  "num",
  "rand",
@@ -484,20 +478,7 @@ version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23f26223deed22acc21a8aea097679f86af968272e29c4157696cdd8c983bf91"
 dependencies = [
- "lexical-core 0.8.0",
-]
-
-[[package]]
-name = "lexical-core"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6607c62aa161d23d17a9072cc5da0be67cdfc89d3afb1e8d9c842bebc2525ffe"
-dependencies = [
- "arrayvec 0.5.2",
- "bitflags",
- "cfg-if",
- "ryu",
- "static_assertions",
+ "lexical-core",
 ]
 
 [[package]]
@@ -726,7 +707,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bafe4179722c2894288ee77a9f044f02811c86af699344c498b0840c698a2465"
 dependencies = [
- "arrayvec 0.4.12",
+ "arrayvec",
  "itoa",
 ]
 
@@ -799,9 +780,9 @@ dependencies = [
 
 [[package]]
 name = "parquet"
-version = "5.4.0"
+version = "6.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f231efd0363ac0d8e6e98113e1913b8298ec15fccb42f142c386831fccbe9ddd"
+checksum = "4db6880da64837ea4511fd4b7783c4248b5b6e9227bd1a2672150b305300b2ed"
 dependencies = [
  "arrow",
  "base64",
@@ -972,7 +953,7 @@ dependencies = [
 
 [[package]]
 name = "readstat-sys"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bindgen",
  "cc",
