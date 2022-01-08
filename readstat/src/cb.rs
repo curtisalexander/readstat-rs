@@ -394,9 +394,6 @@ pub extern "C" fn handle_value(
             let value = unsafe { readstat_sys::readstat_double_value(value) };
             debug!("value (before truncation) is {:#?}", value);
             let value: f64 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
-            // let value =
-            //    lexical::parse::<f64, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
-            //        .unwrap();
             // debug
             debug!("value (after truncation) is {:#?}", value);
 
