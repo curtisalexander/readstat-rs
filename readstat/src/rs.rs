@@ -3,9 +3,9 @@ use arrow::array::{
     Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
 use arrow::csv as csv_arrow;
+use arrow::ipc::writer::FileWriter;
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
-use arrow::ipc::writer::FileWriter;
 // use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use colored::Colorize;
 use csv as csv_crate;
@@ -268,7 +268,7 @@ pub enum ReadStatWriter {
     // parquet
     Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
     // feather
-    Feather(arrow::ipc::writer::FileWriter<std::fs::File>)
+    Feather(arrow::ipc::writer::FileWriter<std::fs::File>),
 }
 
 pub struct ReadStatData {
@@ -299,6 +299,7 @@ pub struct ReadStatData {
     pub pb: Option<ProgressBar>,
     pub wrote_start: bool,
     pub finish: bool,
+    pub is_test: bool,
     // should probably be declared with a trait but just utilizing enum for the time being
     pub wtr: Option<ReadStatWriter>,
 }
@@ -333,6 +334,7 @@ impl ReadStatData {
             pb: None,
             wrote_start: false,
             finish: false,
+            is_test: false,
             wtr: None,
         }
     }
@@ -478,6 +480,11 @@ impl ReadStatData {
 
         Ok(error as u32)
     }
+
+    pub fn set_is_test(self, is_test: bool) -> Self {
+        Self { is_test, ..self }
+    }
+
     pub fn set_reader(self, reader: Reader) -> Self {
         Self { reader, ..self }
     }
@@ -704,7 +711,10 @@ impl ReadStatData {
             }
 
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriter::Feather(FileWriter::try_new(f, &self.schema)?));
+                self.wtr = Some(ReadStatWriter::Feather(FileWriter::try_new(
+                    f,
+                    &self.schema,
+                )?));
             }
             if let Some(wtr) = &mut self.wtr {
                 match wtr {
@@ -713,8 +723,8 @@ impl ReadStatData {
                         if self.finish {
                             w.finish()?;
                         }
-                    },
-                    _ => unreachable!()
+                    }
+                    _ => unreachable!(),
                 }
             }
             Ok(())
@@ -761,7 +771,11 @@ impl ReadStatData {
 
             if !self.wrote_start {
                 let props = WriterProperties::builder().build();
-                self.wtr = Some(ReadStatWriter::Parquet(ArrowWriter::try_new(f, Arc::new(self.schema.clone()), Some(props))?));
+                self.wtr = Some(ReadStatWriter::Parquet(ArrowWriter::try_new(
+                    f,
+                    Arc::new(self.schema.clone()),
+                    Some(props),
+                )?));
             }
             if let Some(wtr) = &mut self.wtr {
                 match wtr {
@@ -770,8 +784,8 @@ impl ReadStatData {
                         if self.finish {
                             w.close()?;
                         }
-                    },
-                    _ => unreachable!()
+                    }
+                    _ => unreachable!(),
                 }
             }
             Ok(())

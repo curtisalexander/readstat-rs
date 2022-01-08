@@ -1,4 +1,4 @@
-use arrow::array::{ArrayRef, StringArray};
+use arrow::array::{Float64Array, StringArray};
 use path_abs::PathAbs;
 use std::env;
 
@@ -9,7 +9,9 @@ fn parse_file_with_missing_data() {
     let sas_path = data_dir.join("hasmissing.sas7bdat");
     let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
 
-    let mut d = readstat::ReadStatData::new(rsp).set_reader(readstat::Reader::mem);
+    let mut d = readstat::ReadStatData::new(rsp)
+        .set_reader(readstat::Reader::mem)
+        .set_is_test(true);
     let error = d.get_data(Some(5)).unwrap();
 
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
@@ -36,18 +38,38 @@ fn parse_file_with_missing_data() {
     let row_count = d.row_count;
     assert_eq!(row_count, 5);
 
-    // column = 5 (index 4) -> row = 2 (index 1)
-    let array_refs: Vec<ArrayRef> = d.cols.iter_mut().map(|builder| builder.finish()).collect();
-    let col_with_non_missing = array_refs[4]
+    // column = 1 (index 0) -> row = 1 (index 0)
+    let string_col_with_non_missing = d
+        .batch
+        .column(0)
         .as_any()
         .downcast_ref::<StringArray>()
         .unwrap();
-    let non_missing_value = col_with_non_missing.value(1);
-    // let row_with_missing = &d.rows[1];
-    //let non_missing_value = if let readstat::ReadStatVar::ReadStat_String(s) = &row_with_missing[0] { s.to_owned() } else { String::from("") };
-    assert_eq!(non_missing_value, String::from("00102"));
-    /*
-    let missing_value = if let readstat::ReadStatVar::ReadStat_Missing(m) = &row_with_missing[4] {  *m } else { panic!("Row 2, var 4 value is not ()")  };
-    assert_eq!(missing_value, ());
-    */
+    assert_eq!(
+        string_col_with_non_missing.value(0),
+        String::from("00101").as_str()
+    );
+
+    // column = 4 (index 3) -> row = 2 (index 1)
+    let float_col_with_non_missing = d
+        .batch
+        .column(3)
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .unwrap();
+    assert_eq!(float_col_with_non_missing.value(1), 33.3);
+
+    // column = 5 (index 4)
+    let float_col_with_missing = d.batch.column(4).data();
+
+    let float_col_with_missing_miss_count = float_col_with_missing.null_count();
+    assert_eq!(float_col_with_missing_miss_count, 1);
+
+    // column = 5 (index 4) -> row = 1 (index 0)
+    let float_col_with_missing_is_not_null = float_col_with_missing.is_null(0);
+    assert!(!float_col_with_missing_is_not_null);
+
+    // column = 5 (index 4) -> row = 2 (index 1)
+    let float_col_with_missing_is_null = float_col_with_missing.is_null(1);
+    assert!(float_col_with_missing_is_null);
 }

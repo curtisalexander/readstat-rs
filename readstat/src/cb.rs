@@ -392,11 +392,13 @@ pub extern "C" fn handle_value(
             // Parse back into float so that the trailing zeroes are trimmed when serializing
             // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
             let value = unsafe { readstat_sys::readstat_double_value(value) };
-            let value =
-                lexical::parse::<f64, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
-                    .unwrap();
+            debug!("value (before) is {:#?}", value);
+            let value: f64 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
+            // let value =
+            //    lexical::parse::<f64, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
+            //        .unwrap();
             // debug
-            debug!("value is {:#?}", value);
+            debug!("value (after) is {:#?}", value);
 
             // is float actually a date?
             let value = if d.var_format_classes.is_empty() {
@@ -509,7 +511,10 @@ pub extern "C" fn handle_value(
                 if obs_index == (d.row_count - 1) {
                     d.finish = true;
                 }
-                d.write().unwrap_or(());
+
+                if !d.is_test {
+                    d.write().unwrap_or(());
+                }
 
                 d.wrote_start = true;
                 d.cols.clear();
@@ -538,7 +543,11 @@ pub extern "C" fn handle_value(
                 d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
 
                 d.finish = true;
-                d.write().unwrap_or(());
+
+                if !d.is_test {
+                    d.write().unwrap_or(());
+                }
+
                 d.wrote_start = true;
                 /*
                 match d.write() {
