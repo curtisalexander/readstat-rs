@@ -392,13 +392,13 @@ pub extern "C" fn handle_value(
             // Parse back into float so that the trailing zeroes are trimmed when serializing
             // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
             let value = unsafe { readstat_sys::readstat_double_value(value) };
-            debug!("value (before) is {:#?}", value);
+            debug!("value (before truncation) is {:#?}", value);
             let value: f64 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
             // let value =
             //    lexical::parse::<f64, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
             //        .unwrap();
             // debug
-            debug!("value (after) is {:#?}", value);
+            debug!("value (after truncation) is {:#?}", value);
 
             // is float actually a date?
             let value = if d.var_format_classes.is_empty() {
