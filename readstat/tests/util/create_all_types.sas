@@ -10,6 +10,7 @@ data all_types;
          _string $30.
          _date yymmdd10.
          _datetime datetime22.
+         _datetime_with_ms datetime22.3
          _time time.
   ;
   
@@ -20,6 +21,7 @@ data all_types;
   _string = 'string';
   _date = '01JAN2021'd;
   _datetime = '01JAN2021:10:49:39'dt;
+  _datetime_with_ms = '01JAN2021:10:49:39.333'dt;
   _time = '02:14:13't;
   output;
   
@@ -30,6 +32,7 @@ data all_types;
   _string = 'another string';
   _date = '01JUN2021'd;
   _datetime = '01JUN2021:13:42:25'dt;
+  _datetime_with_ms = '01JUN2021:13:42:25.943'dt;
   _time = '19:54:42't;
   output;
   
@@ -40,6 +43,8 @@ data all_types;
   _string = 'stringy string';
   _date = '22MAY2014'd;
   _datetime = .;
+  _datetime_with_ms = .;
   _time = '11:04:44't;
   output;
+
 run;
