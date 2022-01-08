@@ -369,7 +369,9 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        self.pb = Some(ProgressBar::new(!0));
+        if !self.is_test {
+            self.pb = Some(ProgressBar::new(!0));
+        }
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -382,7 +384,6 @@ impl ReadStatData {
             pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
-
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -413,7 +414,9 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        self.pb = Some(ProgressBar::new(!0));
+        if !self.is_test {
+            self.pb = Some(ProgressBar::new(!0));
+        }
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -426,7 +429,6 @@ impl ReadStatData {
             pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
-
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -449,7 +451,9 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        self.pb = Some(ProgressBar::new(!0));
+        if !self.is_test {
+            self.pb = Some(ProgressBar::new(!0));
+        }
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -462,7 +466,6 @@ impl ReadStatData {
             pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
-
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -556,7 +559,9 @@ impl ReadStatData {
             }
 
             // spinner
-            self.pb = Some(ProgressBar::new(!0));
+            if !self.is_test {
+                self.pb = Some(ProgressBar::new(!0));
+            }
             if let Some(pb) = &self.pb {
                 pb.set_style(
                     ProgressStyle::default_spinner()
@@ -587,7 +592,9 @@ impl ReadStatData {
 
             // progress bar
             /*
-            self.pb = Some(ProgressBar::new(self.row_count as u64));
+            if !self.is_test {
+                self.pb = Some(ProgressBar::new(self.row_count as u64));
+            }
             if let Some(pb) = &self.pb {
                 pb.set_style(
                     ProgressStyle::default_bar()
