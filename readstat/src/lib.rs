@@ -16,7 +16,10 @@ mod formats;
 mod rs;
 
 pub use err::ReadStatError;
-pub use rs::{ReadStatData, ReadStatPath, ReadStatVar, ReadStatVarIndexAndName, ReadStatVarType};
+pub use rs::{
+    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatFormatClass, ReadStatPath, ReadStatVar,
+    ReadStatVarIndexAndName, ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
+};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
