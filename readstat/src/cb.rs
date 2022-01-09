@@ -19,7 +19,6 @@ use crate::rs::{
 use crate::Reader;
 
 const DIGITS: usize = 14;
-const ROWS: usize = 10000;
 const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
 
@@ -255,7 +254,7 @@ pub extern "C" fn handle_value(
 
     // rows determined based on type of Reader
     let rows = match d.reader {
-        Reader::stream => std::cmp::min(ROWS, d.row_count as usize),
+        Reader::stream => std::cmp::min(d.stream_rows as usize, d.row_count as usize),
         Reader::mem => d.row_count as usize,
     };
 
@@ -497,7 +496,7 @@ pub extern "C" fn handle_value(
         match d.reader {
             // if rows = buffer limit and last variable then go ahead and write
             Reader::stream
-                if (((obs_index + 1) % ROWS as i32 == 0) && (obs_index != 0))
+                if (((obs_index + 1) as u32 % d.stream_rows == 0) && (obs_index != 0))
                     || obs_index == (d.row_count - 1) =>
             {
                 let arrays: Vec<ArrayRef> =
