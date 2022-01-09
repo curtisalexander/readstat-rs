@@ -38,11 +38,14 @@ pub enum ReadStat {
         /// Number of rows to write
         #[structopt(long, default_value = "10")]
         rows: u32,
-        /// Type of reader
+        /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
         reader: Option<Reader>,
+        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
+        #[structopt(long)]
+        stream_rows: Option<u32>,
     },
-    /// Write parsed data to file of specific type
+    /// Write parsed data to file of specific format
     Data {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
@@ -50,15 +53,18 @@ pub enum ReadStat {
         /// Output file path
         #[structopt(short = "o", long, parse(from_os_str))]
         output: Option<PathBuf>,
-        /// Output file format, defaults to csv
+        /// Output file format{n}Defaults to csv
         #[structopt(short="f", long, possible_values=&Format::variants(), case_insensitive=true)]
         format: Option<Format>,
         /// Number of rows to write
         #[structopt(long)]
         rows: Option<u32>,
-        /// Type of reader
+        /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
         reader: Option<Reader>,
+        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
+        #[structopt(long)]
+        stream_rows: Option<u32>,
     },
 }
 
@@ -112,6 +118,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             input,
             rows,
             reader,
+            stream_rows,
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -125,6 +132,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 None => ReadStatData::new(rsp),
                 Some(r) => ReadStatData::new(rsp).set_reader(r),
             };
+            d.set_stream_rows(stream_rows);
+
             let error = d.get_preview(rows)?;
 
             match FromPrimitive::from_i32(error as i32) {
@@ -144,6 +153,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             format,
             rows,
             reader,
+            stream_rows
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -157,6 +167,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 None => ReadStatData::new(rsp),
                 Some(r) => ReadStatData::new(rsp).set_reader(r),
             };
+            d.set_stream_rows(stream_rows);
 
             match &d {
                 ReadStatData { out_path: None, .. } => {

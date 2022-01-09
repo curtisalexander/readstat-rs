@@ -121,7 +121,8 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
 - `mem` &rarr; Parse and read the entire `sas7bdat` into memory before writing to either standard out or a file
-- `stream` (default) &rarr; Parse and read at most [10,000 rows](https://github.com/curtisalexander/readstat-rs/blob/main/readstat/src/cb.rs#L15) into memory before writing to disk
+- `stream` (default) &rarr; Parse and read at most `stream-rows` into memory before writing to disk
+    - `stream-rows` may be set via the command line parameter `--stream-rows` or if elided will default to 50,000 rows
 
 **Why is this useful?**
 - `mem` is useful for testing purposes

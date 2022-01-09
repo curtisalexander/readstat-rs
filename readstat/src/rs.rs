@@ -23,7 +23,7 @@ use std::error::Error;
 use std::ffi::CString;
 use std::fs::OpenOptions;
 use std::io::stdout;
-use std::os::raw::{c_char, c_int, c_long, c_void};
+use std::os::raw::{c_char, c_int, c_uint, c_long, c_void};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -296,6 +296,7 @@ pub struct ReadStatData {
     pub wrote_header: bool,
     pub errors: Vec<String>,
     pub reader: Reader,
+    pub stream_rows: c_uint,
     pub pb: Option<ProgressBar>,
     pub wrote_start: bool,
     pub finish: bool,
@@ -331,6 +332,7 @@ impl ReadStatData {
             wrote_header: false,
             errors: Vec::new(),
             reader: Reader::stream,
+            stream_rows: 50000,
             pb: None,
             wrote_start: false,
             finish: false,
@@ -490,6 +492,17 @@ impl ReadStatData {
 
     pub fn set_reader(self, reader: Reader) -> Self {
         Self { reader, ..self }
+    }
+
+    pub fn set_stream_rows(&mut self, stream_rows: Option<c_uint>) {
+        match self.reader {
+            Reader::stream =>
+                match stream_rows {
+                    Some(stream_rows ) => { self.stream_rows = stream_rows }
+                    _ => ()
+                }
+            Reader::mem => ()
+        }
     }
 
     pub fn set_var_types(&mut self) {
