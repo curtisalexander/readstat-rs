@@ -3,30 +3,24 @@ use arrow::{
     datatypes::DataType,
 };
 use chrono::NaiveDate;
-use path_abs::PathAbs;
-use std::env;
 
-/*
-_int,_float,_char,_string,_date,_datetime,_time
-1234.0,1234.5,s,string,2021-01-01,2021-01-01T10:49:39.000000000,02:14:13
-4567.0,4567.8,c,another string,2021-06-01,2021-06-01T13:42:25.000000000,19:54:42
-,910.11,,stringy string,2014-05-22,,11:04:44
-*/
+mod common;
+
+fn init() -> readstat::ReadStatData {
+    // setup path
+    let rsp = common::setup_path("all_types.sas7bdat").unwrap();
+
+    // parse sas7bdat
+    readstat::ReadStatData::new(rsp)
+        .set_reader(readstat::Reader::mem)
+        .set_is_test(true)
+}
 
 #[test]
 fn parse_all_types_int() {
-    // setup path
-    let project_dir = PathAbs::new(env!("CARGO_MANIFEST_DIR")).unwrap();
-    let data_dir = project_dir.as_path().join("tests").join("data");
-    let sas_path = data_dir.join("all_types.sas7bdat");
-    let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
+    let mut d = init();
 
-    // parse sas7bdat
-    let mut d = readstat::ReadStatData::new(rsp)
-        .set_reader(readstat::Reader::mem)
-        .set_is_test(true);
     let error = d.get_data(None).unwrap();
-
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
@@ -34,21 +28,11 @@ fn parse_all_types_int() {
     let var_index = 0;
 
     // contains variable
-    let vars = d.vars;
-    let contains_key = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
-        var_index,
-        var_name.clone(),
-    ));
-
-    assert!(contains_key);
+    let contains_var = common::contains_var(&d, var_name.clone(), var_index);
+    assert!(contains_var);
 
     // metadata
-    let m = &vars
-        .get(&readstat::ReadStatVarIndexAndName::new(
-            var_index,
-            var_name.clone(),
-        ))
-        .unwrap();
+    let m = common::get_metadata(&d, var_name.clone(), var_index);
 
     // variable type class
     assert!(matches!(
@@ -88,18 +72,9 @@ fn parse_all_types_int() {
 
 #[test]
 fn parse_all_types_string() {
-    // setup path
-    let project_dir = PathAbs::new(env!("CARGO_MANIFEST_DIR")).unwrap();
-    let data_dir = project_dir.as_path().join("tests").join("data");
-    let sas_path = data_dir.join("all_types.sas7bdat");
-    let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
+    let mut d = init();
 
-    // parse sas7bdat
-    let mut d = readstat::ReadStatData::new(rsp)
-        .set_reader(readstat::Reader::mem)
-        .set_is_test(true);
     let error = d.get_data(None).unwrap();
-
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
@@ -107,21 +82,11 @@ fn parse_all_types_string() {
     let var_index = 3;
 
     // contains variable
-    let vars = d.vars;
-    let contains_key = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
-        var_index,
-        var_name.clone(),
-    ));
-
-    assert!(contains_key);
+    let contains_var = common::contains_var(&d, var_name.clone(), var_index);
+    assert!(contains_var);
 
     // metadata
-    let m = &vars
-        .get(&readstat::ReadStatVarIndexAndName::new(
-            var_index,
-            var_name.clone(),
-        ))
-        .unwrap();
+    let m = common::get_metadata(&d, var_name.clone(), var_index);
 
     // variable type class
     assert!(matches!(
@@ -161,18 +126,9 @@ fn parse_all_types_string() {
 
 #[test]
 fn parse_all_types_datetime() {
-    // setup path
-    let project_dir = PathAbs::new(env!("CARGO_MANIFEST_DIR")).unwrap();
-    let data_dir = project_dir.as_path().join("tests").join("data");
-    let sas_path = data_dir.join("all_types.sas7bdat");
-    let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
+    let mut d = init();
 
-    // parse sas7bdat
-    let mut d = readstat::ReadStatData::new(rsp)
-        .set_reader(readstat::Reader::mem)
-        .set_is_test(true);
     let error = d.get_data(None).unwrap();
-
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
@@ -180,21 +136,11 @@ fn parse_all_types_datetime() {
     let var_index = 5;
 
     // contains variable
-    let vars = d.vars;
-    let contains_key = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
-        var_index,
-        var_name.clone(),
-    ));
-
-    assert!(contains_key);
+    let contains_var = common::contains_var(&d, var_name.clone(), var_index);
+    assert!(contains_var);
 
     // metadata
-    let m = &vars
-        .get(&readstat::ReadStatVarIndexAndName::new(
-            var_index,
-            var_name.clone(),
-        ))
-        .unwrap();
+    let m = common::get_metadata(&d, var_name.clone(), var_index);
 
     // variable type class
     assert!(matches!(
@@ -227,46 +173,3 @@ fn parse_all_types_datetime() {
 
     assert_eq!(dt, dt_literal);
 }
-/*
-    let var_count = d.var_count;
-    assert_eq!(var_count, 9);
-
-    let row_count = d.row_count;
-    assert_eq!(row_count, 5);
-
-    // column = 1 (index 0) -> row = 1 (index 0)
-    let string_col_with_non_missing = d
-        .batch
-        .column(0)
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .unwrap();
-    assert_eq!(
-        string_col_with_non_missing.value(0),
-        String::from("00101").as_str()
-    );
-
-    // column = 4 (index 3) -> row = 2 (index 1)
-    let float_col_with_non_missing = d
-        .batch
-        .column(3)
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
-    assert_eq!(float_col_with_non_missing.value(1), 33.3);
-
-    // column = 5 (index 4)
-    let float_col_with_missing = d.batch.column(4).data();
-
-    let float_col_with_missing_miss_count = float_col_with_missing.null_count();
-    assert_eq!(float_col_with_missing_miss_count, 1);
-
-    // column = 5 (index 4) -> row = 1 (index 0)
-    let float_col_with_missing_is_not_null = float_col_with_missing.is_null(0);
-    assert!(!float_col_with_missing_is_not_null);
-
-    // column = 5 (index 4) -> row = 2 (index 1)
-    let float_col_with_missing_is_null = float_col_with_missing.is_null(1);
-    assert!(float_col_with_missing_is_null);
-}
-*/
