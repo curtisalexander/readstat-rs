@@ -1,6 +1,6 @@
 [package]
 name = "readstat"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2021"
 description = "Rust wrapper of the ReadStat C library"
@@ -9,7 +9,7 @@ repository = "https://github.com/curtisalexander/readstat-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-arrow = "6.5"
+arrow = "7.0"
 csv = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 colored = "2.0"
@@ -21,7 +21,7 @@ log = "0.4"
 num-derive = "0.3"
 num-format = "0.4"
 num-traits = "0.2"
-parquet = "6.5"
+parquet = "7.0"
 path_abs = "0.5"
 regex = "1.5"
 readstat-sys = { path = "../readstat-sys", version = "0.2.0" }
