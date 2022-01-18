@@ -3,7 +3,7 @@
 # readstat-rs
 Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
 
-Get [metadata](#metadata), [preview data](#preview-data), or [convert](#data) to `csv`, `feather`, or `parquet` formats.
+Get [metadata](#metadata), [preview data](#preview-data), or [convert](#data) to [`csv`](https://en.wikipedia.org/wiki/Comma-separated_values), [`feather`](https://arrow.apache.org/docs/python/feather.html) (or the [Arrow IPC format](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)), `json` (as [ndjson](http://ndjson.org/)), or [`parquet`](https://parquet.apache.org/) formats.
 
 ## ReadStat
 The command-line tool is developed in Rust and is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
@@ -49,7 +49,7 @@ After [building](#build) or [installing](#install), the binary is invoked using 
     - variable formats
     - arrow data types
 - `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
-- `data` &rarr; writes parsed data in `csv`, `feather`, or `parquet` format to a file
+- `data` &rarr; writes parsed data in `csv`, `feather`, `json`, or `parquet` format to a file
 
 ### Metadata
 To write metadata to standard out, invoke the following.
@@ -105,6 +105,19 @@ To write the first 100 rows of parsed data (as `feather`) to a file, invoke the 
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather --format feather --rows 100
 ```
 
+#### `json`
+To write parsed data (as `json`) to a file, invoke the following (default is to write all parsed data to the specified file).
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.json --format json
+```
+
+To write the first 100 rows of parsed data (as `json`) to a file, invoke the following.
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.json --format json --rows 100
+```
+
 #### `parquet`
 To write parsed data (as `parquet`) to a file, invoke the following (default is to write all parsed data to the specified file).
 
@@ -131,7 +144,9 @@ The `preview` and `data` subcommands include a parameter for `--reader`.  The po
 - In addition, by enabling these options as command line parameters [hyperfine](#benchmarking) may be used to benchmark across an assortment of file sizes
 
 ### Debug
-Debug information is printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.  :warning: This is quite verbose!
+Debug information is printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.
+
+:warning: This is quite verbose!  If using the [preview](#preview-data) or [data](#data) subcommand, will write debug information for _every single value_!
 
 ```sh
 # Linux and macOS
@@ -158,7 +173,7 @@ readstat data --help
 
 For example, the number `1.123456789012345` created within SAS would be returned as `1.12345678901234` within Rust.
 
-Why does this happen?  Is this an implementation error?  No, truncation to only 14 decimal digits has been purposely implemented within the Rust code.
+Why does this happen?  Is this an implementation error?  No, truncation to only 14 decimal digits has been _purposely implemented_ within the Rust code.
 
 As a specific example, when testing with the [cars.sas7bdat](data/README.md) dataset (which was created originally on Windows), the numeric value `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits) within Rust.  Values created on Windows with an x64 processor are only accurate to 15 digits.
 
@@ -195,7 +210,7 @@ SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pg
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
 
-If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
+If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `json`, or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
 
 Finally, [more work is planned](https://github.com/curtisalexander/readstat-rs/issues/21) to handle other SAS dates, times, and datetimes that have SAS formats other than those listed above.
 
@@ -206,6 +221,21 @@ To perform unit / integration tests, run the following within the `readstat` dir
 cargo test
 ```
 
+### Datasets
+Formally tested (via integration tests) against the following datasets.  See the [README.md](readstat/tests/data/README.md) for data sources.
+- [ ] `ahs2019n.sas7bdat` &rarr; US Census data
+- [X] `all_types.sas7bdat` &rarr; SAS dataset containing all SAS types
+- [X] `cars.sas7bdat` &rarr; SAS cars dataset
+- [X] `hasmissing.sas7bdat` &rarr; SAS dataset containing missing values
+- [ ] `intel.sas7bdat`
+- [ ] `messydata.sas7bdat`
+- [ ] `rand_ds.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas)
+- [X] `rand_ds_largepage_err.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `2M`
+- [X] `rand_ds_largepage_ok.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `1M`
+- [X] `scientific_notation.sas7bdat` &rarr; Used to test float parsing
+- [ ] `somedata.sas7bdat`
+- [ ] `somemiss.sas7bdat`
+
 ### Valgrind
 To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `parse_file_metadata_test`, run the following from within the `readstat` directory.
 
@@ -213,9 +243,10 @@ To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  F
 valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 ```
 
-## Platform Support
+## [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 - :heavy_check_mark: Linux   &rarr; successfully builds and runs
-    - Principal development environment
+    - [glibc](https://www.gnu.org/software/libc/)
+    - [musl](https://www.musl-libc.org/) (using the [jemalloc](readstat/Cargo.toml#L33) allocator)
 - :heavy_check_mark: macOS   &rarr; successfully builds and runs
 - :heavy_check_mark: Windows &rarr; successfully builds and runs
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
@@ -230,14 +261,14 @@ To run, execute the following from within the `readstat` directory.
 
 ```powershell
 # Windows
-hyperfine --warmup 5 "ReadStat_App.exe -f ..\data\cars.sas7bdat ..\data\cars_c.csv" ".\target\release\readstat.exe data ..\data\cars.sas7bdat --output ..\data\cars_rust.csv"
+hyperfine --warmup 5 "ReadStat_App.exe -f tests\data\cars.sas7bdat tests\data\cars_c.csv" ".\target\release\readstat.exe data tests\data\cars.sas7bdat --output tests\data\cars_rust.csv"
 ```
 
 :memo: First experiments on Windows are challenging to interpret due to file caching.  Need further research into utilizing the `--prepare` option provided by `hyperfine` on Windows.
 
 ```sh
 # Linux and macOS
-hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f ../data/cars.sas7bdat ../data/cars_c.csv" "./target/release/readstat data ../data/cars.sas7bdat --output ../data/cars_rust.csv"
+hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f tests/data/cars.sas7bdat tests/data/cars_c.csv" "./target/release/readstat data tests/data/cars.sas7bdat --output tests/data/cars_rust.csv"
 ```
 
 Other, future, benchmarking may be performed when/if [channels and threads](https://github.com/curtisalexander/readstat-rs/issues/28) are developed.
@@ -247,7 +278,7 @@ Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/fla
 
 To run, execute the following from within the `readstat` directory.
 ```sh
-cargo flamegraph --bin readstat -- data ../data/_ahs2019n.sas7bdat --output ../data/_ahs2019n.csv
+cargo flamegraph --bin readstat -- data tests/data/_ahs2019n.sas7bdat --output tests/data/_ahs2019n.csv
 ```
 
 Flamegraph is written to `readstat/flamegraph.svg`.
@@ -285,17 +316,17 @@ Short term, developing the command-line tool was a helpful exercise in binding t
 
 ### Long Term
 The long term goals of this repository are uncertain.  Possibilities include:
-- Completing and publishing the `readstat-sys` crate that binds to [ReadStat](https://github.com/WizardMac/ReadStat)
-- Developing and publishing a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
-    - Could implement a custom [serde data format](https://serde.rs/data-format.html) for `sas7bdat` files (implement serialize first and deserialize later (if possible))
-- Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
-- Developing a command line tool that performs transformations from `sas7bdat` to other file types
-    - [ ] text
+- :heavy_check_mark: Developing a command line tool that performs transformations from `sas7bdat` to other file types
+    - [X] text
         - [X] `csv`
-        - [ ] `ndjson`
+        - [X] `json` (as `ndjson`)
     - [X] binary
         - [X] `feather`
         - [X] `parquet`
+- :heavy_check_mark: Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
+- Completing and publishing the `readstat-sys` crate that binds to [ReadStat](https://github.com/WizardMac/ReadStat)
+- Developing and publishing a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
+    - Implementing a custom [serde data format](https://serde.rs/data-format.html) for `sas7bdat` files (implement serialize first and deserialize later (if possible))
 
 ## Resources
 The following have been **_incredibly_** helpful while developing!

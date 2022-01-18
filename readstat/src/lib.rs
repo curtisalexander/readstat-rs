@@ -74,6 +74,7 @@ arg_enum! {
     pub enum Format {
         csv,
         feather,
+        json,
         parquet
     }
 }
@@ -153,7 +154,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             format,
             rows,
             reader,
-            stream_rows
+            stream_rows,
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
