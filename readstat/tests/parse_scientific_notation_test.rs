@@ -71,7 +71,7 @@ fn parse_scientific_notation() {
     // values
     // Due to the way previously utilized lexical to parse floats, was having an issue when
     //   large floats were being read correctly from ReadStat but then were being converted to
-    //   strings via lexical and the string conversion resulted in scientific notation; after 
+    //   strings via lexical and the string conversion resulted in scientific notation; after
     //   trying to parse back from a string to a float with lexical, it would throw errors
     // Fixed by d301a9f9ff8c5e3c34a604a16c095e99d205f624
     assert_eq!(col.value(0), 333039375527f64);
