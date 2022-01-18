@@ -4,6 +4,7 @@ use arrow::array::{
 };
 use arrow::csv as csv_arrow;
 use arrow::ipc::writer::FileWriter;
+use arrow::json::LineDelimitedWriter;
 use arrow::record_batch::RecordBatch;
 use arrow::{datatypes, record_batch};
 // use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
@@ -23,7 +24,7 @@ use std::error::Error;
 use std::ffi::CString;
 use std::fs::OpenOptions;
 use std::io::stdout;
-use std::os::raw::{c_char, c_int, c_uint, c_long, c_void};
+use std::os::raw::{c_char, c_int, c_long, c_uint, c_void};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -112,7 +113,7 @@ impl ReadStatPath {
                     format.to_string().bright_green()
                 ))),
                 |e| match format {
-                    Format::csv | Format::feather | Format::parquet => {
+                    Format::csv | Format::json | Format::feather | Format::parquet => {
                         if e == format.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
@@ -265,10 +266,12 @@ pub enum ReadStatFormatClass {
 }
 
 pub enum ReadStatWriter {
-    // parquet
-    Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
     // feather
     Feather(arrow::ipc::writer::FileWriter<std::fs::File>),
+    // json
+    Json(arrow::json::writer::LineDelimitedWriter<std::fs::File>),
+    // parquet
+    Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
 }
 
 pub struct ReadStatData {
@@ -496,12 +499,11 @@ impl ReadStatData {
 
     pub fn set_stream_rows(&mut self, stream_rows: Option<c_uint>) {
         match self.reader {
-            Reader::stream =>
-                match stream_rows {
-                    Some(stream_rows ) => { self.stream_rows = stream_rows }
-                    _ => ()
-                }
-            Reader::mem => ()
+            Reader::stream => match stream_rows {
+                Some(stream_rows) => self.stream_rows = stream_rows,
+                _ => (),
+            },
+            Reader::mem => (),
         }
     }
 
@@ -551,16 +553,21 @@ impl ReadStatData {
                 self.wrote_header = true;
                 self.write_data_to_csv()
             }
-            // Write parquet data to file
-            Self {
-                format: Format::parquet,
-                ..
-            } => self.write_data_to_parquet(),
             // Write feather data to file
             Self {
                 format: Format::feather,
                 ..
             } => self.write_data_to_feather(),
+            // Write json data to file
+            Self {
+                format: Format::json,
+                ..
+            } => self.write_data_to_json(),
+            // Write parquet data to file
+            Self {
+                format: Format::parquet,
+                ..
+            } => self.write_data_to_parquet(),
         }
     }
 
@@ -751,6 +758,64 @@ impl ReadStatData {
         } else {
             Err(From::from(
                 "Error writing feather file as output path is set to None",
+            ))
+        }
+    }
+
+    pub fn write_data_to_json(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(p) = &self.out_path {
+            let f = if self.wrote_start {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(p)?
+            } else {
+                std::fs::File::create(p)?
+            };
+
+            if let Some(pb) = &self.pb {
+                let in_f = if let Some(f) = &self.path.file_name() {
+                    f.to_string_lossy().bright_red()
+                } else {
+                    String::from("___").bright_red()
+                };
+
+                let out_f = if let Some(p) = &self.out_path {
+                    if let Some(f) = p.file_name() {
+                        f.to_string_lossy().bright_green()
+                    } else {
+                        String::from("___").bright_green()
+                    }
+                } else {
+                    String::from("___").bright_green()
+                };
+
+                let msg = format!("Writing file {} as {}", in_f, out_f);
+
+                pb.set_message(msg);
+            }
+
+            if !self.wrote_start {
+                self.wtr = Some(ReadStatWriter::Json(LineDelimitedWriter::new(f)));
+            }
+            if let Some(wtr) = &mut self.wtr {
+                match wtr {
+                    ReadStatWriter::Json(w) => {
+                        let mut batch = RecordBatch::new_empty(Arc::new(self.schema.clone()));
+                        batch.clone_from(&self.batch);
+                        w.write_batches(&vec![batch])?;
+                        if self.finish {
+                            w.finish()?;
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing json file as output path is set to None",
             ))
         }
     }

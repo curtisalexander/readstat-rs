@@ -2,6 +2,7 @@ use std::error::Error;
 
 use path_abs::PathAbs;
 
+// used in tests
 pub fn setup_path<P>(ds: P) -> Result<readstat::ReadStatPath, Box<dyn Error>>
 where
     P: AsRef<std::path::Path>,
@@ -16,6 +17,8 @@ where
     readstat::ReadStatPath::new(sas_path, None, None)
 }
 
+// used in tests
+#[allow(dead_code)]
 pub fn contains_var(d: &readstat::ReadStatData, var_name: String, var_index: i32) -> bool {
     // contains variable
     d.vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
@@ -24,6 +27,8 @@ pub fn contains_var(d: &readstat::ReadStatData, var_name: String, var_index: i32
     ))
 }
 
+// used in tests
+#[allow(dead_code)]
 pub fn get_metadata<'a>(
     d: &'a readstat::ReadStatData,
     var_name: String,
