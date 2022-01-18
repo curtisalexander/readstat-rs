@@ -3,7 +3,7 @@
 # readstat-rs
 Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
 
-Get [metadata](#metadata), [preview data](#preview-data), or [convert](#data) to [`csv`](https://en.wikipedia.org/wiki/Comma-separated_values), [`feather`](https://arrow.apache.org/docs/python/feather.html) (or the [Arrow IPC format](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)), `json` (as [ndjson](http://ndjson.org/)), or [`parquet`](https://parquet.apache.org/) formats.
+Get [metadata](#metadata), [preview data](#preview-data), or [convert](#data) to [`csv`](https://en.wikipedia.org/wiki/Comma-separated_values), [`feather`](https://arrow.apache.org/docs/python/feather.html) (or the [Arrow IPC format](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)), [`ndjson`](http://ndjson.org/), or [`parquet`](https://parquet.apache.org/) formats.
 
 ## ReadStat
 The command-line tool is developed in Rust and is only possible due to the excellent [ReadStat](https://github.com/WizardMac/ReadStat) library developed by [Evan Miller](https://www.evanmiller.org).
@@ -49,7 +49,7 @@ After [building](#build) or [installing](#install), the binary is invoked using 
     - variable formats
     - arrow data types
 - `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
-- `data` &rarr; writes parsed data in `csv`, `feather`, `json`, or `parquet` format to a file
+- `data` &rarr; writes parsed data in `csv`, `feather`, `ndjson`, or `parquet` format to a file
 
 ### Metadata
 To write metadata to standard out, invoke the following.
@@ -105,17 +105,17 @@ To write the first 100 rows of parsed data (as `feather`) to a file, invoke the 
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather --format feather --rows 100
 ```
 
-#### `json`
-To write parsed data (as `json`) to a file, invoke the following (default is to write all parsed data to the specified file).
+#### `ndjson`
+To write parsed data (as `ndjson`) to a file, invoke the following (default is to write all parsed data to the specified file).
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.json --format json
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson --format ndjson
 ```
 
-To write the first 100 rows of parsed data (as `json`) to a file, invoke the following.
+To write the first 100 rows of parsed data (as `ndjson`) to a file, invoke the following.
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.json --format json --rows 100
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson --format ndjson --rows 100
 ```
 
 #### `parquet`
@@ -210,7 +210,7 @@ SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pg
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
 
-If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `json`, or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
+If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `ndjson`, or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
 
 Finally, [more work is planned](https://github.com/curtisalexander/readstat-rs/issues/21) to handle other SAS dates, times, and datetimes that have SAS formats other than those listed above.
 
@@ -319,7 +319,7 @@ The long term goals of this repository are uncertain.  Possibilities include:
 - :heavy_check_mark: Developing a command line tool that performs transformations from `sas7bdat` to other file types
     - [X] text
         - [X] `csv`
-        - [X] `json` (as `ndjson`)
+        - [X] `ndjson`
     - [X] binary
         - [X] `feather`
         - [X] `parquet`

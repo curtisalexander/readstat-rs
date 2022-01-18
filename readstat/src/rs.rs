@@ -113,7 +113,7 @@ impl ReadStatPath {
                     format.to_string().bright_green()
                 ))),
                 |e| match format {
-                    Format::csv | Format::json | Format::feather | Format::parquet => {
+                    Format::csv | Format::ndjson | Format::feather | Format::parquet => {
                         if e == format.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
@@ -268,7 +268,7 @@ pub enum ReadStatFormatClass {
 pub enum ReadStatWriter {
     // feather
     Feather(arrow::ipc::writer::FileWriter<std::fs::File>),
-    // json
+    // ndjson
     Json(arrow::json::writer::LineDelimitedWriter<std::fs::File>),
     // parquet
     Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
@@ -558,11 +558,11 @@ impl ReadStatData {
                 format: Format::feather,
                 ..
             } => self.write_data_to_feather(),
-            // Write json data to file
+            // Write ndjson data to file
             Self {
-                format: Format::json,
+                format: Format::ndjson,
                 ..
-            } => self.write_data_to_json(),
+            } => self.write_data_to_ndjson(),
             // Write parquet data to file
             Self {
                 format: Format::parquet,
@@ -762,7 +762,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn write_data_to_json(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn write_data_to_ndjson(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(p) = &self.out_path {
             let f = if self.wrote_start {
                 OpenOptions::new()
@@ -815,7 +815,7 @@ impl ReadStatData {
             Ok(())
         } else {
             Err(From::from(
-                "Error writing json file as output path is set to None",
+                "Error writing ndjson file as output path is set to None",
             ))
         }
     }

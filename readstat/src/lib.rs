@@ -74,7 +74,7 @@ arg_enum! {
     pub enum Format {
         csv,
         feather,
-        json,
+        ndjson,
         parquet
     }
 }
