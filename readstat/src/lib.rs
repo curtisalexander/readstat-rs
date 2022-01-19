@@ -117,9 +117,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, None)?;
 
-            // is_test = false  ==>  display progress bar
-            // is_test = true   ==>  do not display progress bar
-            let mut d = ReadStatData::new(rsp).set_is_test(!no_progress);
+            let mut d = ReadStatData::new(rsp).set_is_test(no_progress);
             let error = d.get_metadata()?;
 
             match FromPrimitive::from_i32(error as i32) {
@@ -154,7 +152,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
-                .set_is_test(!no_progress);
+                .set_is_test(no_progress);
 
             let error = d.get_preview(rows)?;
 
@@ -192,7 +190,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
-                .set_is_test(!no_progress);
+                .set_is_test(no_progress);
 
             match &d {
                 ReadStatData { out_path: None, .. } => {
