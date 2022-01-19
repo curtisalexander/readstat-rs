@@ -493,8 +493,32 @@ impl ReadStatData {
         Self { is_test, ..self }
     }
 
-    pub fn set_reader(self, reader: Reader) -> Self {
-        Self { reader, ..self }
+    pub fn set_reader(self, reader: Option<Reader>) -> Self {
+        if let Some(r) = reader {
+            Self { reader: r, ..self}
+        } else {
+            self
+        }
+    }
+
+    pub fn set_stream_rows(self, stream_rows: Option<c_uint>) -> Self {
+        match self.reader {
+            Reader::stream => match stream_rows {
+                Some(stream_rows) => { Self { stream_rows, ..self } }
+                None => self
+            },
+            Reader::mem => self
+        }
+    }
+    /*
+    pub fn set_is_test(&mut self, is_test: bool) {
+        self.is_test = is_test;
+    }
+
+    pub fn set_reader(&mut self, reader: Option<Reader>) {
+        if let Some(r) = reader {
+            self.reader = r;
+        }
     }
 
     pub fn set_stream_rows(&mut self, stream_rows: Option<c_uint>) {
@@ -506,6 +530,7 @@ impl ReadStatData {
             Reader::mem => (),
         }
     }
+    */
 
     pub fn set_var_types(&mut self) {
         let var_types = self.vars.iter().map(|(_, q)| q.var_type).collect();

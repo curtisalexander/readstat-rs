@@ -23,12 +23,18 @@ pub use rs::{
 
 // StructOpt
 #[derive(StructOpt, Debug)]
+/// Command-line tool for working with SAS binary — sas7bdat — files
+///
+/// Get metadata, preview data, or convert data to csv, feather (or the Arrow IPC format), ndjson, or parquet formats
 pub enum ReadStat {
     /// Display sas7bdat metadata
     Metadata {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
         input: PathBuf,
+        /// Do not display progress bar
+        #[structopt(long)]
+        no_progress: bool,
     },
     /// Write rows to standard out
     Preview {
@@ -44,6 +50,9 @@ pub enum ReadStat {
         /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
         #[structopt(long)]
         stream_rows: Option<u32>,
+        /// Do not display progress bar
+        #[structopt(long)]
+        no_progress: bool,
     },
     /// Write parsed data to file of specific format
     Data {
@@ -65,6 +74,9 @@ pub enum ReadStat {
         /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
         #[structopt(long)]
         stream_rows: Option<u32>,
+        /// Do not display progress bar
+        #[structopt(long)]
+        no_progress: bool,
     },
 }
 
@@ -92,7 +104,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     match rs {
-        ReadStat::Metadata { input: in_path } => {
+        ReadStat::Metadata {
+            input: in_path,
+            no_progress,
+        } => {
             let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
                 "Getting metadata from the file {}",
@@ -101,7 +116,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, None)?;
-            let mut d = ReadStatData::new(rsp);
+
+            // is_test = false  ==>  display progress bar
+            // is_test = true   ==>  do not display progress bar
+            let mut d = ReadStatData::new(rsp).set_is_test(!no_progress);
             let error = d.get_metadata()?;
 
             match FromPrimitive::from_i32(error as i32) {
@@ -120,6 +138,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             rows,
             reader,
             stream_rows,
+            no_progress,
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -129,11 +148,13 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv))?;
-            let mut d = match reader {
-                None => ReadStatData::new(rsp),
-                Some(r) => ReadStatData::new(rsp).set_reader(r),
-            };
-            d.set_stream_rows(stream_rows);
+
+            // is_test = false  ==>  display progress bar
+            // is_test = true   ==>  do not display progress bar
+            let mut d = ReadStatData::new(rsp)
+                .set_reader(reader)
+                .set_stream_rows(stream_rows)
+                .set_is_test(!no_progress);
 
             let error = d.get_preview(rows)?;
 
@@ -155,6 +176,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             rows,
             reader,
             stream_rows,
+            no_progress,
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -164,11 +186,13 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, output, format)?;
-            let mut d = match reader {
-                None => ReadStatData::new(rsp),
-                Some(r) => ReadStatData::new(rsp).set_reader(r),
-            };
-            d.set_stream_rows(stream_rows);
+
+            // is_test = false  ==>  display progress bar
+            // is_test = true   ==>  do not display progress bar
+            let mut d = ReadStatData::new(rsp)
+                .set_reader(reader)
+                .set_stream_rows(stream_rows)
+                .set_is_test(!no_progress);
 
             match &d {
                 ReadStatData { out_path: None, .. } => {

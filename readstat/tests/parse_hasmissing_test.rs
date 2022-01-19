@@ -16,7 +16,7 @@ fn parse_hasmissing() {
     // parse sas7bdat
     // set is_test to true to suppress writing to console
     let mut d = readstat::ReadStatData::new(rsp)
-        .set_reader(readstat::Reader::mem)
+        .set_reader(Some(readstat::Reader::mem))
         .set_is_test(true);
     let error = d.get_data(Some(5)).unwrap();
 

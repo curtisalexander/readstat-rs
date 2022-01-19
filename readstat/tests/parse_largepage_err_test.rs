@@ -11,7 +11,7 @@ fn parse_largepage_err() {
 
     // parse sas7bdat
     let mut d = readstat::ReadStatData::new(rsp)
-        .set_reader(readstat::Reader::mem)
+        .set_reader(Some(readstat::Reader::mem))
         .set_is_test(true);
     let error = d.get_metadata().unwrap();
 

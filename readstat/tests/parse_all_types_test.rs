@@ -13,7 +13,7 @@ fn init() -> readstat::ReadStatData {
 
     // parse sas7bdat
     readstat::ReadStatData::new(rsp)
-        .set_reader(readstat::Reader::mem)
+        .set_reader(Some(readstat::Reader::mem))
         .set_is_test(true)
 }
 
