@@ -23,8 +23,8 @@ pub use rs::{
 
 // StructOpt
 #[derive(StructOpt, Debug)]
-/// Command-line tool for working with SAS binary — sas7bdat — files
-/// {n}    Get metadata{n}    Preview data{n}    Convert data to csv, feather (or the Arrow IPC format), ndjson, or parquet formats
+/// 💾 Command-line tool for working with SAS binary files; 🦀 Rust wrapper of ReadStat C library
+/// {n}    Display metadata{n}    Preview data{n}    Convert SAS file to csv, feather (or the Arrow IPC format), ndjson, or parquet format
 pub enum ReadStat {
     /// Display sas7bdat metadata
     Metadata {
@@ -35,7 +35,7 @@ pub enum ReadStat {
         #[structopt(long)]
         no_progress: bool,
     },
-    /// Preview sas7bdat data by writing rows to standard out
+    /// Preview sas7bdat data
     Preview {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
@@ -53,7 +53,7 @@ pub enum ReadStat {
         #[structopt(long)]
         no_progress: bool,
     },
-    /// Parse sas7bdat data and write to file{n}Possible file formats include csv, feather (or the Arror IPC format), ndjson, or parquet
+    /// Convert sas7bdat data to csv, feather (or the Arror IPC format), ndjson, or parquet format
     Data {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
