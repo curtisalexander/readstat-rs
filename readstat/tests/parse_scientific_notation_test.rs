@@ -8,11 +8,12 @@ fn parse_scientific_notation() {
     let project_dir = PathAbs::new(env!("CARGO_MANIFEST_DIR")).unwrap();
     let data_dir = project_dir.as_path().join("tests").join("data");
     let sas_path = data_dir.join("scientific_notation.sas7bdat");
-    let rsp = readstat::ReadStatPath::new(sas_path, None, None).unwrap();
+    let rsp = readstat::ReadStatPath::new(sas_path, None, None, false).unwrap();
 
     // parse sas7bdat
     let mut d = readstat::ReadStatData::new(rsp)
         .set_reader(Some(readstat::Reader::mem))
+        .set_no_progress(true)
         .set_is_test(true);
     let error = d.get_data(None).unwrap();
 

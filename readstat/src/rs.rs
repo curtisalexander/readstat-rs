@@ -41,6 +41,7 @@ pub struct ReadStatPath {
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
     pub format: Format,
+    pub overwrite: bool,
 }
 
 impl ReadStatPath {
@@ -48,11 +49,12 @@ impl ReadStatPath {
         path: PathBuf,
         out_path: Option<PathBuf>,
         format: Option<Format>,
+        overwrite: bool,
     ) -> Result<Self, Box<dyn Error>> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
-        let op: Option<PathBuf> = Self::validate_out_path(out_path)?;
+        let op: Option<PathBuf> = Self::validate_out_path(out_path, overwrite)?;
         let f = Self::validate_format(format)?;
         let op = match op {
             None => op,
@@ -65,6 +67,7 @@ impl ReadStatPath {
             cstring_path: csp,
             out_path: op,
             format: f,
+            overwrite: overwrite,
         })
     }
 
@@ -142,7 +145,7 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_out_path(path: Option<PathBuf>) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    fn validate_out_path(path: Option<PathBuf>, overwrite: bool) -> Result<Option<PathBuf>, Box<dyn Error>> {
         match path {
             None => Ok(None),
             Some(p) => {
@@ -152,7 +155,17 @@ impl ReadStatPath {
                     Err(_) => Err(From::from(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &abs_path.to_string_lossy().bright_yellow()))),
                     Ok(parent) => {
                         if parent.exists() {
-                            Ok(Some(abs_path.as_path().to_path_buf()))
+                            // Check to see if file already exists
+                            if abs_path.exists() {
+                                if overwrite {
+                                    println!("The file {} will be overwritten!", abs_path.to_string_lossy().bright_yellow());
+                                    Ok(Some(abs_path.as_path().to_path_buf()))
+                                } else {
+                                    Err(From::from(format!("The output file - {} - already exists!  To overwrite the file, utilize the {} parameter", abs_path.to_string_lossy().bright_yellow(), String::from("--overwrite").bright_blue())))
+                                }
+                            } else {
+                                Ok(Some(abs_path.as_path().to_path_buf()))
+                            }
                         } else {
                             Err(From::from(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &parent.to_string_lossy().bright_yellow())))
                         }
@@ -303,6 +316,7 @@ pub struct ReadStatData {
     pub pb: Option<ProgressBar>,
     pub wrote_start: bool,
     pub finish: bool,
+    pub no_progress: bool,
     pub is_test: bool,
     // should probably be declared with a trait but just utilizing enum for the time being
     pub wtr: Option<ReadStatWriter>,
@@ -339,6 +353,7 @@ impl ReadStatData {
             pb: None,
             wrote_start: false,
             finish: false,
+            no_progress: false,
             is_test: false,
             wtr: None,
         }
@@ -374,7 +389,7 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        if !self.is_test {
+        if !self.no_progress {
             self.pb = Some(ProgressBar::new(!0));
         }
         if let Some(pb) = &self.pb {
@@ -419,7 +434,7 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        if !self.is_test {
+        if !self.no_progress {
             self.pb = Some(ProgressBar::new(!0));
         }
         if let Some(pb) = &self.pb {
@@ -456,7 +471,7 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
-        if !self.is_test {
+        if !self.no_progress {
             self.pb = Some(ProgressBar::new(!0));
         }
         if let Some(pb) = &self.pb {
@@ -493,9 +508,13 @@ impl ReadStatData {
         Self { is_test, ..self }
     }
 
+    pub fn set_no_progress(self, no_progress: bool) -> Self {
+        Self { no_progress, ..self }
+    }
+
     pub fn set_reader(self, reader: Option<Reader>) -> Self {
         if let Some(r) = reader {
-            Self { reader: r, ..self}
+            Self { reader: r, ..self }
         } else {
             self
         }
@@ -504,33 +523,15 @@ impl ReadStatData {
     pub fn set_stream_rows(self, stream_rows: Option<c_uint>) -> Self {
         match self.reader {
             Reader::stream => match stream_rows {
-                Some(stream_rows) => { Self { stream_rows, ..self } }
-                None => self
+                Some(stream_rows) => Self {
+                    stream_rows,
+                    ..self
+                },
+                None => self,
             },
-            Reader::mem => self
+            Reader::mem => self,
         }
     }
-    /*
-    pub fn set_is_test(&mut self, is_test: bool) {
-        self.is_test = is_test;
-    }
-
-    pub fn set_reader(&mut self, reader: Option<Reader>) {
-        if let Some(r) = reader {
-            self.reader = r;
-        }
-    }
-
-    pub fn set_stream_rows(&mut self, stream_rows: Option<c_uint>) {
-        match self.reader {
-            Reader::stream => match stream_rows {
-                Some(stream_rows) => self.stream_rows = stream_rows,
-                _ => (),
-            },
-            Reader::mem => (),
-        }
-    }
-    */
 
     pub fn set_var_types(&mut self) {
         let var_types = self.vars.iter().map(|(_, q)| q.var_type).collect();
@@ -604,7 +605,7 @@ impl ReadStatData {
             }
 
             // spinner
-            if !self.is_test {
+            if !self.no_progress {
                 self.pb = Some(ProgressBar::new(!0));
             }
             if let Some(pb) = &self.pb {
@@ -637,7 +638,7 @@ impl ReadStatData {
 
             // progress bar
             /*
-            if !self.is_test {
+            if !self.no_progress {
                 self.pb = Some(ProgressBar::new(self.row_count as u64));
             }
             if let Some(pb) = &self.pb {

@@ -14,7 +14,7 @@ where
         .join("tests")
         .join("data")
         .join(ds);
-    readstat::ReadStatPath::new(sas_path, None, None)
+    readstat::ReadStatPath::new(sas_path, None, None, false)
 }
 
 // used in tests
