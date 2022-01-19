@@ -258,7 +258,7 @@ pub enum ReadStatVarTypeClass {
     Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum ReadStatFormatClass {
     Date,
     DateTime,

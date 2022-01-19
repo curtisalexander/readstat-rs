@@ -42,3 +42,27 @@ pub fn get_metadata<'a>(
         ))
         .unwrap()
 }
+
+// used in tests
+#[allow(dead_code)]
+pub fn get_var_attrs<'a>(
+    d: &'a readstat::ReadStatData,
+    var_name: String,
+    var_index: i32,
+) -> (
+    readstat::ReadStatVarTypeClass,
+    readstat::ReadStatVarType,
+    Option<readstat::ReadStatFormatClass>,
+    String,
+    &'a arrow::datatypes::DataType,
+) {
+    let m = get_metadata(&d, var_name, var_index);
+    let s = &d.schema;
+    (
+        m.var_type_class,
+        m.var_type,
+        m.var_format_class,
+        m.var_format.clone(),
+        s.field(var_index as usize).data_type(),
+    )
+}
