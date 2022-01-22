@@ -423,7 +423,7 @@ impl ReadStatData {
         Ok(error as u32)
     }
 
-    pub fn get_metadata(&mut self) -> Result<u32, Box<dyn Error>> {
+    pub fn get_metadata(&mut self, skip_row_count: bool) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -448,9 +448,12 @@ impl ReadStatData {
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {}", &error);
 
+        let row_limit = if skip_row_count { Some(1) } else { None };
+
         let error = ReadStatParser::new()
             .set_metadata_handler(Some(cb::handle_metadata))?
             .set_variable_handler(Some(cb::handle_variable))?
+            .set_row_limit(row_limit)?
             .parse_sas7bdat(ppath, ctx);
 
         if let Some(pb) = &self.pb {

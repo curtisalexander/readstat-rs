@@ -34,6 +34,9 @@ pub enum ReadStat {
         /// Do not display progress bar
         #[structopt(long)]
         no_progress: bool,
+        /// Skip calculating row count{n}Can speed up parsing if only interested in variable metadata
+        #[structopt(long)]
+        skip_row_count: bool,
     },
     /// Preview sas7bdat data
     Preview {
@@ -109,6 +112,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
         ReadStat::Metadata {
             input: in_path,
             no_progress,
+            skip_row_count
         } => {
             let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
@@ -120,7 +124,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let rsp = ReadStatPath::new(sas_path, None, None, false)?;
 
             let mut d = ReadStatData::new(rsp).set_no_progress(no_progress);
-            let error = d.get_metadata()?;
+            let error = d.get_metadata(skip_row_count)?;
 
             match FromPrimitive::from_i32(error as i32) {
                 Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
@@ -195,7 +199,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 ReadStatData { out_path: None, .. } => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
-                    let error = d.get_metadata()?;
+                    let error = d.get_metadata(false)?;
 
                     match FromPrimitive::from_i32(error as i32) {
                         Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),

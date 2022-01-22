@@ -180,7 +180,7 @@ fn parse_all_types_datetime() {
 fn parse_all_types_metadata() {
     let mut d = init();
 
-    let error = d.get_metadata().unwrap();
+    let error = d.get_metadata(false).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // row count
