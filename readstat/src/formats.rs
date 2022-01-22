@@ -1,6 +1,7 @@
-use crate::rs::ReadStatFormatClass;
 use lazy_static::lazy_static;
 use regex::Regex;
+
+use crate::rs_metadata::ReadStatFormatClass;
 
 pub fn match_var_format(v: &str) -> Option<ReadStatFormatClass> {
     lazy_static! {
@@ -23,6 +24,30 @@ pub fn match_var_format(v: &str) -> Option<ReadStatFormatClass> {
         .unwrap();
     };
     lazy_static! {
+        static ref RE_DATETIME_WITH_MILLI: Regex = Regex::new(
+            r#"(?xi)
+            (^DATETIME[0-9]*\.\d{3}$)
+            "#
+        )
+        .unwrap();
+    };
+    lazy_static! {
+        static ref RE_DATETIME_WITH_MICRO: Regex = Regex::new(
+            r#"(?xi)
+            (^DATETIME[0-9]*\.\d{6}$)
+            "#
+        )
+        .unwrap();
+    };
+    lazy_static! {
+        static ref RE_DATETIME_WITH_NANO: Regex = Regex::new(
+            r#"(?xi)
+            (^DATETIME[0-9]*\.\d{9}$)
+            "#
+        )
+        .unwrap();
+    };
+    lazy_static! {
         static ref RE_TIME: Regex = Regex::new(
             r#"(?xi)
             (^TIME[0-9]*$)
@@ -35,6 +60,12 @@ pub fn match_var_format(v: &str) -> Option<ReadStatFormatClass> {
         Some(ReadStatFormatClass::Date)
     } else if RE_DATETIME.is_match(v) {
         Some(ReadStatFormatClass::DateTime)
+    } else if RE_DATETIME_WITH_MILLI.is_match(v) {
+        Some(ReadStatFormatClass::DateTimeWithMilliseconds)
+    } else if RE_DATETIME_WITH_MICRO.is_match(v) {
+        Some(ReadStatFormatClass::DateTimeWithMicroseconds)
+    } else if RE_DATETIME_WITH_NANO.is_match(v) {
+        Some(ReadStatFormatClass::DateTimeWithNanoseconds)
     } else if RE_TIME.is_match(v) {
         Some(ReadStatFormatClass::Time)
     } else {

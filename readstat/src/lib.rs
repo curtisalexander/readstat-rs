@@ -13,13 +13,18 @@ use structopt::StructOpt;
 mod cb;
 mod err;
 mod formats;
-mod rs;
+mod rs_data;
+mod rs_metadata;
+mod rs_parser;
+mod rs_path;
 
 pub use err::ReadStatError;
-pub use rs::{
-    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatFormatClass, ReadStatPath, ReadStatVar,
-    ReadStatVarIndexAndName, ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
+pub use rs_data::ReadStatData;
+pub use rs_metadata::{
+    ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatMetadata, ReadStatVar,
+    ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
 };
+pub use rs_path::ReadStatPath;
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -116,7 +121,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             input: in_path,
             as_json,
             no_progress,
-            skip_row_count
+            skip_row_count,
         } => {
             let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
@@ -134,8 +139,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 Some(ReadStatError::READSTAT_OK) => {
                     if !as_json {
                         d.write_metadata_to_stdout()
-                    }
-                    else {
+                    } else {
                         Ok(())
                     }
                 }
