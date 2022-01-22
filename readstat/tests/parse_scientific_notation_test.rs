@@ -20,25 +20,16 @@ fn parse_scientific_notation() {
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
-    let var_name = String::from("f");
     let var_index = 1;
 
     // contains variable
-    let vars = d.vars;
-    let contains_key = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
-        var_index,
-        var_name.clone(),
-    ));
+    let vars = d.metadata.vars;
+    let contains_key = vars.contains_key(&var_index);
 
     assert!(contains_key);
 
     // metadata
-    let m = &vars
-        .get(&readstat::ReadStatVarIndexAndName::new(
-            var_index,
-            var_name.clone(),
-        ))
-        .unwrap();
+    let m = vars.get(&var_index).unwrap();
 
     // variable type class
     assert!(matches!(

@@ -26,15 +26,14 @@ fn parse_all_types_int() {
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
-    let var_name = String::from("_int");
     let var_index = 0;
 
     // contains variable
-    let contains_var = common::contains_var(&d, var_name.clone(), var_index);
+    let contains_var = common::contains_var(&d, var_index);
     assert!(contains_var);
 
     // metadata
-    let m = common::get_metadata(&d, var_name.clone(), var_index);
+    let m = common::get_metadata(&d, var_index);
 
     // variable type class
     assert!(matches!(
@@ -80,15 +79,14 @@ fn parse_all_types_string() {
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
-    let var_name = String::from("_string");
     let var_index = 3;
 
     // contains variable
-    let contains_var = common::contains_var(&d, var_name.clone(), var_index);
+    let contains_var = common::contains_var(&d, var_index);
     assert!(contains_var);
 
     // metadata
-    let m = common::get_metadata(&d, var_name.clone(), var_index);
+    let m = common::get_metadata(&d, var_index);
 
     // variable type class
     assert!(matches!(
@@ -134,15 +132,14 @@ fn parse_all_types_datetime() {
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
-    let var_name = String::from("_datetime");
     let var_index = 5;
 
     // contains variable
-    let contains_var = common::contains_var(&d, var_name.clone(), var_index);
+    let contains_var = common::contains_var(&d, var_index);
     assert!(contains_var);
 
     // metadata
-    let m = common::get_metadata(&d, var_name.clone(), var_index);
+    let m = common::get_metadata(&d, var_index);
 
     // variable type class
     assert!(matches!(
@@ -184,48 +181,48 @@ fn parse_all_types_metadata() {
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // row count
-    assert_eq!(d.row_count, 1);
+    assert_eq!(d.metadata.row_count, 1);
 
     // variable count
-    assert_eq!(d.var_count, 8);
+    assert_eq!(d.metadata.var_count, 8);
 
     // table name
-    assert_eq!(d.table_name, String::from("ALL_TYPES"));
+    assert_eq!(d.metadata.table_name, String::from("ALL_TYPES"));
 
     // table label
-    assert_eq!(d.file_label, String::from(""));
+    assert_eq!(d.metadata.file_label, String::from(""));
 
     // file encoding
-    assert_eq!(d.file_encoding, String::from("UTF-8"));
+    assert_eq!(d.metadata.file_encoding, String::from("UTF-8"));
 
     // format version
-    assert_eq!(d.version, 9);
+    assert_eq!(d.metadata.version, 9);
 
     // bitness
-    assert_eq!(d.is64bit, 1);
+    assert_eq!(d.metadata.is64bit, 1);
 
     // creation time
-    assert_eq!(d.creation_time, "2022-01-08 19:40:48");
+    assert_eq!(d.metadata.creation_time, "2022-01-08 19:40:48");
 
     // modified time
-    assert_eq!(d.modified_time, "2022-01-08 19:40:48");
+    assert_eq!(d.metadata.modified_time, "2022-01-08 19:40:48");
 
     // compression
-    assert!(matches!(d.compression, readstat::ReadStatCompress::None));
+    assert!(matches!(d.metadata.compression, readstat::ReadStatCompress::None));
 
     // endianness
-    assert!(matches!(d.endianness, readstat::ReadStatEndian::Little));
+    assert!(matches!(d.metadata.endianness, readstat::ReadStatEndian::Little));
 
     // variables - contains variable
-    assert!(common::contains_var(&d, String::from("_int"), 0));
+    assert!(common::contains_var(&d, 0));
 
     // variables - does not contain variable
-    assert!(!common::contains_var(&d, String::from("_int"), 1));
+    assert!(!common::contains_var(&d, 100));
 
     // variables
 
     // 0 - _int
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_int"), 0);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 0);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
@@ -233,7 +230,7 @@ fn parse_all_types_metadata() {
     assert!(matches!(adt, DataType::Float64));
 
     // 1 - _float
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_float"), 1);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 1);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
@@ -241,7 +238,7 @@ fn parse_all_types_metadata() {
     assert!(matches!(adt, DataType::Float64));
 
     // 2 - _char
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_char"), 2);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 2);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
@@ -249,7 +246,7 @@ fn parse_all_types_metadata() {
     assert!(matches!(adt, DataType::Utf8));
 
     // 3 - _string
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_string"), 3);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 3);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
@@ -257,7 +254,7 @@ fn parse_all_types_metadata() {
     assert!(matches!(adt, DataType::Utf8));
 
     // 4 - _date
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_date"), 4);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 4);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert_eq!(vfc, Some(ReadStatFormatClass::Date));
@@ -265,7 +262,7 @@ fn parse_all_types_metadata() {
     assert!(matches!(adt, DataType::Date32));
 
     // 5 - _datetime
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_datetime"), 5);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 5);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert_eq!(vfc, Some(ReadStatFormatClass::DateTime));
@@ -276,7 +273,7 @@ fn parse_all_types_metadata() {
     ));
 
     // 6 - _datetime_with_ms
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_datetime_with_ms"), 6);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert_eq!(vfc, Some(ReadStatFormatClass::DateTime));
@@ -287,7 +284,7 @@ fn parse_all_types_metadata() {
     ));
 
     // 7 - _time
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, String::from("_time"), 7);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert_eq!(vfc, Some(ReadStatFormatClass::Time));
