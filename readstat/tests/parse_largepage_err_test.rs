@@ -46,8 +46,14 @@ fn parse_largepage_err() {
     assert_eq!(d.metadata.modified_time, "2021-07-25 22:02:02");
 
     // compression
-    assert!(matches!(d.metadata.compression, readstat::ReadStatCompress::None));
+    assert!(matches!(
+        d.metadata.compression,
+        readstat::ReadStatCompress::None
+    ));
 
     // endianness
-    assert!(matches!(d.metadata.endianness, readstat::ReadStatEndian::Little));
+    assert!(matches!(
+        d.metadata.endianness,
+        readstat::ReadStatEndian::Little
+    ));
 }

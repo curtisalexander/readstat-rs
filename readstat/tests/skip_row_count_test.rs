@@ -208,10 +208,16 @@ fn parse_all_types_metadata() {
     assert_eq!(d.metadata.modified_time, "2022-01-08 19:40:48");
 
     // compression
-    assert!(matches!(d.metadata.compression, readstat::ReadStatCompress::None));
+    assert!(matches!(
+        d.metadata.compression,
+        readstat::ReadStatCompress::None
+    ));
 
     // endianness
-    assert!(matches!(d.metadata.endianness, readstat::ReadStatEndian::Little));
+    assert!(matches!(
+        d.metadata.endianness,
+        readstat::ReadStatEndian::Little
+    ));
 
     // variables - contains variable
     assert!(common::contains_var(&d, 0));

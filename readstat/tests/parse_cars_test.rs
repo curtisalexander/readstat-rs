@@ -48,10 +48,16 @@ fn parse_cars_metadata() {
     assert_eq!(d.metadata.modified_time, "2008-09-30 14:55:01");
 
     // compression
-    assert!(matches!(d.metadata.compression, readstat::ReadStatCompress::None));
+    assert!(matches!(
+        d.metadata.compression,
+        readstat::ReadStatCompress::None
+    ));
 
     // endianness
-    assert!(matches!(d.metadata.endianness, readstat::ReadStatEndian::Little));
+    assert!(matches!(
+        d.metadata.endianness,
+        readstat::ReadStatEndian::Little
+    ));
 
     // variables - contains variable
     assert!(common::contains_var(&d, 0));
@@ -110,7 +116,7 @@ fn parse_cars_metadata() {
     assert!(matches!(adt, DataType::Float64));
 
     // 6 - EngineSize
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d,6);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());

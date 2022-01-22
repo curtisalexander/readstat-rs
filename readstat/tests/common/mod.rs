@@ -31,9 +31,7 @@ pub fn get_metadata<'a>(
     var_index: i32,
 ) -> &'a readstat::ReadStatVarMetadata {
     // contains variable
-    d.metadata.vars
-        .get(&var_index)
-        .unwrap()
+    d.metadata.vars.get(&var_index).unwrap()
 }
 
 // used in tests

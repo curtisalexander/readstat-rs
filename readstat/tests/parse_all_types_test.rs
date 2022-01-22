@@ -208,10 +208,16 @@ fn parse_all_types_metadata() {
     assert_eq!(d.metadata.modified_time, "2022-01-08 19:40:48");
 
     // compression
-    assert!(matches!(d.metadata.compression, readstat::ReadStatCompress::None));
+    assert!(matches!(
+        d.metadata.compression,
+        readstat::ReadStatCompress::None
+    ));
 
     // endianness
-    assert!(matches!(d.metadata.endianness, readstat::ReadStatEndian::Little));
+    assert!(matches!(
+        d.metadata.endianness,
+        readstat::ReadStatEndian::Little
+    ));
 
     // variables - contains variable
     assert!(common::contains_var(&d, 0));
@@ -222,7 +228,7 @@ fn parse_all_types_metadata() {
     // variables
 
     // 0 - _int
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d,0);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 0);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
@@ -246,7 +252,7 @@ fn parse_all_types_metadata() {
     assert!(matches!(adt, DataType::Utf8));
 
     // 3 - _string
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d,  3);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 3);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
@@ -284,7 +290,7 @@ fn parse_all_types_metadata() {
     ));
 
     // 7 - _time
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d,7);
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert_eq!(vfc, Some(ReadStatFormatClass::Time));
