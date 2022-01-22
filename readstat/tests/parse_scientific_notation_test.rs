@@ -15,7 +15,7 @@ fn parse_scientific_notation() {
         .set_reader(Some(readstat::Reader::mem))
         .set_no_progress(true)
         .set_is_test(true);
-    let error = d.get_data(None).unwrap();
+    let error = d.get_data(None, None).unwrap();
 
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 

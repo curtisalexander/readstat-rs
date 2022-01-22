@@ -147,14 +147,14 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             );
 
             // out_path and format determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv),false)?;
+            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv), false)?;
 
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
                 .set_no_progress(no_progress);
 
-            let error = d.get_preview(rows)?;
+            let error = d.get_preview(Some(rows), None)?;
 
             match FromPrimitive::from_i32(error as i32) {
                 Some(ReadStatError::READSTAT_OK) => Ok(()),
@@ -184,7 +184,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             );
 
             // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, output, format,overwrite)?;
+            let rsp = ReadStatPath::new(sas_path, output, format, overwrite)?;
 
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
@@ -216,7 +216,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         p.to_string_lossy().bright_yellow()
                     );
 
-                    let error = d.get_data(rows)?;
+                    let error = d.get_data(rows, None)?;
 
                     // progress bar
                     if let Some(pb) = &d.pb {

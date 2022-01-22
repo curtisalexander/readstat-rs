@@ -22,7 +22,7 @@ fn init() -> readstat::ReadStatData {
 fn parse_all_types_int() {
     let mut d = init();
 
-    let error = d.get_data(None).unwrap();
+    let error = d.get_data(None, None).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
@@ -76,7 +76,7 @@ fn parse_all_types_int() {
 fn parse_all_types_string() {
     let mut d = init();
 
-    let error = d.get_data(None).unwrap();
+    let error = d.get_data(None, None).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
@@ -130,7 +130,7 @@ fn parse_all_types_string() {
 fn parse_all_types_datetime() {
     let mut d = init();
 
-    let error = d.get_data(None).unwrap();
+    let error = d.get_data(None, None).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name

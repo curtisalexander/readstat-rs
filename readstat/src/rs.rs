@@ -67,7 +67,7 @@ impl ReadStatPath {
             cstring_path: csp,
             out_path: op,
             format: f,
-            overwrite: overwrite,
+            overwrite,
         })
     }
 
@@ -145,7 +145,10 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_out_path(path: Option<PathBuf>, overwrite: bool) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    fn validate_out_path(
+        path: Option<PathBuf>,
+        overwrite: bool,
+    ) -> Result<Option<PathBuf>, Box<dyn Error>> {
         match path {
             None => Ok(None),
             Some(p) => {
@@ -384,7 +387,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn get_data(&mut self, row_limit: Option<u32>) -> Result<u32, Box<dyn Error>> {
+    pub fn get_data(&mut self, row_limit: Option<u32>, row_offset: Option<u32>) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -409,22 +412,13 @@ impl ReadStatData {
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {:#?}", &error);
 
-        // TODO: for parsing data, a new metadata handler may be needed that
-        //   does not get the row count but just the var count
-        // Believe it will save time when working with extremely large files
-        let error = match row_limit {
-            Some(r) => ReadStatParser::new()
-                .set_metadata_handler(Some(cb::handle_metadata))?
-                .set_variable_handler(Some(cb::handle_variable))?
-                .set_value_handler(Some(cb::handle_value))?
-                .set_row_limit(r as c_long)?
-                .parse_sas7bdat(ppath, ctx),
-            None => ReadStatParser::new()
-                .set_metadata_handler(Some(cb::handle_metadata))?
-                .set_variable_handler(Some(cb::handle_variable))?
-                .set_value_handler(Some(cb::handle_value))?
-                .parse_sas7bdat(ppath, ctx),
-        };
+        let error = ReadStatParser::new()
+            .set_metadata_handler(Some(cb::handle_metadata))?
+            .set_variable_handler(Some(cb::handle_variable))?
+            .set_value_handler(Some(cb::handle_value))?
+            .set_row_limit(row_limit)?
+            .set_row_offset(row_offset)?
+            .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
     }
@@ -466,7 +460,7 @@ impl ReadStatData {
         Ok(error as u32)
     }
 
-    pub fn get_preview(&mut self, row_limit: u32) -> Result<u32, Box<dyn Error>> {
+    pub fn get_preview(&mut self, row_limit: Option<u32>, row_offset: Option<u32>) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
@@ -498,7 +492,8 @@ impl ReadStatData {
             .set_metadata_handler(Some(cb::handle_metadata))?
             .set_variable_handler(Some(cb::handle_variable))?
             .set_value_handler(Some(cb::handle_value))?
-            .set_row_limit(row_limit as c_long)?
+            .set_row_limit(row_limit)?
+            .set_row_offset(row_offset)?
             .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
@@ -509,7 +504,10 @@ impl ReadStatData {
     }
 
     pub fn set_no_progress(self, no_progress: bool) -> Self {
-        Self { no_progress, ..self }
+        Self {
+            no_progress,
+            ..self
+        }
     }
 
     pub fn set_reader(self, reader: Option<Reader>) -> Self {
@@ -830,7 +828,7 @@ impl ReadStatData {
                     ReadStatWriter::Json(w) => {
                         let mut batch = RecordBatch::new_empty(Arc::new(self.schema.clone()));
                         batch.clone_from(&self.batch);
-                        w.write_batches(&vec![batch])?;
+                        w.write_batches(&[batch])?;
                         if self.finish {
                             w.finish()?;
                         }
@@ -1015,21 +1013,49 @@ impl ReadStatParser {
         }
     }
 
-    fn set_row_limit(self, row_limit: c_long) -> Result<Self, Box<dyn Error>> {
-        let set_row_limit_error =
-            unsafe { readstat_sys::readstat_set_row_limit(self.parser, row_limit) };
+    fn set_row_limit(self, row_limit: Option<u32>) -> Result<Self, Box<dyn Error>> {
+        match row_limit {
+            Some(r) => {
+                let set_row_limit_error =
+                    unsafe { readstat_sys::readstat_set_row_limit(self.parser, r as c_long) };
 
-        debug!(
-            "After setting row limit, error ==> {}",
-            &set_row_limit_error
-        );
+                debug!(
+                    "After setting row limit, error ==> {}",
+                    &set_row_limit_error
+                );
 
-        match FromPrimitive::from_i32(set_row_limit_error as i32) {
-            Some(ReadStatError::READSTAT_OK) => Ok(self),
-            Some(e) => Err(From::from(format!("Unable to set row limit: {:#?}", e))),
-            None => Err(From::from(
-                "Error when attempting to set row limit: Unknown return value",
-            )),
+                match FromPrimitive::from_i32(set_row_limit_error as i32) {
+                    Some(ReadStatError::READSTAT_OK) => Ok(self),
+                    Some(e) => Err(From::from(format!("Unable to set row limit: {:#?}", e))),
+                    None => Err(From::from(
+                        "Error when attempting to set row limit: Unknown return value",
+                    )),
+                }
+            }
+            None => Ok(self),
+        }
+    }
+
+    fn set_row_offset(self, row_offset: Option<u32>) -> Result<Self, Box<dyn Error>> {
+        match row_offset {
+            Some(r) => {
+                let set_row_offset_error =
+                    unsafe { readstat_sys::readstat_set_row_offset(self.parser, r as c_long) };
+
+                debug!(
+                    "After setting row offset, error ==> {}",
+                    &set_row_offset_error
+                );
+
+                match FromPrimitive::from_i32(set_row_offset_error as i32) {
+                    Some(ReadStatError::READSTAT_OK) => Ok(self),
+                    Some(e) => Err(From::from(format!("Unable to set row limit: {:#?}", e))),
+                    None => Err(From::from(
+                        "Error when attempting to set row limit: Unknown return value",
+                    )),
+                }
+            }
+            None => Ok(self),
         }
     }
 
