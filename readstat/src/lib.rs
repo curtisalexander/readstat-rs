@@ -31,6 +31,9 @@ pub enum ReadStat {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
         input: PathBuf,
+        /// Display sas7bdat metadata as json
+        #[structopt(long)]
+        as_json: bool,
         /// Do not display progress bar
         #[structopt(long)]
         no_progress: bool,
@@ -111,6 +114,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     match rs {
         ReadStat::Metadata {
             input: in_path,
+            as_json,
             no_progress,
             skip_row_count
         } => {
@@ -127,7 +131,14 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let error = d.get_metadata(skip_row_count)?;
 
             match FromPrimitive::from_i32(error as i32) {
-                Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
+                Some(ReadStatError::READSTAT_OK) => {
+                    if !as_json {
+                        d.write_metadata_to_stdout()
+                    }
+                    else {
+                        Ok(())
+                    }
+                }
                 Some(e) => Err(From::from(format!(
                     "Error when attempting to parse sas7bdat: {:#?}",
                     e

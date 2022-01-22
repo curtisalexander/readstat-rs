@@ -921,6 +921,63 @@ impl ReadStatData {
         Ok(())
     }
 
+    pub fn write_metadata_to_json(&mut self) -> Result<(), Box<dyn Error>> {
+        println!(
+            "Metadata for the file {}\n",
+            self.path.to_string_lossy().bright_yellow()
+        );
+        println!(
+            "{}: {}",
+            "Row count".green(),
+            self.row_count.to_formatted_string(&Locale::en)
+        );
+        println!(
+            "{}: {}",
+            "Variable count".red(),
+            self.var_count.to_formatted_string(&Locale::en)
+        );
+        println!("{}: {}", "Table name".blue(), self.table_name);
+        println!("{}: {}", "Table label".cyan(), self.file_label);
+        println!("{}: {}", "File encoding".yellow(), self.file_encoding);
+        println!("{}: {}", "Format version".green(), self.version);
+        println!(
+            "{}: {}",
+            "Bitness".red(),
+            if self.is64bit == 0 {
+                "32-bit"
+            } else {
+                "64-bit"
+            }
+        );
+        println!("{}: {}", "Creation time".blue(), self.creation_time);
+        println!("{}: {}", "Modified time".cyan(), self.modified_time);
+        println!("{}: {:#?}", "Compression".yellow(), self.compression);
+        println!("{}: {:#?}", "Byte order".green(), self.endianness);
+        println!("{}:", "Variable names".purple());
+        for (i, (k, v)) in self.vars.iter().enumerate() {
+            println!(
+                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow data type: {} }}",
+                k.var_index.to_formatted_string(&Locale::en),
+                k.var_name.bright_purple(),
+                format!("{:#?}", v.var_type_class).bright_green(),
+                format!("{:#?}", v.var_type).bright_red(),
+                v.var_label.bright_blue(),
+                (match &v.var_format_class {
+                    Some(f) => match f {
+                        ReadStatFormatClass::Date => "Date",
+                        ReadStatFormatClass::DateTime => "DateTime",
+                        ReadStatFormatClass::Time => "Time",
+                    },
+                    None => "",
+                })
+                .bright_cyan(),
+                v.var_format.bright_yellow(),
+                self.schema.field(i).data_type().to_string().bright_green()
+            );
+        }
+
+        Ok(())
+    }
     pub fn write_metadata_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
         println!(
             "Metadata for the file {}\n",
