@@ -140,7 +140,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     if !as_json {
                         d.write_metadata_to_stdout()
                     } else {
-                        Ok(())
+                        d.write_metadata_to_json()
                     }
                 }
                 Some(e) => Err(From::from(format!(

@@ -665,8 +665,10 @@ impl ReadStatData {
     }
 
     pub fn write_metadata_to_json(&mut self) -> Result<(), Box<dyn Error>> {
-        println!("{:?}", serde_json::to_string(&self.metadata));
-        Ok(())
+        match serde_json::to_string_pretty(&self.metadata) {
+            Ok(s) => { println!("{}", s); Ok(()) }
+            Err(e) => { Err(From::from(format!("Error converting to json: {}", e))) }
+        }
     }
 
     pub fn write_metadata_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
