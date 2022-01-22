@@ -19,33 +19,25 @@ fn parse_hasmissing() {
         .set_reader(Some(readstat::Reader::mem))
         .set_no_progress(true)
         .set_is_test(true);
-    let error = d.get_data(Some(5)).unwrap();
+    let error = d.get_data(Some(5), None).unwrap();
 
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable count
-    let var_count = d.var_count;
+    let var_count = d.metadata.var_count;
     assert_eq!(var_count, 9);
 
     // row count
-    let row_count = d.row_count;
+    let row_count = d.metadata.row_count;
     assert_eq!(row_count, 5);
 
     // variable
-    let vars = d.vars;
-    let contains_key = vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
-        0,
-        String::from("ID"),
-    ));
+    let vars = d.metadata.vars;
+    let contains_key = vars.contains_key(&0);
     assert!(contains_key);
 
     // metadata
-    let m = vars
-        .get(&readstat::ReadStatVarIndexAndName::new(
-            0,
-            String::from("ID"),
-        ))
-        .unwrap();
+    let m = vars.get(&0).unwrap();
 
     // variable type class
     assert!(matches!(

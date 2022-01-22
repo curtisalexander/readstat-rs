@@ -13,13 +13,18 @@ use structopt::StructOpt;
 mod cb;
 mod err;
 mod formats;
-mod rs;
+mod rs_data;
+mod rs_metadata;
+mod rs_parser;
+mod rs_path;
 
 pub use err::ReadStatError;
-pub use rs::{
-    ReadStatCompress, ReadStatData, ReadStatEndian, ReadStatFormatClass, ReadStatPath, ReadStatVar,
-    ReadStatVarIndexAndName, ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
+pub use rs_data::ReadStatData;
+pub use rs_metadata::{
+    ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatMetadata, ReadStatVar,
+    ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
 };
+pub use rs_path::ReadStatPath;
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -31,9 +36,15 @@ pub enum ReadStat {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
         input: PathBuf,
+        /// Display sas7bdat metadata as json
+        #[structopt(long)]
+        as_json: bool,
         /// Do not display progress bar
         #[structopt(long)]
         no_progress: bool,
+        /// Skip calculating row count{n}Can speed up parsing if only interested in variable metadata
+        #[structopt(long)]
+        skip_row_count: bool,
     },
     /// Preview sas7bdat data
     Preview {
@@ -108,7 +119,9 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     match rs {
         ReadStat::Metadata {
             input: in_path,
+            as_json,
             no_progress,
+            skip_row_count,
         } => {
             let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
@@ -120,10 +133,16 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let rsp = ReadStatPath::new(sas_path, None, None, false)?;
 
             let mut d = ReadStatData::new(rsp).set_no_progress(no_progress);
-            let error = d.get_metadata()?;
+            let error = d.get_metadata(skip_row_count)?;
 
             match FromPrimitive::from_i32(error as i32) {
-                Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
+                Some(ReadStatError::READSTAT_OK) => {
+                    if !as_json {
+                        d.write_metadata_to_stdout()
+                    } else {
+                        d.write_metadata_to_json()
+                    }
+                }
                 Some(e) => Err(From::from(format!(
                     "Error when attempting to parse sas7bdat: {:#?}",
                     e
@@ -147,14 +166,14 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             );
 
             // out_path and format determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv),false)?;
+            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv), false)?;
 
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
                 .set_no_progress(no_progress);
 
-            let error = d.get_preview(rows)?;
+            let error = d.get_preview(Some(rows), None)?;
 
             match FromPrimitive::from_i32(error as i32) {
                 Some(ReadStatError::READSTAT_OK) => Ok(()),
@@ -184,7 +203,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             );
 
             // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, output, format,overwrite)?;
+            let rsp = ReadStatPath::new(sas_path, output, format, overwrite)?;
 
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
@@ -195,7 +214,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 ReadStatData { out_path: None, .. } => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
-                    let error = d.get_metadata()?;
+                    let error = d.get_metadata(false)?;
 
                     match FromPrimitive::from_i32(error as i32) {
                         Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
@@ -216,7 +235,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         p.to_string_lossy().bright_yellow()
                     );
 
-                    let error = d.get_data(rows)?;
+                    let error = d.get_data(rows, None)?;
 
                     // progress bar
                     if let Some(pb) = &d.pb {

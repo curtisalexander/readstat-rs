@@ -14,40 +14,46 @@ fn parse_largepage_ok() {
         .set_reader(Some(readstat::Reader::mem))
         .set_no_progress(true)
         .set_is_test(true);
-    let error = d.get_metadata().unwrap();
+    let error = d.get_metadata(false).unwrap();
 
     assert_eq!(error, readstat_sys::readstat_error_e_READSTAT_OK as u32);
 
     // row count
-    assert_eq!(d.row_count, 2000);
+    assert_eq!(d.metadata.row_count, 2000);
 
     // variable count
-    assert_eq!(d.var_count, 110);
+    assert_eq!(d.metadata.var_count, 110);
 
     // table name
-    assert_eq!(d.table_name, String::from("RAND_DS_LARGEPAGE_OK"));
+    assert_eq!(d.metadata.table_name, String::from("RAND_DS_LARGEPAGE_OK"));
 
     // table label
-    assert_eq!(d.file_label, String::from(""));
+    assert_eq!(d.metadata.file_label, String::from(""));
 
     // file encoding
-    assert_eq!(d.file_encoding, String::from("UTF-8"));
+    assert_eq!(d.metadata.file_encoding, String::from("UTF-8"));
 
     // format version
-    assert_eq!(d.version, 9);
+    assert_eq!(d.metadata.version, 9);
 
     // bitness
-    assert_eq!(d.is64bit, 1);
+    assert_eq!(d.metadata.is64bit, 1);
 
     // creation time
-    assert_eq!(d.creation_time, "2021-07-25 22:02:30");
+    assert_eq!(d.metadata.creation_time, "2021-07-25 22:02:30");
 
     // modified time
-    assert_eq!(d.modified_time, "2021-07-25 22:02:30");
+    assert_eq!(d.metadata.modified_time, "2021-07-25 22:02:30");
 
     // compression
-    assert!(matches!(d.compression, readstat::ReadStatCompress::None));
+    assert!(matches!(
+        d.metadata.compression,
+        readstat::ReadStatCompress::None
+    ));
 
     // endianness
-    assert!(matches!(d.endianness, readstat::ReadStatEndian::Little));
+    assert!(matches!(
+        d.metadata.endianness,
+        readstat::ReadStatEndian::Little
+    ));
 }

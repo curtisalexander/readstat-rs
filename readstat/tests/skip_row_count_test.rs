@@ -177,11 +177,11 @@ fn parse_all_types_datetime() {
 fn parse_all_types_metadata() {
     let mut d = init();
 
-    let error = d.get_metadata(false).unwrap();
+    let error = d.get_metadata(true).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // row count
-    assert_eq!(d.metadata.row_count, 3);
+    assert_eq!(d.metadata.row_count, 1);
 
     // variable count
     assert_eq!(d.metadata.var_count, 8);

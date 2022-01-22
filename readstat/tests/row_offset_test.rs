@@ -1,5 +1,5 @@
 use arrow::{
-    array::{Float64Array, StringArray, TimestampSecondArray},
+    array::{Date32Array, StringArray},
     datatypes::DataType,
 };
 use chrono::NaiveDate;
@@ -19,10 +19,10 @@ fn init() -> readstat::ReadStatData {
 }
 
 #[test]
-fn parse_all_types_int() {
+fn row_offset_int() {
     let mut d = init();
 
-    let error = d.get_data(None, None).unwrap();
+    let error = d.get_data(None, Some(2)).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
@@ -57,25 +57,16 @@ fn parse_all_types_int() {
     ));
 
     // int column
-    let col = d
-        .batch
-        .column(var_index as usize)
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
-
-    // non-missing value
-    assert_eq!(col.value(0), 1234f64);
 
     // missing value
     assert!(d.batch.column(0).data().is_null(2));
 }
 
 #[test]
-fn parse_all_types_string() {
+fn row_offset_string() {
     let mut d = init();
 
-    let error = d.get_data(None, None).unwrap();
+    let error = d.get_data(None, Some(2)).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
@@ -118,21 +109,18 @@ fn parse_all_types_string() {
         .unwrap();
 
     // non-missing value
-    assert_eq!(col.value(0), String::from("string"));
-
-    // non-missing value
-    assert_eq!(col.value(2), String::from("stringy string"));
+    assert_eq!(col.value(0), String::from("stringy string"));
 }
 
 #[test]
-fn parse_all_types_datetime() {
+fn row_offset_date() {
     let mut d = init();
 
-    let error = d.get_data(None, None).unwrap();
+    let error = d.get_data(None, Some(2)).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
     // variable index and name
-    let var_index = 5;
+    let var_index = 4;
 
     // contains variable
     let contains_var = common::contains_var(&d, var_index);
@@ -153,35 +141,36 @@ fn parse_all_types_datetime() {
     // variable format class
     assert!(matches!(
         m.var_format_class,
-        Some(readstat::ReadStatFormatClass::DateTime)
+        Some(readstat::ReadStatFormatClass::Date)
     ));
 
     // variable format
-    assert_eq!(m.var_format, String::from("DATETIME22"));
+    assert_eq!(m.var_format, String::from("YYMMDD10"));
 
     // non-missing value
     let col = d
         .batch
         .column(var_index as usize)
         .as_any()
-        .downcast_ref::<TimestampSecondArray>()
+        .downcast_ref::<Date32Array>()
         .unwrap();
 
-    let dt = col.value_as_datetime(1).unwrap();
-    let dt_literal = NaiveDate::from_ymd(2021, 6, 1).and_hms_milli(13, 42, 25, 0);
+    let date = col.value_as_date(0).unwrap();
+    let date_literal = NaiveDate::from_ymd(2014, 5, 22);
 
-    assert_eq!(dt, dt_literal);
+    assert_eq!(date, date_literal);
 }
 
 #[test]
-fn parse_all_types_metadata() {
+fn row_offset_metadata() {
     let mut d = init();
 
-    let error = d.get_metadata(false).unwrap();
+    // Get data instead of get metadata
+    let error = d.get_data(None, Some(2)).unwrap();
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
 
-    // row count
-    assert_eq!(d.metadata.row_count, 3);
+    // row count = 1 due to offset
+    assert_eq!(d.metadata.row_count, 1);
 
     // variable count
     assert_eq!(d.metadata.var_count, 8);

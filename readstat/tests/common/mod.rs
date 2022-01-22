@@ -19,35 +19,25 @@ where
 
 // used in tests
 #[allow(dead_code)]
-pub fn contains_var(d: &readstat::ReadStatData, var_name: String, var_index: i32) -> bool {
+pub fn contains_var(d: &readstat::ReadStatData, var_index: i32) -> bool {
     // contains variable
-    d.vars.contains_key(&readstat::ReadStatVarIndexAndName::new(
-        var_index,
-        var_name.clone(),
-    ))
+    d.metadata.vars.contains_key(&var_index)
 }
 
 // used in tests
 #[allow(dead_code)]
 pub fn get_metadata<'a>(
     d: &'a readstat::ReadStatData,
-    var_name: String,
     var_index: i32,
 ) -> &'a readstat::ReadStatVarMetadata {
     // contains variable
-    d.vars
-        .get(&readstat::ReadStatVarIndexAndName::new(
-            var_index,
-            var_name.clone(),
-        ))
-        .unwrap()
+    d.metadata.vars.get(&var_index).unwrap()
 }
 
 // used in tests
 #[allow(dead_code)]
 pub fn get_var_attrs<'a>(
     d: &'a readstat::ReadStatData,
-    var_name: String,
     var_index: i32,
 ) -> (
     readstat::ReadStatVarTypeClass,
@@ -56,7 +46,7 @@ pub fn get_var_attrs<'a>(
     String,
     &'a arrow::datatypes::DataType,
 ) {
-    let m = get_metadata(&d, var_name, var_index);
+    let m = get_metadata(&d, var_index);
     let s = &d.schema;
     (
         m.var_type_class,
