@@ -3,7 +3,6 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::os::raw::c_int;
 
-
 /***********
 * Metadata *
 ***********/
@@ -21,7 +20,7 @@ pub struct ReadStatMetadata {
     pub modified_time: String,
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
-    pub vars: BTreeMap<i32, ReadStatVarMetadata>
+    pub vars: BTreeMap<i32, ReadStatVarMetadata>,
 }
 
 impl ReadStatMetadata {
@@ -57,9 +56,8 @@ pub enum ReadStatEndian {
     Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
 }
 
-
 /*********************
- * Variable Metadata * 
+ * Variable Metadata *
  ********************/
 
 #[derive(Debug, Serialize)]
@@ -119,8 +117,6 @@ pub enum ReadStatFormatClass {
     DateTimeWithNanoseconds,
     Time,
 }
-
-
 
 /************
  * Variable *
