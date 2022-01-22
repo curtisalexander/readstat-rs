@@ -57,7 +57,7 @@ fn parse_cars_metadata() {
     assert!(common::contains_var(&d, 0));
 
     // variables - does not contain variable
-    assert!(!common::contains_var(&d, 1));
+    assert!(!common::contains_var(&d, 100));
 
     // variables
 
