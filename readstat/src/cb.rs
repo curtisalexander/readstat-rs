@@ -1,6 +1,6 @@
 use arrow::array::{
     ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder, TimestampMillisecondBuilder, TimestampMicrosecondBuilder, TimestampNanosecondBuilder,
 };
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
@@ -187,16 +187,16 @@ pub extern "C" fn handle_variable(
                 DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
             }
             Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Millisecond, None)
+                // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                DataType::Timestamp(arrow::datatypes::TimeUnit::Millisecond, None)
             }
             Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None)
+                // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None)
             }
             Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Nanosecond, None)
+                // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                DataType::Timestamp(arrow::datatypes::TimeUnit::Nanosecond, None)
             }
             Some(ReadStatFormatClass::Time) => DataType::Time32(arrow::datatypes::TimeUnit::Second),
             None => DataType::Float64,
@@ -386,12 +386,24 @@ pub extern "C" fn handle_value(
                     ReadStatFormatClass::Date => {
                         ReadStatVar::ReadStat_Date((value as i32).checked_sub(DAY_SHIFT).unwrap())
                     }
-                    ReadStatFormatClass::DateTime
-                    | ReadStatFormatClass::DateTimeWithMilliseconds
-                    | ReadStatFormatClass::DateTimeWithMicroseconds
-                    | ReadStatFormatClass::DateTimeWithNanoseconds => {
+                    ReadStatFormatClass::DateTime => {
                         ReadStatVar::ReadStat_DateTime(
                             (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                        )
+                    },
+                    ReadStatFormatClass::DateTimeWithMilliseconds => {
+                        ReadStatVar::ReadStat_DateTime(
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap()*1000,
+                        )
+                    }
+                    ReadStatFormatClass::DateTimeWithMicroseconds => {
+                        ReadStatVar::ReadStat_DateTime(
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap()*1000000,
+                        )
+                    }
+                    ReadStatFormatClass::DateTimeWithNanoseconds => {
+                        ReadStatVar::ReadStat_DateTime(
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap()*1000000000,
                         )
                     }
                     ReadStatFormatClass::Time => ReadStatVar::ReadStat_Time(value as i32),
@@ -429,6 +441,57 @@ pub extern "C" fn handle_value(
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<TimestampSecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMillisecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMillisecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMicrosecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMicrosecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampNanosecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampNanosecondBuilder>()
                             .unwrap()
                             .append_null()
                             .unwrap();

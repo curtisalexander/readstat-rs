@@ -133,5 +133,8 @@ pub enum ReadStatVar {
     ReadStat_Missing(()),
     ReadStat_Date(i32),
     ReadStat_DateTime(i64),
+    ReadStat_DateTimeWithMilliseconds(i64),
+    ReadStat_DateTimeWithMicroseconds(i64),
+    ReadStat_DateTimeWithNanoseconds(i64),
     ReadStat_Time(i32),
 }
