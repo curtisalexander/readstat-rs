@@ -2,6 +2,7 @@
 
 use colored::Colorize;
 use log::debug;
+use num_cpus;
 use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
 use serde::Serialize;
@@ -64,7 +65,7 @@ pub enum ReadStat {
         #[structopt(long)]
         no_progress: bool,
     },
-    /// Convert sas7bdat data to csv, feather (or the Arror IPC format), ndjson, or parquet format
+    /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
     Data {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
@@ -90,6 +91,9 @@ pub enum ReadStat {
         /// Overwrite output file if it already exists
         #[structopt(long)]
         overwrite: bool,
+        /// Convert sas7bdat data in parallel{n}    Number of threads to utilize
+        #[structopt(long)]
+        parallel: Option<usize>,
     },
 }
 
@@ -195,6 +199,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             stream_rows,
             no_progress,
             overwrite,
+            parallel
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -204,6 +209,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, output, format, overwrite)?;
+
 
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
@@ -235,12 +241,25 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         p.to_string_lossy().bright_yellow()
                     );
 
-                    let error = d.get_data(rows, None)?;
+                    // get and optionally write data - single or multi-threaded
+                    let error: u32;
+                    if let Some(_p) = parallel {
+                        let cpu_logical_count: usize = num_cpus::get();
+                        let cpu_physical_count: usize = num_cpus::get_physical();
+                        println!("Logical count {:?}", cpu_logical_count);
+                        println!("Physical count {:?}", cpu_physical_count);
 
-                    // progress bar
-                    if let Some(pb) = &d.pb {
-                        pb.finish_at_current_pos()
-                    };
+                        error = d.get_row_count()?;
+                        println!("Row count {:?}", d.metadata.row_count);
+                    } else {
+                        error = d.get_data(rows, None)?;
+
+                        // progress bar
+                        if let Some(pb) = &d.pb {
+                            pb.finish_at_current_pos()
+                        };
+                    }
+                    
                     match FromPrimitive::from_i32(error as i32) {
                         Some(ReadStatError::READSTAT_OK) => Ok(()),
                         // Some(ReadStatError::READSTAT_OK) => d.write(),

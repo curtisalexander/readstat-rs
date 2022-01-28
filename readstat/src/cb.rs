@@ -124,6 +124,24 @@ pub extern "C" fn handle_metadata(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
+pub extern "C" fn handle_metadata_row_count_only(
+    metadata: *mut readstat_sys::readstat_metadata_t,
+    ctx: *mut c_void,
+) -> c_int {
+    // dereference ctx pointer
+    let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
+
+    // get metadata
+    let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
+    debug!("row_count is {}", rc);
+
+    // insert into ReadStatMetadata struct
+    d.metadata.row_count = rc;
+    debug!("d.metadata struct is {:#?}", &d.metadata);
+
+    ReadStatHandler::READSTAT_HANDLER_OK as c_int
+}
+
 pub extern "C" fn handle_variable(
     index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
