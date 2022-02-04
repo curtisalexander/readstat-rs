@@ -139,10 +139,10 @@ impl ReadStatPath {
                             // Check to see if file already exists
                             if abs_path.exists() {
                                 if overwrite {
-                                    println!("The file {} will be {}!", abs_path.to_string_lossy().bright_yellow(), String::from("overwritten").bright_blue());
+                                    println!("The file {} will be {}!", abs_path.to_string_lossy().bright_yellow(), String::from("overwritten").truecolor(255, 132, 0));
                                     Ok(Some(abs_path.as_path().to_path_buf()))
                                 } else {
-                                    Err(From::from(format!("The output file - {} - already exists!  To overwrite the file, utilize the {} parameter", abs_path.to_string_lossy().bright_yellow(), String::from("--overwrite").bright_blue())))
+                                    Err(From::from(format!("The output file - {} - already exists!  To overwrite the file, utilize the {} parameter", abs_path.to_string_lossy().bright_yellow(), String::from("--overwrite").bright_cyan())))
                                 }
                             } else {
                                 Ok(Some(abs_path.as_path().to_path_buf()))
