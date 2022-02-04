@@ -1,6 +1,7 @@
 use arrow::array::{
     ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder, TimestampMillisecondBuilder, TimestampMicrosecondBuilder, TimestampNanosecondBuilder,
+    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampMicrosecondBuilder,
+    TimestampMillisecondBuilder, TimestampNanosecondBuilder, TimestampSecondBuilder,
 };
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
@@ -90,6 +91,11 @@ pub extern "C" fn handle_metadata(
         Some(t) => t,
         None => ReadStatEndian::None,
     };
+    // rows determined based on type of Reader
+    let rtp = match d.reader {
+        Reader::stream => std::cmp::min(d.stream_rows as usize, d.metadata.row_count as usize),
+        Reader::mem => d.metadata.row_count as usize,
+    };
 
     // allocate
     d.cols = Vec::with_capacity(vc as usize);
@@ -105,6 +111,7 @@ pub extern "C" fn handle_metadata(
     debug!("modified_time is {}", &mt);
     debug!("compression is {:#?}", &compression);
     debug!("endianness is {:#?}", &endianness);
+    debug!("rows is {}", rtp);
 
     // insert into ReadStatMetadata struct
     d.metadata.row_count = rc;
@@ -118,6 +125,7 @@ pub extern "C" fn handle_metadata(
     d.metadata.modified_time = mt;
     d.metadata.compression = compression;
     d.metadata.endianness = endianness;
+    d.rows_to_process = rows;
 
     debug!("d.metadata struct is {:#?}", &d.metadata);
 
@@ -252,15 +260,9 @@ pub extern "C" fn handle_value(
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
-    // rows determined based on type of Reader
-    let rows = match d.reader {
-        Reader::stream => std::cmp::min(d.stream_rows as usize, d.metadata.row_count as usize),
-        Reader::mem => d.metadata.row_count as usize,
-    };
-
     // allocate columns
     if obs_index == 0 && var_index == 0 {
-        d.allocate_cols(rows);
+        d.allocate_cols(d.rows_to_process);
     };
 
     // get value and push into cols
@@ -403,26 +405,22 @@ pub extern "C" fn handle_value(
                     ReadStatFormatClass::Date => {
                         ReadStatVar::ReadStat_Date((value as i32).checked_sub(DAY_SHIFT).unwrap())
                     }
-                    ReadStatFormatClass::DateTime => {
-                        ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap(),
-                        )
-                    },
+                    ReadStatFormatClass::DateTime => ReadStatVar::ReadStat_DateTime(
+                        (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                    ),
                     ReadStatFormatClass::DateTimeWithMilliseconds => {
                         ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap()*1000,
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000,
                         )
                     }
                     ReadStatFormatClass::DateTimeWithMicroseconds => {
                         ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap()*1000000,
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000,
                         )
                     }
-                    ReadStatFormatClass::DateTimeWithNanoseconds => {
-                        ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap()*1000000000,
-                        )
-                    }
+                    ReadStatFormatClass::DateTimeWithNanoseconds => ReadStatVar::ReadStat_DateTime(
+                        (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
+                    ),
                     ReadStatFormatClass::Time => ReadStatVar::ReadStat_Time(value as i32),
                 },
             };
@@ -581,7 +579,7 @@ pub extern "C" fn handle_value(
                 d.cols.clear();
 
                 if obs_index != (d.metadata.row_count - 1) {
-                    d.allocate_cols(rows);
+                    d.allocate_cols(d.rows_to_process);
                 };
                 /*
                 match d.write() {

@@ -210,7 +210,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, output, format, overwrite)?;
 
-
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
