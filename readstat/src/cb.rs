@@ -142,10 +142,17 @@ pub extern "C" fn handle_metadata_row_count_only(
     // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     debug!("row_count is {}", rc);
+    // rows determined based on type of Reader
+    let rtp = match d.reader {
+        Reader::stream => std::cmp::min(d.stream_rows as usize, rc as usize),
+        Reader::mem => rc as usize,
+    };
 
     // insert into ReadStatMetadata struct
     d.metadata.row_count = rc;
+    d.rows_to_process = rtp;
     debug!("d.metadata struct is {:#?}", &d.metadata);
+    debug!("d.rows_to_process is {}", d.rows_to_process);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
