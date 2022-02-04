@@ -232,7 +232,6 @@ pub extern "C" fn handle_variable(
 
 pub extern "C" fn handle_value(
     obs_index: c_int,
-    // #[allow(unused_variables)] obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     value: readstat_sys::readstat_value_t,
     ctx: *mut c_void,
