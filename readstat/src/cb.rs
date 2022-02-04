@@ -125,7 +125,7 @@ pub extern "C" fn handle_metadata(
     d.metadata.modified_time = mt;
     d.metadata.compression = compression;
     d.metadata.endianness = endianness;
-    d.rows_to_process = rows;
+    d.rows_to_process = rtp;
 
     debug!("d.metadata struct is {:#?}", &d.metadata);
 
