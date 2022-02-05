@@ -551,7 +551,9 @@ pub extern "C" fn handle_value(
     };
 
     // if last variable for a row, check to see if data should be finalized and written
-    if var_index == (d.metadata.var_count - 1) && (obs_index as usize) == (d.batch_rows_to_process - 1) {
+    if var_index == (d.metadata.var_count - 1)
+        && (obs_index as usize) == (d.batch_rows_to_process - 1)
+    {
         let arrays: Vec<ArrayRef> = d.cols.iter_mut().map(|builder| builder.finish()).collect();
 
         d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();

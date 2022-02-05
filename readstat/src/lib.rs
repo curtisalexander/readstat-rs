@@ -12,16 +12,16 @@ use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
 mod cb;
+mod drive;
 mod err;
 mod formats;
-mod drive;
 mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
 
-pub use err::ReadStatError;
 pub use drive::{build_offsets, get_data_from_offsets, get_metadata, get_preview};
+pub use err::ReadStatError;
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{
     ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatMetadata, ReadStatVar,
@@ -169,7 +169,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // Get preview
             get_preview(&mut d, rows)
-
         }
         ReadStat::Data {
             input,
@@ -223,12 +222,19 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     let total_rows_processed = Arc::new(Mutex::new(0));
 
                     // Build up offsets
-                    let offsets = build_offsets(d.reader, d.metadata.row_count as u32, d.stream_rows, rows)?;
+                    let offsets =
+                        build_offsets(d.reader, d.metadata.row_count as u32, d.stream_rows, rows)?;
                     let offsets_pairs = offsets.windows(2);
 
                     // Get data
                     for w in offsets_pairs {
-                        get_data_from_offsets(&mut d, w[0], w[1], total_rows_to_process, Arc::clone(&total_rows_processed))?;
+                        get_data_from_offsets(
+                            &mut d,
+                            w[0],
+                            w[1],
+                            total_rows_to_process,
+                            Arc::clone(&total_rows_processed),
+                        )?;
                     }
 
                     // progress bar
