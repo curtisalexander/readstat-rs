@@ -3,6 +3,7 @@ use arrow::array::{
     Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
 use arrow::csv as csv_arrow;
+use arrow::datatypes::{Field, DataType, Schema};
 use arrow::ipc::writer::FileWriter;
 use arrow::json::LineDelimitedWriter;
 use arrow::record_batch::RecordBatch;
@@ -16,6 +17,7 @@ use parquet::arrow::arrow_writer::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use path_abs::PathInfo;
 use serde_json;
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::CString;
 use std::fs::OpenOptions;
@@ -24,7 +26,7 @@ use std::os::raw::{c_uint, c_void};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::cb;
+use crate::{cb, ReadStatVarMetadata};
 use crate::{Format, Reader};
 use crate::rs_metadata::{ReadStatMetadata, ReadStatVarType, ReadStatFormatClass};
 use crate::rs_path::ReadStatPath;
@@ -48,30 +50,15 @@ pub enum ReadStatWriter {
  *******/
 
 pub struct ReadStatData {
-    // path
-    pub path: PathBuf,
-    pub cstring_path: CString,
-    pub out_path: Option<PathBuf>,
     // metadata
-    pub metadata: ReadStatMetadata,
+    pub var_count: i32,
+    pub vars: BTreeMap<i32, ReadStatVarMetadata>,
     // data
     pub cols: Vec<Box<dyn ArrayBuilder>>,
     pub schema: datatypes::Schema,
     pub batch: record_batch::RecordBatch,
-    // writer and format
-    pub format: Format,
-    // should probably be declared with a trait but just utilizing enum for the time being
-    pub wtr: Option<ReadStatWriter>,
-    pub wrote_header: bool,
-    pub wrote_start: bool,
-    pub finish: bool,
-    // usage
-    pub reader: Reader,
-    pub stream_rows: c_uint,
-    pub row_limit: Option<usize>,
-    pub no_write: bool,
     // progress
-    pub batch_rows_to_process: usize,  // min(stream_rows, metadata.row_count)
+    pub batch_rows_to_process: usize,  // min(stream_rows, row_limit, row_count)
     pub batch_row_start: usize,
     pub batch_row_end: usize,
     pub batch_rows_processed: usize,
@@ -82,29 +69,15 @@ pub struct ReadStatData {
 }
 
 impl ReadStatData {
-    pub fn new(rsp: ReadStatPath) -> Self {
+    pub fn new() -> Self {
         Self {
-            // path
-            path: rsp.path,
-            cstring_path: rsp.cstring_path,
-            out_path: rsp.out_path,
             // metadata
-            metadata: ReadStatMetadata::new(),
-            format: rsp.format,
+            var_count: 0,
+            vars: BTreeMap::new(),
             // data
             cols: Vec::new(),
             schema: datatypes::Schema::empty(),
             batch: RecordBatch::new_empty(Arc::new(datatypes::Schema::empty())),
-            // writer and format
-            wtr: None,
-            wrote_header: false,
-            wrote_start: false,
-            finish: false,
-            // usage
-            reader: Reader::stream,
-            stream_rows: 50000,
-            row_limit: None,
-            no_write: false,
             // progress
             batch_rows_to_process: 0,
             batch_rows_processed: 0,
@@ -118,8 +91,8 @@ impl ReadStatData {
     }
 
     pub fn allocate_cols(&mut self, rows: usize) {
-        for i in 0..self.metadata.var_count {
-            let var_type = self.metadata.vars.get(&i).unwrap().var_type;
+        for i in 0..self.var_count {
+            let var_type = self.vars.get(&i).unwrap().var_type;
             // Allocate space for ArrayBuilder
             let array: Box<dyn ArrayBuilder> = match var_type {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
@@ -129,7 +102,7 @@ impl ReadStatData {
                 ReadStatVarType::Int16 => Box::new(Int16Builder::new(rows)),
                 ReadStatVarType::Int32 => Box::new(Int32Builder::new(rows)),
                 ReadStatVarType::Float => Box::new(Float32Builder::new(rows)),
-                ReadStatVarType::Double => match self.metadata.vars.get(&i).unwrap().var_format_class {
+                ReadStatVarType::Double => match self.vars.get(&i).unwrap().var_format_class {
                     None => Box::new(Float64Builder::new(rows)),
                     Some(ReadStatFormatClass::Date) => Box::new(Date32Builder::new(rows)),
                     Some(ReadStatFormatClass::DateTime) |
@@ -182,46 +155,6 @@ impl ReadStatData {
             .set_row_limit(row_limit)?
             .set_row_offset(row_offset)?
             .parse_sas7bdat(ppath, ctx);
-
-        Ok(error as u32)
-    }
-
-    pub fn get_metadata(&mut self, skip_row_count: bool) -> Result<u32, Box<dyn Error>> {
-        debug!("Path as C string is {:?}", &self.cstring_path);
-        let ppath = self.cstring_path.as_ptr();
-
-        // spinner
-        if !self.no_progress {
-            self.pb = Some(ProgressBar::new(!0));
-        }
-        if let Some(pb) = &self.pb {
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            );
-            let msg = format!(
-                "Parsing sas7bdat metadata from file {}",
-                &self.path.to_string_lossy().bright_red()
-            );
-            pb.set_message(msg);
-            pb.enable_steady_tick(120);
-        }
-        let ctx = self as *mut ReadStatData as *mut c_void;
-
-        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
-
-        let row_limit = if skip_row_count { Some(1) } else { None };
-
-        let error = ReadStatParser::new()
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
-            .set_row_limit(row_limit)?
-            .parse_sas7bdat(ppath, ctx);
-
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear();
-        }
 
         Ok(error as u32)
     }
@@ -285,43 +218,59 @@ impl ReadStatData {
         Ok(error as u32)
     }
 
-    pub fn set_no_write(self, no_write: bool) -> Self {
-        Self { no_write, ..self }
+    pub fn initialize_schema(self, m: ReadStatMetadata) -> Self {
+        // build up Schema
+        let fields: Vec<Field> = m.vars.iter().map(|(idx,vm)| { 
+            let var_dt = match &vm.var_type {
+                ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
+                    DataType::Utf8
+                }
+                ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
+                ReadStatVarType::Int32 => DataType::Int32,
+                ReadStatVarType::Float => DataType::Float32,
+                ReadStatVarType::Double => match &vm.var_format_class {
+                    Some(ReadStatFormatClass::Date) => DataType::Date32,
+                    Some(ReadStatFormatClass::DateTime) => {
+                        DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                    }
+                    Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
+                        // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                        DataType::Timestamp(arrow::datatypes::TimeUnit::Millisecond, None)
+                    }
+                    Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
+                        // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                        DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None)
+                    }
+                    Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
+                        // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                        DataType::Timestamp(arrow::datatypes::TimeUnit::Nanosecond, None)
+                    }
+                    Some(ReadStatFormatClass::Time) => DataType::Time32(arrow::datatypes::TimeUnit::Second),
+                    None => DataType::Float64,
+                },
+            };
+            Field::new(&vm.var_name, var_dt, true)
+        }).collect();
+
+        let schema = Schema::new(fields);
+
+        Self { schema, ..self}
+    }
+
+    pub fn set_metadata(self, m: ReadStatMetadata) -> Self {
+        let var_count = m.var_count;
+        let vars = m.vars;
+        Self {
+            var_count,
+            vars,
+            ..self
+        }
     }
 
     pub fn set_no_progress(self, no_progress: bool) -> Self {
         Self {
             no_progress,
             ..self
-        }
-    }
-
-    pub fn set_reader(self, reader: Option<Reader>) -> Self {
-        if let Some(r) = reader {
-            Self { reader: r, ..self }
-        } else {
-            self
-        }
-    }
-
-    pub fn set_row_limit(self, rows: Option<u32>) -> Self {
-        if let Some(r) = rows {
-            Self { row_limit: Some(r as usize), ..self }
-        } else {
-            Self { row_limit: None, ..self }
-        }
-    }
-
-    pub fn set_stream_rows(self, stream_rows: Option<c_uint>) -> Self {
-        match self.reader {
-            Reader::stream => match stream_rows {
-                Some(stream_rows) => Self {
-                    stream_rows,
-                    ..self
-                },
-                None => self,
-            },
-            Reader::mem => self,
         }
     }
 

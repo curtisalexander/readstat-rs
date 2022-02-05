@@ -12,7 +12,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::Arc;
 
-use crate::formats;
+use crate::{formats, ReadStatMetadata};
 use crate::rs_data::ReadStatData;
 use crate::rs_metadata::{
     ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatVar, ReadStatVarMetadata,
@@ -34,11 +34,11 @@ enum ReadStatHandler {
 }
 
 // String out from C pointer
-fn ptr_to_string(x: *const i8) -> String {
+unsafe fn ptr_to_string(x: *const i8) -> String {
     if x.is_null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(x).to_str().unwrap().to_owned() }
+        CStr::from_ptr(x).to_str().unwrap().to_owned()
     }
 }
 
@@ -54,7 +54,7 @@ pub extern "C" fn handle_metadata(
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
+    let mut m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
     // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
@@ -90,9 +90,6 @@ pub extern "C" fn handle_metadata(
         None => ReadStatEndian::None,
     };
 
-    // allocate
-    d.cols = Vec::with_capacity(vc as usize);
-
     debug!("row_count is {}", rc);
     debug!("var_count is {}", vc);
     debug!("table_name is {}", &table_name);
@@ -106,23 +103,24 @@ pub extern "C" fn handle_metadata(
     debug!("endianness is {:#?}", &endianness);
 
     // insert into ReadStatMetadata struct
-    d.metadata.row_count = rc;
-    d.metadata.var_count = vc;
-    d.metadata.table_name = table_name;
-    d.metadata.file_label = file_label;
-    d.metadata.file_encoding = file_encoding;
-    d.metadata.version = version;
-    d.metadata.is64bit = is64bit;
-    d.metadata.creation_time = ct;
-    d.metadata.modified_time = mt;
-    d.metadata.compression = compression;
-    d.metadata.endianness = endianness;
+    m.row_count = rc;
+    m.var_count = vc;
+    m.table_name = table_name;
+    m.file_label = file_label;
+    m.file_encoding = file_encoding;
+    m.version = version;
+    m.is64bit = is64bit;
+    m.creation_time = ct;
+    m.modified_time = mt;
+    m.compression = compression;
+    m.endianness = endianness;
 
-    debug!("d.metadata struct is {:#?}", &d.metadata);
+    debug!("metadata struct is {:#?}", &m);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
+/*
 pub extern "C" fn handle_metadata_row_count_only(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
@@ -140,6 +138,7 @@ pub extern "C" fn handle_metadata_row_count_only(
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
+*/
 
 pub extern "C" fn handle_variable(
     index: c_int,
@@ -148,7 +147,7 @@ pub extern "C" fn handle_variable(
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let d = unsafe { &mut *(ctx as *mut ReadStatData) };
+    let m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
     // get variable metadata
     let var_type = match FromPrimitive::from_i32(unsafe {
@@ -178,7 +177,7 @@ pub extern "C" fn handle_variable(
     debug!("var_format_class is {:#?}", &var_format_class);
 
     // insert into BTreeMap within ReadStatMetadata struct
-    d.metadata.vars.insert(
+    m.vars.insert(
         index,
         ReadStatVarMetadata::new(
             var_name.clone(),
@@ -189,42 +188,6 @@ pub extern "C" fn handle_variable(
             var_format_class,
         ),
     );
-
-    // build up Schema
-    let var_dt = match &var_type {
-        ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-            DataType::Utf8
-        }
-        ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
-        ReadStatVarType::Int32 => DataType::Int32,
-        ReadStatVarType::Float => DataType::Float32,
-        ReadStatVarType::Double => match var_format_class {
-            Some(ReadStatFormatClass::Date) => DataType::Date32,
-            Some(ReadStatFormatClass::DateTime) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-            }
-            Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Millisecond, None)
-            }
-            Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None)
-            }
-            Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Nanosecond, None)
-            }
-            Some(ReadStatFormatClass::Time) => DataType::Time32(arrow::datatypes::TimeUnit::Second),
-            None => DataType::Float64,
-        },
-    };
-
-    d.schema = Schema::try_merge(vec![
-        d.schema.clone(),
-        Schema::new(vec![Field::new(&var_name, var_dt, true)]),
-    ])
-    .unwrap();
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -237,6 +200,8 @@ pub extern "C" fn handle_value(
 ) -> c_int {
     // dereference ctx pointer
     let d = unsafe { &mut *(ctx as *mut ReadStatData) };
+
+    d.cols = Vec::with_capacity(vc as usize);
 
     // get index, type, and missingness
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
@@ -546,7 +511,7 @@ pub extern "C" fn handle_value(
     }
 
     // increment
-    if var_index == (d.metadata.var_count - 1) {
+    if var_index == (d.var_count - 1) {
         d.batch_rows_processed += 1;
     };
 

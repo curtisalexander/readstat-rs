@@ -20,7 +20,7 @@ mod rs_metadata;
 mod rs_parser;
 mod rs_path;
 
-pub use drive::{build_offsets, get_data_from_offsets, get_metadata, get_preview};
+pub use drive::{build_offsets, drive_data_from_offsets, get_metadata, get_preview};
 pub use err::ReadStatError;
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{
@@ -181,68 +181,81 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             overwrite,
             parallel,
         } => {
+            // validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
                 "Generating data from the file {}",
                 &sas_path.to_string_lossy()
             );
 
-            // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, output, format, overwrite)?;
+            // output and format determine the type of writing to be performed
+            let rsp = ReadStatPath::new(sas_path, output, format, overwrite, false)?;
+
+            // instantiate ReadStatMetadata
+            let mut md = ReadStatMetadata::new();
+            md.get_metadata(rsp, false)?;
+
 
             // instantiate ReadStatData
+            /*
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
                 .set_row_limit(rows)
                 .set_no_progress(no_progress);
+            */
 
-            match &d {
-                ReadStatData { out_path: None, .. } => {
+            match &rsp.out_path {
+               None => { 
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
                     // Get metadata
-                    get_metadata(&mut d, false, false)
+                    //get_metadata(&mut d, false, false)
+                    Ok(())
                 }
-                ReadStatData {
-                    out_path: Some(p), ..
-                } => {
+                Some(p) => {
                     println!(
                         "Writing parsed data to file {}",
                         p.to_string_lossy().bright_yellow()
                     );
 
                     // Determine row count
-                    d.get_row_count()?;
-                    let total_rows_to_process = if let Some(r) = d.row_limit {
-                        std::cmp::min(r, d.metadata.row_count as usize)
+                    let total_rows_to_process = if let Some(r) = rows {
+                        std::cmp::min(r, md.row_count as u32)
                     } else {
-                        d.metadata.row_count as usize
+                        md.row_count as u32
                     };
                     let total_rows_processed = Arc::new(Mutex::new(0));
 
                     // Build up offsets
                     let offsets =
-                        build_offsets(d.reader, d.metadata.row_count as u32, d.stream_rows, rows)?;
+                        build_offsets(&reader, md.row_count as u32, stream_rows, rows)?;
                     let offsets_pairs = offsets.windows(2);
 
-                    // Get data
+                    // Get data - for each iteration create a new instance of ReadStatData
                     for w in offsets_pairs {
-                        get_data_from_offsets(
-                            &mut d,
-                            w[0],
-                            w[1],
-                            total_rows_to_process,
-                            Arc::clone(&total_rows_processed),
-                        )?;
+                        let mut d = ReadStatData::new()
+                            .set_metadata(md.clone())
+                            .set_no_progress(no_progress);
+
+                        drive_data_from_offsets(&mut d, w[0], w[1])?;
                     }
 
-                    // progress bar
-                    if let Some(pb) = &d.pb {
-                        pb.finish_at_current_pos()
-                    };
+                /*
+                if total_rows_to_process == *total_rows_processed.lock().unwrap() {
+                    d.finish = true;
+                }
+                */
+                write(d)?;
+                // write start?  
 
-                    Ok(())
+                // progress bar
+                /*
+                if let Some(pb) = &d.pb {
+                    pb.finish_at_current_pos()
+                };
+                */
+                Ok(())
 
                     // get and optionally write data - single or multi-threaded
                     /*

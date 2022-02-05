@@ -20,6 +20,7 @@ pub struct ReadStatPath {
     pub out_path: Option<PathBuf>,
     pub format: Format,
     pub overwrite: bool,
+    pub no_write: bool,
 }
 
 impl ReadStatPath {
@@ -28,12 +29,13 @@ impl ReadStatPath {
         out_path: Option<PathBuf>,
         format: Option<Format>,
         overwrite: bool,
+        no_write: bool,
     ) -> Result<Self, Box<dyn Error>> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
-        let op: Option<PathBuf> = Self::validate_out_path(out_path, overwrite)?;
         let f = Self::validate_format(format)?;
+        let op: Option<PathBuf> = Self::validate_out_path(out_path, overwrite)?;
         let op = match op {
             None => op,
             Some(op) => Self::validate_out_extension(&op, f)?,
@@ -46,6 +48,7 @@ impl ReadStatPath {
             out_path: op,
             format: f,
             overwrite,
+            no_write
         })
     }
 
@@ -60,6 +63,13 @@ impl ReadStatPath {
     pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error>> {
         let rust_str = path.as_os_str().to_str().ok_or("Invalid path")?;
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
+    }
+
+    fn validate_format(format: Option<Format>) -> Result<Format, Box<dyn Error>> {
+        match format {
+            None => Ok(Format::csv),
+            Some(f) => Ok(f),
+        }
     }
 
     fn validate_in_extension(path: &Path) -> Result<String, Box<dyn Error>> {
@@ -110,19 +120,6 @@ impl ReadStatPath {
             )
     }
 
-    fn validate_path(path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
-        let abs_path = PathAbs::new(path)?;
-
-        if abs_path.exists() {
-            Ok(abs_path.as_path().to_path_buf())
-        } else {
-            Err(From::from(format!(
-                "File {} does not exist!",
-                abs_path.to_string_lossy().bright_yellow()
-            )))
-        }
-    }
-
     fn validate_out_path(
         path: Option<PathBuf>,
         overwrite: bool,
@@ -156,10 +153,16 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_format(format: Option<Format>) -> Result<Format, Box<dyn Error>> {
-        match format {
-            None => Ok(Format::csv),
-            Some(f) => Ok(f),
+    fn validate_path(path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+        let abs_path = PathAbs::new(path)?;
+
+        if abs_path.exists() {
+            Ok(abs_path.as_path().to_path_buf())
+        } else {
+            Err(From::from(format!(
+                "File {} does not exist!",
+                abs_path.to_string_lossy().bright_yellow()
+            )))
         }
     }
 }

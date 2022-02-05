@@ -1,13 +1,23 @@
+use colored::Colorize;
+use log::debug;
 use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::ffi::c_void;
+use std::error::Error;
 use std::os::raw::c_int;
+
+use crate::{ReadStatPath, ReadStatError};
+use crate::rs_parser::ReadStatParser;
+use crate::cb::{handle_metadata, handle_variable};
+
 
 /***********
 * Metadata *
 ***********/
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
     pub row_count: c_int,
     pub var_count: c_int,
@@ -40,16 +50,75 @@ impl ReadStatMetadata {
             vars: BTreeMap::new(),
         }
     }
+
+    pub fn get_metadata(&mut self, rsp: ReadStatPath, skip_row_count: bool) -> Result<(), Box<dyn Error>> {
+        debug!("Path as C string is {:?}", &rsp.cstring_path);
+        let ppath = rsp.cstring_path.as_ptr();
+
+        // spinner
+        /*
+        if !self.no_progress {
+            self.pb = Some(ProgressBar::new(!0));
+        }
+        if let Some(pb) = &self.pb {
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
+            );
+            let msg = format!(
+                "Parsing sas7bdat metadata from file {}",
+                &self.path.to_string_lossy().bright_red()
+            );
+            pb.set_message(msg);
+            pb.enable_steady_tick(120);
+        }
+        */
+        let msg = format!(
+            "Parsing sas7bdat metadata from file {}",
+            &rsp.path.to_string_lossy().bright_red()
+        );
+        
+        let ctx = self as *mut ReadStatMetadata as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let row_limit = if skip_row_count { Some(1) } else { None };
+
+        let error = ReadStatParser::new()
+            .set_metadata_handler(Some(handle_metadata))?
+            .set_variable_handler(Some(handle_variable))?
+            .set_row_limit(row_limit)?
+            .parse_sas7bdat(ppath, ctx);
+
+        /*
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear();
+        }
+        */
+
+        match FromPrimitive::from_i32(error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(()),
+            Some(e) => Err(From::from(format!(
+                "Error when attempting to parse sas7bdat: {:#?}",
+                e
+            ))),
+            None => Err(From::from(
+                "Error when attempting to parse sas7bdat: Unknown return value",
+            )),
+        }
+    }
+
 }
 
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatCompress {
     None = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_NONE as isize,
     Rows = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_ROWS as isize,
     Binary = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_BINARY as isize,
 }
 
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatEndian {
     None = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_NONE as isize,
     Little = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_LITTLE as isize,
@@ -60,7 +129,7 @@ pub enum ReadStatEndian {
  * Variable Metadata *
  ********************/
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ReadStatVarMetadata {
     pub var_name: String,
     pub var_type: ReadStatVarType,
