@@ -68,10 +68,15 @@ pub struct ReadStatData {
     // usage
     pub reader: Reader,
     pub stream_rows: c_uint,
-    pub rows_to_process: usize,  // min(stream_rows, metadata.row_count)
+    pub row_limit: Option<usize>,
+    pub no_write: bool,
+    // progress
+    pub batch_rows_to_process: usize,  // min(stream_rows, metadata.row_count)
+    pub batch_row_start: usize,
+    pub batch_row_end: usize,
+    pub batch_rows_processed: usize,
     pub pb: Option<ProgressBar>,
     pub no_progress: bool,
-    pub is_test: bool,
     // errors
     pub errors: Vec<String>,
 }
@@ -98,10 +103,15 @@ impl ReadStatData {
             // usage
             reader: Reader::stream,
             stream_rows: 50000,
-            rows_to_process: 0,
+            row_limit: None,
+            no_write: false,
+            // progress
+            batch_rows_to_process: 0,
+            batch_rows_processed: 0,
+            batch_row_start: 0,
+            batch_row_end: 0,
             pb: None,
             no_progress: false,
-            is_test: false,
             // errors
             errors: Vec::new(),
         }
@@ -275,8 +285,8 @@ impl ReadStatData {
         Ok(error as u32)
     }
 
-    pub fn set_is_test(self, is_test: bool) -> Self {
-        Self { is_test, ..self }
+    pub fn set_no_write(self, no_write: bool) -> Self {
+        Self { no_write, ..self }
     }
 
     pub fn set_no_progress(self, no_progress: bool) -> Self {
@@ -291,6 +301,14 @@ impl ReadStatData {
             Self { reader: r, ..self }
         } else {
             self
+        }
+    }
+
+    pub fn set_row_limit(self, rows: Option<u32>) -> Self {
+        if let Some(r) = rows {
+            Self { row_limit: Some(r as usize), ..self }
+        } else {
+            Self { row_limit: None, ..self }
         }
     }
 

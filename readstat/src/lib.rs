@@ -3,23 +3,25 @@
 use colored::Colorize;
 use log::debug;
 use num_cpus;
-use num_traits::FromPrimitive;
 use path_abs::{PathAbs, PathInfo};
 use serde::Serialize;
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
 mod cb;
 mod err;
 mod formats;
+mod drive;
 mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
 
 pub use err::ReadStatError;
+pub use drive::{build_offsets, get_data_from_offsets, get_metadata, get_preview};
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{
     ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatMetadata, ReadStatVar,
@@ -136,25 +138,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, None, false)?;
 
+            // instantiate ReadStatData
             let mut d = ReadStatData::new(rsp).set_no_progress(no_progress);
-            let error = d.get_metadata(skip_row_count)?;
 
-            match FromPrimitive::from_i32(error as i32) {
-                Some(ReadStatError::READSTAT_OK) => {
-                    if !as_json {
-                        d.write_metadata_to_stdout()
-                    } else {
-                        d.write_metadata_to_json()
-                    }
-                }
-                Some(e) => Err(From::from(format!(
-                    "Error when attempting to parse sas7bdat: {:#?}",
-                    e
-                ))),
-                None => Err(From::from(
-                    "Error when attempting to parse sas7bdat: Unknown return value",
-                )),
-            }
+            // Get metadata
+            get_metadata(&mut d, skip_row_count, as_json)
         }
         ReadStat::Preview {
             input,
@@ -172,23 +160,16 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv), false)?;
 
+            // instantiate ReadStatData
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
+                .set_row_limit(Some(rows))
                 .set_no_progress(no_progress);
 
-            let error = d.get_preview(Some(rows), None)?;
+            // Get preview
+            get_preview(&mut d, rows)
 
-            match FromPrimitive::from_i32(error as i32) {
-                Some(ReadStatError::READSTAT_OK) => Ok(()),
-                Some(e) => Err(From::from(format!(
-                    "Error when attempting to parse sas7bdat: {:#?}",
-                    e
-                ))),
-                None => Err(From::from(
-                    "Error when attempting to parse sas7bdat: Unknown return value",
-                )),
-            }
         }
         ReadStat::Data {
             input,
@@ -199,7 +180,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             stream_rows,
             no_progress,
             overwrite,
-            parallel
+            parallel,
         } => {
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -210,27 +191,19 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // out_path and out_type determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, output, format, overwrite)?;
 
+            // instantiate ReadStatData
             let mut d = ReadStatData::new(rsp)
                 .set_reader(reader)
                 .set_stream_rows(stream_rows)
+                .set_row_limit(rows)
                 .set_no_progress(no_progress);
 
             match &d {
                 ReadStatData { out_path: None, .. } => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
-                    let error = d.get_metadata(false)?;
-
-                    match FromPrimitive::from_i32(error as i32) {
-                        Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
-                        Some(e) => Err(From::from(format!(
-                            "Error when attempting to parse sas7bdat: {:#?}",
-                            e
-                        ))),
-                        None => Err(From::from(
-                            "Error when attempting to parse sas7bdat: Unknown return value",
-                        )),
-                    }
+                    // Get metadata
+                    get_metadata(&mut d, false, false)
                 }
                 ReadStatData {
                     out_path: Some(p), ..
@@ -240,36 +213,43 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         p.to_string_lossy().bright_yellow()
                     );
 
+                    // Determine row count
+                    d.get_row_count()?;
+                    let total_rows_to_process = if let Some(r) = d.row_limit {
+                        std::cmp::min(r, d.metadata.row_count as usize)
+                    } else {
+                        d.metadata.row_count as usize
+                    };
+                    let total_rows_processed = Arc::new(Mutex::new(0));
+
+                    // Build up offsets
+                    let offsets = build_offsets(d.reader, d.metadata.row_count as u32, d.stream_rows, rows)?;
+                    let offsets_pairs = offsets.windows(2);
+
+                    // Get data
+                    for w in offsets_pairs {
+                        get_data_from_offsets(&mut d, w[0], w[1], total_rows_to_process, Arc::clone(&total_rows_processed))?;
+                    }
+
+                    // progress bar
+                    if let Some(pb) = &d.pb {
+                        pb.finish_at_current_pos()
+                    };
+
+                    Ok(())
+
                     // get and optionally write data - single or multi-threaded
-                    let error: u32;
+                    /*
                     if let Some(_p) = parallel {
                         let cpu_logical_count: usize = num_cpus::get();
                         let cpu_physical_count: usize = num_cpus::get_physical();
                         println!("Logical count {:?}", cpu_logical_count);
                         println!("Physical count {:?}", cpu_physical_count);
 
-                        error = d.get_row_count()?;
+                        d.get_row_count()?;
                         println!("Row count {:?}", d.metadata.row_count);
-                    } else {
-                        error = d.get_data(rows, None)?;
-
-                        // progress bar
-                        if let Some(pb) = &d.pb {
-                            pb.finish_at_current_pos()
-                        };
-                    }
-                    
-                    match FromPrimitive::from_i32(error as i32) {
-                        Some(ReadStatError::READSTAT_OK) => Ok(()),
-                        // Some(ReadStatError::READSTAT_OK) => d.write(),
-                        Some(e) => Err(From::from(format!(
-                            "Error when attempting to parse sas7bdat: {:#?}",
-                            e
-                        ))),
-                        None => Err(From::from(
-                            "Error when attempting to parse sas7bdat: Unknown return value",
-                        )),
-                    }
+                        Ok(())
+                    */
                 }
             }
         }

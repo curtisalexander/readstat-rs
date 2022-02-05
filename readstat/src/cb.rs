@@ -19,8 +19,6 @@ use crate::rs_metadata::{
     ReadStatVarType, ReadStatVarTypeClass,
 };
 
-use crate::Reader;
-
 const DIGITS: usize = 14;
 const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
@@ -91,11 +89,6 @@ pub extern "C" fn handle_metadata(
         Some(t) => t,
         None => ReadStatEndian::None,
     };
-    // rows determined based on type of Reader
-    let rtp = match d.reader {
-        Reader::stream => std::cmp::min(d.stream_rows as usize, d.metadata.row_count as usize),
-        Reader::mem => d.metadata.row_count as usize,
-    };
 
     // allocate
     d.cols = Vec::with_capacity(vc as usize);
@@ -111,7 +104,6 @@ pub extern "C" fn handle_metadata(
     debug!("modified_time is {}", &mt);
     debug!("compression is {:#?}", &compression);
     debug!("endianness is {:#?}", &endianness);
-    debug!("rows is {}", rtp);
 
     // insert into ReadStatMetadata struct
     d.metadata.row_count = rc;
@@ -125,7 +117,6 @@ pub extern "C" fn handle_metadata(
     d.metadata.modified_time = mt;
     d.metadata.compression = compression;
     d.metadata.endianness = endianness;
-    d.rows_to_process = rtp;
 
     debug!("d.metadata struct is {:#?}", &d.metadata);
 
@@ -142,17 +133,10 @@ pub extern "C" fn handle_metadata_row_count_only(
     // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
     debug!("row_count is {}", rc);
-    // rows determined based on type of Reader
-    let rtp = match d.reader {
-        Reader::stream => std::cmp::min(d.stream_rows as usize, rc as usize),
-        Reader::mem => rc as usize,
-    };
 
     // insert into ReadStatMetadata struct
     d.metadata.row_count = rc;
-    d.rows_to_process = rtp;
     debug!("d.metadata struct is {:#?}", &d.metadata);
-    debug!("d.rows_to_process is {}", d.rows_to_process);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -269,7 +253,7 @@ pub extern "C" fn handle_value(
 
     // allocate columns
     if obs_index == 0 && var_index == 0 {
-        d.allocate_cols(d.rows_to_process);
+        d.allocate_cols(d.batch_rows_to_process);
     };
 
     // get value and push into cols
@@ -561,76 +545,19 @@ pub extern "C" fn handle_value(
         _ => unreachable!(),
     }
 
-    // if last variable for a row, check to see if data should be finalized and written
+    // increment
     if var_index == (d.metadata.var_count - 1) {
-        match d.reader {
-            // if rows = buffer limit and last variable then go ahead and write
-            Reader::stream
-                if (((obs_index + 1) as u32 % d.stream_rows == 0) && (obs_index != 0))
-                    || obs_index == (d.metadata.row_count - 1) =>
-            {
-                let arrays: Vec<ArrayRef> =
-                    d.cols.iter_mut().map(|builder| builder.finish()).collect();
+        d.batch_rows_processed += 1;
+    };
 
-                d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
+    // if last variable for a row, check to see if data should be finalized and written
+    if var_index == (d.metadata.var_count - 1) && (obs_index as usize) == (d.batch_rows_to_process - 1) {
+        let arrays: Vec<ArrayRef> = d.cols.iter_mut().map(|builder| builder.finish()).collect();
 
-                if obs_index == (d.metadata.row_count - 1) {
-                    d.finish = true;
-                }
+        d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
 
-                if !d.is_test {
-                    d.write().unwrap_or(());
-                }
-
-                d.wrote_start = true;
-                d.cols.clear();
-
-                if obs_index != (d.metadata.row_count - 1) {
-                    d.allocate_cols(d.rows_to_process);
-                };
-                /*
-                match d.write() {
-                    Ok(()) => (),
-                    // Err(e) => d.errors.push(format!("{:#?}", e)),
-                    // TODO: what to do with writing errors?
-                    //       could include an errors container on the ReadStatData struct
-                    //         and carry the errors generated to be accessed by the end user
-                    //       or could simply dump the errors to standard out or even write them
-                    //         to a separate file
-                    // For now just swallow any errors when writing
-                    Err(_) => (),
-                };
-                */
-            }
-            Reader::mem if obs_index == (d.metadata.row_count - 1) => {
-                let arrays: Vec<ArrayRef> =
-                    d.cols.iter_mut().map(|builder| builder.finish()).collect();
-
-                d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
-
-                d.finish = true;
-
-                if !d.is_test {
-                    d.write().unwrap_or(());
-                }
-
-                d.wrote_start = true;
-                /*
-                match d.write() {
-                    Ok(()) => (),
-                    // Err(e) => d.errors.push(format!("{:#?}", e)),
-                    // TODO: what to do with writing errors?
-                    //       could include an errors container on the ReadStatData struct
-                    //         and carry the errors generated to be accessed by the end user
-                    //       or could simply dump the errors to standard out or even write them
-                    //         to a separate file
-                    // For now just swallow any errors when writing
-                    Err(_) => (),
-                };
-                */
-            }
-            _ => (),
-        }
+        // reset
+        d.cols.clear();
     }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
