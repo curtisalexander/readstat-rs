@@ -14,7 +14,7 @@ fn parse_scientific_notation() {
     let mut d = readstat::ReadStatData::new(rsp)
         .set_reader(Some(readstat::Reader::mem))
         .set_no_progress(true)
-        .set_is_test(true);
+        .set_no_write(true);
     let error = d.get_data(None, None).unwrap();
 
     assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);

@@ -13,7 +13,7 @@ fn parse_largepage_err() {
     let mut d = readstat::ReadStatData::new(rsp)
         .set_reader(Some(readstat::Reader::mem))
         .set_no_progress(true)
-        .set_is_test(true);
+        .set_no_write(true);
     let error = d.get_metadata(false).unwrap();
 
     assert_eq!(error, readstat_sys::readstat_error_e_READSTAT_OK as u32);

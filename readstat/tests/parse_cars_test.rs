@@ -10,7 +10,7 @@ fn init() -> readstat::ReadStatData {
     readstat::ReadStatData::new(rsp)
         .set_reader(Some(readstat::Reader::mem))
         .set_no_progress(true)
-        .set_is_test(true)
+        .set_no_write(true)
 }
 
 #[test]
