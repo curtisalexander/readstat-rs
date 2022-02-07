@@ -12,7 +12,7 @@ use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
 mod cb;
-mod drive;
+mod read_data;
 mod err;
 mod formats;
 mod rs_data;
@@ -20,7 +20,7 @@ mod rs_metadata;
 mod rs_parser;
 mod rs_path;
 
-pub use drive::{build_offsets, drive_data_from_offsets, get_metadata, get_preview};
+pub use read_data::{build_offsets, drive_data_from_offsets, get_metadata, get_preview};
 pub use err::ReadStatError;
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{
@@ -28,6 +28,8 @@ pub use rs_metadata::{
     ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
 };
 pub use rs_path::ReadStatPath;
+
+use crate::read_data::{read_data_from_offsets, read_data, write_data};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -195,7 +197,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let mut md = ReadStatMetadata::new();
             md.get_metadata(rsp, false)?;
 
-
             // instantiate ReadStatData
             /*
             let mut d = ReadStatData::new(rsp)
@@ -232,21 +233,33 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         build_offsets(&reader, md.row_count as u32, stream_rows, rows)?;
                     let offsets_pairs = offsets.windows(2);
 
+                    // Process data in batches (i.e. stream the rows)
                     // Get data - for each iteration create a new instance of ReadStatData
                     for w in offsets_pairs {
-                        let mut d = ReadStatData::new()
-                            .set_metadata(md.clone())
-                            .set_no_progress(no_progress);
+                        let start = w[0];
+                        let end = w[1];
 
-                        drive_data_from_offsets(&mut d, w[0], w[1])?;
+                        let mut d = ReadStatData::new()
+                            .set_no_progress(no_progress)
+                            .set_metadata(md.clone())
+                            .set_batch_counts(start, end)
+                            .allocate_cols();
+                        
+                        // read
+                        read_data(&mut d, &rsp)?;
+
+                        // TODO wrote_start/wrote_header needs to be global as does wrote_finish
+                        // write
+                        // write_data();
                     }
+
+
 
                 /*
                 if total_rows_to_process == *total_rows_processed.lock().unwrap() {
                     d.finish = true;
                 }
                 */
-                write(d)?;
                 // write start?  
 
                 // progress bar

@@ -57,11 +57,12 @@ pub struct ReadStatData {
     pub cols: Vec<Box<dyn ArrayBuilder>>,
     pub schema: datatypes::Schema,
     pub batch: record_batch::RecordBatch,
-    // progress
+    // batch rows
     pub batch_rows_to_process: usize,  // min(stream_rows, row_limit, row_count)
     pub batch_row_start: usize,
     pub batch_row_end: usize,
     pub batch_rows_processed: usize,
+    // progress
     pub pb: Option<ProgressBar>,
     pub no_progress: bool,
     // errors
@@ -78,11 +79,12 @@ impl ReadStatData {
             cols: Vec::new(),
             schema: datatypes::Schema::empty(),
             batch: RecordBatch::new_empty(Arc::new(datatypes::Schema::empty())),
-            // progress
+            // batch rows
             batch_rows_to_process: 0,
             batch_rows_processed: 0,
             batch_row_start: 0,
             batch_row_end: 0,
+            // progress
             pb: None,
             no_progress: false,
             // errors
@@ -90,13 +92,16 @@ impl ReadStatData {
         }
     }
 
-    pub fn allocate_cols(&mut self, rows: usize) {
+    pub fn allocate_cols(self) -> Self {
+        let rows = self.batch_rows_to_process;
+        let cols: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.var_count as usize);
         for i in 0..self.var_count {
+            // Get variable type
             let var_type = self.vars.get(&i).unwrap().var_type;
             // Allocate space for ArrayBuilder
             let array: Box<dyn ArrayBuilder> = match var_type {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-                    Box::new(StringBuilder::new(rows))
+                    Box::new(StringBuilder::new(self.batch_rows_to_process))
                 }
                 ReadStatVarType::Int8 => Box::new(Int8Builder::new(rows)),
                 ReadStatVarType::Int16 => Box::new(Int16Builder::new(rows)),
@@ -115,8 +120,10 @@ impl ReadStatData {
                 },
             };
 
-            self.cols.push(array);
+            cols.push(array);
         }
+
+        Self { cols, ..self }
     }
 
     pub fn get_data(
@@ -128,6 +135,7 @@ impl ReadStatData {
         let ppath = self.cstring_path.as_ptr();
 
         // spinner
+        /*
         if !self.no_progress {
             self.pb = Some(ProgressBar::new(!0));
         }
@@ -143,6 +151,7 @@ impl ReadStatData {
             pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
+        */
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -218,9 +227,9 @@ impl ReadStatData {
         Ok(error as u32)
     }
 
-    pub fn initialize_schema(self, m: ReadStatMetadata) -> Self {
+    fn initialize_schema(self) -> Schema {
         // build up Schema
-        let fields: Vec<Field> = m.vars.iter().map(|(idx,vm)| { 
+        let fields: Vec<Field> = self.vars.iter().map(|(idx,vm)| { 
             let var_dt = match &vm.var_type {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
                     DataType::Utf8
@@ -252,17 +261,32 @@ impl ReadStatData {
             Field::new(&vm.var_name, var_dt, true)
         }).collect();
 
-        let schema = Schema::new(fields);
+        Schema::new(fields)
+    }
 
-        Self { schema, ..self}
+    pub fn set_batch_counts(self, start: u32, end: u32) -> Self {
+        let batch_rows_to_process = (end - start) as usize;
+        let batch_row_start = start as usize;
+        let batch_row_end = end as usize;
+        let batch_rows_processed = 0_usize;
+
+        Self {
+            batch_rows_to_process,
+            batch_row_start,
+            batch_row_end,
+            batch_rows_processed,
+            ..self
+        }
     }
 
     pub fn set_metadata(self, m: ReadStatMetadata) -> Self {
         let var_count = m.var_count;
         let vars = m.vars;
+        let schema = self.initialize_schema();
         Self {
             var_count,
             vars,
+            schema,
             ..self
         }
     }
