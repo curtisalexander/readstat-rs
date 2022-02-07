@@ -1,56 +1,64 @@
+use std::fs::OpenOptions;
+use std::io::stdout;
+use std::sync::{Arc, Mutex};
+use std::error::Error;
 
+use arrow::csv as csv_arrow;
+use csv as csv_crate;
 
-pub fn write_data(d: ReadStatData, rsp: ReadStatPath) -> Result<(), Box<dyn Error>> {
-    let wrote_header = false;
+use crate::rs_path::ReadStatPath;
+use crate::Format;
+use crate::rs_data::ReadStatData;
 
+pub fn write_data(d: &ReadStatData, rsp: &ReadStatPath, wrote_header: Arc<Mutex<bool>>, wrote_start: Arc<Mutex<bool>>, finish_writing: Arc<Mutex<bool>>) -> Result<(), Box<dyn Error>> {
     match rsp {
         // Write data to standard out
         ReadStatPath {
             out_path: None,
             format: Format::csv,
             ..
-        } if rsp.wrote_header => write_data_to_stdout(),
-        // Write header to standard out
+        } if wrote_header.unlock().unwrap() => write_data_to_stdout(&d),
+        // Write header and data to standard out
         ReadStatData {
             out_path: None,
             format: Format::csv,
             ..
         } => {
-            self.write_header_to_stdout()?;
-            self.wrote_header = true;
-            self.write_data_to_stdout()
+            write_header_to_stdout(&d)?;
+            *wrote_header.unlock().unwrap() = true;
+            write_data_to_stdout(&d)
         }
         // Write csv data to file
         ReadStatData {
             out_path: Some(_),
             format: Format::csv,
             ..
-        } if self.wrote_header => self.write_data_to_csv(),
+        } if wrote_header.unlock().unwrap() => write_data_to_csv(),
         // Write csv header to file
         ReadStatData {
             out_path: Some(_),
             format: Format::csv,
             ..
         } => {
-            self.write_header_to_csv()?;
-            self.wrote_header = true;
-            self.write_data_to_csv()
+            write_header_to_csv()?;
+            wrote_header.unlock().unwrap() = true;
+            write_data_to_csv()
         }
         // Write feather data to file
         ReadStatData {
             format: Format::feather,
             ..
-        } => self.write_data_to_feather(),
+        } => write_data_to_feather(),
         // Write ndjson data to file
         ReadStatData {
             format: Format::ndjson,
             ..
-        } => self.write_data_to_ndjson(),
+        } => write_data_to_ndjson(),
         // Write parquet data to file
         ReadStatData {
             format: Format::parquet,
             ..
-        } => self.write_data_to_parquet(),
+        } => write_data_to_parquet(),
     }
 }
 
@@ -135,15 +143,15 @@ pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub fn write_header_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-    if let Some(pb) = &self.pb {
+pub fn write_header_to_stdout(d: &ReadStatData) -> Result<(), Box<dyn Error>> {
+    if let Some(pb) = d.pb {
         pb.finish_and_clear()
     }
 
     let mut wtr = csv_crate::WriterBuilder::new().from_writer(stdout());
 
     // write header
-    let vars: Vec<String> = self
+    let vars: Vec<String> = d 
         .batch
         .schema()
         .fields()
@@ -160,22 +168,22 @@ pub fn write_header_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-    if let Some(p) = &self.out_path {
+pub fn write_data_to_csv(d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    if let Some(p) = rsp.out_path {
         let f = OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
             .open(p)?;
-        if let Some(pb) = &self.pb {
+        if let Some(pb) = d.pb {
             let pb_f = pb.wrap_write(f);
             let mut wtr = csv_arrow::WriterBuilder::new()
                 .has_headers(false)
                 .build(pb_f);
-            wtr.write(&self.batch)?;
+            wtr.write(&d.batch)?;
         } else {
             let mut wtr = csv_arrow::WriterBuilder::new().has_headers(false).build(f);
-            wtr.write(&self.batch)?;
+            wtr.write(&d.batch)?;
         };
 
         Ok(())
@@ -364,15 +372,15 @@ pub fn write_data_to_parquet(&mut self) -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-    if let Some(pb) = &self.pb {
+pub fn write_data_to_stdout(d: &ReadStatData) -> Result<(), Box<dyn Error>> {
+    if let Some(pb) = &d.pb {
         pb.finish_and_clear()
     }
 
     let mut wtr = csv_arrow::WriterBuilder::new()
         .has_headers(false)
         .build(stdout());
-    wtr.write(&self.batch)?;
+    wtr.write(&d.batch)?;
 
     Ok(())
 }

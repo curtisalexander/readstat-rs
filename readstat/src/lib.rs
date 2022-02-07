@@ -12,15 +12,21 @@ use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
 mod cb;
-mod read_data;
 mod err;
 mod formats;
+mod read_data;
+mod read_metadata;
+mod read_preview;
 mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
+mod write_data;
+mod write_metadata;
+mod write_preview;
 
-pub use read_data::{build_offsets, drive_data_from_offsets, get_metadata, get_preview};
+pub use read_data::{build_offsets, read_data};
+pub use write_data::{write_data};
 pub use err::ReadStatError;
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{
@@ -29,7 +35,6 @@ pub use rs_metadata::{
 };
 pub use rs_path::ReadStatPath;
 
-use crate::read_data::{read_data_from_offsets, read_data, write_data};
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -233,9 +238,14 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         build_offsets(&reader, md.row_count as u32, stream_rows, rows)?;
                     let offsets_pairs = offsets.windows(2);
 
+                    // Initialize writing
+                    let wrote_header = Arc::new(Mutex::new(false));
+                    let wrote_start = Arc::new(Mutex::new(false));
+                    let finish_writing = Arc::new(Mutex::new(false));
+
                     // Process data in batches (i.e. stream the rows)
                     // Get data - for each iteration create a new instance of ReadStatData
-                    for w in offsets_pairs {
+                    for (i, w) in offsets_pairs.enumerate() {
                         let start = w[0];
                         let end = w[1];
 
@@ -248,9 +258,25 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         // read
                         read_data(&mut d, &rsp)?;
 
-                        // TODO wrote_start/wrote_header needs to be global as does wrote_finish
+                        // convert cols data to a Record Batch to prepare for writing
+                        d.cols_to_record_batch()?;
+
+                        // if last write then need to finish file
+                        if i == offsets_pairs.len() {
+                            *finish_writing.unlock().unwrap() = true;
+                        }
+
                         // write
-                        // write_data();
+                        write_data();
+
+                        // update for next iteration
+                        // for single threaded case does not need to be in an Arc<Mutex>
+                        /*
+                        if i == 0 {
+                            *wrote_header.unlock().unwrap() = true;
+                            *wrote_start.unlock().unwrap() = true;
+                        }
+                        */
                     }
 
 

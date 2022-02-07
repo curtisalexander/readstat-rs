@@ -1,12 +1,15 @@
-use std::{
-    error::Error,
-    sync::{Arc, Mutex}, ffi::c_void,
-};
+use std::error::Error;
+use std::ffi::c_void;
 
 use log::debug;
 use num_traits::FromPrimitive;
 
-use crate::{ReadStatData, ReadStatError, Reader, Format, ReadStatPath, rs_parser::ReadStatParser, cb};
+use crate::cb;
+use crate::err::ReadStatError;
+use crate::rs_data::ReadStatData;
+use crate::rs_parser::ReadStatParser;
+use crate::rs_path::ReadStatPath;
+use crate::Reader;
 
 pub fn build_offsets(
     reader: &Option<Reader>,
@@ -23,8 +26,8 @@ pub fn build_offsets(
     let sr = match reader {
         Some(Reader::stream) => match stream_rows {
             Some(s) => s,
-            None => rc
-        }
+            None => rc,
+        },
         Some(Reader::mem) | None => row_count,
     };
 
@@ -52,12 +55,9 @@ pub fn build_offsets(
     Ok(offsets)
 }
 
-pub fn read_data(
-    d: &mut ReadStatData,
-    rsp: &ReadStatPath
-) -> Result<(), Box<dyn Error>> {
+pub fn read_data(d: &mut ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
     // path as pointer
-    debug!("Path as C string is {:?}", &self.cstring_path);
+    debug!("Path as C string is {:?}", &rsp.cstring_path);
     let ppath = rsp.cstring_path.as_ptr();
 
     // spinner
@@ -96,70 +96,7 @@ pub fn read_data(
         .parse_sas7bdat(ppath, ctx);
 
     match FromPrimitive::from_i32(error as i32) {
-        Some(ReadStatError::READSTAT_OK) => { Ok(()) }
-        Some(e) => Err(From::from(format!(
-            "Error when attempting to parse sas7bdat: {:#?}",
-            e
-        ))),
-        None => Err(From::from(
-            "Error when attempting to parse sas7bdat: Unknown return value",
-        )),
-    }
-}
-
-pub fn get_metadata(
-    m: &mut ReadStatMetadata,
-    skip_row_count: bool,
-) -> Result<(), Box<dyn Error>> {
-    let error = m.get_metadata(skip_row_count)?;
-
-    match FromPrimitive::from_i32(error as i32) {
         Some(ReadStatError::READSTAT_OK) => Ok(()),
-        Some(e) => Err(From::from(format!(
-            "Error when attempting to parse sas7bdat: {:#?}",
-            e
-        ))),
-        None => Err(From::from(
-            "Error when attempting to parse sas7bdat: Unknown return value",
-        )),
-    }
-}
-
-pub fn write_metadata(m: ReadStatMetadata) {
-    match FromPrimitive::from_i32(error as i32) {
-        Some(ReadStatError::READSTAT_OK) => {
-            if !as_json {
-                d.write_metadata_to_stdout()
-            } else {
-                d.write_metadata_to_json()
-            }
-        }
-        Some(e) => Err(From::from(format!(
-            "Error when attempting to parse sas7bdat: {:#?}",
-            e
-        ))),
-        None => Err(From::from(
-            "Error when attempting to parse sas7bdat: Unknown return value",
-        )),
-    }
-}
-
-pub fn get_preview(d: &mut ReadStatData, row_limit: u32) -> Result<(), Box<dyn Error>> {
-    // how many rows to process?
-    d.batch_rows_to_process = row_limit as usize;
-    d.batch_row_start = 0;
-    d.batch_row_end = row_limit as usize;
-
-    let error = d.get_preview(Some(row_limit), None)?;
-
-    match FromPrimitive::from_i32(error as i32) {
-        Some(ReadStatError::READSTAT_OK) => {
-            if !d.no_write {
-                d.write()?;
-                d.wrote_start = true;
-            };
-            Ok(())
-        }
         Some(e) => Err(From::from(format!(
             "Error when attempting to parse sas7bdat: {:#?}",
             e

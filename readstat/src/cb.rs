@@ -12,11 +12,14 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::Arc;
 
-use crate::{formats, ReadStatMetadata};
-use crate::rs_data::ReadStatData;
-use crate::rs_metadata::{
-    ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatVar, ReadStatVarMetadata,
-    ReadStatVarType, ReadStatVarTypeClass,
+use crate::{
+    formats,
+    rs_data::ReadStatData,
+    rs_metadata::{
+        ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatVar, ReadStatVarMetadata,
+        ReadStatVarType, ReadStatVarTypeClass,
+    },
+    ReadStatMetadata,
 };
 
 const DIGITS: usize = 14;
