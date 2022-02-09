@@ -4,11 +4,13 @@ use std::sync::{Arc, Mutex};
 use std::error::Error;
 
 use arrow::csv as csv_arrow;
+use arrow::ipc::writer::FileWriter;
 use csv as csv_crate;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::rs_path::ReadStatPath;
 use crate::Format;
-use crate::rs_data::ReadStatData;
+use crate::rs_data::{ReadStatData, ReadStatWriter};
 
 pub fn write_data(d: &ReadStatData, rsp: &ReadStatPath, wrote_header: Arc<Mutex<bool>>, wrote_start: Arc<Mutex<bool>>, finish_writing: Arc<Mutex<bool>>) -> Result<(), Box<dyn Error>> {
     match rsp {
@@ -33,22 +35,22 @@ pub fn write_data(d: &ReadStatData, rsp: &ReadStatPath, wrote_header: Arc<Mutex<
             out_path: Some(_),
             format: Format::csv,
             ..
-        } if wrote_header.unlock().unwrap() => write_data_to_csv(),
+        } if wrote_header.unlock().unwrap() => write_data_to_csv(&d, &rsp),
         // Write csv header to file
         ReadStatData {
             out_path: Some(_),
             format: Format::csv,
             ..
         } => {
-            write_header_to_csv()?;
+            write_header_to_csv(&d, &rsp)?;
             wrote_header.unlock().unwrap() = true;
-            write_data_to_csv()
+            write_data_to_csv(&d, &rsp)
         }
         // Write feather data to file
         ReadStatData {
             format: Format::feather,
             ..
-        } => write_data_to_feather(),
+        } => write_data_to_feather(&d, &rsp, wrote_start),
         // Write ndjson data to file
         ReadStatData {
             format: Format::ndjson,
@@ -62,30 +64,30 @@ pub fn write_data(d: &ReadStatData, rsp: &ReadStatPath, wrote_header: Arc<Mutex<
     }
 }
 
-pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-    if let Some(p) = &self.out_path {
+pub fn write_header_to_csv(d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    if let Some(p) = rsp.out_path {
         // spinner
-        if let Some(pb) = &self.pb {
+        if let Some(pb) = d.pb {
             pb.finish_at_current_pos();
         }
 
         // spinner
-        if !self.no_progress {
-            self.pb = Some(ProgressBar::new(!0));
+        if !d.no_progress {
+            d.pb = Some(ProgressBar::new(!0));
         }
-        if let Some(pb) = &self.pb {
+        if let Some(pb) = d.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template("[{spinner:.green} {elapsed_precise} | {bytes}] {msg}"),
             );
 
-            let in_f = if let Some(f) = &self.path.file_name() {
+            let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()
             } else {
                 String::from("___").bright_red()
             };
 
-            let out_f = if let Some(p) = &self.out_path {
+            let out_f = if let Some(p) = rsp.out_path {
                 if let Some(f) = p.file_name() {
                     f.to_string_lossy().bright_green()
                 } else {
@@ -121,7 +123,7 @@ pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
 
         // write header
-        let vars: Vec<String> = self
+        let vars: Vec<String> = d
             .batch
             .schema()
             .fields()
@@ -132,7 +134,7 @@ pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
         // Alternate way to get variable names
         // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
 
-        wtr.write_record(&vars)?;
+        wtr.write_record(vars)?;
         wtr.flush()?;
 
         Ok(())
@@ -162,19 +164,23 @@ pub fn write_header_to_stdout(d: &ReadStatData) -> Result<(), Box<dyn Error>> {
     // Alternate way to get variable names
     // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
 
-    wtr.write_record(&vars)?;
+    wtr.write_record(vars)?;
     wtr.flush()?;
 
     Ok(())
 }
 
-pub fn write_data_to_csv(d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+pub fn write_data_to_csv(d: &ReadStatData, rsp: &ReadStatPath, wrote_start: Arc<Mutex<bool>>) -> Result<(), Box<dyn Error>> {
     if let Some(p) = rsp.out_path {
-        let f = OpenOptions::new()
+        let f = if wrote_start { OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
             .open(p)?;
+        } else {
+            std::fs::File::create(p)?;
+        };
+
         if let Some(pb) = d.pb {
             let pb_f = pb.wrap_write(f);
             let mut wtr = csv_arrow::WriterBuilder::new()
@@ -194,9 +200,36 @@ pub fn write_data_to_csv(d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box
     }
 }
 
-pub fn write_data_to_feather(&mut self) -> Result<(), Box<dyn Error>> {
-    if let Some(p) = &self.out_path {
-        let f = if self.wrote_start {
+pub fn set_message_for_file(d: &ReadStatData, rsp: &ReadStatPath)  {
+
+    if let Some(pb) = d.pb {
+        let in_f = if let Some(f) = rsp.path.file_name() {
+            f.to_string_lossy().bright_red()
+        } else {
+            String::from("___").bright_red()
+        };
+
+        let out_f = if let Some(p) = rsp.out_path {
+            if let Some(f) = p.file_name() {
+                f.to_string_lossy().bright_green()
+            } else {
+                String::from("___").bright_green()
+            }
+        } else {
+            String::from("___").bright_green()
+        };
+
+        let msg = format!("Writing file {} as {}", in_f, out_f);
+
+        pb.set_message(msg);
+    }
+}
+
+pub fn write_data_to_feather(d: &ReadStatData, rsp: &ReadStatPath, wrote_start: Arc<Mutex<bool>>) -> Result<(), Box<dyn Error>> {
+    if let Some(p) = rsp.out_path {
+        
+        // create file
+        let f = if wrote_start {
             OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -206,34 +239,25 @@ pub fn write_data_to_feather(&mut self) -> Result<(), Box<dyn Error>> {
             std::fs::File::create(p)?
         };
 
-        if let Some(pb) = &self.pb {
-            let in_f = if let Some(f) = &self.path.file_name() {
-                f.to_string_lossy().bright_red()
-            } else {
-                String::from("___").bright_red()
-            };
+        // set message for what is being read/written
+        set_message_for_file(&d, &rsp);
 
-            let out_f = if let Some(p) = &self.out_path {
-                if let Some(f) = p.file_name() {
-                    f.to_string_lossy().bright_green()
-                } else {
-                    String::from("___").bright_green()
-                }
-            } else {
-                String::from("___").bright_green()
-            };
-
-            let msg = format!("Writing file {} as {}", in_f, out_f);
-
-            pb.set_message(msg);
-        }
-
-        if !self.wrote_start {
-            self.wtr = Some(ReadStatWriter::Feather(FileWriter::try_new(
+        // TODO - resume here
+        // Need to pull out the writer into something outside of the ReadStatData struct
+        // Create its own writer struct and pass into the write functions
+        // That struct can also house the various Arc<Mutex>'s
+        let wtr = if !wrote_start {
+            FileWriter::try_new(f, &d.schema)?
+        };
+        /*
+        if !wrote_start {
+            let wtr = Some(ReadStatWriter::Feather(FileWriter::try_new(
                 f,
                 &self.schema,
             )?));
         }
+        */
+
         if let Some(wtr) = &mut self.wtr {
             match wtr {
                 ReadStatWriter::Feather(w) => {

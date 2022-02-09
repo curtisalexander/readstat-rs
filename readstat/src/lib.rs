@@ -246,14 +246,12 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     // Process data in batches (i.e. stream the rows)
                     // Get data - for each iteration create a new instance of ReadStatData
                     for (i, w) in offsets_pairs.enumerate() {
-                        let start = w[0];
-                        let end = w[1];
+                        let row_start = w[0];
+                        let row_end = w[1];
 
                         let mut d = ReadStatData::new()
                             .set_no_progress(no_progress)
-                            .set_metadata(md.clone())
-                            .set_batch_counts(start, end)
-                            .allocate_cols();
+                            .init(md.clone(), row_start, row_end);
                         
                         // read
                         read_data(&mut d, &rsp)?;

@@ -1,6 +1,6 @@
 use arrow::array::{
     ArrayBuilder, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder, ArrayRef,
 };
 use arrow::csv as csv_arrow;
 use arrow::datatypes::{DataType, Field, Schema};
@@ -200,6 +200,12 @@ impl ReadStatData {
         Ok(error as u32)
     }
 
+    pub fn init(self, m: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
+        self.set_metadata(m)
+            .set_batch_counts(row_start, row_end)
+            .allocate_cols()
+    }
+
     fn initialize_schema(self) -> Schema {
         // build up Schema
         let fields: Vec<Field> = self
@@ -243,10 +249,10 @@ impl ReadStatData {
         Schema::new(fields)
     }
 
-    pub fn set_batch_counts(self, start: u32, end: u32) -> Self {
-        let batch_rows_to_process = (end - start) as usize;
-        let batch_row_start = start as usize;
-        let batch_row_end = end as usize;
+    fn set_batch_counts(self, row_start: u32, row_end: u32) -> Self {
+        let batch_rows_to_process = (row_end - row_start) as usize;
+        let batch_row_start = row_start as usize;
+        let batch_row_end = row_end as usize;
         let batch_rows_processed = 0_usize;
 
         Self {
@@ -258,7 +264,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn set_metadata(self, m: ReadStatMetadata) -> Self {
+    fn set_metadata(self, m: ReadStatMetadata) -> Self {
         let var_count = m.var_count;
         let vars = m.vars;
         let schema = self.initialize_schema();
