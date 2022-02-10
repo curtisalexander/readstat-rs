@@ -32,18 +32,6 @@ use crate::rs_path::ReadStatPath;
 use crate::{cb, ReadStatVarMetadata};
 use crate::{Format, Reader};
 
-/**********
- * Writer *
- *********/
-
-pub enum ReadStatWriter {
-    // feather
-    Feather(arrow::ipc::writer::FileWriter<std::fs::File>),
-    // ndjson
-    Ndjson(arrow::json::writer::LineDelimitedWriter<std::fs::File>),
-    // parquet
-    Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
-}
 
 /********
  * Data *

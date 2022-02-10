@@ -21,6 +21,7 @@ mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
+mod rs_write;
 mod write_data;
 mod write_metadata;
 mod write_preview;
@@ -34,7 +35,7 @@ pub use rs_metadata::{
     ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
 };
 pub use rs_path::ReadStatPath;
-
+pub use rs_write::ReadStatWriter;
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -239,9 +240,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     let offsets_pairs = offsets.windows(2);
 
                     // Initialize writing
-                    let wrote_header = Arc::new(Mutex::new(false));
-                    let wrote_start = Arc::new(Mutex::new(false));
-                    let finish_writing = Arc::new(Mutex::new(false));
+                    let mut wtr = ReadStatWriter::new();
 
                     // Process data in batches (i.e. stream the rows)
                     // Get data - for each iteration create a new instance of ReadStatData
@@ -261,7 +260,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
                         // if last write then need to finish file
                         if i == offsets_pairs.len() {
-                            *finish_writing.unlock().unwrap() = true;
+                            wtr.set_finish(true);
                         }
 
                         // write
