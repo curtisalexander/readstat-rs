@@ -80,7 +80,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn allocate_cols(self) -> Self {
+    fn allocate_cols(self) -> Self {
         let rows = self.batch_rows_to_process;
         let cols: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.var_count as usize);
         for i in 0..self.var_count {
