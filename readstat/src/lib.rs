@@ -26,9 +26,8 @@ mod write_data;
 mod write_metadata;
 mod write_preview;
 
-pub use read_data::{build_offsets, read_data};
-pub use write_data::{write_data};
 pub use err::ReadStatError;
+pub use read_data::read_data;
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{
     ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatMetadata, ReadStatVar,
@@ -127,6 +126,34 @@ arg_enum! {
     }
 }
 
+fn build_offsets(row_count: u32, stream_rows: u32) -> Result<Vec<u32>, Box<dyn Error>> {
+    // Get number of chunks
+    let chunks = if stream_rows < row_count {
+        if row_count % stream_rows == 0 {
+            row_count / stream_rows
+        } else {
+            (row_count / stream_rows) + 1
+        }
+    } else {
+        1
+    };
+
+    // Allocate and populate a vector for the offsets
+    let mut offsets: Vec<u32> = Vec::with_capacity(chunks as usize);
+
+    for c in 0..=chunks {
+        if c == 0 {
+            offsets.push(0);
+        } else if c == chunks {
+            offsets.push(rc);
+        } else {
+            offsets.push(c * sr);
+        }
+    }
+
+    Ok(offsets)
+}
+
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -201,19 +228,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
-            md.get_metadata(rsp, false)?;
+            md.read_metadata(rsp, false)?;
 
-            // instantiate ReadStatData
-            /*
-            let mut d = ReadStatData::new(rsp)
-                .set_reader(reader)
-                .set_stream_rows(stream_rows)
-                .set_row_limit(rows)
-                .set_no_progress(no_progress);
-            */
-
+            // if no output path then only read metadata; otherwise read data
             match &rsp.out_path {
-               None => { 
+                None => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
                     // Get metadata
@@ -232,31 +251,41 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     } else {
                         md.row_count as u32
                     };
-                    let total_rows_processed = Arc::new(Mutex::new(0));
+
+                    // Determine stream row count
+                    // 📝 Default stream rows set to 50,000
+                    let total_rows_to_stream = match reader {
+                        Some(Reader::stream) => match stream_rows {
+                            Some(s) => s,
+                            None => 50000,
+                        },
+                        Some(Reader::mem) | None => total_rows_to_process,
+                    };
+
+                    // initialize Mutex to contain total rows processed
+                    let total_rows_processed = Arc::new(Mutex::new(0 as usize));
 
                     // Build up offsets
-                    let offsets =
-                        build_offsets(&reader, md.row_count as u32, stream_rows, rows)?;
+                    let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
                     let offsets_pairs = offsets.windows(2);
 
                     // Initialize writing
                     let mut wtr = ReadStatWriter::new();
 
-                    // Process data in batches (i.e. stream the rows)
-                    // Get data - for each iteration create a new instance of ReadStatData
+                    // Process data in batches (i.e. stream chunks of rows)
+                    // Read data - for each iteration create a new instance of ReadStatData
                     for (i, w) in offsets_pairs.enumerate() {
                         let row_start = w[0];
                         let row_end = w[1];
 
-                        let mut d = ReadStatData::new()
-                            .set_no_progress(no_progress)
-                            .init(md.clone(), row_start, row_end);
-                        
-                        // read
-                        read_data(&mut d, &rsp)?;
+                        let mut d = ReadStatData::new().set_no_progress(no_progress).init(
+                            md.clone(),
+                            row_start,
+                            row_end,
+                        );
 
-                        // convert cols data to a Record Batch to prepare for writing
-                        d.cols_to_record_batch()?;
+                        // read
+                        d.read_data(&rsp)?;
 
                         // if last write then need to finish file
                         if i == offsets_pairs.len() {
@@ -276,22 +305,20 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         */
                     }
 
+                    /*
+                    if total_rows_to_process == *total_rows_processed.lock().unwrap() {
+                        d.finish = true;
+                    }
+                    */
+                    // write start?
 
-
-                /*
-                if total_rows_to_process == *total_rows_processed.lock().unwrap() {
-                    d.finish = true;
-                }
-                */
-                // write start?  
-
-                // progress bar
-                /*
-                if let Some(pb) = &d.pb {
-                    pb.finish_at_current_pos()
-                };
-                */
-                Ok(())
+                    // progress bar
+                    /*
+                    if let Some(pb) = &d.pb {
+                        pb.finish_at_current_pos()
+                    };
+                    */
+                    Ok(())
 
                     // get and optionally write data - single or multi-threaded
                     /*

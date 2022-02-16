@@ -51,7 +51,7 @@ impl ReadStatMetadata {
         }
     }
 
-    pub fn get_metadata(&mut self, rsp: ReadStatPath, skip_row_count: bool) -> Result<(), Box<dyn Error>> {
+    pub fn read_metadata(&mut self, rsp: ReadStatPath, skip_row_count: bool) -> Result<(), Box<dyn Error>> {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 

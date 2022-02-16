@@ -27,7 +27,6 @@ const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
 
 // C types
-#[allow(dead_code)]
 #[derive(Debug)]
 #[repr(C)]
 enum ReadStatHandler {

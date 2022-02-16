@@ -1,6 +1,6 @@
 use arrow::array::{
-    ArrayBuilder, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder, ArrayRef,
+    ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
+    Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
 use arrow::csv as csv_arrow;
 use arrow::datatypes::{DataType, Field, Schema};
@@ -13,6 +13,7 @@ use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use num_format::{Locale, ToFormattedString};
+use num_traits::FromPrimitive;
 use parquet::arrow::arrow_writer::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use path_abs::PathInfo;
@@ -29,9 +30,8 @@ use std::sync::Arc;
 use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
 use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
-use crate::{cb, ReadStatVarMetadata};
+use crate::{cb, ReadStatVarMetadata, ReadStatError};
 use crate::{Format, Reader};
-
 
 /********
  * Data *
@@ -114,7 +114,7 @@ impl ReadStatData {
         Self { cols, ..self }
     }
 
-    pub fn cols_to_record_batch(&mut self) -> Result<(), Box<dyn Error>> {
+    fn cols_to_record_batch(&mut self) -> Result<(), Box<dyn Error>> {
         // Build array references and save in batch
         let arrays: Vec<ArrayRef> = self
             .cols
@@ -170,6 +170,62 @@ impl ReadStatData {
             .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
+    }
+
+    pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+        // parse data and if successful then convert cols into a record batch
+        self.parse_data(&rsp)?;
+        self.cols_to_record_batch()?;
+    }
+
+    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+        // path as pointer
+        debug!("Path as C string is {:?}", &rsp.cstring_path);
+        let ppath = rsp.cstring_path.as_ptr();
+
+        // spinner
+        if !self.no_progress {
+            self.pb = Some(ProgressBar::new(!0));
+        }
+        if let Some(pb) = &self.pb {
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
+            );
+            let msg = format!(
+                "Parsing sas7bdat data from file {}",
+                &self.path.to_string_lossy().bright_red()
+            );
+            pb.set_message(msg);
+            pb.enable_steady_tick(120);
+        }
+
+        // initialize context
+        let ctx = self as *mut ReadStatData as *mut c_void;
+
+        // initialize error
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {:#?}", &error);
+
+        // setup parser
+        // once call parse_sas7bdat, iteration begins
+        let error = ReadStatParser::new()
+            // do not set metadata handler nor variable handler as already processed
+            .set_value_handler(Some(cb::handle_value))?
+            .set_row_limit(Some(self.batch_rows_to_process.try_into().unwrap()))?
+            .set_row_offset(Some(self.batch_row_start.try_into().unwrap()))?
+            .parse_sas7bdat(ppath, ctx);
+
+        match FromPrimitive::from_i32(error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(()),
+            Some(e) => Err(From::from(format!(
+                "Error when attempting to parse sas7bdat: {:#?}",
+                e
+            ))),
+            None => Err(From::from(
+                "Error when attempting to parse sas7bdat: Unknown return value",
+            )),
+        }
     }
 
     pub fn get_row_count(&mut self) -> Result<u32, Box<dyn Error>> {

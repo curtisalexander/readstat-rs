@@ -7,8 +7,11 @@ use std::error::Error;
 
 use arrow::csv as csv_arrow;
 use arrow::ipc::writer::FileWriter;
+use arrow::json::LineDelimitedWriter;
 use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
+use parquet::arrow::ArrowWriter;
+use parquet::file::properties::WriterProperties;
 
 use crate::Format;
 use crate::rs_data::ReadStatData;
@@ -96,7 +99,6 @@ impl ReadStatWriter {
     }
 
     fn set_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
-
         if let Some(pb) = d.pb {
             let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()
@@ -123,13 +125,14 @@ impl ReadStatWriter {
 
     fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         if let Some(p) = rsp.out_path {
+            // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start { OpenOptions::new()
                 .write(true)
                 .create(true)
                 .append(true)
-                .open(p)?;
+                .open(p)?
             } else {
-                std::fs::File::create(p)?;
+                std::fs::File::create(p)?
             };
 
             // set message for what is being read/written
@@ -140,14 +143,25 @@ impl ReadStatWriter {
             } else {
                 f
             };
+            
+            // setup writer if not already started writing
             self.wtr = if !self.wrote_start {
-                csv_arrow::WriterBuilder::new()
+                Some(csv_arrow::WriterBuilder::new()
                     .has_headers(false)
-                    .build(f)
+                    .build(f))
             };
-            self.wtr.write(&d.batch)?;
-            self.wtr.wrote_start = true;
+            
+            // write
+            if let Some(wtr) = self.wtr {
+                wtr.write(&d.batch)?;
+            }
+            
+            // update
+            self.wrote_start = true;
 
+            // 📝 no finishing required
+
+            // return
             Ok(())
         } else {
             Err(From::from(
@@ -158,8 +172,7 @@ impl ReadStatWriter {
 
     fn write_data_to_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         if let Some(p) = rsp.out_path {
-            
-            // create file
+            // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
                     .write(true)
@@ -173,14 +186,23 @@ impl ReadStatWriter {
             // set message for what is being read/written
             self.set_message_for_file(&d, &rsp);
 
+            // setup writer if not already started writing
             self.wtr = if !self.wrote_start {
-                FileWriter::try_new(f, &d.schema)?
+                Some(FileWriter::try_new(f, &d.schema)?)
             };
 
-            self.wtr.write(&d.batch)?;
-            self.wtr.wrote_start = true; 
-            if self.finish { self.wtr.finish()? };
+            // write
+            if let Some(wtr) = self.wtr {
+                wtr.write(&d.batch)?;
+            }
+            // update
+            self.wrote_start = true; 
+            
+            // finish
+            if self.finish { if let Some(wtr) = self.wtr { wtr.finish()? }};
 
+            // return
+            Ok(())
         } else {
             Err(From::from(
                 "Error writing feather file as output path is set to None",
@@ -189,7 +211,8 @@ impl ReadStatWriter {
     }
 
     fn write_data_to_ndjson(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
+        if let Some(p) = rsp.out_path {
+            // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
                     .write(true)
@@ -200,44 +223,26 @@ impl ReadStatWriter {
                 std::fs::File::create(p)?
             };
 
-            if let Some(pb) = &self.pb {
-                let in_f = if let Some(f) = &self.path.file_name() {
-                    f.to_string_lossy().bright_red()
-                } else {
-                    String::from("___").bright_red()
-                };
+            // set message for what is being read/written
+            self.set_message_for_file(&d, &rsp);
+            
+            // setup writer if not already started writing
+            self.wtr = if !self.wrote_start {
+                Some(LineDelimitedWriter::new(f))
+            };
 
-                let out_f = if let Some(p) = &self.out_path {
-                    if let Some(f) = p.file_name() {
-                        f.to_string_lossy().bright_green()
-                    } else {
-                        String::from("___").bright_green()
-                    }
-                } else {
-                    String::from("___").bright_green()
-                };
+            // write
+            if let Some(wtr) = self.wtr {
+                self.wtr.write_batches(d.batch)?;
+            };
 
-                let msg = format!("Writing file {} as {}", in_f, out_f);
+            // update
+            self.wrote_start = true;
 
-                pb.set_message(msg);
-            }
-
-            if !self.wrote_start {
-                self.wtr = Some(ReadStatWriter::Ndjson(LineDelimitedWriter::new(f)));
-            }
-            if let Some(wtr) = &mut self.wtr {
-                match wtr {
-                    ReadStatWriter::Ndjson(w) => {
-                        let mut batch = RecordBatch::new_empty(Arc::new(self.schema.clone()));
-                        batch.clone_from(&self.batch);
-                        w.write_batches(&[batch])?;
-                        if self.finish {
-                            w.finish()?;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
+            // finish
+            if self.finish { if let Some(wtr) = self.wtr { wtr.finish()? }};
+            
+            // return
             Ok(())
         } else {
             Err(From::from(
@@ -247,7 +252,8 @@ impl ReadStatWriter {
     }
 
     fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
+        if let Some(p) = rsp.out_path {
+            // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
                     .write(true)
@@ -258,47 +264,30 @@ impl ReadStatWriter {
                 std::fs::File::create(p)?
             };
 
-            if let Some(pb) = &self.pb {
-                let in_f = if let Some(f) = &self.path.file_name() {
-                    f.to_string_lossy().bright_red()
-                } else {
-                    String::from("___").bright_red()
-                };
-
-                let out_f = if let Some(p) = &self.out_path {
-                    if let Some(f) = p.file_name() {
-                        f.to_string_lossy().bright_green()
-                    } else {
-                        String::from("___").bright_green()
-                    }
-                } else {
-                    String::from("___").bright_green()
-                };
-
-                let msg = format!("Writing file {} as {}", in_f, out_f);
-
-                pb.set_message(msg);
-            }
-
-            if !self.wrote_start {
-                let props = WriterProperties::builder().build();
-                self.wtr = Some(ReadStatWriter::Parquet(ArrowWriter::try_new(
+            // set message for what is being read/written
+            self.set_message_for_file(&d, &rsp);
+            
+            // setup writer if not already started writing
+            self.wtr = if !self.wrote_start {
+                Some(ArrowWriter::try_new(
                     f,
-                    Arc::new(self.schema.clone()),
-                    Some(props),
-                )?));
-            }
-            if let Some(wtr) = &mut self.wtr {
-                match wtr {
-                    ReadStatWriter::Parquet(w) => {
-                        w.write(&self.batch)?;
-                        if self.finish {
-                            w.close()?;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
+                    Arc::new(d.schema.clone()),
+                    Some(WriterProperties::builder().build()),
+                )?)
+            };
+
+            // write
+            if let Some(wtr) = self.wtr {
+                self.wtr.write(&d.batch)?;
+            };
+
+            // update
+            self.wrote_start = true;
+
+            // finish
+            if self.finish { if let Some(wtr) = self.wtr { wtr.close()? }};
+            
+            // return
             Ok(())
         } else {
             Err(From::from(
@@ -308,15 +297,23 @@ impl ReadStatWriter {
     }
 
     fn write_data_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error>> {
-        if let Some(pb) = &d.pb {
+        if let Some(pb) = d.pb {
             pb.finish_and_clear()
         }
 
-        self.wtr = csv_arrow::WriterBuilder::new()
+        // setup writer
+        self.wtr = Some(csv_arrow::WriterBuilder::new()
             .has_headers(false)
-            .build(stdout());
-        self.wtr.write(&d.batch)?;
+            .build(stdout()));
+        
+        // write
+        if let Some(wtr) = self.wtr {
+            wtr.write(&d.batch)?;
+        };
 
+        // 📝 no finishing required
+        
+        // return
         Ok(())
     }
 
@@ -328,6 +325,7 @@ impl ReadStatWriter {
             }
 
             // spinner
+            /*
             if !d.no_progress {
                 d.pb = Some(ProgressBar::new(!0));
             }
@@ -358,7 +356,7 @@ impl ReadStatWriter {
                 pb.set_message(msg);
                 pb.enable_steady_tick(120);
             }
-
+            */
             // progress bar
             /*
             if !self.no_progress {
@@ -375,7 +373,10 @@ impl ReadStatWriter {
             }
             */
 
+            // create file
             let file = std::fs::File::create(p)?;
+            
+            // 
             let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
 
             // write header
@@ -393,6 +394,7 @@ impl ReadStatWriter {
             wtr.write_record(vars)?;
             wtr.flush()?;
 
+            // TODO self.wrote_header = true here
             Ok(())
         } else {
             Err(From::from(
