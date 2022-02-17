@@ -2,40 +2,22 @@ use arrow::array::{
     ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
     Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
-use arrow::csv as csv_arrow;
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::ipc::writer::FileWriter;
-use arrow::json::LineDelimitedWriter;
+use arrow::datatypes::Schema;
 use arrow::record_batch::RecordBatch;
-use arrow::{datatypes, record_batch};
 use colored::Colorize;
-use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
-use parquet::arrow::arrow_writer::ArrowWriter;
-use parquet::file::properties::WriterProperties;
 use path_abs::PathInfo;
-use serde_json;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::ffi::CString;
-use std::fs::OpenOptions;
-use std::io::stdout;
-use std::os::raw::{c_uint, c_void};
-use std::path::PathBuf;
+use std::os::raw::c_void;
 use std::sync::Arc;
 
 use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
 use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
 use crate::{cb, ReadStatVarMetadata, ReadStatError};
-use crate::{Format, Reader};
-
-/********
- * Data *
- *******/
 
 pub struct ReadStatData {
     // metadata
@@ -43,8 +25,8 @@ pub struct ReadStatData {
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
     // data
     pub cols: Vec<Box<dyn ArrayBuilder>>,
-    pub schema: datatypes::Schema,
-    pub batch: record_batch::RecordBatch,
+    pub schema: Schema,
+    pub batch: RecordBatch,
     // batch rows
     pub batch_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
     pub batch_row_start: usize,
@@ -65,8 +47,8 @@ impl ReadStatData {
             vars: BTreeMap::new(),
             // data
             cols: Vec::new(),
-            schema: datatypes::Schema::empty(),
-            batch: RecordBatch::new_empty(Arc::new(datatypes::Schema::empty())),
+            schema: Schema::empty(),
+            batch: RecordBatch::new_empty(Arc::new(Schema::empty())),
             // batch rows
             batch_rows_to_process: 0,
             batch_rows_processed: 0,
@@ -228,6 +210,7 @@ impl ReadStatData {
         }
     }
 
+    /*
     pub fn get_row_count(&mut self) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
@@ -243,54 +226,12 @@ impl ReadStatData {
 
         Ok(error as u32)
     }
+    */
 
-    pub fn init(self, m: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
-        self.set_metadata(m)
+    pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
+        self.set_metadata(md)
             .set_batch_counts(row_start, row_end)
             .allocate_cols()
-    }
-
-    fn initialize_schema(self) -> Schema {
-        // build up Schema
-        let fields: Vec<Field> = self
-            .vars
-            .iter()
-            .map(|(idx, vm)| {
-                let var_dt = match &vm.var_type {
-                    ReadStatVarType::String
-                    | ReadStatVarType::StringRef
-                    | ReadStatVarType::Unknown => DataType::Utf8,
-                    ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
-                    ReadStatVarType::Int32 => DataType::Int32,
-                    ReadStatVarType::Float => DataType::Float32,
-                    ReadStatVarType::Double => match &vm.var_format_class {
-                        Some(ReadStatFormatClass::Date) => DataType::Date32,
-                        Some(ReadStatFormatClass::DateTime) => {
-                            DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                        }
-                        Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                            DataType::Timestamp(arrow::datatypes::TimeUnit::Millisecond, None)
-                        }
-                        Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                            DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None)
-                        }
-                        Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                            DataType::Timestamp(arrow::datatypes::TimeUnit::Nanosecond, None)
-                        }
-                        Some(ReadStatFormatClass::Time) => {
-                            DataType::Time32(arrow::datatypes::TimeUnit::Second)
-                        }
-                        None => DataType::Float64,
-                    },
-                };
-                Field::new(&vm.var_name, var_dt, true)
-            })
-            .collect();
-
-        Schema::new(fields)
     }
 
     fn set_batch_counts(self, row_start: u32, row_end: u32) -> Self {
@@ -308,10 +249,10 @@ impl ReadStatData {
         }
     }
 
-    fn set_metadata(self, m: ReadStatMetadata) -> Self {
-        let var_count = m.var_count;
-        let vars = m.vars;
-        let schema = self.initialize_schema();
+    fn set_metadata(self, md: ReadStatMetadata) -> Self {
+        let var_count = md.var_count;
+        let vars = md.vars;
+        let schema = md.schema.clone();
         Self {
             var_count,
             vars,

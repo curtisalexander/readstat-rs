@@ -203,7 +203,7 @@ pub extern "C" fn handle_value(
     // dereference ctx pointer
     let d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
-    d.cols = Vec::with_capacity(vc as usize);
+    d.cols = Vec::with_capacity(d.var_count as usize);
 
     // get index, type, and missingness
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };

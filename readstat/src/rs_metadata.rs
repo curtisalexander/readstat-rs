@@ -1,3 +1,4 @@
+use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
@@ -11,11 +12,6 @@ use std::os::raw::c_int;
 use crate::{ReadStatPath, ReadStatError};
 use crate::rs_parser::ReadStatParser;
 use crate::cb::{handle_metadata, handle_variable};
-
-
-/***********
-* Metadata *
-***********/
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
@@ -31,6 +27,7 @@ pub struct ReadStatMetadata {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
+    pub schema: Schema,
 }
 
 impl ReadStatMetadata {
@@ -48,7 +45,51 @@ impl ReadStatMetadata {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
+            schema: Schema::empty(),
         }
+    }
+
+    fn initialize_schema(self) -> Schema {
+        // build up Schema
+        let fields: Vec<Field> = self
+            .vars
+            .iter()
+            .map(|(idx, vm)| {
+                let var_dt = match &vm.var_type {
+                    ReadStatVarType::String
+                    | ReadStatVarType::StringRef
+                    | ReadStatVarType::Unknown => DataType::Utf8,
+                    ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
+                    ReadStatVarType::Int32 => DataType::Int32,
+                    ReadStatVarType::Float => DataType::Float32,
+                    ReadStatVarType::Double => match &vm.var_format_class {
+                        Some(ReadStatFormatClass::Date) => DataType::Date32,
+                        Some(ReadStatFormatClass::DateTime) => {
+                            DataType::Timestamp(TimeUnit::Second, None)
+                        }
+                        Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
+                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                            DataType::Timestamp(TimeUnit::Millisecond, None)
+                        }
+                        Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
+                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                            DataType::Timestamp(TimeUnit::Microsecond, None)
+                        }
+                        Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
+                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                            DataType::Timestamp(TimeUnit::Nanosecond, None)
+                        }
+                        Some(ReadStatFormatClass::Time) => {
+                            DataType::Time32(TimeUnit::Second)
+                        }
+                        None => DataType::Float64,
+                    },
+                };
+                Field::new(&vm.var_name, var_dt, true)
+            })
+            .collect();
+
+        Schema::new(fields)
     }
 
     pub fn read_metadata(&mut self, rsp: ReadStatPath, skip_row_count: bool) -> Result<(), Box<dyn Error>> {
@@ -98,7 +139,11 @@ impl ReadStatMetadata {
         */
 
         match FromPrimitive::from_i32(error as i32) {
-            Some(ReadStatError::READSTAT_OK) => Ok(()),
+            Some(ReadStatError::READSTAT_OK) => {
+                // if successful, initialize schema
+                self.schema = self.initialize_schema();
+                Ok(())
+            },
             Some(e) => Err(From::from(format!(
                 "Error when attempting to parse sas7bdat: {:#?}",
                 e

@@ -8,12 +8,16 @@ use std::error::Error;
 use arrow::csv as csv_arrow;
 use arrow::ipc::writer::FileWriter;
 use arrow::json::LineDelimitedWriter;
+use colored::Colorize;
 use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
+use num_format::Locale;
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 use crate::Format;
+use crate::ReadStatFormatClass;
+use crate::ReadStatMetadata;
 use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
 
@@ -46,6 +50,10 @@ impl ReadStatWriter {
         }
     }
 
+    pub fn set_finish(&mut self, finish: bool) {
+        self.finish = finish;
+    }
+
     pub fn write(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         match rsp {
             // Write data to standard out
@@ -61,7 +69,6 @@ impl ReadStatWriter {
                 ..
             } => {
                 self.write_header_to_stdout(&d)?;
-                self.wrote_header = true;
                 self.write_data_to_stdout(&d)
             }
             // Write csv data to file
@@ -77,7 +84,6 @@ impl ReadStatWriter {
                 ..
             } => {
                 self.write_header_to_csv(&d, &rsp)?;
-                self.wrote_header = true;
                 self.write_data_to_csv(&d, &rsp)
             }
             // Write feather data to file
@@ -138,17 +144,17 @@ impl ReadStatWriter {
             // set message for what is being read/written
             self.set_message_for_file(&d, &rsp);
 
-            let f = if let Some(pb) = d.pb {
-                pb.wrap_write(f)
-            } else {
-                f
-            };
-            
             // setup writer if not already started writing
             self.wtr = if !self.wrote_start {
-                Some(csv_arrow::WriterBuilder::new()
-                    .has_headers(false)
-                    .build(f))
+                if let Some(pb) = d.pb {
+                    Some(csv_arrow::WriterBuilder::new()
+                        .has_headers(false)
+                        .build(pb.wrap_write(f)))
+                } else {
+                    Some(csv_arrow::WriterBuilder::new()
+                        .has_headers(false)
+                        .build(f))
+                }
             };
             
             // write
@@ -320,9 +326,11 @@ impl ReadStatWriter {
     fn write_header_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         if let Some(p) = rsp.out_path {
             // spinner
+            /*
             if let Some(pb) = d.pb {
                 pb.finish_at_current_pos();
             }
+            */
 
             // spinner
             /*
@@ -374,12 +382,12 @@ impl ReadStatWriter {
             */
 
             // create file
-            let file = std::fs::File::create(p)?;
+            let f = std::fs::File::create(p)?;
             
-            // 
-            let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
+            // setup writer
+            self.wtr = Some(csv_crate::WriterBuilder::new().from_writer(f));
 
-            // write header
+            // get variable names for header
             let vars: Vec<String> = d
                 .batch
                 .schema()
@@ -391,10 +399,16 @@ impl ReadStatWriter {
             // Alternate way to get variable names
             // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
 
-            wtr.write_record(vars)?;
-            wtr.flush()?;
+            // write
+            if let Some(wtr) = self.wtr {
+                wtr.write_record(vars)?;
+                wtr.flush()?;
+            };
 
-            // TODO self.wrote_header = true here
+            // wrote header
+            self.wrote_header = true;
+
+            // return
             Ok(())
         } else {
             Err(From::from(
@@ -408,9 +422,10 @@ impl ReadStatWriter {
             pb.finish_and_clear()
         }
 
-        self.wtr = csv_crate::WriterBuilder::new().from_writer(stdout());
+        // setup writer
+        self.wtr = Some(csv_crate::WriterBuilder::new().from_writer(stdout()));
 
-        // write header
+        // get variable names for header
         let vars: Vec<String> = d 
             .batch
             .schema()
@@ -422,53 +437,68 @@ impl ReadStatWriter {
         // Alternate way to get variable names
         // let vars: Vec<String> = d.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
 
-        self.wtr.write_record(vars)?;
-        self.wtr.flush()?;
+        // write
+        if let Some(wtr) = self.wtr {
+            self.wtr.write_record(vars)?;
+            self.wtr.flush()?;
+        };
 
+        // wrote header
+        self.wrote_header = true;
+
+        // return
         Ok(())
     }
 
-    fn write_metadata_to_json(&mut self) -> Result<(), Box<dyn Error>> {
-        match serde_json::to_string_pretty(&self.metadata) {
+    pub fn write_metadata(&self, md: &ReadStatMetadata, rsp: &ReadStatPath, as_json: bool) -> Result<(), Box<dyn Error>> {
+        if as_json {
+            self.write_metadata_to_json(&md)
+        } else {
+            self.write_metadata_to_stdout(&md, &rsp)
+        }
+    }
+
+    pub fn write_metadata_to_json(md: &ReadStatMetadata) -> Result<(), Box<dyn Error>> {
+        match serde_json::to_string_pretty(md) {
             Ok(s) => { println!("{}", s); Ok(()) }
             Err(e) => { Err(From::from(format!("Error converting to json: {}", e))) }
         }
     }
 
-    fn write_metadata_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn write_metadata_to_stdout(md: &ReadStatMetadata, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         println!(
             "Metadata for the file {}\n",
-            self.path.to_string_lossy().bright_yellow()
+            rsp.path.to_string_lossy().bright_yellow()
         );
         println!(
             "{}: {}",
             "Row count".green(),
-            self.metadata.row_count.to_formatted_string(&Locale::en)
+            md.row_count.to_formatted_string(&Locale::en)
         );
         println!(
             "{}: {}",
             "Variable count".red(),
-            self.metadata.var_count.to_formatted_string(&Locale::en)
+            md.var_count.to_formatted_string(&Locale::en)
         );
-        println!("{}: {}", "Table name".blue(), self.metadata.table_name);
-        println!("{}: {}", "Table label".cyan(), self.metadata.file_label);
-        println!("{}: {}", "File encoding".yellow(), self.metadata.file_encoding);
-        println!("{}: {}", "Format version".green(), self.metadata.version);
+        println!("{}: {}", "Table name".blue(), md.table_name);
+        println!("{}: {}", "Table label".cyan(), md.file_label);
+        println!("{}: {}", "File encoding".yellow(), md.file_encoding);
+        println!("{}: {}", "Format version".green(), md.version);
         println!(
             "{}: {}",
             "Bitness".red(),
-            if self.metadata.is64bit == 0 {
+            if md.is64bit == 0 {
                 "32-bit"
             } else {
                 "64-bit"
             }
         );
-        println!("{}: {}", "Creation time".blue(), self.metadata.creation_time);
-        println!("{}: {}", "Modified time".cyan(), self.metadata.modified_time);
-        println!("{}: {:#?}", "Compression".yellow(), self.metadata.compression);
-        println!("{}: {:#?}", "Byte order".green(), self.metadata.endianness);
+        println!("{}: {}", "Creation time".blue(), md.reation_time);
+        println!("{}: {}", "Modified time".cyan(), md.modified_time);
+        println!("{}: {:#?}", "Compression".yellow(), md.compression);
+        println!("{}: {:#?}", "Byte order".green(), md.endianness);
         println!("{}:", "Variable names".purple());
-        for (k, v) in self.metadata.vars.iter() {
+        for (k, v) in md.vars.iter() {
             println!(
                 "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow data type: {} }}",
                 (*k).to_formatted_string(&Locale::en),
@@ -489,7 +519,7 @@ impl ReadStatWriter {
                 })
                 .bright_cyan(),
                 v.var_format.bright_yellow(),
-                self.schema.field(*k as usize).data_type().to_string().bright_green()
+                md.schema.field(*k as usize).data_type().to_string().bright_green()
             );
         }
 
