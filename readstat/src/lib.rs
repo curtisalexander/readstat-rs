@@ -231,11 +231,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 let row_start = w[0];
                 let row_end = w[1];
 
-                let mut d = ReadStatData::new().set_no_progress(no_progress).init(
-                    md.clone(),
-                    row_start,
-                    row_end,
-                );
+                let mut d = ReadStatData::new()
+                    .set_no_progress(no_progress)
+                    .set_total_rows_to_process(total_rows_to_process as usize)
+                    .set_total_rows_processed(total_rows_processed.clone())
+                    .init(md.clone(), row_start, row_end);
 
                 // read
                 d.read_data(&rsp)?;
@@ -247,7 +247,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
                 // write
                 wtr.write(&d, &rsp)?;
-
             }
 
             // return
@@ -259,7 +258,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 pb.finish_at_current_pos()
             };
             */
-            
         }
         ReadStat::Data {
             input,
@@ -292,6 +290,14 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
                     // Get metadata
+
+                    // instantiate ReadStatMetadata
+                    let mut md = ReadStatMetadata::new();
+                    md.read_metadata(&rsp, false)?;
+
+                    // Write metadata
+                    ReadStatWriter::new().write_metadata(&md, &rsp, false)?;
+
                     //get_metadata(&mut d, false, false)
                     Ok(())
                 }
@@ -335,11 +341,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         let row_start = w[0];
                         let row_end = w[1];
 
-                        let mut d = ReadStatData::new().set_no_progress(no_progress).init(
-                            md.clone(),
-                            row_start,
-                            row_end,
-                        );
+                        let mut d = ReadStatData::new()
+                            .set_no_progress(no_progress)
+                            .set_total_rows_to_process(total_rows_to_process as usize)
+                            .set_total_rows_processed(total_rows_processed.clone())
+                            .init(md.clone(), row_start, row_end);
 
                         // read
                         d.read_data(&rsp)?;

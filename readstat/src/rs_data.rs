@@ -12,7 +12,7 @@ use path_abs::PathInfo;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::os::raw::c_void;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
 use crate::rs_parser::ReadStatParser;
@@ -32,6 +32,9 @@ pub struct ReadStatData {
     pub batch_row_start: usize,
     pub batch_row_end: usize,
     pub batch_rows_processed: usize,
+    // total rows
+    pub total_rows_to_process: usize,
+    pub total_rows_processed: Option<Arc<Mutex<usize>>>,
     // progress
     pub pb: Option<ProgressBar>,
     pub no_progress: bool,
@@ -54,6 +57,9 @@ impl ReadStatData {
             batch_rows_processed: 0,
             batch_row_start: 0,
             batch_row_end: 0,
+            // total rows
+            total_rows_to_process: 0,
+            total_rows_processed: None,
             // progress
             pb: None,
             no_progress: false,
@@ -124,9 +130,13 @@ impl ReadStatData {
         let ppath = rsp.cstring_path.as_ptr();
 
         // spinner
+        // TODO - uncomment when ready to reimplement progress bar 
+        /*
         if !self.no_progress {
             self.pb = Some(ProgressBar::new(!0));
         }
+        */
+
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -222,6 +232,20 @@ impl ReadStatData {
     pub fn set_no_progress(self, no_progress: bool) -> Self {
         Self {
             no_progress,
+            ..self
+        }
+    }
+
+    pub fn set_total_rows_to_process(self, total_rows_to_process: usize) -> Self {
+        Self {
+            total_rows_to_process,
+            ..self
+        }
+    }
+
+    pub fn set_total_rows_processed(self, total_rows_processed: Arc<Mutex<usize>>) -> Self {
+        Self {
+            total_rows_processed: Some(total_rows_processed),
             ..self
         }
     }

@@ -60,6 +60,56 @@ impl ReadStatWriter {
         self.finish = finish;
     }
 
+    fn write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
+        if let Some(pb) = &d.pb {
+            let in_f = if let Some(f) = rsp.path.file_name() {
+                f.to_string_lossy().bright_red()
+            } else {
+                String::from("___").bright_red()
+            };
+
+            let out_f = if let Some(p) = &rsp.out_path {
+                if let Some(f) = p.file_name() {
+                    f.to_string_lossy().bright_green()
+                } else {
+                    String::from("___").bright_green()
+                }
+            } else {
+                String::from("___").bright_green()
+            };
+
+            let msg = format!("Writing file {} as {}", in_f, out_f);
+
+            pb.set_message(msg);
+        }
+    }
+
+    fn write_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
+        //if let Some(pb) = &d.pb {
+            let in_f = if let Some(f) = rsp.path.file_name() {
+                f.to_string_lossy().bright_red()
+            } else {
+                String::from("___").bright_red()
+            };
+
+            let out_f = if let Some(p) = &rsp.out_path {
+                if let Some(f) = p.file_name() {
+                    f.to_string_lossy().bright_green()
+                } else {
+                    String::from("___").bright_green()
+                }
+            } else {
+                String::from("___").bright_green()
+            };
+
+            let rows = d.batch_rows_processed.to_formatted_string(&Locale::en).truecolor(255, 132, 0);
+            let msg = format!("Wrote {} rows from file {} into {}", rows, in_f, out_f);
+
+            println!("{}", msg);
+            //pb.set_message(msg);
+        //}
+    }
+
     pub fn write(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         match rsp {
             // Write data to standard out
@@ -110,30 +160,6 @@ impl ReadStatWriter {
         }
     }
 
-    fn set_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
-        if let Some(pb) = &d.pb {
-            let in_f = if let Some(f) = rsp.path.file_name() {
-                f.to_string_lossy().bright_red()
-            } else {
-                String::from("___").bright_red()
-            };
-
-            let out_f = if let Some(p) = &rsp.out_path {
-                if let Some(f) = p.file_name() {
-                    f.to_string_lossy().bright_green()
-                } else {
-                    String::from("___").bright_green()
-                }
-            } else {
-                String::from("___").bright_green()
-            };
-
-            let msg = format!("Writing file {} as {}", in_f, out_f);
-
-            pb.set_message(msg);
-        }
-    }
-
     fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
@@ -147,7 +173,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.set_message_for_file(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp);
 
             // setup writer if not already started writing
             /*
@@ -206,7 +232,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.set_message_for_file(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp);
 
             // setup writer if not already started writing
             if !self.wrote_start {
@@ -257,7 +283,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.set_message_for_file(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp);
             
             // setup writer if not already started writing
             if !self.wrote_start {
@@ -310,7 +336,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.set_message_for_file(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp);
             
             // setup writer if not already started writing
             if !self.wrote_start {
