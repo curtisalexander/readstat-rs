@@ -8,10 +8,6 @@ use crate::Format;
 
 const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
-/*******
-* Path *
-*******/
-
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
     pub path: PathBuf,

@@ -203,25 +203,21 @@ pub extern "C" fn handle_value(
     // dereference ctx pointer
     let d = unsafe { &mut *(ctx as *mut ReadStatData) };
 
-    d.cols = Vec::with_capacity(d.var_count as usize);
-
     // get index, type, and missingness
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
     let value_type: readstat_sys::readstat_type_t =
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    debug!("row_count is {}", d.metadata.row_count);
-    debug!("var_count is {}", d.metadata.var_count);
+    debug!("batch_rows_to_process is {}", d.batch_rows_to_process);
+    debug!("batch_row_start is {}", d.batch_row_start);
+    debug!("batch_row_end is {}", d.batch_row_end);
+    debug!("batch_rows_processed is {}", d.batch_rows_processed);
+    debug!("var_count is {}", d.var_count);
     debug!("obs_index is {}", obs_index);
     debug!("var_index is {}", var_index);
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
-
-    // allocate columns
-    if obs_index == 0 && var_index == 0 {
-        d.allocate_cols(d.batch_rows_to_process);
-    };
 
     // get value and push into cols
     match value_type {
@@ -234,8 +230,10 @@ pub extern "C" fn handle_value(
                     .unwrap()
                     .to_owned()
             };
+
             // debug
             debug!("value is {:#?}", &value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -252,12 +250,14 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int8_value(value) };
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -274,12 +274,14 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int16_value(value) };
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -296,12 +298,14 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int32_value(value) };
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -318,7 +322,7 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
             // Format as string to truncate float to only contain 14 decimal digits
             // Parse back into float so that the trailing zeroes are trimmed when serializing
@@ -327,8 +331,10 @@ pub extern "C" fn handle_value(
             let value =
                 lexical::parse::<f32, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
                     .unwrap();
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -345,7 +351,7 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        }
+        },
         readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
             // Format as string to truncate float to only contain 14 decimal digits
             // Parse back into float so that the trailing zeroes are trimmed when serializing
@@ -357,7 +363,7 @@ pub extern "C" fn handle_value(
             debug!("value (after truncation) is {:#?}", value);
 
             // is double actually a date?
-            let value = match d.metadata.vars.get(&var_index).unwrap().var_format_class {
+            let value = match d.vars.get(&var_index).unwrap().var_format_class {
                 None => ReadStatVar::ReadStat_f64(value),
                 Some(fc) => match fc {
                     ReadStatFormatClass::Date => {
@@ -401,7 +407,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                }
+                },
                 ReadStatVar::ReadStat_DateTime(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -418,7 +424,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                }
+                },
                 ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -435,7 +441,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                }
+                },
                 ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -452,7 +458,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                }
+                },
                 ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -469,7 +475,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                }
+                },
                 ReadStatVar::ReadStat_Time(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -486,7 +492,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                }
+                },
                 ReadStatVar::ReadStat_f64(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -512,22 +518,10 @@ pub extern "C" fn handle_value(
         _ => unreachable!(),
     }
 
-    // increment
+    // if row is complete
     if var_index == (d.var_count - 1) {
         d.batch_rows_processed += 1;
     };
-
-    // if last variable for a row, check to see if data should be finalized and written
-    if var_index == (d.metadata.var_count - 1)
-        && (obs_index as usize) == (d.batch_rows_to_process - 1)
-    {
-        let arrays: Vec<ArrayRef> = d.cols.iter_mut().map(|builder| builder.finish()).collect();
-
-        d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
-
-        // reset
-        d.cols.clear();
-    }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }

@@ -29,6 +29,9 @@ pub use rs_metadata::{
 pub use rs_path::ReadStatPath;
 pub use rs_write::ReadStatWriter;
 
+// Default stream rows is 50000;
+const STREAM_ROWS: u32 = 50000;
+
 // StructOpt
 #[derive(StructOpt, Debug)]
 /// 💾 Command-line tool for working with SAS binary files; 🦀 Rust wrapper of ReadStat C library
@@ -167,12 +170,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, None, false, false)?;
 
-            // instantiate ReadStatData
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
-            md.read_metadata(rsp, skip_row_count)?;
+            md.read_metadata(&rsp, skip_row_count)?;
 
-            // Initialize writing
+            // Write metadata
             ReadStatWriter::new().write_metadata(&md, &rsp, as_json)?;
 
             // return
@@ -197,7 +199,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
-            md.read_metadata(rsp, false)?;
+            md.read_metadata(&rsp, false)?;
 
             // Determine row count
             let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
@@ -207,7 +209,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             let total_rows_to_stream = match reader {
                 Some(Reader::stream) => match stream_rows {
                     Some(s) => s,
-                    None => 50000,
+                    None => STREAM_ROWS,
                 },
                 Some(Reader::mem) | None => total_rows_to_process,
             };
@@ -218,6 +220,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
             let offsets_pairs = offsets.windows(2);
+            let pairs_cnt = *(&offsets_pairs.len());
 
             // Initialize writing
             let mut wtr = ReadStatWriter::new();
@@ -238,7 +241,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 d.read_data(&rsp)?;
 
                 // if last write then need to finish file
-                if i == offsets_pairs.len() {
+                if i == pairs_cnt {
                     wtr.set_finish(true);
                 }
 
@@ -281,7 +284,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
-            md.read_metadata(rsp, false)?;
+            md.read_metadata(&rsp, false)?;
 
             // if no output path then only read metadata; otherwise read data
             match &rsp.out_path {
@@ -310,7 +313,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     let total_rows_to_stream = match reader {
                         Some(Reader::stream) => match stream_rows {
                             Some(s) => s,
-                            None => 50000,
+                            None => STREAM_ROWS,
                         },
                         Some(Reader::mem) | None => total_rows_to_process,
                     };
@@ -321,6 +324,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
                     let offsets_pairs = offsets.windows(2);
+                    let pairs_cnt = *(&offsets_pairs.len());
 
                     // Initialize writing
                     let mut wtr = ReadStatWriter::new();
@@ -341,7 +345,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         d.read_data(&rsp)?;
 
                         // if last write then need to finish file
-                        if i == offsets_pairs.len() {
+                        if i == pairs_cnt {
                             wtr.set_finish(true);
                         }
 

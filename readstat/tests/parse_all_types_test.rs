@@ -12,7 +12,7 @@ fn init() -> readstat::ReadStatData {
     let rsp = common::setup_path("all_types.sas7bdat").unwrap();
 
     // parse sas7bdat
-    readstat::ReadStatData::new(rsp)
+    readstat::ReadStatData::new()
         .set_reader(Some(readstat::Reader::mem))
         .set_no_progress(true)
         .set_no_write(true)

@@ -14,14 +14,14 @@ where
         .join("tests")
         .join("data")
         .join(ds);
-    readstat::ReadStatPath::new(sas_path, None, None, false)
+    readstat::ReadStatPath::new(sas_path, None, None, false, false)
 }
 
 // used in tests
 #[allow(dead_code)]
 pub fn contains_var(d: &readstat::ReadStatData, var_index: i32) -> bool {
     // contains variable
-    d.metadata.vars.contains_key(&var_index)
+    d.vars.contains_key(&var_index)
 }
 
 // used in tests
@@ -31,7 +31,7 @@ pub fn get_metadata<'a>(
     var_index: i32,
 ) -> &'a readstat::ReadStatVarMetadata {
     // contains variable
-    d.metadata.vars.get(&var_index).unwrap()
+    d.vars.get(&var_index).unwrap()
 }
 
 // used in tests

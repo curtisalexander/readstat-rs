@@ -49,12 +49,12 @@ impl ReadStatMetadata {
         }
     }
 
-    fn initialize_schema(self) -> Schema {
+    fn initialize_schema(&self) -> Schema {
         // build up Schema
         let fields: Vec<Field> = self
             .vars
             .iter()
-            .map(|(idx, vm)| {
+            .map(|(_idx, vm)| {
                 let var_dt = match &vm.var_type {
                     ReadStatVarType::String
                     | ReadStatVarType::StringRef
@@ -92,7 +92,7 @@ impl ReadStatMetadata {
         Schema::new(fields)
     }
 
-    pub fn read_metadata(&mut self, rsp: ReadStatPath, skip_row_count: bool) -> Result<(), Box<dyn Error>> {
+    pub fn read_metadata(&mut self, rsp: &ReadStatPath, skip_row_count: bool) -> Result<(), Box<dyn Error>> {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
@@ -169,10 +169,6 @@ pub enum ReadStatEndian {
     Little = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_LITTLE as isize,
     Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
 }
-
-/*********************
- * Variable Metadata *
- ********************/
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadStatVarMetadata {
