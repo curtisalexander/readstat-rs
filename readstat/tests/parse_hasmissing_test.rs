@@ -13,9 +13,9 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     // setup metadata
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    
+
     // parse sas7bdat
-    // read the entire dataset
+    // read only up to the 5th row
     let d = readstat::ReadStatData::new()
         .set_no_progress(true)
         .init(md.clone(), 0, 5);

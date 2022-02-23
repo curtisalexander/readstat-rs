@@ -3,27 +3,33 @@ use arrow::{
     datatypes::DataType,
 };
 use chrono::NaiveDate;
-use readstat::ReadStatFormatClass;
+use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
 mod common;
 
-fn init() -> readstat::ReadStatData {
+fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     // setup path
     let rsp = common::setup_path("all_types.sas7bdat").unwrap();
 
+    // setup metadata
+    let mut md = ReadStatMetadata::new();
+    md.read_metadata(&rsp, false).unwrap();
+
     // parse sas7bdat
-    readstat::ReadStatData::new(rsp)
-        .set_reader(Some(readstat::Reader::mem))
+    // read starting at row 2
+    let d = readstat::ReadStatData::new()
         .set_no_progress(true)
-        .set_no_write(true)
+        .init(md.clone(), 2, 3);
+
+    (rsp, md, d)
 }
 
 #[test]
 fn row_offset_int() {
-    let mut d = init();
+    let (rsp, _md, mut d) = init();
 
-    let error = d.get_data(None, Some(2)).unwrap();
-    assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
 
     // variable index and name
     let var_index = 0;
@@ -64,10 +70,10 @@ fn row_offset_int() {
 
 #[test]
 fn row_offset_string() {
-    let mut d = init();
+    let (rsp, _md, mut d) = init();
 
-    let error = d.get_data(None, Some(2)).unwrap();
-    assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
 
     // variable index and name
     let var_index = 3;
@@ -114,10 +120,10 @@ fn row_offset_string() {
 
 #[test]
 fn row_offset_date() {
-    let mut d = init();
+    let (rsp, _md, mut d) = init();
 
-    let error = d.get_data(None, Some(2)).unwrap();
-    assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
 
     // variable index and name
     let var_index = 4;
@@ -163,50 +169,43 @@ fn row_offset_date() {
 
 #[test]
 fn row_offset_metadata() {
-    let mut d = init();
+    let (rsp, md, mut d) = init();
 
-    // Get data instead of get metadata
-    let error = d.get_data(None, Some(2)).unwrap();
-    assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
 
     // row count = 1 due to offset
-    assert_eq!(d.metadata.row_count, 1);
+    assert_eq!(d.batch_rows_to_process, 1);
 
     // variable count
-    assert_eq!(d.metadata.var_count, 8);
+    assert_eq!(md.var_count, 8);
 
     // table name
-    assert_eq!(d.metadata.table_name, String::from("ALL_TYPES"));
+    assert_eq!(md.table_name, String::from("ALL_TYPES"));
 
     // table label
-    assert_eq!(d.metadata.file_label, String::from(""));
+    assert_eq!(md.file_label, String::from(""));
 
     // file encoding
-    assert_eq!(d.metadata.file_encoding, String::from("UTF-8"));
+    assert_eq!(md.file_encoding, String::from("UTF-8"));
 
     // format version
-    assert_eq!(d.metadata.version, 9);
+    assert_eq!(md.version, 9);
 
     // bitness
-    assert_eq!(d.metadata.is64bit, 1);
+    assert_eq!(md.is64bit, 1);
 
     // creation time
-    assert_eq!(d.metadata.creation_time, "2022-01-08 19:40:48");
+    assert_eq!(md.creation_time, "2022-01-08 19:40:48");
 
     // modified time
-    assert_eq!(d.metadata.modified_time, "2022-01-08 19:40:48");
+    assert_eq!(md.modified_time, "2022-01-08 19:40:48");
 
     // compression
-    assert!(matches!(
-        d.metadata.compression,
-        readstat::ReadStatCompress::None
-    ));
+    assert!(matches!(md.compression, readstat::ReadStatCompress::None));
 
     // endianness
-    assert!(matches!(
-        d.metadata.endianness,
-        readstat::ReadStatEndian::Little
-    ));
+    assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
 
     // variables - contains variable
     assert!(common::contains_var(&d, 0));
@@ -252,7 +251,7 @@ fn row_offset_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 4);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(ReadStatFormatClass::Date));
+    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::Date));
     assert_eq!(vf, String::from("YYMMDD10"));
     assert!(matches!(adt, DataType::Date32));
 
@@ -260,7 +259,7 @@ fn row_offset_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 5);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(ReadStatFormatClass::DateTime));
+    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::DateTime));
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
@@ -271,7 +270,7 @@ fn row_offset_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(ReadStatFormatClass::DateTime));
+    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::DateTime));
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
@@ -282,7 +281,7 @@ fn row_offset_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(ReadStatFormatClass::Time));
+    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::Time));
     assert_eq!(vf, String::from("TIME"));
     assert!(matches!(
         adt,

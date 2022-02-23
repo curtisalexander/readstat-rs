@@ -229,10 +229,6 @@ pub enum ReadStatFormatClass {
     Time,
 }
 
-/************
- * Variable *
- ***********/
-
 #[derive(Debug, Clone)]
 pub enum ReadStatVar {
     ReadStat_String(String),
