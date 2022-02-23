@@ -2,42 +2,48 @@ use arrow::{
     array::{Float64Array, StringArray},
     datatypes::DataType,
 };
-use path_abs::PathAbs;
-use std::env;
+use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
+
+mod common;
+
+fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
+    // setup path
+    let rsp = common::setup_path("hasmissing.sas7bdat").unwrap();
+
+    // setup metadata
+    let mut md = ReadStatMetadata::new();
+    md.read_metadata(&rsp, false).unwrap();
+    
+    // parse sas7bdat
+    // read the entire dataset
+    let d = readstat::ReadStatData::new()
+        .set_no_progress(true)
+        .init(md.clone(), 0, 5);
+
+    (rsp, md, d)
+}
 
 #[test]
 fn parse_hasmissing() {
-    // setup path
-    let project_dir = PathAbs::new(env!("CARGO_MANIFEST_DIR")).unwrap();
-    let data_dir = project_dir.as_path().join("tests").join("data");
-    let sas_path = data_dir.join("hasmissing.sas7bdat");
-    let rsp = readstat::ReadStatPath::new(sas_path, None, None, false).unwrap();
+    let (rsp, _md, mut d) = init();
 
-    // parse sas7bdat
-    // set is_test to true to suppress writing to console
-    let mut d = readstat::ReadStatData::new(rsp)
-        .set_reader(Some(readstat::Reader::mem))
-        .set_no_progress(true)
-        .set_no_write(true);
-    let error = d.get_data(Some(5), None).unwrap();
-
-    assert_eq!(error, readstat::ReadStatError::READSTAT_OK as u32);
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
 
     // variable count
-    let var_count = d.metadata.var_count;
+    let var_count = d.var_count;
     assert_eq!(var_count, 9);
 
     // row count
-    let row_count = d.metadata.row_count;
+    let row_count = d.batch_rows_to_process;
     assert_eq!(row_count, 5);
 
-    // variable
-    let vars = d.metadata.vars;
-    let contains_key = vars.contains_key(&0);
-    assert!(contains_key);
+    // contains variable
+    let contains_var = common::contains_var(&d, 0);
+    assert!(contains_var);
 
     // metadata
-    let m = vars.get(&0).unwrap();
+    let m = common::get_metadata(&d, 0);
 
     // variable type class
     assert!(matches!(

@@ -5,13 +5,13 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::ffi::c_void;
 use std::error::Error;
+use std::ffi::c_void;
 use std::os::raw::c_int;
 
-use crate::{ReadStatPath, ReadStatError};
-use crate::rs_parser::ReadStatParser;
 use crate::cb::{handle_metadata, handle_variable};
+use crate::rs_parser::ReadStatParser;
+use crate::{ReadStatError, ReadStatPath};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
@@ -79,9 +79,7 @@ impl ReadStatMetadata {
                             // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Nanosecond, None)
                         }
-                        Some(ReadStatFormatClass::Time) => {
-                            DataType::Time32(TimeUnit::Second)
-                        }
+                        Some(ReadStatFormatClass::Time) => DataType::Time32(TimeUnit::Second),
                         None => DataType::Float64,
                     },
                 };
@@ -92,7 +90,11 @@ impl ReadStatMetadata {
         Schema::new(fields)
     }
 
-    pub fn read_metadata(&mut self, rsp: &ReadStatPath, skip_row_count: bool) -> Result<(), Box<dyn Error>> {
+    pub fn read_metadata(
+        &mut self,
+        rsp: &ReadStatPath,
+        skip_row_count: bool,
+    ) -> Result<(), Box<dyn Error>> {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
@@ -114,11 +116,11 @@ impl ReadStatMetadata {
             pb.enable_steady_tick(120);
         }
         */
-        let msg = format!(
+        let _msg = format!(
             "Parsing sas7bdat metadata from file {}",
             &rsp.path.to_string_lossy().bright_red()
         );
-        
+
         let ctx = self as *mut ReadStatMetadata as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -143,7 +145,7 @@ impl ReadStatMetadata {
                 // if successful, initialize schema
                 self.schema = self.initialize_schema();
                 Ok(())
-            },
+            }
             Some(e) => Err(From::from(format!(
                 "Error when attempting to parse sas7bdat: {:#?}",
                 e
@@ -153,7 +155,6 @@ impl ReadStatMetadata {
             )),
         }
     }
-
 }
 
 #[derive(Clone, Debug, FromPrimitive, Serialize)]

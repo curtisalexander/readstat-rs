@@ -2,7 +2,7 @@
 
 use colored::Colorize;
 use log::debug;
-use num_cpus;
+// use num_cpus;
 use path_abs::{PathAbs, PathInfo};
 use serde::Serialize;
 use std::error::Error;
@@ -157,7 +157,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
         ReadStat::Metadata {
             input: in_path,
             as_json,
-            no_progress,
+            no_progress: _,
             skip_row_count,
         } => {
             // validate and create path to sas7bdat/sas7bcat
@@ -268,7 +268,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             stream_rows,
             no_progress,
             overwrite,
-            parallel,
+            parallel: _,
         } => {
             // validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();

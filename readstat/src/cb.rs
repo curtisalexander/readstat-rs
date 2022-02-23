@@ -1,16 +1,13 @@
 use arrow::array::{
-    ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampMicrosecondBuilder,
-    TimestampMillisecondBuilder, TimestampNanosecondBuilder, TimestampSecondBuilder,
+    Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder,
+    StringBuilder, Time32SecondBuilder, TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
+    TimestampNanosecondBuilder, TimestampSecondBuilder,
 };
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::RecordBatch;
 use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
-use std::sync::Arc;
 
 use crate::{
     formats,
@@ -27,6 +24,7 @@ const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
 
 // C types
+#[allow(dead_code)]
 #[derive(Debug)]
 #[repr(C)]
 enum ReadStatHandler {
@@ -250,7 +248,7 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        },
+        }
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int8_value(value) };
@@ -274,7 +272,7 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        },
+        }
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int16_value(value) };
@@ -298,7 +296,7 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        },
+        }
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int32_value(value) };
@@ -322,7 +320,7 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        },
+        }
         readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
             // Format as string to truncate float to only contain 14 decimal digits
             // Parse back into float so that the trailing zeroes are trimmed when serializing
@@ -351,7 +349,7 @@ pub extern "C" fn handle_value(
                     .append_null()
                     .unwrap();
             }
-        },
+        }
         readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
             // Format as string to truncate float to only contain 14 decimal digits
             // Parse back into float so that the trailing zeroes are trimmed when serializing
@@ -407,7 +405,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                },
+                }
                 ReadStatVar::ReadStat_DateTime(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -424,7 +422,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                },
+                }
                 ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -441,7 +439,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                },
+                }
                 ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -458,7 +456,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                },
+                }
                 ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -475,7 +473,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                },
+                }
                 ReadStatVar::ReadStat_Time(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]
@@ -492,7 +490,7 @@ pub extern "C" fn handle_value(
                             .append_null()
                             .unwrap();
                     }
-                },
+                }
                 ReadStatVar::ReadStat_f64(v) => {
                     if is_missing == 0 {
                         d.cols[var_index as usize]

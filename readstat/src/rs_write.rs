@@ -1,8 +1,7 @@
 // Create a writer struct
 use std::fs::OpenOptions;
 use std::io::stdout;
-use std::io::Write;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::error::Error;
 
 use arrow::csv as csv_arrow;
@@ -10,7 +9,7 @@ use arrow::ipc::writer::FileWriter;
 use arrow::json::LineDelimitedWriter;
 use colored::Colorize;
 use csv as csv_crate;
-use indicatif::{ProgressBar, ProgressStyle};
+// use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
 use parquet::arrow::ArrowWriter;
@@ -60,7 +59,7 @@ impl ReadStatWriter {
         self.finish = finish;
     }
 
-    fn write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
+    fn _write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
         if let Some(pb) = &d.pb {
             let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()

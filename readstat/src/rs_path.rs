@@ -44,7 +44,7 @@ impl ReadStatPath {
             out_path: op,
             format: f,
             overwrite,
-            no_write
+            no_write,
         })
     }
 

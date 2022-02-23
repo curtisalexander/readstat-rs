@@ -14,10 +14,11 @@ use std::error::Error;
 use std::os::raw::c_void;
 use std::sync::{Arc, Mutex};
 
+use crate::cb;
 use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
 use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
-use crate::{cb, ReadStatVarMetadata, ReadStatError};
+use crate::{ReadStatError, ReadStatVarMetadata};
 
 pub struct ReadStatData {
     // metadata
@@ -130,7 +131,7 @@ impl ReadStatData {
         let ppath = rsp.cstring_path.as_ptr();
 
         // spinner
-        // TODO - uncomment when ready to reimplement progress bar 
+        // TODO - uncomment when ready to reimplement progress bar
         /*
         if !self.no_progress {
             self.pb = Some(ProgressBar::new(!0));
