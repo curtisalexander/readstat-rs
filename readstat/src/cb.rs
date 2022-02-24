@@ -1,24 +1,23 @@
 use arrow::array::{
-    ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+    Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder,
+    StringBuilder, Time32SecondBuilder, TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
+    TimestampNanosecondBuilder, TimestampSecondBuilder,
 };
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::RecordBatch;
 use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
-use std::sync::Arc;
 
-use crate::formats;
-use crate::rs_data::ReadStatData;
-use crate::rs_metadata::{
-    ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatVar, ReadStatVarMetadata,
-    ReadStatVarType, ReadStatVarTypeClass,
+use crate::{
+    formats,
+    rs_data::ReadStatData,
+    rs_metadata::{
+        ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatVar, ReadStatVarMetadata,
+        ReadStatVarType, ReadStatVarTypeClass,
+    },
+    ReadStatMetadata,
 };
-
-use crate::Reader;
 
 const DIGITS: usize = 14;
 const DAY_SHIFT: i32 = 3653;
@@ -35,11 +34,11 @@ enum ReadStatHandler {
 }
 
 // String out from C pointer
-fn ptr_to_string(x: *const i8) -> String {
+unsafe fn ptr_to_string(x: *const i8) -> String {
     if x.is_null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(x).to_str().unwrap().to_owned() }
+        CStr::from_ptr(x).to_str().unwrap().to_owned()
     }
 }
 
@@ -55,7 +54,7 @@ pub extern "C" fn handle_metadata(
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
+    let mut m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
     // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
@@ -91,9 +90,6 @@ pub extern "C" fn handle_metadata(
         None => ReadStatEndian::None,
     };
 
-    // allocate
-    d.cols = Vec::with_capacity(vc as usize);
-
     debug!("row_count is {}", rc);
     debug!("var_count is {}", vc);
     debug!("table_name is {}", &table_name);
@@ -107,22 +103,42 @@ pub extern "C" fn handle_metadata(
     debug!("endianness is {:#?}", &endianness);
 
     // insert into ReadStatMetadata struct
-    d.metadata.row_count = rc;
-    d.metadata.var_count = vc;
-    d.metadata.table_name = table_name;
-    d.metadata.file_label = file_label;
-    d.metadata.file_encoding = file_encoding;
-    d.metadata.version = version;
-    d.metadata.is64bit = is64bit;
-    d.metadata.creation_time = ct;
-    d.metadata.modified_time = mt;
-    d.metadata.compression = compression;
-    d.metadata.endianness = endianness;
+    m.row_count = rc;
+    m.var_count = vc;
+    m.table_name = table_name;
+    m.file_label = file_label;
+    m.file_encoding = file_encoding;
+    m.version = version;
+    m.is64bit = is64bit;
+    m.creation_time = ct;
+    m.modified_time = mt;
+    m.compression = compression;
+    m.endianness = endianness;
 
+    debug!("metadata struct is {:#?}", &m);
+
+    ReadStatHandler::READSTAT_HANDLER_OK as c_int
+}
+
+/*
+pub extern "C" fn handle_metadata_row_count_only(
+    metadata: *mut readstat_sys::readstat_metadata_t,
+    ctx: *mut c_void,
+) -> c_int {
+    // dereference ctx pointer
+    let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
+
+    // get metadata
+    let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
+    debug!("row_count is {}", rc);
+
+    // insert into ReadStatMetadata struct
+    d.metadata.row_count = rc;
     debug!("d.metadata struct is {:#?}", &d.metadata);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
+*/
 
 pub extern "C" fn handle_variable(
     index: c_int,
@@ -131,7 +147,7 @@ pub extern "C" fn handle_variable(
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let d = unsafe { &mut *(ctx as *mut ReadStatData) };
+    let m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
     // get variable metadata
     let var_type = match FromPrimitive::from_i32(unsafe {
@@ -161,7 +177,7 @@ pub extern "C" fn handle_variable(
     debug!("var_format_class is {:#?}", &var_format_class);
 
     // insert into BTreeMap within ReadStatMetadata struct
-    d.metadata.vars.insert(
+    m.vars.insert(
         index,
         ReadStatVarMetadata::new(
             var_name.clone(),
@@ -173,48 +189,11 @@ pub extern "C" fn handle_variable(
         ),
     );
 
-    // build up Schema
-    let var_dt = match &var_type {
-        ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-            DataType::Utf8
-        }
-        ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
-        ReadStatVarType::Int32 => DataType::Int32,
-        ReadStatVarType::Float => DataType::Float32,
-        ReadStatVarType::Double => match var_format_class {
-            Some(ReadStatFormatClass::Date) => DataType::Date32,
-            Some(ReadStatFormatClass::DateTime) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-            }
-            Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Millisecond, None)
-            }
-            Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None)
-            }
-            Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
-                DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
-                // DataType::Timestamp(arrow::datatypes::TimeUnit::Nanosecond, None)
-            }
-            Some(ReadStatFormatClass::Time) => DataType::Time32(arrow::datatypes::TimeUnit::Second),
-            None => DataType::Float64,
-        },
-    };
-
-    d.schema = Schema::try_merge(vec![
-        d.schema.clone(),
-        Schema::new(vec![Field::new(&var_name, var_dt, true)]),
-    ])
-    .unwrap();
-
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
 pub extern "C" fn handle_value(
     obs_index: c_int,
-    // #[allow(unused_variables)] obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     value: readstat_sys::readstat_value_t,
     ctx: *mut c_void,
@@ -228,23 +207,15 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    debug!("row_count is {}", d.metadata.row_count);
-    debug!("var_count is {}", d.metadata.var_count);
+    debug!("batch_rows_to_process is {}", d.batch_rows_to_process);
+    debug!("batch_row_start is {}", d.batch_row_start);
+    debug!("batch_row_end is {}", d.batch_row_end);
+    debug!("batch_rows_processed is {}", d.batch_rows_processed);
+    debug!("var_count is {}", d.var_count);
     debug!("obs_index is {}", obs_index);
     debug!("var_index is {}", var_index);
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
-
-    // rows determined based on type of Reader
-    let rows = match d.reader {
-        Reader::stream => std::cmp::min(d.stream_rows as usize, d.metadata.row_count as usize),
-        Reader::mem => d.metadata.row_count as usize,
-    };
-
-    // allocate columns
-    if obs_index == 0 && var_index == 0 {
-        d.allocate_cols(rows);
-    };
 
     // get value and push into cols
     match value_type {
@@ -257,8 +228,10 @@ pub extern "C" fn handle_value(
                     .unwrap()
                     .to_owned()
             };
+
             // debug
             debug!("value is {:#?}", &value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -279,8 +252,10 @@ pub extern "C" fn handle_value(
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int8_value(value) };
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -301,8 +276,10 @@ pub extern "C" fn handle_value(
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int16_value(value) };
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -323,8 +300,10 @@ pub extern "C" fn handle_value(
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
             // get value
             let value = unsafe { readstat_sys::readstat_int32_value(value) };
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -350,8 +329,10 @@ pub extern "C" fn handle_value(
             let value =
                 lexical::parse::<f32, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
                     .unwrap();
+
             // debug
             debug!("value is {:#?}", value);
+
             // append to builder
             if is_missing == 0 {
                 d.cols[var_index as usize]
@@ -380,20 +361,28 @@ pub extern "C" fn handle_value(
             debug!("value (after truncation) is {:#?}", value);
 
             // is double actually a date?
-            let value = match d.metadata.vars.get(&var_index).unwrap().var_format_class {
+            let value = match d.vars.get(&var_index).unwrap().var_format_class {
                 None => ReadStatVar::ReadStat_f64(value),
                 Some(fc) => match fc {
                     ReadStatFormatClass::Date => {
                         ReadStatVar::ReadStat_Date((value as i32).checked_sub(DAY_SHIFT).unwrap())
                     }
-                    ReadStatFormatClass::DateTime
-                    | ReadStatFormatClass::DateTimeWithMilliseconds
-                    | ReadStatFormatClass::DateTimeWithMicroseconds
-                    | ReadStatFormatClass::DateTimeWithNanoseconds => {
+                    ReadStatFormatClass::DateTime => ReadStatVar::ReadStat_DateTime(
+                        (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                    ),
+                    ReadStatFormatClass::DateTimeWithMilliseconds => {
                         ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000,
                         )
                     }
+                    ReadStatFormatClass::DateTimeWithMicroseconds => {
+                        ReadStatVar::ReadStat_DateTime(
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000,
+                        )
+                    }
+                    ReadStatFormatClass::DateTimeWithNanoseconds => ReadStatVar::ReadStat_DateTime(
+                        (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
+                    ),
                     ReadStatFormatClass::Time => ReadStatVar::ReadStat_Time(value as i32),
                 },
             };
@@ -429,6 +418,57 @@ pub extern "C" fn handle_value(
                         d.cols[var_index as usize]
                             .as_any_mut()
                             .downcast_mut::<TimestampSecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMillisecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMillisecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMicrosecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampMicrosecondBuilder>()
+                            .unwrap()
+                            .append_null()
+                            .unwrap();
+                    }
+                }
+                ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) => {
+                    if is_missing == 0 {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampNanosecondBuilder>()
+                            .unwrap()
+                            .append_value(v)
+                            .unwrap();
+                    } else {
+                        d.cols[var_index as usize]
+                            .as_any_mut()
+                            .downcast_mut::<TimestampNanosecondBuilder>()
                             .unwrap()
                             .append_null()
                             .unwrap();
@@ -476,77 +516,14 @@ pub extern "C" fn handle_value(
         _ => unreachable!(),
     }
 
-    // if last variable for a row, check to see if data should be finalized and written
-    if var_index == (d.metadata.var_count - 1) {
-        match d.reader {
-            // if rows = buffer limit and last variable then go ahead and write
-            Reader::stream
-                if (((obs_index + 1) as u32 % d.stream_rows == 0) && (obs_index != 0))
-                    || obs_index == (d.metadata.row_count - 1) =>
-            {
-                let arrays: Vec<ArrayRef> =
-                    d.cols.iter_mut().map(|builder| builder.finish()).collect();
-
-                d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
-
-                if obs_index == (d.metadata.row_count - 1) {
-                    d.finish = true;
-                }
-
-                if !d.is_test {
-                    d.write().unwrap_or(());
-                }
-
-                d.wrote_start = true;
-                d.cols.clear();
-
-                if obs_index != (d.metadata.row_count - 1) {
-                    d.allocate_cols(rows);
-                };
-                /*
-                match d.write() {
-                    Ok(()) => (),
-                    // Err(e) => d.errors.push(format!("{:#?}", e)),
-                    // TODO: what to do with writing errors?
-                    //       could include an errors container on the ReadStatData struct
-                    //         and carry the errors generated to be accessed by the end user
-                    //       or could simply dump the errors to standard out or even write them
-                    //         to a separate file
-                    // For now just swallow any errors when writing
-                    Err(_) => (),
-                };
-                */
-            }
-            Reader::mem if obs_index == (d.metadata.row_count - 1) => {
-                let arrays: Vec<ArrayRef> =
-                    d.cols.iter_mut().map(|builder| builder.finish()).collect();
-
-                d.batch = RecordBatch::try_new(Arc::new(d.schema.clone()), arrays).unwrap();
-
-                d.finish = true;
-
-                if !d.is_test {
-                    d.write().unwrap_or(());
-                }
-
-                d.wrote_start = true;
-                /*
-                match d.write() {
-                    Ok(()) => (),
-                    // Err(e) => d.errors.push(format!("{:#?}", e)),
-                    // TODO: what to do with writing errors?
-                    //       could include an errors container on the ReadStatData struct
-                    //         and carry the errors generated to be accessed by the end user
-                    //       or could simply dump the errors to standard out or even write them
-                    //         to a separate file
-                    // For now just swallow any errors when writing
-                    Err(_) => (),
-                };
-                */
-            }
-            _ => (),
+    // if row is complete
+    if var_index == (d.var_count - 1) {
+        d.batch_rows_processed += 1;
+        if let Some(trp) = &d.total_rows_processed {
+            let mut total_rows = trp.lock().unwrap();
+            *total_rows += 1;
         }
-    }
+    };
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }

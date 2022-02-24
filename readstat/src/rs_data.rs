@@ -1,151 +1,143 @@
 use arrow::array::{
-    ArrayBuilder, Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-    Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
+    ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
+    Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
-use arrow::csv as csv_arrow;
-use arrow::ipc::writer::FileWriter;
-use arrow::json::LineDelimitedWriter;
+use arrow::datatypes::Schema;
 use arrow::record_batch::RecordBatch;
-use arrow::{datatypes, record_batch};
 use colored::Colorize;
-use csv as csv_crate;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use num_format::{Locale, ToFormattedString};
-use parquet::arrow::arrow_writer::ArrowWriter;
-use parquet::file::properties::WriterProperties;
+use num_traits::FromPrimitive;
 use path_abs::PathInfo;
-use serde_json;
+use std::collections::BTreeMap;
 use std::error::Error;
-use std::ffi::CString;
-use std::fs::OpenOptions;
-use std::io::stdout;
-use std::os::raw::{c_uint, c_void};
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::os::raw::c_void;
+use std::sync::{Arc, Mutex};
 
 use crate::cb;
-use crate::{Format, Reader};
-use crate::rs_metadata::{ReadStatMetadata, ReadStatVarType, ReadStatFormatClass};
-use crate::rs_path::ReadStatPath;
+use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
 use crate::rs_parser::ReadStatParser;
-
-/**********
- * Writer *
- *********/
-
-pub enum ReadStatWriter {
-    // feather
-    Feather(arrow::ipc::writer::FileWriter<std::fs::File>),
-    // ndjson
-    Ndjson(arrow::json::writer::LineDelimitedWriter<std::fs::File>),
-    // parquet
-    Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
-}
-
-/********
- * Data *
- *******/
+use crate::rs_path::ReadStatPath;
+use crate::{ReadStatError, ReadStatVarMetadata};
 
 pub struct ReadStatData {
-    // path
-    pub path: PathBuf,
-    pub cstring_path: CString,
-    pub out_path: Option<PathBuf>,
     // metadata
-    pub metadata: ReadStatMetadata,
+    pub var_count: i32,
+    pub vars: BTreeMap<i32, ReadStatVarMetadata>,
     // data
     pub cols: Vec<Box<dyn ArrayBuilder>>,
-    pub schema: datatypes::Schema,
-    pub batch: record_batch::RecordBatch,
-    // writer and format
-    pub format: Format,
-    // should probably be declared with a trait but just utilizing enum for the time being
-    pub wtr: Option<ReadStatWriter>,
-    pub wrote_header: bool,
-    pub wrote_start: bool,
-    pub finish: bool,
-    // usage
-    pub reader: Reader,
-    pub stream_rows: c_uint,
+    pub schema: Schema,
+    pub batch: RecordBatch,
+    // batch rows
+    pub batch_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
+    pub batch_row_start: usize,
+    pub batch_row_end: usize,
+    pub batch_rows_processed: usize,
+    // total rows
+    pub total_rows_to_process: usize,
+    pub total_rows_processed: Option<Arc<Mutex<usize>>>,
+    // progress
     pub pb: Option<ProgressBar>,
     pub no_progress: bool,
-    pub is_test: bool,
     // errors
     pub errors: Vec<String>,
 }
 
 impl ReadStatData {
-    pub fn new(rsp: ReadStatPath) -> Self {
+    pub fn new() -> Self {
         Self {
-            // path
-            path: rsp.path,
-            cstring_path: rsp.cstring_path,
-            out_path: rsp.out_path,
             // metadata
-            metadata: ReadStatMetadata::new(),
-            format: rsp.format,
+            var_count: 0,
+            vars: BTreeMap::new(),
             // data
             cols: Vec::new(),
-            schema: datatypes::Schema::empty(),
-            batch: RecordBatch::new_empty(Arc::new(datatypes::Schema::empty())),
-            // writer and format
-            wtr: None,
-            wrote_header: false,
-            wrote_start: false,
-            finish: false,
-            // usage
-            reader: Reader::stream,
-            stream_rows: 50000,
+            schema: Schema::empty(),
+            batch: RecordBatch::new_empty(Arc::new(Schema::empty())),
+            // batch rows
+            batch_rows_to_process: 0,
+            batch_rows_processed: 0,
+            batch_row_start: 0,
+            batch_row_end: 0,
+            // total rows
+            total_rows_to_process: 0,
+            total_rows_processed: None,
+            // progress
             pb: None,
             no_progress: false,
-            is_test: false,
             // errors
             errors: Vec::new(),
         }
     }
 
-    pub fn allocate_cols(&mut self, rows: usize) {
-        for i in 0..self.metadata.var_count {
-            let var_type = self.metadata.vars.get(&i).unwrap().var_type;
+    fn allocate_cols(self) -> Self {
+        let rows = self.batch_rows_to_process;
+        let mut cols: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.var_count as usize);
+        for i in 0..self.var_count {
+            // Get variable type
+            let var_type = self.vars.get(&i).unwrap().var_type;
             // Allocate space for ArrayBuilder
             let array: Box<dyn ArrayBuilder> = match var_type {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-                    Box::new(StringBuilder::new(rows))
+                    Box::new(StringBuilder::new(self.batch_rows_to_process))
                 }
                 ReadStatVarType::Int8 => Box::new(Int8Builder::new(rows)),
                 ReadStatVarType::Int16 => Box::new(Int16Builder::new(rows)),
                 ReadStatVarType::Int32 => Box::new(Int32Builder::new(rows)),
                 ReadStatVarType::Float => Box::new(Float32Builder::new(rows)),
-                ReadStatVarType::Double => match self.metadata.vars.get(&i).unwrap().var_format_class {
+                ReadStatVarType::Double => match self.vars.get(&i).unwrap().var_format_class {
                     None => Box::new(Float64Builder::new(rows)),
                     Some(ReadStatFormatClass::Date) => Box::new(Date32Builder::new(rows)),
-                    Some(ReadStatFormatClass::DateTime) |
-                    Some(ReadStatFormatClass::DateTimeWithMilliseconds) |
-                    Some(ReadStatFormatClass::DateTimeWithMicroseconds) |
-                    Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
+                    Some(ReadStatFormatClass::DateTime)
+                    | Some(ReadStatFormatClass::DateTimeWithMilliseconds)
+                    | Some(ReadStatFormatClass::DateTimeWithMicroseconds)
+                    | Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
                         Box::new(TimestampSecondBuilder::new(rows))
                     }
                     Some(ReadStatFormatClass::Time) => Box::new(Time32SecondBuilder::new(rows)),
                 },
             };
 
-            self.cols.push(array);
+            cols.push(array);
         }
+
+        Self { cols, ..self }
     }
 
-    pub fn get_data(
-        &mut self,
-        row_limit: Option<u32>,
-        row_offset: Option<u32>,
-    ) -> Result<u32, Box<dyn Error>> {
-        debug!("Path as C string is {:?}", &self.cstring_path);
-        let ppath = self.cstring_path.as_ptr();
+    fn cols_to_record_batch(&mut self) -> Result<(), Box<dyn Error>> {
+        // Build array references and save in batch
+        let arrays: Vec<ArrayRef> = self
+            .cols
+            .iter_mut()
+            .map(|builder| builder.finish())
+            .collect();
+        self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
+
+        // reset
+        self.cols.clear();
+
+        Ok(())
+    }
+
+    pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+        // parse data and if successful then convert cols into a record batch
+        self.parse_data(&rsp)?;
+        self.cols_to_record_batch()?;
+        Ok(())
+    }
+
+    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+        // path as pointer
+        debug!("Path as C string is {:?}", &rsp.cstring_path);
+        let ppath = rsp.cstring_path.as_ptr();
 
         // spinner
+        // TODO - uncomment when ready to reimplement progress bar
+        /*
         if !self.no_progress {
             self.pb = Some(ProgressBar::new(!0));
         }
+        */
+
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -153,112 +145,89 @@ impl ReadStatData {
             );
             let msg = format!(
                 "Parsing sas7bdat data from file {}",
-                &self.path.to_string_lossy().bright_red()
+                &rsp.path.to_string_lossy().bright_red()
             );
             pb.set_message(msg);
             pb.enable_steady_tick(120);
         }
+
+        // initialize context
         let ctx = self as *mut ReadStatData as *mut c_void;
 
+        // initialize error
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {:#?}", &error);
 
+        // setup parser
+        // once call parse_sas7bdat, iteration begins
         let error = ReadStatParser::new()
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
+            // do not set metadata handler nor variable handler as already processed
             .set_value_handler(Some(cb::handle_value))?
-            .set_row_limit(row_limit)?
-            .set_row_offset(row_offset)?
+            .set_row_limit(Some(self.batch_rows_to_process.try_into().unwrap()))?
+            .set_row_offset(Some(self.batch_row_start.try_into().unwrap()))?
             .parse_sas7bdat(ppath, ctx);
 
-        Ok(error as u32)
+        match FromPrimitive::from_i32(error as i32) {
+            Some(ReadStatError::READSTAT_OK) => Ok(()),
+            Some(e) => Err(From::from(format!(
+                "Error when attempting to parse sas7bdat: {:#?}",
+                e
+            ))),
+            None => Err(From::from(
+                "Error when attempting to parse sas7bdat: Unknown return value",
+            )),
+        }
     }
 
-    pub fn get_metadata(&mut self, skip_row_count: bool) -> Result<u32, Box<dyn Error>> {
+    /*
+    pub fn get_row_count(&mut self) -> Result<u32, Box<dyn Error>> {
         debug!("Path as C string is {:?}", &self.cstring_path);
         let ppath = self.cstring_path.as_ptr();
 
-        // spinner
-        if !self.no_progress {
-            self.pb = Some(ProgressBar::new(!0));
-        }
-        if let Some(pb) = &self.pb {
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            );
-            let msg = format!(
-                "Parsing sas7bdat metadata from file {}",
-                &self.path.to_string_lossy().bright_red()
-            );
-            pb.set_message(msg);
-            pb.enable_steady_tick(120);
-        }
-        let ctx = self as *mut ReadStatData as *mut c_void;
-
-        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
-
-        let row_limit = if skip_row_count { Some(1) } else { None };
-
-        let error = ReadStatParser::new()
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
-            .set_row_limit(row_limit)?
-            .parse_sas7bdat(ppath, ctx);
-
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear();
-        }
-
-        Ok(error as u32)
-    }
-
-    pub fn get_preview(
-        &mut self,
-        row_limit: Option<u32>,
-        row_offset: Option<u32>,
-    ) -> Result<u32, Box<dyn Error>> {
-        debug!("Path as C string is {:?}", &self.cstring_path);
-        let ppath = self.cstring_path.as_ptr();
-
-        // spinner
-        if !self.no_progress {
-            self.pb = Some(ProgressBar::new(!0));
-        }
-        if let Some(pb) = &self.pb {
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            );
-            let msg = format!(
-                "Parsing sas7bdat data from file {}",
-                &self.path.to_string_lossy().bright_red()
-            );
-            pb.set_message(msg);
-            pb.enable_steady_tick(120);
-        }
         let ctx = self as *mut ReadStatData as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {}", &error);
 
         let error = ReadStatParser::new()
-            // TODO: for just a data preview, a new metadata handler may be needed that
-            //   does not get the row count but just the var count
-            // Believe it will save time when working with extremely large files
-            .set_metadata_handler(Some(cb::handle_metadata))?
-            .set_variable_handler(Some(cb::handle_variable))?
-            .set_value_handler(Some(cb::handle_value))?
-            .set_row_limit(row_limit)?
-            .set_row_offset(row_offset)?
+            .set_metadata_handler(Some(cb::handle_metadata_row_count_only))?
             .parse_sas7bdat(ppath, ctx);
 
         Ok(error as u32)
     }
+    */
 
-    pub fn set_is_test(self, is_test: bool) -> Self {
-        Self { is_test, ..self }
+    pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
+        self.set_metadata(md)
+            .set_batch_counts(row_start, row_end)
+            .allocate_cols()
+    }
+
+    fn set_batch_counts(self, row_start: u32, row_end: u32) -> Self {
+        let batch_rows_to_process = (row_end - row_start) as usize;
+        let batch_row_start = row_start as usize;
+        let batch_row_end = row_end as usize;
+        let batch_rows_processed = 0_usize;
+
+        Self {
+            batch_rows_to_process,
+            batch_row_start,
+            batch_row_end,
+            batch_rows_processed,
+            ..self
+        }
+    }
+
+    fn set_metadata(self, md: ReadStatMetadata) -> Self {
+        let var_count = md.var_count;
+        let vars = md.vars;
+        let schema = md.schema.clone();
+        Self {
+            var_count,
+            vars,
+            schema,
+            ..self
+        }
     }
 
     pub fn set_no_progress(self, no_progress: bool) -> Self {
@@ -268,467 +237,17 @@ impl ReadStatData {
         }
     }
 
-    pub fn set_reader(self, reader: Option<Reader>) -> Self {
-        if let Some(r) = reader {
-            Self { reader: r, ..self }
-        } else {
-            self
+    pub fn set_total_rows_to_process(self, total_rows_to_process: usize) -> Self {
+        Self {
+            total_rows_to_process,
+            ..self
         }
     }
 
-    pub fn set_stream_rows(self, stream_rows: Option<c_uint>) -> Self {
-        match self.reader {
-            Reader::stream => match stream_rows {
-                Some(stream_rows) => Self {
-                    stream_rows,
-                    ..self
-                },
-                None => self,
-            },
-            Reader::mem => self,
+    pub fn set_total_rows_processed(self, total_rows_processed: Arc<Mutex<usize>>) -> Self {
+        Self {
+            total_rows_processed: Some(total_rows_processed),
+            ..self
         }
-    }
-
-    pub fn write(&mut self) -> Result<(), Box<dyn Error>> {
-        match self {
-            // Write data to standard out
-            Self {
-                out_path: None,
-                format: Format::csv,
-                ..
-            } if self.wrote_header => self.write_data_to_stdout(),
-            // Write header to standard out
-            Self {
-                out_path: None,
-                format: Format::csv,
-                ..
-            } => {
-                self.write_header_to_stdout()?;
-                self.wrote_header = true;
-                self.write_data_to_stdout()
-            }
-            // Write csv data to file
-            Self {
-                out_path: Some(_),
-                format: Format::csv,
-                ..
-            } if self.wrote_header => self.write_data_to_csv(),
-            // Write csv header to file
-            Self {
-                out_path: Some(_),
-                format: Format::csv,
-                ..
-            } => {
-                self.write_header_to_csv()?;
-                self.wrote_header = true;
-                self.write_data_to_csv()
-            }
-            // Write feather data to file
-            Self {
-                format: Format::feather,
-                ..
-            } => self.write_data_to_feather(),
-            // Write ndjson data to file
-            Self {
-                format: Format::ndjson,
-                ..
-            } => self.write_data_to_ndjson(),
-            // Write parquet data to file
-            Self {
-                format: Format::parquet,
-                ..
-            } => self.write_data_to_parquet(),
-        }
-    }
-
-    pub fn write_header_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
-            // spinner
-            if let Some(pb) = &self.pb {
-                pb.finish_at_current_pos();
-            }
-
-            // spinner
-            if !self.no_progress {
-                self.pb = Some(ProgressBar::new(!0));
-            }
-            if let Some(pb) = &self.pb {
-                pb.set_style(
-                    ProgressStyle::default_spinner()
-                        .template("[{spinner:.green} {elapsed_precise} | {bytes}] {msg}"),
-                );
-
-                let in_f = if let Some(f) = &self.path.file_name() {
-                    f.to_string_lossy().bright_red()
-                } else {
-                    String::from("___").bright_red()
-                };
-
-                let out_f = if let Some(p) = &self.out_path {
-                    if let Some(f) = p.file_name() {
-                        f.to_string_lossy().bright_green()
-                    } else {
-                        String::from("___").bright_green()
-                    }
-                } else {
-                    String::from("___").bright_green()
-                };
-
-                let msg = format!("Writing file {} as {}", in_f, out_f);
-
-                pb.set_message(msg);
-                pb.enable_steady_tick(120);
-            }
-
-            // progress bar
-            /*
-            if !self.no_progress {
-                self.pb = Some(ProgressBar::new(self.row_count as u64));
-            }
-            if let Some(pb) = &self.pb {
-                pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
-                        .progress_chars("##-"),
-                );
-                pb.set_message("Rows processed");
-                pb.enable_steady_tick(120);
-            }
-            */
-
-            let file = std::fs::File::create(p)?;
-            let mut wtr = csv_crate::WriterBuilder::new().from_writer(file);
-
-            // write header
-            let vars: Vec<String> = self
-                .batch
-                .schema()
-                .fields()
-                .iter()
-                .map(|field| field.name().to_string())
-                .collect();
-
-            // Alternate way to get variable names
-            // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-
-            wtr.write_record(&vars)?;
-            wtr.flush()?;
-
-            Ok(())
-        } else {
-            Err(From::from(
-                "Error writing csv as output path is set to None",
-            ))
-        }
-    }
-
-    pub fn write_header_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear()
-        }
-
-        let mut wtr = csv_crate::WriterBuilder::new().from_writer(stdout());
-
-        // write header
-        let vars: Vec<String> = self
-            .batch
-            .schema()
-            .fields()
-            .iter()
-            .map(|field| field.name().to_string())
-            .collect();
-
-        // Alternate way to get variable names
-        // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
-
-        wtr.write_record(&vars)?;
-        wtr.flush()?;
-
-        Ok(())
-    }
-
-    pub fn write_data_to_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
-            let f = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .open(p)?;
-            if let Some(pb) = &self.pb {
-                let pb_f = pb.wrap_write(f);
-                let mut wtr = csv_arrow::WriterBuilder::new()
-                    .has_headers(false)
-                    .build(pb_f);
-                wtr.write(&self.batch)?;
-            } else {
-                let mut wtr = csv_arrow::WriterBuilder::new().has_headers(false).build(f);
-                wtr.write(&self.batch)?;
-            };
-
-            Ok(())
-        } else {
-            Err(From::from(
-                "Error writing csv as output path is set to None",
-            ))
-        }
-    }
-
-    pub fn write_data_to_feather(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
-
-            if let Some(pb) = &self.pb {
-                let in_f = if let Some(f) = &self.path.file_name() {
-                    f.to_string_lossy().bright_red()
-                } else {
-                    String::from("___").bright_red()
-                };
-
-                let out_f = if let Some(p) = &self.out_path {
-                    if let Some(f) = p.file_name() {
-                        f.to_string_lossy().bright_green()
-                    } else {
-                        String::from("___").bright_green()
-                    }
-                } else {
-                    String::from("___").bright_green()
-                };
-
-                let msg = format!("Writing file {} as {}", in_f, out_f);
-
-                pb.set_message(msg);
-            }
-
-            if !self.wrote_start {
-                self.wtr = Some(ReadStatWriter::Feather(FileWriter::try_new(
-                    f,
-                    &self.schema,
-                )?));
-            }
-            if let Some(wtr) = &mut self.wtr {
-                match wtr {
-                    ReadStatWriter::Feather(w) => {
-                        w.write(&self.batch)?;
-                        if self.finish {
-                            w.finish()?;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            Ok(())
-        } else {
-            Err(From::from(
-                "Error writing feather file as output path is set to None",
-            ))
-        }
-    }
-
-    pub fn write_data_to_ndjson(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
-
-            if let Some(pb) = &self.pb {
-                let in_f = if let Some(f) = &self.path.file_name() {
-                    f.to_string_lossy().bright_red()
-                } else {
-                    String::from("___").bright_red()
-                };
-
-                let out_f = if let Some(p) = &self.out_path {
-                    if let Some(f) = p.file_name() {
-                        f.to_string_lossy().bright_green()
-                    } else {
-                        String::from("___").bright_green()
-                    }
-                } else {
-                    String::from("___").bright_green()
-                };
-
-                let msg = format!("Writing file {} as {}", in_f, out_f);
-
-                pb.set_message(msg);
-            }
-
-            if !self.wrote_start {
-                self.wtr = Some(ReadStatWriter::Ndjson(LineDelimitedWriter::new(f)));
-            }
-            if let Some(wtr) = &mut self.wtr {
-                match wtr {
-                    ReadStatWriter::Ndjson(w) => {
-                        let mut batch = RecordBatch::new_empty(Arc::new(self.schema.clone()));
-                        batch.clone_from(&self.batch);
-                        w.write_batches(&[batch])?;
-                        if self.finish {
-                            w.finish()?;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            Ok(())
-        } else {
-            Err(From::from(
-                "Error writing ndjson file as output path is set to None",
-            ))
-        }
-    }
-
-    pub fn write_data_to_parquet(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(p) = &self.out_path {
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
-
-            if let Some(pb) = &self.pb {
-                let in_f = if let Some(f) = &self.path.file_name() {
-                    f.to_string_lossy().bright_red()
-                } else {
-                    String::from("___").bright_red()
-                };
-
-                let out_f = if let Some(p) = &self.out_path {
-                    if let Some(f) = p.file_name() {
-                        f.to_string_lossy().bright_green()
-                    } else {
-                        String::from("___").bright_green()
-                    }
-                } else {
-                    String::from("___").bright_green()
-                };
-
-                let msg = format!("Writing file {} as {}", in_f, out_f);
-
-                pb.set_message(msg);
-            }
-
-            if !self.wrote_start {
-                let props = WriterProperties::builder().build();
-                self.wtr = Some(ReadStatWriter::Parquet(ArrowWriter::try_new(
-                    f,
-                    Arc::new(self.schema.clone()),
-                    Some(props),
-                )?));
-            }
-            if let Some(wtr) = &mut self.wtr {
-                match wtr {
-                    ReadStatWriter::Parquet(w) => {
-                        w.write(&self.batch)?;
-                        if self.finish {
-                            w.close()?;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            Ok(())
-        } else {
-            Err(From::from(
-                "Error writing parquet file as output path is set to None",
-            ))
-        }
-    }
-
-    pub fn write_data_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear()
-        }
-
-        let mut wtr = csv_arrow::WriterBuilder::new()
-            .has_headers(false)
-            .build(stdout());
-        wtr.write(&self.batch)?;
-
-        Ok(())
-    }
-
-    pub fn write_metadata_to_json(&mut self) -> Result<(), Box<dyn Error>> {
-        match serde_json::to_string_pretty(&self.metadata) {
-            Ok(s) => { println!("{}", s); Ok(()) }
-            Err(e) => { Err(From::from(format!("Error converting to json: {}", e))) }
-        }
-    }
-
-    pub fn write_metadata_to_stdout(&mut self) -> Result<(), Box<dyn Error>> {
-        println!(
-            "Metadata for the file {}\n",
-            self.path.to_string_lossy().bright_yellow()
-        );
-        println!(
-            "{}: {}",
-            "Row count".green(),
-            self.metadata.row_count.to_formatted_string(&Locale::en)
-        );
-        println!(
-            "{}: {}",
-            "Variable count".red(),
-            self.metadata.var_count.to_formatted_string(&Locale::en)
-        );
-        println!("{}: {}", "Table name".blue(), self.metadata.table_name);
-        println!("{}: {}", "Table label".cyan(), self.metadata.file_label);
-        println!("{}: {}", "File encoding".yellow(), self.metadata.file_encoding);
-        println!("{}: {}", "Format version".green(), self.metadata.version);
-        println!(
-            "{}: {}",
-            "Bitness".red(),
-            if self.metadata.is64bit == 0 {
-                "32-bit"
-            } else {
-                "64-bit"
-            }
-        );
-        println!("{}: {}", "Creation time".blue(), self.metadata.creation_time);
-        println!("{}: {}", "Modified time".cyan(), self.metadata.modified_time);
-        println!("{}: {:#?}", "Compression".yellow(), self.metadata.compression);
-        println!("{}: {:#?}", "Byte order".green(), self.metadata.endianness);
-        println!("{}:", "Variable names".purple());
-        for (k, v) in self.metadata.vars.iter() {
-            println!(
-                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow data type: {} }}",
-                (*k).to_formatted_string(&Locale::en),
-                v.var_name.bright_purple(),
-                format!("{:#?}", v.var_type_class).bright_green(),
-                format!("{:#?}", v.var_type).bright_red(),
-                v.var_label.bright_blue(),
-                (match &v.var_format_class {
-                    Some(f) => match f {
-                        ReadStatFormatClass::Date => "Date",
-                        ReadStatFormatClass::DateTime |
-                        ReadStatFormatClass::DateTimeWithMilliseconds | 
-                        ReadStatFormatClass::DateTimeWithMicroseconds |
-                        ReadStatFormatClass::DateTimeWithNanoseconds => "DateTime",
-                        ReadStatFormatClass::Time => "Time",
-                    },
-                    None => "",
-                })
-                .bright_cyan(),
-                v.var_format.bright_yellow(),
-                self.schema.field(*k as usize).data_type().to_string().bright_green()
-            );
-        }
-
-        Ok(())
     }
 }

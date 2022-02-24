@@ -1,13 +1,19 @@
+use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+use colored::Colorize;
+use log::debug;
 use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::error::Error;
+use std::ffi::c_void;
 use std::os::raw::c_int;
 
-/***********
-* Metadata *
-***********/
+use crate::cb::{handle_metadata, handle_variable};
+use crate::rs_parser::ReadStatParser;
+use crate::{ReadStatError, ReadStatPath};
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
     pub row_count: c_int,
     pub var_count: c_int,
@@ -21,6 +27,7 @@ pub struct ReadStatMetadata {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
+    pub schema: Schema,
 }
 
 impl ReadStatMetadata {
@@ -38,29 +45,133 @@ impl ReadStatMetadata {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
+            schema: Schema::empty(),
+        }
+    }
+
+    fn initialize_schema(&self) -> Schema {
+        // build up Schema
+        let fields: Vec<Field> = self
+            .vars
+            .iter()
+            .map(|(_idx, vm)| {
+                let var_dt = match &vm.var_type {
+                    ReadStatVarType::String
+                    | ReadStatVarType::StringRef
+                    | ReadStatVarType::Unknown => DataType::Utf8,
+                    ReadStatVarType::Int8 | ReadStatVarType::Int16 => DataType::Int16,
+                    ReadStatVarType::Int32 => DataType::Int32,
+                    ReadStatVarType::Float => DataType::Float32,
+                    ReadStatVarType::Double => match &vm.var_format_class {
+                        Some(ReadStatFormatClass::Date) => DataType::Date32,
+                        Some(ReadStatFormatClass::DateTime) => {
+                            DataType::Timestamp(TimeUnit::Second, None)
+                        }
+                        Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
+                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                            DataType::Timestamp(TimeUnit::Millisecond, None)
+                        }
+                        Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
+                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                            DataType::Timestamp(TimeUnit::Microsecond, None)
+                        }
+                        Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
+                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+                            DataType::Timestamp(TimeUnit::Nanosecond, None)
+                        }
+                        Some(ReadStatFormatClass::Time) => DataType::Time32(TimeUnit::Second),
+                        None => DataType::Float64,
+                    },
+                };
+                Field::new(&vm.var_name, var_dt, true)
+            })
+            .collect();
+
+        Schema::new(fields)
+    }
+
+    pub fn read_metadata(
+        &mut self,
+        rsp: &ReadStatPath,
+        skip_row_count: bool,
+    ) -> Result<(), Box<dyn Error>> {
+        debug!("Path as C string is {:?}", &rsp.cstring_path);
+        let ppath = rsp.cstring_path.as_ptr();
+
+        // spinner
+        /*
+        if !self.no_progress {
+            self.pb = Some(ProgressBar::new(!0));
+        }
+        if let Some(pb) = &self.pb {
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
+            );
+            let msg = format!(
+                "Parsing sas7bdat metadata from file {}",
+                &self.path.to_string_lossy().bright_red()
+            );
+            pb.set_message(msg);
+            pb.enable_steady_tick(120);
+        }
+        */
+        let _msg = format!(
+            "Parsing sas7bdat metadata from file {}",
+            &rsp.path.to_string_lossy().bright_red()
+        );
+
+        let ctx = self as *mut ReadStatMetadata as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let row_limit = if skip_row_count { Some(1) } else { None };
+
+        let error = ReadStatParser::new()
+            .set_metadata_handler(Some(handle_metadata))?
+            .set_variable_handler(Some(handle_variable))?
+            .set_row_limit(row_limit)?
+            .parse_sas7bdat(ppath, ctx);
+
+        /*
+        if let Some(pb) = &self.pb {
+            pb.finish_and_clear();
+        }
+        */
+
+        match FromPrimitive::from_i32(error as i32) {
+            Some(ReadStatError::READSTAT_OK) => {
+                // if successful, initialize schema
+                self.schema = self.initialize_schema();
+                Ok(())
+            }
+            Some(e) => Err(From::from(format!(
+                "Error when attempting to parse sas7bdat: {:#?}",
+                e
+            ))),
+            None => Err(From::from(
+                "Error when attempting to parse sas7bdat: Unknown return value",
+            )),
         }
     }
 }
 
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatCompress {
     None = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_NONE as isize,
     Rows = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_ROWS as isize,
     Binary = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_BINARY as isize,
 }
 
-#[derive(Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatEndian {
     None = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_NONE as isize,
     Little = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_LITTLE as isize,
     Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,
 }
 
-/*********************
- * Variable Metadata *
- ********************/
-
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ReadStatVarMetadata {
     pub var_name: String,
     pub var_type: ReadStatVarType,
@@ -118,10 +229,6 @@ pub enum ReadStatFormatClass {
     Time,
 }
 
-/************
- * Variable *
- ***********/
-
 #[derive(Debug, Clone)]
 pub enum ReadStatVar {
     ReadStat_String(String),
@@ -133,5 +240,8 @@ pub enum ReadStatVar {
     ReadStat_Missing(()),
     ReadStat_Date(i32),
     ReadStat_DateTime(i64),
+    ReadStat_DateTimeWithMilliseconds(i64),
+    ReadStat_DateTimeWithMicroseconds(i64),
+    ReadStat_DateTimeWithNanoseconds(i64),
     ReadStat_Time(i32),
 }

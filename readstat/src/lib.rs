@@ -2,11 +2,12 @@
 
 use colored::Colorize;
 use log::debug;
-use num_traits::FromPrimitive;
+// use num_cpus;
 use path_abs::{PathAbs, PathInfo};
 use serde::Serialize;
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
@@ -17,6 +18,7 @@ mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
+mod rs_write;
 
 pub use err::ReadStatError;
 pub use rs_data::ReadStatData;
@@ -25,6 +27,10 @@ pub use rs_metadata::{
     ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
 };
 pub use rs_path::ReadStatPath;
+pub use rs_write::ReadStatWriter;
+
+// Default stream rows is 50000;
+const STREAM_ROWS: u32 = 50000;
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -64,7 +70,7 @@ pub enum ReadStat {
         #[structopt(long)]
         no_progress: bool,
     },
-    /// Convert sas7bdat data to csv, feather (or the Arror IPC format), ndjson, or parquet format
+    /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
     Data {
         #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
@@ -90,6 +96,9 @@ pub enum ReadStat {
         /// Overwrite output file if it already exists
         #[structopt(long)]
         overwrite: bool,
+        /// Convert sas7bdat data in parallel{n}    Number of threads to utilize
+        #[structopt(long)]
+        parallel: Option<usize>,
     },
 }
 
@@ -113,6 +122,34 @@ arg_enum! {
     }
 }
 
+fn build_offsets(row_count: u32, stream_rows: u32) -> Result<Vec<u32>, Box<dyn Error>> {
+    // Get number of chunks
+    let chunks = if stream_rows < row_count {
+        if row_count % stream_rows == 0 {
+            row_count / stream_rows
+        } else {
+            (row_count / stream_rows) + 1
+        }
+    } else {
+        1
+    };
+
+    // Allocate and populate a vector for the offsets
+    let mut offsets: Vec<u32> = Vec::with_capacity(chunks as usize);
+
+    for c in 0..=chunks {
+        if c == 0 {
+            offsets.push(0);
+        } else if c == chunks {
+            offsets.push(row_count);
+        } else {
+            offsets.push(c * stream_rows);
+        }
+    }
+
+    Ok(offsets)
+}
+
 pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -120,9 +157,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
         ReadStat::Metadata {
             input: in_path,
             as_json,
-            no_progress,
+            no_progress: _,
             skip_row_count,
         } => {
+            // validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
                 "Getting metadata from the file {}",
@@ -130,27 +168,17 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             );
 
             // out_path and format determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, None, None, false)?;
+            let rsp = ReadStatPath::new(sas_path, None, None, false, false)?;
 
-            let mut d = ReadStatData::new(rsp).set_no_progress(no_progress);
-            let error = d.get_metadata(skip_row_count)?;
+            // instantiate ReadStatMetadata
+            let mut md = ReadStatMetadata::new();
+            md.read_metadata(&rsp, skip_row_count)?;
 
-            match FromPrimitive::from_i32(error as i32) {
-                Some(ReadStatError::READSTAT_OK) => {
-                    if !as_json {
-                        d.write_metadata_to_stdout()
-                    } else {
-                        d.write_metadata_to_json()
-                    }
-                }
-                Some(e) => Err(From::from(format!(
-                    "Error when attempting to parse sas7bdat: {:#?}",
-                    e
-                ))),
-                None => Err(From::from(
-                    "Error when attempting to parse sas7bdat: Unknown return value",
-                )),
-            }
+            // Write metadata
+            ReadStatWriter::new().write_metadata(&md, &rsp, as_json)?;
+
+            // return
+            Ok(())
         }
         ReadStat::Preview {
             input,
@@ -159,32 +187,77 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             stream_rows,
             no_progress,
         } => {
+            // validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
                 "Generating a data preview from the file {}",
                 &sas_path.to_string_lossy()
             );
 
-            // out_path and format determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv), false)?;
+            // output and format determine the type of writing to be performed
+            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv), false, false)?;
 
-            let mut d = ReadStatData::new(rsp)
-                .set_reader(reader)
-                .set_stream_rows(stream_rows)
-                .set_no_progress(no_progress);
+            // instantiate ReadStatMetadata
+            let mut md = ReadStatMetadata::new();
+            md.read_metadata(&rsp, false)?;
 
-            let error = d.get_preview(Some(rows), None)?;
+            // Determine row count
+            let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
 
-            match FromPrimitive::from_i32(error as i32) {
-                Some(ReadStatError::READSTAT_OK) => Ok(()),
-                Some(e) => Err(From::from(format!(
-                    "Error when attempting to parse sas7bdat: {:#?}",
-                    e
-                ))),
-                None => Err(From::from(
-                    "Error when attempting to parse sas7bdat: Unknown return value",
-                )),
+            // Determine stream row count
+            // 📝 Default stream rows set to 50,000
+            let total_rows_to_stream = match reader {
+                Some(Reader::stream) => match stream_rows {
+                    Some(s) => s,
+                    None => STREAM_ROWS,
+                },
+                Some(Reader::mem) | None => total_rows_to_process,
+            };
+
+            // initialize Mutex to contain total rows processed
+            let total_rows_processed = Arc::new(Mutex::new(0 as usize));
+
+            // Build up offsets
+            let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
+            let offsets_pairs = offsets.windows(2);
+            let pairs_cnt = *(&offsets_pairs.len());
+
+            // Initialize writing
+            let mut wtr = ReadStatWriter::new();
+
+            // Process data in batches (i.e. stream chunks of rows)
+            // Read data - for each iteration create a new instance of ReadStatData
+            for (i, w) in offsets_pairs.enumerate() {
+                let row_start = w[0];
+                let row_end = w[1];
+
+                let mut d = ReadStatData::new()
+                    .set_no_progress(no_progress)
+                    .set_total_rows_to_process(total_rows_to_process as usize)
+                    .set_total_rows_processed(total_rows_processed.clone())
+                    .init(md.clone(), row_start, row_end);
+
+                // read
+                d.read_data(&rsp)?;
+
+                // if last write then need to finish file
+                if i == pairs_cnt {
+                    wtr.set_finish(true);
+                }
+
+                // write
+                wtr.write(&d, &rsp)?;
             }
+
+            // return
+            Ok(())
+
+            // progress bar
+            /*
+            if let Some(pb) = &d.pb {
+                pb.finish_at_current_pos()
+            };
+            */
         }
         ReadStat::Data {
             input,
@@ -195,63 +268,119 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             stream_rows,
             no_progress,
             overwrite,
+            parallel: _,
         } => {
+            // validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
                 "Generating data from the file {}",
                 &sas_path.to_string_lossy()
             );
 
-            // out_path and out_type determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, output, format, overwrite)?;
+            // output and format determine the type of writing to be performed
+            let rsp = ReadStatPath::new(sas_path, output, format, overwrite, false)?;
 
-            let mut d = ReadStatData::new(rsp)
-                .set_reader(reader)
-                .set_stream_rows(stream_rows)
-                .set_no_progress(no_progress);
+            // instantiate ReadStatMetadata
+            let mut md = ReadStatMetadata::new();
+            md.read_metadata(&rsp, false)?;
 
-            match &d {
-                ReadStatData { out_path: None, .. } => {
+            // if no output path then only read metadata; otherwise read data
+            match &rsp.out_path {
+                None => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
-                    let error = d.get_metadata(false)?;
+                    // Get metadata
 
-                    match FromPrimitive::from_i32(error as i32) {
-                        Some(ReadStatError::READSTAT_OK) => d.write_metadata_to_stdout(),
-                        Some(e) => Err(From::from(format!(
-                            "Error when attempting to parse sas7bdat: {:#?}",
-                            e
-                        ))),
-                        None => Err(From::from(
-                            "Error when attempting to parse sas7bdat: Unknown return value",
-                        )),
-                    }
+                    // instantiate ReadStatMetadata
+                    let mut md = ReadStatMetadata::new();
+                    md.read_metadata(&rsp, false)?;
+
+                    // Write metadata
+                    ReadStatWriter::new().write_metadata(&md, &rsp, false)?;
+
+                    //get_metadata(&mut d, false, false)
+                    Ok(())
                 }
-                ReadStatData {
-                    out_path: Some(p), ..
-                } => {
+                Some(p) => {
                     println!(
                         "Writing parsed data to file {}",
                         p.to_string_lossy().bright_yellow()
                     );
 
-                    let error = d.get_data(rows, None)?;
+                    // Determine row count
+                    let total_rows_to_process = if let Some(r) = rows {
+                        std::cmp::min(r, md.row_count as u32)
+                    } else {
+                        md.row_count as u32
+                    };
+
+                    // Determine stream row count
+                    // 📝 Default stream rows set to 50,000
+                    let total_rows_to_stream = match reader {
+                        Some(Reader::stream) => match stream_rows {
+                            Some(s) => s,
+                            None => STREAM_ROWS,
+                        },
+                        Some(Reader::mem) | None => total_rows_to_process,
+                    };
+
+                    // initialize Mutex to contain total rows processed
+                    let total_rows_processed = Arc::new(Mutex::new(0 as usize));
+
+                    // Build up offsets
+                    let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
+                    let offsets_pairs = offsets.windows(2);
+                    let pairs_cnt = *(&offsets_pairs.len());
+
+                    // Initialize writing
+                    let mut wtr = ReadStatWriter::new();
+
+                    // Process data in batches (i.e. stream chunks of rows)
+                    // Read data - for each iteration create a new instance of ReadStatData
+                    for (i, w) in offsets_pairs.enumerate() {
+                        let row_start = w[0];
+                        let row_end = w[1];
+
+                        let mut d = ReadStatData::new()
+                            .set_no_progress(no_progress)
+                            .set_total_rows_to_process(total_rows_to_process as usize)
+                            .set_total_rows_processed(total_rows_processed.clone())
+                            .init(md.clone(), row_start, row_end);
+
+                        // read
+                        d.read_data(&rsp)?;
+
+                        // if last write then need to finish file
+                        if i == pairs_cnt {
+                            wtr.set_finish(true);
+                        }
+
+                        // write
+                        wtr.write(&d, &rsp)?;
+                    }
+
+                    // return
+                    Ok(())
 
                     // progress bar
+                    /*
                     if let Some(pb) = &d.pb {
                         pb.finish_at_current_pos()
                     };
-                    match FromPrimitive::from_i32(error as i32) {
-                        Some(ReadStatError::READSTAT_OK) => Ok(()),
-                        // Some(ReadStatError::READSTAT_OK) => d.write(),
-                        Some(e) => Err(From::from(format!(
-                            "Error when attempting to parse sas7bdat: {:#?}",
-                            e
-                        ))),
-                        None => Err(From::from(
-                            "Error when attempting to parse sas7bdat: Unknown return value",
-                        )),
-                    }
+                    */
+
+                    // get and optionally write data - single or multi-threaded
+                    /*
+                    if let Some(_p) = parallel {
+                        let cpu_logical_count: usize = num_cpus::get();
+                        let cpu_physical_count: usize = num_cpus::get_physical();
+                        println!("Logical count {:?}", cpu_logical_count);
+                        println!("Physical count {:?}", cpu_physical_count);
+
+                        d.get_row_count()?;
+                        println!("Row count {:?}", d.metadata.row_count);
+                        Ok(())
+                    */
                 }
             }
         }
