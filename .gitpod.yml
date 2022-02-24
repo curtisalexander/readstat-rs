@@ -4,7 +4,7 @@ image:
 tasks:
     - name: Build
       init: >
-          cd readstat && build
+          cd readstat && cargo build
     - name: Test
       init: >
           cargo test
