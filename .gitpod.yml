@@ -1,4 +1,5 @@
-image: gitpod/workspace-rust
+image:
+    file: .gitpod.Dockerfile
 
 tasks:
     - init: >
