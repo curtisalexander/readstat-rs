@@ -12,7 +12,7 @@ use path_abs::PathInfo;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::os::raw::c_void;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, atomic::AtomicUsize};
 
 use crate::cb;
 use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
@@ -35,7 +35,7 @@ pub struct ReadStatData {
     pub batch_rows_processed: usize,
     // total rows
     pub total_rows_to_process: usize,
-    pub total_rows_processed: Option<Arc<Mutex<usize>>>,
+    pub total_rows_processed: Option<Arc<AtomicUsize>>,
     // progress
     pub pb: Option<ProgressBar>,
     pub no_progress: bool,
@@ -244,7 +244,7 @@ impl ReadStatData {
         }
     }
 
-    pub fn set_total_rows_processed(self, total_rows_processed: Arc<Mutex<usize>>) -> Self {
+    pub fn set_total_rows_processed(self, total_rows_processed: Arc<AtomicUsize>) -> Self {
         Self {
             total_rows_processed: Some(total_rows_processed),
             ..self

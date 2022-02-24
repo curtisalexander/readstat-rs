@@ -7,7 +7,7 @@ use path_abs::{PathAbs, PathInfo};
 use serde::Serialize;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
@@ -207,15 +207,16 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // Determine stream row count
             // 📝 Default stream rows set to 50,000
             let total_rows_to_stream = match reader {
-                Some(Reader::stream) => match stream_rows {
+                Some(Reader::stream) | None => match stream_rows {
                     Some(s) => s,
                     None => STREAM_ROWS,
                 },
-                Some(Reader::mem) | None => total_rows_to_process,
+                Some(Reader::mem) => total_rows_to_process,
             };
 
             // initialize Mutex to contain total rows processed
-            let total_rows_processed = Arc::new(Mutex::new(0 as usize));
+            let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            // let total_rows_processed = Arc::new(Mutex::new(0 as usize));
 
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
@@ -317,15 +318,16 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                     // Determine stream row count
                     // 📝 Default stream rows set to 50,000
                     let total_rows_to_stream = match reader {
-                        Some(Reader::stream) => match stream_rows {
+                        Some(Reader::stream) | None => match stream_rows {
                             Some(s) => s,
                             None => STREAM_ROWS,
                         },
-                        Some(Reader::mem) | None => total_rows_to_process,
+                        Some(Reader::mem) => total_rows_to_process,
                     };
 
                     // initialize Mutex to contain total rows processed
-                    let total_rows_processed = Arc::new(Mutex::new(0 as usize));
+                    // let total_rows_processed = Arc::new(Mutex::new(0 as usize));
+                    let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
