@@ -2,8 +2,12 @@ image:
     file: .gitpod.Dockerfile
 
 tasks:
-    - init: >
-        cd readstat && cargo install --path . && cargo test
+    - name: Build
+      init: >
+          cd readstat && build
+    - name: Test
+      init: >
+          cargo test
         
 github:
     prebuilds:
@@ -21,6 +25,7 @@ github:
         addComment: false
         # add a "Review in Gitpod" button to the pull request's description (defaults to false)
         addBadge: false
+
 vscode:
   extensions:
     - matklad.rust-analyzer
