@@ -5,7 +5,7 @@ tasks:
     - name: Build & Test
       init: >
           cd readstat && cargo build && cargo test
-        
+
 github:
     prebuilds:
         # enable for the master/default branch (defaults to true)
@@ -26,3 +26,4 @@ github:
 vscode:
   extensions:
     - matklad.rust-analyzer
+    - serayuzgur.crates
