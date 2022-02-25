@@ -4,6 +4,7 @@ use colored::Colorize;
 use log::debug;
 // use num_cpus;
 use path_abs::{PathAbs, PathInfo};
+use rayon::prelude::*;
 use serde::Serialize;
 use std::error::Error;
 use std::path::PathBuf;
@@ -331,6 +332,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
 
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
+
+                    // TODO
+                    // Create a parallel iterator
+                    //let offsets_pairs = offsets.par_windows(2);
                     let offsets_pairs = offsets.windows(2);
                     let pairs_cnt = *(&offsets_pairs.len());
 
