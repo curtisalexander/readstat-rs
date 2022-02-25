@@ -2,12 +2,9 @@ image:
     file: .gitpod.Dockerfile
 
 tasks:
-    - name: Build
+    - name: Build & Test
       init: >
-          cd readstat && cargo build
-    - name: Test
-      init: >
-          cargo test
+          cd readstat && cargo build && cargo test
         
 github:
     prebuilds:
