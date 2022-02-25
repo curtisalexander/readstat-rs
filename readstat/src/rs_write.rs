@@ -109,6 +109,40 @@ impl ReadStatWriter {
         //}
     }
 
+    fn write_final_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
+        //if let Some(pb) = &d.pb {
+            let in_f = if let Some(f) = rsp.path.file_name() {
+                f.to_string_lossy().bright_red()
+            } else {
+                String::from("___").bright_red()
+            };
+
+            let out_f = if let Some(p) = &rsp.out_path {
+                if let Some(f) = p.file_name() {
+                    f.to_string_lossy().bright_green()
+                } else {
+                    String::from("___").bright_green()
+                }
+            } else {
+                String::from("___").bright_green()
+            };
+
+            // let rows = d.batch_rows_processed.to_formatted_string(&Locale::en).truecolor(255, 132, 0);
+            let rows = if let Some(trp) = &d.total_rows_processed {
+                trp
+                    .load(std::sync::atomic::Ordering::SeqCst)
+                    .to_formatted_string(&Locale::en)
+                    .truecolor(255, 132, 0)
+            } else {
+                0.to_formatted_string(&Locale::en).truecolor(255, 132, 0)
+            };
+            let msg = format!("In total, wrote {} rows from file {} into {}", rows, in_f, out_f);
+
+            println!("{}", msg);
+            //pb.set_message(msg);
+        //}
+    }
+
     pub fn write(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
         match rsp {
             // Write data to standard out
@@ -207,6 +241,9 @@ impl ReadStatWriter {
             self.wrote_start = true;
 
             // 📝 no finishing required
+            if self.finish {
+                self.write_final_message_for_rows(&d, &rsp);
+            };
 
             // return
             Ok(())
@@ -257,6 +294,7 @@ impl ReadStatWriter {
                         _ => unreachable!()
                     }
                 };
+                self.write_final_message_for_rows(&d, &rsp);
             };
 
             // return
@@ -310,6 +348,7 @@ impl ReadStatWriter {
                         _ => unreachable!()
                     }
                 };
+                self.write_final_message_for_rows(&d, &rsp);
             };
             
             // return
@@ -366,6 +405,7 @@ impl ReadStatWriter {
                         _ => unreachable!()
                     }
                 };
+                self.write_final_message_for_rows(&d, &rsp);
             };
             
             // return
@@ -396,7 +436,7 @@ impl ReadStatWriter {
         };
 
         // 📝 no finishing required
-        
+
         // return
         Ok(())
     }

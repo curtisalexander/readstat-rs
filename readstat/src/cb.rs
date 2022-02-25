@@ -520,10 +520,7 @@ pub extern "C" fn handle_value(
     if var_index == (d.var_count - 1) {
         d.batch_rows_processed += 1;
         if let Some(trp) = &d.total_rows_processed {
-            //let mut total_rows = trp.lock().unwrap();
-            //*total_rows += 1;
             trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            // let _ = trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     };
 

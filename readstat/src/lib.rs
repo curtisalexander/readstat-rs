@@ -353,7 +353,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         d.read_data(&rsp)?;
 
                         // if last write then need to finish file
-                        if i == pairs_cnt {
+                        if i == (pairs_cnt-1) {
                             wtr.set_finish(true);
                         }
 
