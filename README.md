@@ -30,7 +30,7 @@ For details see the following.
 
 ## Run
 After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/structopt/latest/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
-- `metadata` &rarr; writes the following to standard out
+- `metadata` &rarr; writes the following to standard out or json
     - row count
     - variable count
     - table name
@@ -59,6 +59,12 @@ To write metadata to standard out, invoke the following.
 readstat metadata /some/dir/to/example.sas7bdat
 ```
 
+To write metadata to json, invoke the following.  This is useful for reading the metadata programmatically.
+
+```sh
+readstat metadata /some/dir/to/example.sas7bdat --as-json
+```
+
 ### Preview Data
 To write parsed data (as a `csv`) to standard out, invoke the following (default is to write the first 10 rows).
 
@@ -76,6 +82,7 @@ readstat preview /some/dir/to/example.sas7bdat --rows 100
 :memo: The `data` subcommand includes a parameter for `--format`, which is the file format that is to be written.  Currently, the following formats have been implemented:
 - `csv`
 - `feather`
+- `ndjson`
 - `parquet`
 
 #### `csv`
@@ -131,6 +138,13 @@ To write the first 100 rows of parsed data (as `parquet`) to a file, invoke the 
 ```sh
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 100
 ```
+
+### Parallelism
+The `data` subcommand includes a parameter for `--parallel`.  If invoked with this parameter, the *reading* of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 50,000), then each chunk of rows is read in parallel.  Note that all processors on the users's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
+
+Note that although reading is in parallel, *writing* is still sequential.  Thus one should only anticipate moderate speed-ups as much of the time is spent writing.
+
+:warning: Utilizing the `--parallel` parameter will increase memory usage &mdash; there will be multiple threads simultaneously reading chunks from the `sas7bdat`.  In addition because all processors are utilized, CPU usage will maxed out during reading.
 
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
@@ -247,7 +261,7 @@ valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 ## [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 - :heavy_check_mark: Linux   &rarr; successfully builds and runs
     - [glibc](https://www.gnu.org/software/libc/)
-    - [musl](https://www.musl-libc.org/) (using the [jemalloc](readstat/Cargo.toml#L33) allocator)
+    - [musl](https://www.musl-libc.org/) (using the [jemalloc](readstat/Cargo.toml#L36) allocator)
 - :heavy_check_mark: macOS   &rarr; successfully builds and runs
 - :heavy_check_mark: Windows &rarr; successfully builds and runs
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
