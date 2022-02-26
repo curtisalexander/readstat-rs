@@ -20,7 +20,7 @@ impl ReadStatParser {
     pub fn set_metadata_handler(
         self,
         metadata_handler: readstat_sys::readstat_metadata_handler,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let set_metadata_handler_error =
             unsafe { readstat_sys::readstat_set_metadata_handler(self.parser, metadata_handler) };
 
@@ -41,7 +41,7 @@ impl ReadStatParser {
         }
     }
 
-    pub fn set_row_limit(self, row_limit: Option<u32>) -> Result<Self, Box<dyn Error>> {
+    pub fn set_row_limit(self, row_limit: Option<u32>) -> Result<Self, Box<dyn Error + Send + Sync>> {
         match row_limit {
             Some(r) => {
                 let set_row_limit_error =
@@ -64,7 +64,7 @@ impl ReadStatParser {
         }
     }
 
-    pub fn set_row_offset(self, row_offset: Option<u32>) -> Result<Self, Box<dyn Error>> {
+    pub fn set_row_offset(self, row_offset: Option<u32>) -> Result<Self, Box<dyn Error + Send + Sync>> {
         match row_offset {
             Some(r) => {
                 let set_row_offset_error =
@@ -90,7 +90,7 @@ impl ReadStatParser {
     pub fn set_variable_handler(
         self,
         variable_handler: readstat_sys::readstat_variable_handler,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let set_variable_handler_error =
             unsafe { readstat_sys::readstat_set_variable_handler(self.parser, variable_handler) };
 
@@ -114,7 +114,7 @@ impl ReadStatParser {
     pub fn set_value_handler(
         self,
         value_handler: readstat_sys::readstat_value_handler,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let set_value_handler_error =
             unsafe { readstat_sys::readstat_set_value_handler(self.parser, value_handler) };
 

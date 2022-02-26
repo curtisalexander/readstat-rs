@@ -1,14 +1,15 @@
 #![allow(non_camel_case_types)]
 
 use colored::Colorize;
+use crossbeam::channel::unbounded;
 use log::debug;
-// use num_cpus;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
 use serde::Serialize;
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
@@ -30,7 +31,7 @@ pub use rs_metadata::{
 pub use rs_path::ReadStatPath;
 pub use rs_write::ReadStatWriter;
 
-// Default stream rows is 50000;
+// Default rows to stream
 const STREAM_ROWS: u32 = 50000;
 
 // StructOpt
@@ -40,8 +41,8 @@ const STREAM_ROWS: u32 = 50000;
 pub enum ReadStat {
     /// Display sas7bdat metadata
     Metadata {
-        #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
+        #[structopt(parse(from_os_str))]
         input: PathBuf,
         /// Display sas7bdat metadata as json
         #[structopt(long)]
@@ -49,20 +50,20 @@ pub enum ReadStat {
         /// Do not display progress bar
         #[structopt(long)]
         no_progress: bool,
-        /// Skip calculating row count{n}Can speed up parsing if only interested in variable metadata
+        /// Skip calculating row count{n}If only interested in variable metadata speeds up parsing
         #[structopt(long)]
         skip_row_count: bool,
     },
     /// Preview sas7bdat data
     Preview {
-        #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
+        #[structopt(parse(from_os_str))]
         input: PathBuf,
         /// Number of rows to write
         #[structopt(long, default_value = "10")]
         rows: u32,
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
+        #[structopt(long, possible_values = &Reader::variants(), case_insensitive=true)]
         reader: Option<Reader>,
         /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
         #[structopt(long)]
@@ -73,20 +74,23 @@ pub enum ReadStat {
     },
     /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
     Data {
-        #[structopt(parse(from_os_str))]
         /// Path to sas7bdat file
+        #[structopt(parse(from_os_str))]
         input: PathBuf,
         /// Output file path
         #[structopt(short = "o", long, parse(from_os_str))]
         output: Option<PathBuf>,
         /// Output file format{n}Defaults to csv
-        #[structopt(short="f", long, possible_values=&Format::variants(), case_insensitive=true)]
+        #[structopt(short = "f", long, possible_values = &Format::variants(), case_insensitive=true)]
         format: Option<Format>,
+        /// Overwrite output file if it already exists
+        #[structopt(long)]
+        overwrite: bool,
         /// Number of rows to write
         #[structopt(long)]
         rows: Option<u32>,
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[structopt(long, possible_values=&Reader::variants(), case_insensitive=true)]
+        #[structopt(long, possible_values = &Reader::variants(), case_insensitive=true)]
         reader: Option<Reader>,
         /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
         #[structopt(long)]
@@ -94,12 +98,9 @@ pub enum ReadStat {
         /// Do not display progress bar
         #[structopt(long)]
         no_progress: bool,
-        /// Overwrite output file if it already exists
+        /// Convert sas7bdat data in parallel
         #[structopt(long)]
-        overwrite: bool,
-        /// Convert sas7bdat data in parallel{n}    Number of threads to utilize
-        #[structopt(long)]
-        parallel: Option<usize>,
+        parallel: bool
     },
 }
 
@@ -123,7 +124,10 @@ arg_enum! {
     }
 }
 
-fn build_offsets(row_count: u32, stream_rows: u32) -> Result<Vec<u32>, Box<dyn Error>> {
+fn build_offsets(
+    row_count: u32,
+    stream_rows: u32,
+) -> Result<Vec<u32>, Box<dyn Error + Send + Sync>> {
     // Get number of chunks
     let chunks = if stream_rows < row_count {
         if row_count % stream_rows == 0 {
@@ -151,7 +155,7 @@ fn build_offsets(row_count: u32, stream_rows: u32) -> Result<Vec<u32>, Box<dyn E
     Ok(offsets)
 }
 
-pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
+pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
     env_logger::init();
 
     match rs {
@@ -161,24 +165,24 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             no_progress: _,
             skip_row_count,
         } => {
-            // validate and create path to sas7bdat/sas7bcat
+            // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
             debug!(
-                "Getting metadata from the file {}",
+                "Retrieving metadata from the file {}",
                 &sas_path.to_string_lossy()
             );
 
             // out_path and format determine the type of writing performed
             let rsp = ReadStatPath::new(sas_path, None, None, false, false)?;
 
-            // instantiate ReadStatMetadata
+            // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
             md.read_metadata(&rsp, skip_row_count)?;
 
             // Write metadata
             ReadStatWriter::new().write_metadata(&md, &rsp, as_json)?;
 
-            // return
+            // Return
             Ok(())
         }
         ReadStat::Preview {
@@ -188,10 +192,10 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             stream_rows,
             no_progress,
         } => {
-            // validate and create path to sas7bdat/sas7bcat
+            // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
-                "Generating a data preview from the file {}",
+                "Generating data preview from the file {}",
                 &sas_path.to_string_lossy()
             );
 
@@ -215,9 +219,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 Some(Reader::mem) => total_rows_to_process,
             };
 
-            // initialize Mutex to contain total rows processed
+            // Initialize AtomicUsize to contain total rows processed
             let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-            // let total_rows_processed = Arc::new(Mutex::new(0 as usize));
 
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
@@ -233,25 +236,29 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                 let row_start = w[0];
                 let row_end = w[1];
 
+                // Initialize ReadStatData struct
                 let mut d = ReadStatData::new()
                     .set_no_progress(no_progress)
                     .set_total_rows_to_process(total_rows_to_process as usize)
                     .set_total_rows_processed(total_rows_processed.clone())
                     .init(md.clone(), row_start, row_end);
 
-                // read
+                // Read
                 d.read_data(&rsp)?;
 
-                // if last write then need to finish file
-                if i == pairs_cnt {
-                    wtr.set_finish(true);
-                }
-
-                // write
+                // Write
                 wtr.write(&d, &rsp)?;
+            
+                // Finish
+                if i == pairs_cnt {
+                    wtr.finish(&d, &rsp)?;
+                }
             }
+            
+            // Finish writer
+            //wtr.finish(&d, &rsp)?;
 
-            // return
+            // Return
             Ok(())
 
             // progress bar
@@ -270,9 +277,9 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             stream_rows,
             no_progress,
             overwrite,
-            parallel: _,
+            parallel,
         } => {
-            // validate and create path to sas7bdat/sas7bcat
+            // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
                 "Generating data from the file {}",
@@ -282,25 +289,23 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
             // output and format determine the type of writing to be performed
             let rsp = ReadStatPath::new(sas_path, output, format, overwrite, false)?;
 
-            // instantiate ReadStatMetadata
+            // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
             md.read_metadata(&rsp, false)?;
 
-            // if no output path then only read metadata; otherwise read data
+            // If no output path then only read metadata; otherwise read data
             match &rsp.out_path {
                 None => {
                     println!("{}: a value was not provided for the parameter {}, thus displaying metadata only\n", "Warning".bright_yellow(), "--output".bright_cyan());
 
-                    // Get metadata
-
-                    // instantiate ReadStatMetadata
+                    // Instantiate ReadStatMetadata
                     let mut md = ReadStatMetadata::new();
                     md.read_metadata(&rsp, false)?;
 
                     // Write metadata
                     ReadStatWriter::new().write_metadata(&md, &rsp, false)?;
 
-                    //get_metadata(&mut d, false, false)
+                    // Return
                     Ok(())
                 }
                 Some(p) => {
@@ -326,47 +331,96 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error>> {
                         Some(Reader::mem) => total_rows_to_process,
                     };
 
-                    // initialize Mutex to contain total rows processed
-                    // let total_rows_processed = Arc::new(Mutex::new(0 as usize));
+                    // Initialize AtomicUsize to contain total rows processed
                     let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
 
-                    // TODO
-                    // Create a parallel iterator
-                    //let offsets_pairs = offsets.par_windows(2);
-                    let offsets_pairs = offsets.windows(2);
-                    let pairs_cnt = *(&offsets_pairs.len());
+                    // Create channels
+                    //let (s, r) = bounded(channel_capacity);
+                    let (s, r) = unbounded();
 
                     // Initialize writing
                     let mut wtr = ReadStatWriter::new();
 
                     // Process data in batches (i.e. stream chunks of rows)
-                    // Read data - for each iteration create a new instance of ReadStatData
-                    for (i, w) in offsets_pairs.enumerate() {
-                        let row_start = w[0];
-                        let row_end = w[1];
+                    thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                        // Create windows
+                        let offsets_pairs = offsets.par_windows(2);
+                        let pairs_cnt = *(&offsets_pairs.len());
 
-                        let mut d = ReadStatData::new()
-                            .set_no_progress(no_progress)
-                            .set_total_rows_to_process(total_rows_to_process as usize)
-                            .set_total_rows_processed(total_rows_processed.clone())
-                            .init(md.clone(), row_start, row_end);
+                        // Run in parallel or not?
+                        // Controlled via number of threads in the rayon threadpool
+                        if !parallel {
+                            rayon::ThreadPoolBuilder::new()
+                                .num_threads(1)
+                                .build_global()?;
+                        };
 
-                        // read
-                        d.read_data(&rsp)?;
+                        // Iterate over offset pairs, reading data for each iteration and then
+                        //   sending the results over a channel to the writer
+                        // 📝 For each iteration a new instance of ReadStatData is created
+                        // for w in offsets_pairs {
+                        let errors: Vec<_> = offsets_pairs
+                            .map(|w| -> Result<(), Box<dyn Error + Send + Sync>> {
+                                let row_start = w[0];
+                                let row_end = w[1];
 
-                        // if last write then need to finish file
-                        if i == (pairs_cnt-1) {
-                            wtr.set_finish(true);
+                                // Initialize ReadStatData struct
+                                let mut d = ReadStatData::new()
+                                    .set_no_progress(no_progress)
+                                    .set_total_rows_to_process(total_rows_to_process as usize)
+                                    .set_total_rows_processed(total_rows_processed.clone())
+                                    .init(md.clone(), row_start, row_end);
+
+                                // Read
+                                d.read_data(&rsp)?;
+
+                                // Send
+                                let sent = s.send((d, rsp.clone(), pairs_cnt));
+
+                                // Early return if an error
+                                if sent.is_err() {
+                                    return Err(From::from(
+                                        "Error when attempting to send read data for writing",
+                                    ));
+                                } else {
+                                    return Ok(());
+                                }
+                            })
+                            .filter_map(|r| -> Option<Box<dyn Error + Send + Sync>> {
+                                match r {
+                                    Ok(()) => None,
+                                    Err(e) => Some(e),
+                                }
+                            })
+                            .collect();
+
+                        // Drop sender so that receive iterator will eventually exit
+                        drop(s);
+
+                        if !errors.is_empty() {
+                            println!("The following errors occured when processing data:");
+                            for e in errors {
+                                println!("    Error: {:#?}", e);
+                            }
                         }
 
-                        // write
+                        // Return
+                        Ok(())
+                    });
+
+                    // Write
+                    for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
                         wtr.write(&d, &rsp)?;
+                       
+                        if i == pairs_cnt {
+                            wtr.finish(&d, &rsp)?;
+                        }
                     }
 
-                    // return
+                    // Return
                     Ok(())
 
                     // progress bar

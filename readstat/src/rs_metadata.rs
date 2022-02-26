@@ -94,7 +94,7 @@ impl ReadStatMetadata {
         &mut self,
         rsp: &ReadStatPath,
         skip_row_count: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
