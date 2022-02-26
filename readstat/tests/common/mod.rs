@@ -3,7 +3,7 @@ use std::error::Error;
 use path_abs::PathAbs;
 
 // used in tests
-pub fn setup_path<P>(ds: P) -> Result<readstat::ReadStatPath, Box<dyn Error>>
+pub fn setup_path<P>(ds: P) -> Result<readstat::ReadStatPath, Box<dyn Error + Send + Sync>>
 where
     P: AsRef<std::path::Path>,
 {

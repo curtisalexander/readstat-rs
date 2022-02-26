@@ -26,7 +26,7 @@ impl ReadStatPath {
         format: Option<Format>,
         overwrite: bool,
         no_write: bool,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
@@ -49,26 +49,26 @@ impl ReadStatPath {
     }
 
     #[cfg(unix)]
-    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error>> {
+    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error + Send + Sync>> {
         use std::os::unix::ffi::OsStrExt;
         let bytes = path.as_os_str().as_bytes();
         CString::new(bytes).map_err(|_| From::from("Invalid path"))
     }
 
     #[cfg(not(unix))]
-    pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error>> {
+    pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error + Send + Sync>> {
         let rust_str = path.as_os_str().to_str().ok_or("Invalid path")?;
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
     }
 
-    fn validate_format(format: Option<Format>) -> Result<Format, Box<dyn Error>> {
+    fn validate_format(format: Option<Format>) -> Result<Format, Box<dyn Error + Send + Sync>> {
         match format {
             None => Ok(Format::csv),
             Some(f) => Ok(f),
         }
     }
 
-    fn validate_in_extension(path: &Path) -> Result<String, Box<dyn Error>> {
+    fn validate_in_extension(path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
         path.extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_owned())
@@ -89,7 +89,7 @@ impl ReadStatPath {
     fn validate_out_extension(
         path: &Path,
         format: Format,
-    ) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    ) -> Result<Option<PathBuf>, Box<dyn Error + Send + Sync>> {
         path.extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_owned())
@@ -119,7 +119,7 @@ impl ReadStatPath {
     fn validate_out_path(
         path: Option<PathBuf>,
         overwrite: bool,
-    ) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    ) -> Result<Option<PathBuf>, Box<dyn Error + Send + Sync>> {
         match path {
             None => Ok(None),
             Some(p) => {
@@ -149,7 +149,7 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_path(path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+    fn validate_path(path: PathBuf) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
         let abs_path = PathAbs::new(path)?;
 
         if abs_path.exists() {

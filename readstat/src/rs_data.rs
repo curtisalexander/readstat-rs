@@ -103,7 +103,7 @@ impl ReadStatData {
         Self { cols, ..self }
     }
 
-    fn cols_to_record_batch(&mut self) -> Result<(), Box<dyn Error>> {
+    fn cols_to_record_batch(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Build array references and save in batch
         let arrays: Vec<ArrayRef> = self
             .cols
@@ -118,14 +118,14 @@ impl ReadStatData {
         Ok(())
     }
 
-    pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         // parse data and if successful then convert cols into a record batch
         self.parse_data(&rsp)?;
         self.cols_to_record_batch()?;
         Ok(())
     }
 
-    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         // path as pointer
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();

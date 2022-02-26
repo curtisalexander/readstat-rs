@@ -42,7 +42,6 @@ pub struct ReadStatWriter {
     pub wtr: Option<ReadStatWriterFormat>,
     pub wrote_header: bool,
     pub wrote_start: bool,
-    pub finish: bool
 }
 
 impl ReadStatWriter {
@@ -51,12 +50,63 @@ impl ReadStatWriter {
             wtr: None,
             wrote_header: false,
             wrote_start: false,
-            finish: false,
         }
     }
 
-    pub fn set_finish(&mut self, finish: bool) {
-        self.finish = finish;
+    pub fn finish(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>>{
+        match rsp {
+            // Write csv data to file
+            ReadStatPath {
+                out_path: Some(_),
+                format: Format::csv,
+                ..
+            } => { self.write_final_message_for_rows(&d, &rsp); Ok(()) },
+            // Write feather data to file
+            ReadStatPath {
+                format: Format::feather,
+                ..
+            } => {
+                if let Some(rswf) = &mut self.wtr {
+                    match rswf {
+                        ReadStatWriterFormat::Feather(wtr) => wtr.finish()?,
+                        _ => unreachable!()
+                    }
+                };
+                self.write_final_message_for_rows(&d, &rsp);
+                Ok(())
+            }
+            // Write ndjson data to file
+            ReadStatPath {
+                format: Format::ndjson,
+                ..
+            } => {
+                if let Some(rswf) = &mut self.wtr {
+                    match rswf {
+                        ReadStatWriterFormat::Ndjson(wtr) => wtr.finish()?,
+                        _ => unreachable!()
+                    }
+                };
+                self.write_final_message_for_rows(&d, &rsp);
+                Ok(())
+            }
+            // Write parquet data to file
+            ReadStatPath {
+                format: Format::parquet,
+                ..
+            } => {
+                if let Some(rswf) = &mut self.wtr {
+                    match rswf {
+                        // need semi-colon in order to return unit type - ()
+                        ReadStatWriterFormat::Parquet(wtr) => { wtr.close()?; }
+                        _ => unreachable!()
+                    }
+                };
+                self.write_final_message_for_rows(&d, &rsp);
+                Ok(())
+            },
+            _ => Ok(())
+        }
+
     }
 
     fn _write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
@@ -109,7 +159,7 @@ impl ReadStatWriter {
         //}
     }
 
-    fn write_final_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
+    fn write_final_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath) {
         //if let Some(pb) = &d.pb {
             let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()
@@ -127,7 +177,6 @@ impl ReadStatWriter {
                 String::from("___").bright_green()
             };
 
-            // let rows = d.batch_rows_processed.to_formatted_string(&Locale::en).truecolor(255, 132, 0);
             let rows = if let Some(trp) = &d.total_rows_processed {
                 trp
                     .load(std::sync::atomic::Ordering::SeqCst)
@@ -143,7 +192,7 @@ impl ReadStatWriter {
         //}
     }
 
-    pub fn write(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    pub fn write(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         match rsp {
             // Write data to standard out
             ReadStatPath {
@@ -193,7 +242,7 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start { OpenOptions::new()
@@ -240,11 +289,6 @@ impl ReadStatWriter {
             // update
             self.wrote_start = true;
 
-            // 📝 no finishing required
-            if self.finish {
-                self.write_final_message_for_rows(&d, &rsp);
-            };
-
             // return
             Ok(())
         } else {
@@ -254,7 +298,7 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    fn write_data_to_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -285,17 +329,6 @@ impl ReadStatWriter {
 
             // update
             self.wrote_start = true; 
-            
-            // finish
-            if self.finish {
-                if let Some(rswf) = &mut self.wtr {
-                    match rswf {
-                        ReadStatWriterFormat::Feather(wtr) => wtr.finish()?,
-                        _ => unreachable!()
-                    }
-                };
-                self.write_final_message_for_rows(&d, &rsp);
-            };
 
             // return
             Ok(())
@@ -306,7 +339,7 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_ndjson(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    fn write_data_to_ndjson(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -340,17 +373,6 @@ impl ReadStatWriter {
             // update
             self.wrote_start = true;
 
-            // finish
-            if self.finish {
-                if let Some(rswf) = &mut self.wtr {
-                    match rswf {
-                        ReadStatWriterFormat::Ndjson(wtr) => wtr.finish()?,
-                        _ => unreachable!()
-                    }
-                };
-                self.write_final_message_for_rows(&d, &rsp);
-            };
-            
             // return
             Ok(())
         } else {
@@ -360,7 +382,7 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -396,18 +418,6 @@ impl ReadStatWriter {
             // update
             self.wrote_start = true;
 
-            // finish
-            if self.finish {
-                if let Some(rswf) = &mut self.wtr {
-                    match rswf {
-                        // need semi-colon in order to return unit type - ()
-                        ReadStatWriterFormat::Parquet(wtr) => { wtr.close()?; }
-                        _ => unreachable!()
-                    }
-                };
-                self.write_final_message_for_rows(&d, &rsp);
-            };
-            
             // return
             Ok(())
         } else {
@@ -417,7 +427,7 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error>> {
+    fn write_data_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -435,13 +445,11 @@ impl ReadStatWriter {
             }
         };
 
-        // 📝 no finishing required
-
         // return
         Ok(())
     }
 
-    fn write_header_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    fn write_header_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // spinner
             /*
@@ -531,8 +539,6 @@ impl ReadStatWriter {
             // wrote header
             self.wrote_header = true;
 
-            // 📝 no finishing required
-
             // return
             Ok(())
         } else {
@@ -542,7 +548,7 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error>> {
+    fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -580,7 +586,7 @@ impl ReadStatWriter {
         Ok(())
     }
 
-    pub fn write_metadata(&self, md: &ReadStatMetadata, rsp: &ReadStatPath, as_json: bool) -> Result<(), Box<dyn Error>> {
+    pub fn write_metadata(&self, md: &ReadStatMetadata, rsp: &ReadStatPath, as_json: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
         if as_json {
             self.write_metadata_to_json(&md)
         } else {
@@ -588,14 +594,14 @@ impl ReadStatWriter {
         }
     }
 
-    pub fn write_metadata_to_json(&self, md: &ReadStatMetadata) -> Result<(), Box<dyn Error>> {
+    pub fn write_metadata_to_json(&self, md: &ReadStatMetadata) -> Result<(), Box<dyn Error + Send + Sync>> {
         match serde_json::to_string_pretty(md) {
             Ok(s) => { println!("{}", s); Ok(()) }
             Err(e) => { Err(From::from(format!("Error converting to json: {}", e))) }
         }
     }
 
-    pub fn write_metadata_to_stdout(&self, md: &ReadStatMetadata, rsp: &ReadStatPath) -> Result<(), Box<dyn Error>> {
+    pub fn write_metadata_to_stdout(&self, md: &ReadStatMetadata, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         println!(
             "Metadata for the file {}\n",
             rsp.path.to_string_lossy().bright_yellow()
