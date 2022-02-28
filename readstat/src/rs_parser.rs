@@ -133,7 +133,7 @@ impl ReadStatParser {
     }
 
     pub fn parse_sas7bdat(
-        self,
+        &mut self,
         path: *const c_char,
         user_ctx: *mut c_void,
     ) -> readstat_sys::readstat_error_t {
