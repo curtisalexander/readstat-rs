@@ -418,6 +418,9 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                         if i == pairs_cnt {
                             wtr.finish(&d, &rsp)?;
                         }
+
+                        // Explicitly drop to save on memory
+                        drop(d);
                     }
 
                     // Return
