@@ -1,6 +1,7 @@
 # data
 /readstat/tests/data/*.csv
 /readstat/tests/data/*.feather
+/readstat/tests/data/*.ndjson
 /readstat/tests/data/*.parquet
 # environment
 .vscode/

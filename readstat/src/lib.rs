@@ -1,7 +1,8 @@
 #![allow(non_camel_case_types)]
 
 use colored::Colorize;
-use crossbeam::channel::unbounded;
+use crossbeam::channel::bounded;
+// use crossbeam::channel::unbounded;
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
@@ -240,7 +241,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                 let mut d = ReadStatData::new()
                     .set_no_progress(no_progress)
                     .set_total_rows_to_process(total_rows_to_process as usize)
-                    // .set_total_rows_processed(total_rows_processed.clone())
+                    .set_total_rows_processed(total_rows_processed.clone())
                     .init(md.clone(), row_start, row_end);
 
                 // Read
@@ -338,8 +339,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
 
                     // Create channels
-                    //let (s, r) = bounded(channel_capacity);
-                    let (s, r) = unbounded();
+                    let (s, r) = bounded(rayon::current_num_threads());
+                    //let (s, r) = unbounded();
 
                     // Initialize writing
                     let mut wtr = ReadStatWriter::new();
@@ -371,7 +372,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                                 let mut d = ReadStatData::new()
                                     .set_no_progress(no_progress)
                                     .set_total_rows_to_process(total_rows_to_process as usize)
-                                    // .set_total_rows_processed(total_rows_processed.clone())
+                                    .set_total_rows_processed(total_rows_processed.clone())
                                     .init(md.clone(), row_start, row_end);
 
                                 // Read

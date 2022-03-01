@@ -1,7 +1,6 @@
 // Create a writer struct
 use std::fs::OpenOptions;
 use std::io::stdout;
-use std::sync::Arc;
 use std::error::Error;
 
 use arrow::csv as csv_arrow;
@@ -177,7 +176,6 @@ impl ReadStatWriter {
                 String::from("___").bright_green()
             };
 
-            /*
             let rows = if let Some(trp) = &d.total_rows_processed {
                 trp
                     .load(std::sync::atomic::Ordering::SeqCst)
@@ -186,8 +184,6 @@ impl ReadStatWriter {
             } else {
                 0.to_formatted_string(&Locale::en).truecolor(255, 132, 0)
             };
-            */
-            let rows = 100;
             let msg = format!("In total, wrote {} rows from file {} into {}", rows, in_f, out_f);
 
             println!("{}", msg);
@@ -402,18 +398,20 @@ impl ReadStatWriter {
             self.write_message_for_rows(&d, &rsp);
             
             // setup writer if not already started writing
-            if !self.wrote_start {
+            //if !self.wrote_start {
                 self.wtr = Some(ReadStatWriterFormat::Parquet(ArrowWriter::try_new(
                     f,
-                    Arc::new(d.schema.clone()),
-                    Some(WriterProperties::builder().build()),
+                    //Arc::new(d.schema.clone()),
+                    d.batch.schema(),
+                    // Arc::new(d.schema.clone()),
+                    Some(WriterProperties::builder().set_write_batch_size(d.batch_rows_to_process).set_max_row_group_size(d.batch_rows_to_process).build()),
                 )?));
-            };
+//            };
 
             // write
             if let Some(rswf) = &mut self.wtr {
                 match rswf {
-                    ReadStatWriterFormat::Parquet(wtr) => wtr.write(&d.batch)?,
+                    ReadStatWriterFormat::Parquet(wtr) => { wtr.write(&d.batch)?; wtr.close()?; },
                     _ => unreachable!()
                 }
             };
