@@ -177,6 +177,7 @@ impl ReadStatWriter {
                 String::from("___").bright_green()
             };
 
+            /*
             let rows = if let Some(trp) = &d.total_rows_processed {
                 trp
                     .load(std::sync::atomic::Ordering::SeqCst)
@@ -185,6 +186,8 @@ impl ReadStatWriter {
             } else {
                 0.to_formatted_string(&Locale::en).truecolor(255, 132, 0)
             };
+            */
+            let rows = 100;
             let msg = format!("In total, wrote {} rows from file {} into {}", rows, in_f, out_f);
 
             println!("{}", msg);

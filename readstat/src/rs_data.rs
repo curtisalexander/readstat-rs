@@ -35,7 +35,7 @@ pub struct ReadStatData {
     pub batch_rows_processed: usize,
     // total rows
     pub total_rows_to_process: usize,
-    pub total_rows_processed: Option<Arc<AtomicUsize>>,
+    // pub total_rows_processed: Option<Arc<AtomicUsize>>,
     // progress
     pub pb: Option<ProgressBar>,
     pub no_progress: bool,
@@ -60,7 +60,7 @@ impl ReadStatData {
             batch_row_end: 0,
             // total rows
             total_rows_to_process: 0,
-            total_rows_processed: None,
+            // total_rows_processed: None,
             // progress
             pb: None,
             no_progress: false,
@@ -169,7 +169,7 @@ impl ReadStatData {
         let error = parser.parse_sas7bdat(ppath, ctx);
 
         // drop parser after finished
-        drop(parser);
+        // drop(parser);
 
         match FromPrimitive::from_i32(error as i32) {
             Some(ReadStatError::READSTAT_OK) => Ok(()),
@@ -248,10 +248,12 @@ impl ReadStatData {
         }
     }
 
+    /*
     pub fn set_total_rows_processed(self, total_rows_processed: Arc<AtomicUsize>) -> Self {
         Self {
             total_rows_processed: Some(total_rows_processed),
             ..self
         }
     }
+    */
 }

@@ -240,7 +240,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                 let mut d = ReadStatData::new()
                     .set_no_progress(no_progress)
                     .set_total_rows_to_process(total_rows_to_process as usize)
-                    .set_total_rows_processed(total_rows_processed.clone())
+                    // .set_total_rows_processed(total_rows_processed.clone())
                     .init(md.clone(), row_start, row_end);
 
                 // Read
@@ -371,7 +371,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                                 let mut d = ReadStatData::new()
                                     .set_no_progress(no_progress)
                                     .set_total_rows_to_process(total_rows_to_process as usize)
-                                    .set_total_rows_processed(total_rows_processed.clone())
+                                    // .set_total_rows_processed(total_rows_processed.clone())
                                     .init(md.clone(), row_start, row_end);
 
                                 // Read

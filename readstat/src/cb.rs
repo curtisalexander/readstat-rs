@@ -519,9 +519,11 @@ pub extern "C" fn handle_value(
     // if row is complete
     if var_index == (d.var_count - 1) {
         d.batch_rows_processed += 1;
+        /*
         if let Some(trp) = &d.total_rows_processed {
             trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        */
     };
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
