@@ -160,16 +160,12 @@ impl ReadStatData {
 
         // setup parser
         // once call parse_sas7bdat, iteration begins
-        let mut parser = ReadStatParser::new()
+        let error = ReadStatParser::new()
             // do not set metadata handler nor variable handler as already processed
             .set_value_handler(Some(cb::handle_value))?
             .set_row_limit(Some(self.batch_rows_to_process.try_into().unwrap()))?
-            .set_row_offset(Some(self.batch_row_start.try_into().unwrap()))?;
-
-        let error = parser.parse_sas7bdat(ppath, ctx);
-
-        // drop parser after finished
-        // drop(parser);
+            .set_row_offset(Some(self.batch_row_start.try_into().unwrap()))?
+            .parse_sas7bdat(ppath, ctx);
 
         match FromPrimitive::from_i32(error as i32) {
             Some(ReadStatError::READSTAT_OK) => Ok(()),

@@ -401,9 +401,7 @@ impl ReadStatWriter {
             //if !self.wrote_start {
                 self.wtr = Some(ReadStatWriterFormat::Parquet(ArrowWriter::try_new(
                     f,
-                    //Arc::new(d.schema.clone()),
                     d.batch.schema(),
-                    // Arc::new(d.schema.clone()),
                     Some(WriterProperties::builder().set_write_batch_size(d.batch_rows_to_process).set_max_row_group_size(d.batch_rows_to_process).build()),
                 )?));
 //            };
@@ -411,7 +409,7 @@ impl ReadStatWriter {
             // write
             if let Some(rswf) = &mut self.wtr {
                 match rswf {
-                    ReadStatWriterFormat::Parquet(wtr) => { wtr.write(&d.batch)?; wtr.close()?; },
+                    ReadStatWriterFormat::Parquet(wtr) => { wtr.write(&d.batch)? },
                     _ => unreachable!()
                 }
             };
