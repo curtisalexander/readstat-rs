@@ -32,7 +32,7 @@ pub use rs_path::ReadStatPath;
 pub use rs_write::ReadStatWriter;
 
 // Default rows to stream
-const STREAM_ROWS: u32 = 50000;
+const STREAM_ROWS: u32 = 10000;
 
 // StructOpt
 #[derive(StructOpt, Debug)]
@@ -338,7 +338,6 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
 
                     // Create channels
-                    //let (s, r) = bounded(channel_capacity);
                     let (s, r) = unbounded();
 
                     // Initialize writing
@@ -415,7 +414,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                     for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
                         wtr.write(&d, &rsp)?;
                        
-                        if i == pairs_cnt {
+                        if i == (pairs_cnt - 1) {
                             wtr.finish(&d, &rsp)?;
                         }
 
