@@ -150,7 +150,7 @@ impl ReadStatWriter {
                 String::from("___").bright_green()
             };
 
-            let rows = d.batch_rows_processed.to_formatted_string(&Locale::en).truecolor(255, 132, 0);
+            let rows = d.chunk_rows_processed.to_formatted_string(&Locale::en).truecolor(255, 132, 0);
             let msg = format!("Wrote {} rows from file {} into {}", rows, in_f, out_f);
 
             println!("{}", msg);
@@ -402,7 +402,7 @@ impl ReadStatWriter {
                 self.wtr = Some(ReadStatWriterFormat::Parquet(ArrowWriter::try_new(
                     f,
                     d.batch.schema(),
-                    Some(WriterProperties::builder().set_write_batch_size(d.batch_rows_to_process).set_max_row_group_size(d.batch_rows_to_process).build()),
+                    Some(WriterProperties::builder().set_write_batch_size(d.chunk_rows_to_process).set_max_row_group_size(d.chunk_rows_to_process).build()),
                 )?));
 //            };
 
