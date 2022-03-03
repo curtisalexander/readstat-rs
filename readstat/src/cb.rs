@@ -3,6 +3,7 @@ use arrow::array::{
     StringBuilder, Time32SecondBuilder, TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
     TimestampNanosecondBuilder, TimestampSecondBuilder,
 };
+use arrow2::array::MutableUtf8Array;
 use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
@@ -207,10 +208,10 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    debug!("batch_rows_to_process is {}", d.batch_rows_to_process);
-    debug!("batch_row_start is {}", d.batch_row_start);
-    debug!("batch_row_end is {}", d.batch_row_end);
-    debug!("batch_rows_processed is {}", d.batch_rows_processed);
+    debug!("chunk_rows_to_process is {}", d.chunk_rows_to_process);
+    debug!("chunk_row_start is {}", d.chunk_row_start);
+    debug!("chunk_row_end is {}", d.chunk_row_end);
+    debug!("chunk_rows_processed is {}", d.chunk_rows_processed);
     debug!("var_count is {}", d.var_count);
     debug!("obs_index is {}", obs_index);
     debug!("var_index is {}", var_index);
@@ -234,19 +235,17 @@ pub extern "C" fn handle_value(
 
             // append to builder
             if is_missing == 0 {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<StringBuilder>()
+                d.arrays[var_index as usize]
+                    .as_mut_any()
+                    .downcast_mut::<MutableUtf8Array<i32>>()
                     .unwrap()
-                    .append_value(value)
-                    .unwrap();
+                    .push(Some(value));
             } else {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<StringBuilder>()
+                d.arrays[var_index as usize]
+                    .as_mut_any()
+                    .downcast_mut::<MutableUtf8Array<i32>>()
                     .unwrap()
-                    .append_null()
-                    .unwrap();
+                    .push(None);
             }
         }
         readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
@@ -518,7 +517,7 @@ pub extern "C" fn handle_value(
 
     // if row is complete
     if var_index == (d.var_count - 1) {
-        d.batch_rows_processed += 1;
+        d.chunk_rows_processed += 1;
         if let Some(trp) = &d.total_rows_processed {
             trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }

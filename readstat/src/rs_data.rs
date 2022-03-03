@@ -1,9 +1,14 @@
+use arrow2::array::{Array, MutablePrimitiveArray, MutableArray, MutableUtf8Array};
+use arrow2::chunk::Chunk;
+use arrow2::datatypes::{DataType, Schema, TimeUnit};
+/*
 use arrow::array::{
     ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
     Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
 };
-use arrow::datatypes::Schema;
-use arrow::record_batch::RecordBatch;
+*/
+// use arrow::datatypes::Schema;
+// use arrow::record_batch::RecordBatch;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
@@ -25,14 +30,16 @@ pub struct ReadStatData {
     pub var_count: i32,
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
     // data
-    pub cols: Vec<Box<dyn ArrayBuilder>>,
+    // pub cols: Vec<Box<dyn ArrayBuilder>>,
+    pub arrays: Vec<Arc<dyn MutableArray>>,
     pub schema: Schema,
-    pub batch: RecordBatch,
+    pub chunk: Option<Chunk<Arc<dyn Array>>>,
+    // pub batch: RecordBatch,
     // batch rows
-    pub batch_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
-    pub batch_row_start: usize,
-    pub batch_row_end: usize,
-    pub batch_rows_processed: usize,
+    pub chunk_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
+    pub chunk_row_start: usize,
+    pub chunk_row_end: usize,
+    pub chunk_rows_processed: usize,
     // total rows
     pub total_rows_to_process: usize,
     pub total_rows_processed: Option<Arc<AtomicUsize>>,
@@ -50,14 +57,16 @@ impl ReadStatData {
             var_count: 0,
             vars: BTreeMap::new(),
             // data
-            cols: Vec::new(),
-            schema: Schema::empty(),
-            batch: RecordBatch::new_empty(Arc::new(Schema::empty())),
+            arrays: Vec::new(),
+            // cols: Vec::new(),
+            schema: Schema::default(),
+            chunk: None,
+            // batch: RecordBatch::new_empty(Arc::new(Schema::empty())),
             // batch rows
-            batch_rows_to_process: 0,
-            batch_rows_processed: 0,
-            batch_row_start: 0,
-            batch_row_end: 0,
+            chunk_rows_to_process: 0,
+            chunk_rows_processed: 0,
+            chunk_row_start: 0,
+            chunk_row_end: 0,
             // total rows
             total_rows_to_process: 0,
             total_rows_processed: None,
@@ -69,51 +78,52 @@ impl ReadStatData {
         }
     }
 
-    fn allocate_cols(self) -> Self {
-        let rows = self.batch_rows_to_process;
-        let mut cols: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.var_count as usize);
+    fn allocate_arrays(self) -> Self {
+        let rows = self.chunk_rows_to_process;
+        let mut arrays: Vec<Arc<dyn MutableArray>> = Vec::with_capacity(self.var_count as usize);
         for i in 0..self.var_count {
             // Get variable type
             let var_type = self.vars.get(&i).unwrap().var_type;
-            // Allocate space for ArrayBuilder
-            let array: Box<dyn ArrayBuilder> = match var_type {
+            // Allocate space
+            let array: Arc<dyn MutableArray> = match var_type {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-                    Box::new(StringBuilder::new(self.batch_rows_to_process))
+                    Arc::new(MutableUtf8Array::<i32>::with_capacity(rows))
                 }
-                ReadStatVarType::Int8 => Box::new(Int8Builder::new(rows)),
-                ReadStatVarType::Int16 => Box::new(Int16Builder::new(rows)),
-                ReadStatVarType::Int32 => Box::new(Int32Builder::new(rows)),
-                ReadStatVarType::Float => Box::new(Float32Builder::new(rows)),
+                ReadStatVarType::Int8 => Arc::new(MutablePrimitiveArray::<i8>::with_capacity(rows)),
+                ReadStatVarType::Int16 => Arc::new(MutablePrimitiveArray::<i16>::with_capacity(rows)),
+                ReadStatVarType::Int32 => Arc::new(MutablePrimitiveArray::<i32>::with_capacity(rows)),
+                ReadStatVarType::Float => Arc::new(MutablePrimitiveArray::<f32>::with_capacity(rows)),
                 ReadStatVarType::Double => match self.vars.get(&i).unwrap().var_format_class {
-                    None => Box::new(Float64Builder::new(rows)),
-                    Some(ReadStatFormatClass::Date) => Box::new(Date32Builder::new(rows)),
+                    None => Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows)),
+                    Some(ReadStatFormatClass::Date) => Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows).to(DataType::Date32)),
                     Some(ReadStatFormatClass::DateTime)
                     | Some(ReadStatFormatClass::DateTimeWithMilliseconds)
                     | Some(ReadStatFormatClass::DateTimeWithMicroseconds)
                     | Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
-                        Box::new(TimestampSecondBuilder::new(rows))
+                        Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows).to(DataType::Timestamp(TimeUnit::Second, None)))
                     }
-                    Some(ReadStatFormatClass::Time) => Box::new(Time32SecondBuilder::new(rows)),
+                    Some(ReadStatFormatClass::Time) => Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows).to(DataType::Time32(TimeUnit::Second)))
                 },
             };
 
-            cols.push(array);
+            arrays.push(array);
         }
 
-        Self { cols, ..self }
+        Self { arrays, ..self }
     }
 
-    fn cols_to_record_batch(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        // Build array references and save in batch
-        let arrays: Vec<ArrayRef> = self
-            .cols
+    fn arrays_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Build array references and save in chunk
+        let arrays = self
+            .arrays
             .iter_mut()
-            .map(|builder| builder.finish())
+            .map(|array| array.as_arc())
             .collect();
-        self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
+        self.chunk = Some(Chunk::try_new(arrays)?);
+        // self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
 
         // reset
-        self.cols.clear();
+        self.arrays.clear();
 
         Ok(())
     }
@@ -121,7 +131,7 @@ impl ReadStatData {
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         // parse data and if successful then convert cols into a record batch
         self.parse_data(&rsp)?;
-        self.cols_to_record_batch()?;
+        self.arrays_to_chunk()?;
         Ok(())
     }
 
@@ -163,8 +173,8 @@ impl ReadStatData {
         let error = ReadStatParser::new()
             // do not set metadata handler nor variable handler as already processed
             .set_value_handler(Some(cb::handle_value))?
-            .set_row_limit(Some(self.batch_rows_to_process.try_into().unwrap()))?
-            .set_row_offset(Some(self.batch_row_start.try_into().unwrap()))?
+            .set_row_limit(Some(self.chunk_rows_to_process.try_into().unwrap()))?
+            .set_row_offset(Some(self.chunk_row_start.try_into().unwrap()))?
             .parse_sas7bdat(ppath, ctx);
 
         match FromPrimitive::from_i32(error as i32) {
@@ -199,21 +209,21 @@ impl ReadStatData {
 
     pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
         self.set_metadata(md)
-            .set_batch_counts(row_start, row_end)
-            .allocate_cols()
+            .set_chunk_counts(row_start, row_end)
+            .allocate_arrays()
     }
 
-    fn set_batch_counts(self, row_start: u32, row_end: u32) -> Self {
-        let batch_rows_to_process = (row_end - row_start) as usize;
-        let batch_row_start = row_start as usize;
-        let batch_row_end = row_end as usize;
-        let batch_rows_processed = 0_usize;
+    fn set_chunk_counts(self, row_start: u32, row_end: u32) -> Self {
+        let chunk_rows_to_process = (row_end - row_start) as usize;
+        let chunk_row_start = row_start as usize;
+        let chunk_row_end = row_end as usize;
+        let chunk_rows_processed = 0_usize;
 
         Self {
-            batch_rows_to_process,
-            batch_row_start,
-            batch_row_end,
-            batch_rows_processed,
+            chunk_rows_to_process,
+            chunk_row_start,
+            chunk_row_end,
+            chunk_rows_processed,
             ..self
         }
     }

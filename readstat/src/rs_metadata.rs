@@ -1,4 +1,5 @@
-use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+use arrow2::datatypes::{Schema, Field, DataType, TimeUnit};
+// use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
@@ -27,6 +28,7 @@ pub struct ReadStatMetadata {
     pub compression: ReadStatCompress,
     pub endianness: ReadStatEndian,
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
+    #[serde(skip_serializing)]
     pub schema: Schema,
 }
 
@@ -45,7 +47,7 @@ impl ReadStatMetadata {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
-            schema: Schema::empty(),
+            schema: Schema::default(),
         }
     }
 
@@ -87,7 +89,8 @@ impl ReadStatMetadata {
             })
             .collect();
 
-        Schema::new(fields)
+        Schema::from(fields)
+        // Schema::new(fields)
     }
 
     pub fn read_metadata(
