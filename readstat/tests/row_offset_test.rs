@@ -1,4 +1,4 @@
-use arrow::{
+se arrow::{
     array::{Date32Array, StringArray},
     datatypes::DataType,
 };
@@ -175,7 +175,7 @@ fn row_offset_metadata() {
     assert!(error.is_ok());
 
     // row count = 1 due to offset
-    assert_eq!(d.batch_rows_to_process, 1);
+    assert_eq!(d.chunk_rows_to_process, 1);
 
     // variable count
     assert_eq!(md.var_count, 8);

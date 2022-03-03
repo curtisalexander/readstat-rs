@@ -35,7 +35,7 @@ fn parse_hasmissing() {
     assert_eq!(var_count, 9);
 
     // row count
-    let row_count = d.batch_rows_to_process;
+    let row_count = d.chunk_rows_to_process;
     assert_eq!(row_count, 5);
 
     // contains variable
