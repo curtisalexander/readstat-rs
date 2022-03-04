@@ -1,4 +1,4 @@
-use arrow2::array::{Array, MutablePrimitiveArray, MutableArray, MutableUtf8Array};
+use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Schema, TimeUnit};
 /*
@@ -17,7 +17,7 @@ use path_abs::PathInfo;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::os::raw::c_void;
-use std::sync::{Arc, atomic::AtomicUsize};
+use std::sync::{atomic::AtomicUsize, Arc};
 
 use crate::cb;
 use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
@@ -90,19 +90,40 @@ impl ReadStatData {
                     Arc::new(MutableUtf8Array::<i32>::with_capacity(rows))
                 }
                 ReadStatVarType::Int8 => Arc::new(MutablePrimitiveArray::<i8>::with_capacity(rows)),
-                ReadStatVarType::Int16 => Arc::new(MutablePrimitiveArray::<i16>::with_capacity(rows)),
-                ReadStatVarType::Int32 => Arc::new(MutablePrimitiveArray::<i32>::with_capacity(rows)),
-                ReadStatVarType::Float => Arc::new(MutablePrimitiveArray::<f32>::with_capacity(rows)),
+                ReadStatVarType::Int16 => {
+                    Arc::new(MutablePrimitiveArray::<i16>::with_capacity(rows))
+                }
+                ReadStatVarType::Int32 => {
+                    Arc::new(MutablePrimitiveArray::<i32>::with_capacity(rows))
+                }
+                ReadStatVarType::Float => {
+                    Arc::new(MutablePrimitiveArray::<f32>::with_capacity(rows))
+                }
                 ReadStatVarType::Double => match self.vars.get(&i).unwrap().var_format_class {
                     None => Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows)),
-                    Some(ReadStatFormatClass::Date) => Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows).to(DataType::Date32)),
-                    Some(ReadStatFormatClass::DateTime)
-                    | Some(ReadStatFormatClass::DateTimeWithMilliseconds)
-                    | Some(ReadStatFormatClass::DateTimeWithMicroseconds)
-                    | Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
-                        Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows).to(DataType::Timestamp(TimeUnit::Second, None)))
-                    }
-                    Some(ReadStatFormatClass::Time) => Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows).to(DataType::Time32(TimeUnit::Second)))
+                    Some(ReadStatFormatClass::Date) => Arc::new(
+                        MutablePrimitiveArray::<i32>::with_capacity(rows).to(DataType::Date32),
+                    ),
+                    Some(ReadStatFormatClass::DateTime) => Arc::new(
+                        MutablePrimitiveArray::<i64>::with_capacity(rows)
+                            .to(DataType::Timestamp(TimeUnit::Second, None)),
+                    ),
+                    Some(ReadStatFormatClass::DateTimeWithMilliseconds) => Arc::new(
+                        MutablePrimitiveArray::<i64>::with_capacity(rows)
+                            .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
+                    ),
+                    Some(ReadStatFormatClass::DateTimeWithMicroseconds) => Arc::new(
+                        MutablePrimitiveArray::<i64>::with_capacity(rows)
+                            .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
+                    ),
+                    Some(ReadStatFormatClass::DateTimeWithNanoseconds) => Arc::new(
+                        MutablePrimitiveArray::<i64>::with_capacity(rows)
+                            .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
+                    ),
+                    Some(ReadStatFormatClass::Time) => Arc::new(
+                        MutablePrimitiveArray::<i32>::with_capacity(rows)
+                            .to(DataType::Time32(TimeUnit::Second)),
+                    ),
                 },
             };
 
@@ -114,11 +135,7 @@ impl ReadStatData {
 
     fn arrays_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Build array references and save in chunk
-        let arrays = self
-            .arrays
-            .iter_mut()
-            .map(|array| array.as_arc())
-            .collect();
+        let arrays = self.arrays.iter_mut().map(|array| array.as_arc()).collect();
         self.chunk = Some(Chunk::try_new(arrays)?);
         // self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
 

@@ -247,4 +247,8 @@ pub enum ReadStatVar {
     ReadStat_DateTimeWithMicroseconds(i64),
     ReadStat_DateTimeWithNanoseconds(i64),
     ReadStat_Time(i32),
+    // TODO
+    // ReadStat_TimeWithMilliseconds(i32),
+    // ReadStat_TimeWithMicroseconds(i32),
+    // ReadStat_TimeWithNanoseconds(i32),
 }

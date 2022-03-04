@@ -2,17 +2,20 @@
 use std::fs::OpenOptions;
 use std::io::stdout;
 use std::error::Error;
-
-use arrow::csv as csv_arrow;
-use arrow::ipc::writer::FileWriter;
-use arrow::json::LineDelimitedWriter;
+use arrow2::chunk::Chunk;
+use arrow2::io::csv as csv_arrow2;
+use arrow2::io::ipc as ipc_arrow2;
+use arrow2::io::json as json_arrow2;
+// use arrow::csv as csv_arrow;
+// use arrow::ipc::writer::FileWriter;
+// use arrow::json::LineDelimitedWriter;
 use colored::Colorize;
-use csv as csv_crate;
+// use csv as csv_crate;
 // use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
-use parquet::arrow::ArrowWriter;
-use parquet::file::properties::WriterProperties;
+// use parquet::arrow::ArrowWriter;
+// use parquet::file::properties::WriterProperties;
 
 use crate::Format;
 use crate::ReadStatFormatClass;
@@ -22,19 +25,19 @@ use crate::rs_path::ReadStatPath;
 
 pub enum ReadStatWriterFormat {
     // csv data to file
-    CsvDataToFile(csv_arrow::writer::Writer<std::fs::File>),
+    CsvDataToFile(csv_arrow2::write::Writer<std::fs::File>),
     // csv data to stdout
-    CsvDataToStdout(csv_arrow::writer::Writer<std::io::Stdout>),
+    CsvDataToStdout(csv_arrow2::write::Writer<std::io::Stdout>),
     // csv header to file
-    CsvHeaderToFile(csv_crate::Writer<std::fs::File>),
+    CsvHeaderToFile(csv_arrow2::write::Writer<std::fs::File>),
     // csv header to stdout
-    CsvHeaderToStdOut(csv_crate::Writer<std::io::Stdout>),
+    CsvHeaderToStdOut(csv_arrow2::write::Writer<std::io::Stdout>),
     // feather
-    Feather(arrow::ipc::writer::FileWriter<std::fs::File>),
+    Feather(ipc_arrow2::write::FileWriter<std::fs::File>),
     // ndjson
-    Ndjson(arrow::json::writer::LineDelimitedWriter<std::fs::File>),
+    Ndjson(std::fs::File),
     // parquet
-    Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
+    // Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
 }
 
 pub struct ReadStatWriter {
@@ -271,15 +274,23 @@ impl ReadStatWriter {
             };
             */
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::CsvDataToFile(csv_arrow::WriterBuilder::new()
+                self.wtr = Some(ReadStatWriterFormat::CsvDataToFile(csv_arrow2::write::WriterBuilder::new()
                     .has_headers(false)
-                    .build(f)));
+                    .from_writer(f)));
             };
 
             // write
+            // RESUME HERE - types are not aligning
             if let Some(rswf) = &mut self.wtr {
                 match rswf {
-                    ReadStatWriterFormat::CsvDataToFile(wtr) => wtr.write(&d.batch)?,
+                    ReadStatWriterFormat::CsvDataToFile(wtr) => {
+                        let options = csv_arrow2::write::SerializeOptions::default();
+                        if let Some(c) = d.chunk {
+                            let slice = &[c];
+                            c.iter().try_for_each(|batch| csv_arrow2::write::write_chunk(wtr, slice, &options));
+                            
+                        }
+                    }
                     _ => unreachable!()
                 
                 }
