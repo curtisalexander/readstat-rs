@@ -398,13 +398,13 @@ impl ReadStatWriter {
             self.write_message_for_rows(&d, &rsp);
             
             // setup writer if not already started writing
-            //if !self.wrote_start {
+            if !self.wrote_start {
                 self.wtr = Some(ReadStatWriterFormat::Parquet(ArrowWriter::try_new(
                     f,
                     d.batch.schema(),
                     Some(WriterProperties::builder().set_write_batch_size(d.batch_rows_to_process).set_max_row_group_size(d.batch_rows_to_process).build()),
                 )?));
-//            };
+            };
 
             // write
             if let Some(rswf) = &mut self.wtr {
