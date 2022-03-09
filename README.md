@@ -144,7 +144,9 @@ The `data` subcommand includes a parameter for `--parallel`.  If invoked with th
 
 Note that although reading is in parallel, *writing* is still sequential.  Thus one should only anticipate moderate speed-ups as much of the time is spent writing.
 
-:warning: Utilizing the `--parallel` parameter will increase memory usage &mdash; there will be multiple threads simultaneously reading chunks from the `sas7bdat`.  In addition because all processors are utilized, CPU usage will maxed out during reading.
+:heavy_exclamation_mark: Utilizing the `--parallel` parameter will increase memory usage &mdash; there will be multiple threads simultaneously reading chunks from the `sas7bdat`.  In addition because all processors are utilized, CPU usage will maxed out during reading.
+
+:warning: Also, note that utilizing the `--parallel` parameter will write rows out of order from the original `sas7bdat`.
 
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
