@@ -1,11 +1,12 @@
 // Create a writer struct
+use csv;
 use std::fs::OpenOptions;
 use std::io::stdout;
 use std::error::Error;
 use arrow2::chunk::Chunk;
 use arrow2::io::csv as csv_arrow2;
 use arrow2::io::ipc as ipc_arrow2;
-use arrow2::io::json as json_arrow2;
+use arrow2::io::ndjson as ndjson_arrow2;
 // use arrow::csv as csv_arrow;
 // use arrow::ipc::writer::FileWriter;
 // use arrow::json::LineDelimitedWriter;
@@ -25,17 +26,17 @@ use crate::rs_path::ReadStatPath;
 
 pub enum ReadStatWriterFormat {
     // csv data to file
-    CsvDataToFile(csv_arrow2::write::Writer<std::fs::File>),
+    CsvDataToFile(std::fs::File),
     // csv data to stdout
-    CsvDataToStdout(csv_arrow2::write::Writer<std::io::Stdout>),
+    CsvDataToStdout(std::io::Stdout),
     // csv header to file
-    CsvHeaderToFile(csv_arrow2::write::Writer<std::fs::File>),
+    CsvHeaderToFile(std::fs::File),
     // csv header to stdout
-    CsvHeaderToStdOut(csv_arrow2::write::Writer<std::io::Stdout>),
+    CsvHeaderToStdOut(std::io::Stdout),
     // feather
     Feather(ipc_arrow2::write::FileWriter<std::fs::File>),
     // ndjson
-    Ndjson(std::fs::File),
+    // Ndjson(ndjson_arrow2::write::FileWriter<std::fs::File>),
     // parquet
     // Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
 }
@@ -274,9 +275,8 @@ impl ReadStatWriter {
             };
             */
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::CsvDataToFile(csv_arrow2::write::WriterBuilder::new()
-                    .has_headers(false)
-                    .from_writer(f)));
+
+                self.wtr = Some(ReadStatWriterFormat::CsvDataToFile(f));
             };
 
             // write
@@ -287,7 +287,7 @@ impl ReadStatWriter {
                         let options = csv_arrow2::write::SerializeOptions::default();
                         if let Some(c) = d.chunk {
                             let slice = &[c];
-                            c.iter().try_for_each(|batch| csv_arrow2::write::write_chunk(wtr, slice, &options));
+                            slice.iter().try_for_each(|batch| csv_arrow2::write::write_chunk(&mut wtr, batch, &options));
                             
                         }
                     }
@@ -326,13 +326,16 @@ impl ReadStatWriter {
 
             // setup writer if not already started writing
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::Feather(FileWriter::try_new(f, &d.schema)?));
+                let options = ipc_arrow2::write::WriteOptions { compression: None };
+                self.wtr = Some(ReadStatWriterFormat::Feather(ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?));
             };
 
             // write
             if let Some(rswf) = &mut self.wtr {
                 match rswf {
-                    ReadStatWriterFormat::Feather(wtr) => wtr.write(&d.batch)?,
+                    ReadStatWriterFormat::Feather(wtr) => if let Some(c) = d.chunk {
+                        wtr.write(&c, None)?;
+                    }
                     _ => unreachable!()
                 }
             };
@@ -367,7 +370,7 @@ impl ReadStatWriter {
             
             // setup writer if not already started writing
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::Ndjson(LineDelimitedWriter::new(f)));
+                self.wtr = Some(ReadStatWriterFormat::Ndjson(::new(f)));
             };
 
             // write
