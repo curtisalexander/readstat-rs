@@ -1,6 +1,7 @@
 // Create a writer struct
 use csv;
 use std::fs::OpenOptions;
+use std::io::Write;
 use std::io::stdout;
 use std::error::Error;
 use arrow2::chunk::Chunk;
@@ -41,13 +42,14 @@ pub enum ReadStatWriterFormat {
     // Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
 }
 
-pub struct ReadStatWriter {
-    pub wtr: Option<ReadStatWriterFormat>,
+pub struct ReadStatWriter<F: File> {
+    pub wtr: Option<F>,
+    // pub wtr: Option<ReadStatWriterFormat>,
     pub wrote_header: bool,
     pub wrote_start: bool,
 }
 
-impl ReadStatWriter {
+impl<F: File> ReadStatWriter<F> {
     pub fn new() -> Self {
         Self {
             wtr: None,
@@ -69,11 +71,14 @@ impl ReadStatWriter {
                 format: Format::feather,
                 ..
             } => {
-                if let Some(rswf) = &mut self.wtr {
+                if let Some(wtr) = &mut self.wtr {
+                    /*
                     match rswf {
                         ReadStatWriterFormat::Feather(wtr) => wtr.finish()?,
                         _ => unreachable!()
                     }
+                    */
+                    wtr.finish();
                 };
                 self.write_final_message_for_rows(&d, &rsp);
                 Ok(())
@@ -275,24 +280,19 @@ impl ReadStatWriter {
             };
             */
             if !self.wrote_start {
-
-                self.wtr = Some(ReadStatWriterFormat::CsvDataToFile(f));
+                self.wtr = Some(f);
             };
 
             // write
-            // RESUME HERE - types are not aligning
-            if let Some(rswf) = &mut self.wtr {
-                match rswf {
-                    ReadStatWriterFormat::CsvDataToFile(wtr) => {
-                        let options = csv_arrow2::write::SerializeOptions::default();
-                        if let Some(c) = d.chunk {
-                            let slice = &[c];
-                            slice.iter().try_for_each(|batch| csv_arrow2::write::write_chunk(&mut wtr, batch, &options));
-                            
-                        }
-                    }
-                    _ => unreachable!()
-                
+            if let Some(wtr) = &mut self.wtr {
+                let options = csv_arrow2::write::SerializeOptions::default();
+
+                if let Some(c) = d.chunk {
+                    let cols = &[c];
+                    cols
+                        .iter()
+                        .try_for_each(|batch|
+                            csv_arrow2::write::write_chunk(&mut wtr, batch, &options));
                 }
             };
             
