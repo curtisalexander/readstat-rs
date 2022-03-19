@@ -134,6 +134,9 @@ impl ReadStatData {
     }
 
     fn arrays_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        
+        // TODO - resume here
+
         // Build array references and save in chunk
         let arrays = self
             .arrays
