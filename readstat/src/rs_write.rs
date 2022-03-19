@@ -1,18 +1,16 @@
+use arrow2::error::ArrowError;
 // Create a writer struct
-use csv;
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::io::stdout;
 use std::error::Error;
-use arrow2::chunk::Chunk;
 use arrow2::io::csv as csv_arrow2;
 use arrow2::io::ipc as ipc_arrow2;
 use arrow2::io::ndjson as ndjson_arrow2;
+use arrow2::io::parquet as parquet_arrow2;
 // use arrow::csv as csv_arrow;
 // use arrow::ipc::writer::FileWriter;
 // use arrow::json::LineDelimitedWriter;
 use colored::Colorize;
-// use csv as csv_crate;
 // use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
@@ -26,33 +24,29 @@ use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
 
 pub enum ReadStatWriterFormat {
-    // csv data to file
-    CsvDataToFile(std::fs::File),
-    // csv data to stdout
-    CsvDataToStdout(std::io::Stdout),
-    // csv header to file
-    CsvHeaderToFile(std::fs::File),
-    // csv header to stdout
-    CsvHeaderToStdOut(std::io::Stdout),
+    // csv
+    CsvFile(std::fs::File),
+    // csv
+    CsvStdOut(std::io::Stdout),
     // feather
     Feather(ipc_arrow2::write::FileWriter<std::fs::File>),
     // ndjson
-    // Ndjson(ndjson_arrow2::write::FileWriter<std::fs::File>),
+    //Ndjson(ndjson_arrow2::write::FileWriter<std::fs::File, ndjson_arrow2::write::Serializer<Chunk<>>>),
     // parquet
-    // Parquet(parquet::arrow::arrow_writer::ArrowWriter<std::fs::File>),
+    Parquet(std::fs::File),
+    // Parquet(parquet_arrow2::write::FileWriter<std::fs::File>)
 }
 
-pub struct ReadStatWriter<F: File> {
-    pub wtr: Option<F>,
-    // pub wtr: Option<ReadStatWriterFormat>,
+pub struct ReadStatWriter {
+    //pub wtr: Option<ReadStatWriterFormat>,
     pub wrote_header: bool,
     pub wrote_start: bool,
 }
 
-impl<F: File> ReadStatWriter<F> {
+impl ReadStatWriter {
     pub fn new() -> Self {
         Self {
-            wtr: None,
+            //wtr: None,
             wrote_header: false,
             wrote_start: false,
         }
@@ -65,53 +59,22 @@ impl<F: File> ReadStatWriter<F> {
                 out_path: Some(_),
                 format: Format::csv,
                 ..
-            } => { self.write_final_message_for_rows(&d, &rsp); Ok(()) },
+            } => { self.write_final_message_for_rows(&d, &rsp) },
             // Write feather data to file
             ReadStatPath {
                 format: Format::feather,
                 ..
-            } => {
-                if let Some(wtr) = &mut self.wtr {
-                    /*
-                    match rswf {
-                        ReadStatWriterFormat::Feather(wtr) => wtr.finish()?,
-                        _ => unreachable!()
-                    }
-                    */
-                    wtr.finish();
-                };
-                self.write_final_message_for_rows(&d, &rsp);
-                Ok(())
-            }
+            } => { self.finish_feather(&d, &rsp) }
             // Write ndjson data to file
             ReadStatPath {
                 format: Format::ndjson,
                 ..
-            } => {
-                if let Some(rswf) = &mut self.wtr {
-                    match rswf {
-                        ReadStatWriterFormat::Ndjson(wtr) => wtr.finish()?,
-                        _ => unreachable!()
-                    }
-                };
-                self.write_final_message_for_rows(&d, &rsp);
-                Ok(())
-            }
+            } => { self.write_final_message_for_rows(&d, &rsp) }
             // Write parquet data to file
             ReadStatPath {
                 format: Format::parquet,
                 ..
-            } => {
-                if let Some(rswf) = &mut self.wtr {
-                    match rswf {
-                        // need semi-colon in order to return unit type - ()
-                        ReadStatWriterFormat::Parquet(wtr) => { wtr.close()?; }
-                        _ => unreachable!()
-                    }
-                };
-                self.write_final_message_for_rows(&d, &rsp);
-                Ok(())
-            },
+            } => { self.finish_parquet(&d, &rsp) },
             _ => Ok(())
         }
 
@@ -141,7 +104,7 @@ impl<F: File> ReadStatWriter<F> {
         }
     }
 
-    fn write_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
+    fn write_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         //if let Some(pb) = &d.pb {
             let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()
@@ -160,14 +123,16 @@ impl<F: File> ReadStatWriter<F> {
             };
 
             let rows = d.chunk_rows_processed.to_formatted_string(&Locale::en).truecolor(255, 132, 0);
+
             let msg = format!("Wrote {} rows from file {} into {}", rows, in_f, out_f);
 
             println!("{}", msg);
             //pb.set_message(msg);
         //}
+            Ok(())
     }
 
-    fn write_final_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath) {
+    fn write_final_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         //if let Some(pb) = &d.pb {
             let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()
@@ -193,11 +158,14 @@ impl<F: File> ReadStatWriter<F> {
             } else {
                 0.to_formatted_string(&Locale::en).truecolor(255, 132, 0)
             };
+
             let msg = format!("In total, wrote {} rows from file {} into {}", rows, in_f, out_f);
 
             println!("{}", msg);
+            
             //pb.set_message(msg);
         //}
+            Ok(())
     }
 
     pub fn write(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -253,11 +221,12 @@ impl<F: File> ReadStatWriter<F> {
     fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start { OpenOptions::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .open(p)?
+            let mut f = if self.wrote_start {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(p)?
             } else {
                 std::fs::File::create(p)?
             };
@@ -279,21 +248,22 @@ impl<F: File> ReadStatWriter<F> {
                 }
             };
             */
+            /*
             if !self.wrote_start {
-                self.wtr = Some(f);
+                // let mut wtr = csv::WriterBuilder::new().has_headers(false).from_writer(f);
+                self.wtr = Some(ReadStatWriterFormat::CsvFile(f));
             };
+            */
 
             // write
-            if let Some(wtr) = &mut self.wtr {
-                let options = csv_arrow2::write::SerializeOptions::default();
+            let options = csv_arrow2::write::SerializeOptions::default();
 
-                if let Some(c) = d.chunk {
-                    let cols = &[c];
-                    cols
-                        .iter()
-                        .try_for_each(|batch|
-                            csv_arrow2::write::write_chunk(&mut wtr, batch, &options));
-                }
+            if let Some(c) = d.chunk.clone() {
+                let cols = &[c];
+                cols
+                    .iter()
+                    .try_for_each(|batch|
+                        csv_arrow2::write::write_chunk(&mut f, batch, &options));
             };
             
             // update
@@ -325,23 +295,63 @@ impl<F: File> ReadStatWriter<F> {
             self.write_message_for_rows(&d, &rsp);
 
             // setup writer if not already started writing
+            /*
             if !self.wrote_start {
                 let options = ipc_arrow2::write::WriteOptions { compression: None };
-                self.wtr = Some(ReadStatWriterFormat::Feather(ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?));
+                let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
+                self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
             };
+            */
 
             // write
-            if let Some(rswf) = &mut self.wtr {
-                match rswf {
-                    ReadStatWriterFormat::Feather(wtr) => if let Some(c) = d.chunk {
-                        wtr.write(&c, None)?;
-                    }
-                    _ => unreachable!()
-                }
+            if let Some(c) = d.chunk.clone() {
+                let options = ipc_arrow2::write::WriteOptions { compression: None };
+                let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
+                wtr.write(&c, None)?;
             };
 
             // update
             self.wrote_start = true; 
+
+            // return
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing feather file as output path is set to None",
+            ))
+        }
+    }
+
+    fn finish_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if let Some(p) = &rsp.out_path {
+            // if already started writing, then need to append to file; otherwise create file
+            let f = if self.wrote_start {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(p)?
+            } else {
+                std::fs::File::create(p)?
+            };
+
+
+            // setup writer if not already started writing
+            /*
+            if !self.wrote_start {
+                let options = ipc_arrow2::write::WriteOptions { compression: None };
+                let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
+                self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
+            };
+            */
+
+            // write
+            let options = ipc_arrow2::write::WriteOptions { compression: None };
+            let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
+            wtr.finish()?;
+
+            // set message for what is being read/written
+            self.write_final_message_for_rows(&d, &rsp);
 
             // return
             Ok(())
@@ -369,19 +379,20 @@ impl<F: File> ReadStatWriter<F> {
             self.write_message_for_rows(&d, &rsp);
             
             // setup writer if not already started writing
+            /*
             if !self.wrote_start {
                 self.wtr = Some(ReadStatWriterFormat::Ndjson(::new(f)));
             };
-
+            */
             // write
-            if let Some(rswf) = &mut self.wtr {
-                match rswf {
-                    // TODO - is a clone necessary here?
-                    //   It is necessary for the compiler but there may be another way to accomplish
-                    ReadStatWriterFormat::Ndjson(wtr) => wtr.write_batches(&[d.batch.clone()])?,
-                    _ => unreachable!()
-                }
-            };
+            if let Some(c) = d.chunk.clone() {
+                let arrays = c.columns().into_iter().map(|a| Ok(a));
+                // let arrays = vec![Ok(c)].into_iter();
+                let serializer = ndjson_arrow2::write::Serializer::new(arrays, vec![]);
+
+                let mut wtr = ndjson_arrow2::write::FileWriter::new(f, serializer);
+                wtr.by_ref().collect::<Result<(), ArrowError>>();
+            }
 
             // update
             self.wrote_start = true;
@@ -412,19 +423,37 @@ impl<F: File> ReadStatWriter<F> {
             self.write_message_for_rows(&d, &rsp);
             
             // setup writer if not already started writing
+            /*
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::Parquet(ArrowWriter::try_new(
-                    f,
-                    d.batch.schema(),
-                    Some(WriterProperties::builder().set_write_batch_size(d.chunk_rows_to_process).set_max_row_group_size(d.chunk_rows_to_process).build()),
-                )?));
+                let options = parquet_arrow2::write::WriteOptions {
+                    write_statistics: true,
+                    compression: parquet_arrow2::write::Compression::Uncompressed,
+                    version: parquet_arrow2::write::Version::V2
+                };
+                let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema, options)?;
+
+                self.wtr = Some(ReadStatWriterFormat::Parquet(f));
             };
+            */
 
             // write
-            if let Some(rswf) = &mut self.wtr {
-                match rswf {
-                    ReadStatWriterFormat::Parquet(wtr) => { wtr.write(&d.batch)? },
-                    _ => unreachable!()
+            let options = parquet_arrow2::write::WriteOptions {
+                    write_statistics: true,
+                    compression: parquet_arrow2::write::Compression::Uncompressed,
+                    version: parquet_arrow2::write::Version::V2
+            };
+            let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
+
+            if !self.wrote_start { wtr.start()? };
+
+            if let Some(c) = d.chunk.clone() {
+                let iter = vec![Ok(c)];
+
+                let row_groups = parquet_arrow2::write::RowGroupIterator::try_new(iter.into_iter(), &d.schema, options, vec![parquet_arrow2::write::Encoding::Plain])?;
+
+                for group in row_groups {
+                    let (group, len) = group?;
+                    wtr.write(group, len);
                 }
             };
 
@@ -440,23 +469,66 @@ impl<F: File> ReadStatWriter<F> {
         }
     }
 
+    fn finish_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if let Some(p) = &rsp.out_path {
+            // if already started writing, then need to append to file; otherwise create file
+            let f = if self.wrote_start {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(p)?
+            } else {
+                std::fs::File::create(p)?
+            };
+
+            // write
+            let options = parquet_arrow2::write::WriteOptions {
+                    write_statistics: true,
+                    compression: parquet_arrow2::write::Compression::Uncompressed,
+                    version: parquet_arrow2::write::Version::V2
+            };
+            let wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
+            let _size = wtr.end(None)?;
+
+            // set message for what is being read/written
+            self.write_final_message_for_rows(&d, &rsp);
+
+            // return
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing parquet file as output path is set to None",
+            ))
+        }
+    }
+
     fn write_data_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
 
-        // setup writer
-        self.wtr = Some(ReadStatWriterFormat::CsvDataToStdout(csv_arrow::WriterBuilder::new()
-            .has_headers(false)
-            .build(stdout())));
-        
-        // write
-        if let Some(rswf) = &mut self.wtr {
-            match rswf {
-                ReadStatWriterFormat::CsvDataToStdout(wtr) => wtr.write(&d.batch)?,
-                _ => unreachable!()
-            }
+        // setup writer if not already started writing
+        /*
+        if !self.wrote_start {
+            // let mut wtr = csv::WriterBuilder::new().has_headers(false).from_path(stdout())?;
+            self.wtr = Some(ReadStatWriterFormat::CsvStdOut(stdout()));
         };
+        */
+
+        // write
+        let options = csv_arrow2::write::SerializeOptions::default();
+
+        if let Some(c) = d.chunk.clone() {
+            let cols = &[c];
+            cols
+                .iter()
+                .try_for_each(|batch|
+                    csv_arrow2::write::write_chunk(&mut stdout(), batch, &options));
+        };
+
+        // update
+        self.wrote_start = true;
 
         // return
         Ok(())
@@ -521,34 +593,21 @@ impl<F: File> ReadStatWriter<F> {
             */
 
             // create file
-            let f = std::fs::File::create(p)?;
+            let mut f = std::fs::File::create(p)?;
             
             // setup writer
-            self.wtr = Some(ReadStatWriterFormat::CsvHeaderToFile(csv_crate::WriterBuilder::new().from_writer(f)));
+            //let mut wtr = csv::WriterBuilder::new().has_headers(true).from_path(f)?;
+            /*
+            self.wtr = Some(ReadStatWriterFormat::CsvFile(f));
+            */
 
-            // get variable names for header
-            let vars: Vec<String> = d
-                .batch
-                .schema()
-                .fields()
-                .iter()
-                .map(|field| field.name().to_string())
-                .collect();
-
-            // Alternate way to get variable names
-            // let vars: Vec<String> = self.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+            // Get variable names
+            let vars: Vec<String> = d.vars.iter().map(|(_, m)| m.var_name.clone()).collect();
 
             // write
-            if let Some(rswf) = &mut self.wtr {
-                match rswf {
-                    ReadStatWriterFormat::CsvHeaderToFile(wtr) => {
-                        wtr.write_record(vars)?;
-                        wtr.flush()?
-                    },
-                    _ => unreachable!()
-                }
-            };
-
+            let options = csv_arrow2::write::SerializeOptions::default();
+            csv_arrow2::write::write_header(&mut f, &vars, &options);
+                
             // wrote header
             self.wrote_header = true;
 
@@ -567,30 +626,17 @@ impl<F: File> ReadStatWriter<F> {
         }
 
         // setup writer
-        self.wtr = Some(ReadStatWriterFormat::CsvHeaderToStdOut(csv_crate::WriterBuilder::new().from_writer(stdout())));
+        // let mut wtr = csv::WriterBuilder::new().has_headers(true).from_writer(stdout())?;
+        /*
+        self.wtr = Some(ReadStatWriterFormat::CsvStdOut(stdout()));
+        */
 
-        // get variable names for header
-        let vars: Vec<String> = d 
-            .batch
-            .schema()
-            .fields()
-            .iter()
-            .map(|field| field.name().to_string())
-            .collect();
-
-        // Alternate way to get variable names
-        // let vars: Vec<String> = d.vars.iter().map(|(k, _)| k.var_name.clone()).collect();
+        // Get variable names
+        let vars: Vec<String> = d.vars.iter().map(|(_, m)| m.var_name.clone()).collect();
 
         // write
-        if let Some(rswf) = &mut self.wtr {
-            match rswf {
-                ReadStatWriterFormat::CsvHeaderToStdOut(wtr) => {
-                    wtr.write_record(vars)?;
-                    wtr.flush()?
-                },
-                _ => unreachable!()
-            }
-        };
+        let options = csv_arrow2::write::SerializeOptions::default();
+        csv_arrow2::write::write_header(&mut stdout(), &vars, &options);
 
         // wrote header
         self.wrote_header = true;
@@ -649,7 +695,7 @@ impl<F: File> ReadStatWriter<F> {
         println!("{}:", "Variable names".purple());
         for (k, v) in md.vars.iter() {
             println!(
-                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow data type: {} }}",
+                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow logical data type: {}, arrow physical data type: {} }}",
                 (*k).to_formatted_string(&Locale::en),
                 v.var_name.bright_purple(),
                 format!("{:#?}", v.var_type_class).bright_green(),
@@ -668,7 +714,8 @@ impl<F: File> ReadStatWriter<F> {
                 })
                 .bright_cyan(),
                 v.var_format.bright_yellow(),
-                md.schema.field(*k as usize).data_type().to_string().bright_green()
+                format!("{:#?}", md.schema.fields[*k as usize].data_type().to_logical_type()).bright_green(),
+                format!("{:#?}", md.schema.fields[*k as usize].data_type().to_physical_type()).bright_red(),
             );
         }
 
