@@ -1,4 +1,4 @@
-use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array, Float64Array};
+use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Schema, TimeUnit};
 /*
@@ -133,15 +133,16 @@ impl ReadStatData {
         Self { arrays, ..self }
     }
 
-    fn arrays_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn arrays_to_chunk(mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         
         // TODO - resume here
 
         // Build array references and save in chunk
         let arrays = self
             .arrays
-            .iter_mut()
+            .into_iter()
             .map(|array| {
+                /*
                 match array.data_type() {
                     DataType::Float64 => {
                         let array = array
@@ -152,6 +153,9 @@ impl ReadStatData {
                     },
                     _ => unreachable!()
                 }
+                */
+                let array = (*array).into_arc();
+                array
             })
             .collect();
         // let arrays = self.arrays.iter_mut().map(|array| array.as_arc()).collect();

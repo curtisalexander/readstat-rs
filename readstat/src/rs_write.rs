@@ -1,8 +1,11 @@
+use arrow2::array::Array;
+use arrow2::chunk::Chunk;
 use arrow2::error::ArrowError;
 // Create a writer struct
 use std::fs::OpenOptions;
 use std::io::stdout;
 use std::error::Error;
+use std::sync::Arc;
 use arrow2::io::csv as csv_arrow2;
 use arrow2::io::ipc as ipc_arrow2;
 use arrow2::io::ndjson as ndjson_arrow2;
@@ -46,7 +49,6 @@ pub struct ReadStatWriter {
 impl ReadStatWriter {
     pub fn new() -> Self {
         Self {
-            //wtr: None,
             wrote_header: false,
             wrote_start: false,
         }
