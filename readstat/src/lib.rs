@@ -177,6 +177,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
             // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
+            
+            // Read metadata
             md.read_metadata(&rsp, skip_row_count)?;
 
             // Write metadata
@@ -204,6 +206,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
+            
+            // Read metadata
             md.read_metadata(&rsp, false)?;
 
             // Determine row count
