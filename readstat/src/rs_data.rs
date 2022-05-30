@@ -154,7 +154,7 @@ impl ReadStatData {
                     _ => unreachable!()
                 }
                 */
-                let array = (*array).into_arc();
+                let array = (*array).as_arc();
                 array
             })
             .collect();
