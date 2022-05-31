@@ -1,6 +1,7 @@
 use arrow2::array::Array;
 use arrow2::chunk::Chunk;
 use arrow2::error::ArrowError;
+use arrow2::io::parquet::write::RowGroupIterator;
 // Create a writer struct
 use std::fs::OpenOptions;
 use std::io::stdout;
@@ -61,7 +62,7 @@ impl ReadStatWriter {
                 out_path: Some(_),
                 format: Format::csv,
                 ..
-            } => { self.write_final_message_for_rows(&d, &rsp) },
+            } => { self.finish_txt(&d, &rsp) },
             // Write feather data to file
             ReadStatPath {
                 format: Format::feather,
@@ -71,7 +72,7 @@ impl ReadStatWriter {
             ReadStatPath {
                 format: Format::ndjson,
                 ..
-            } => { self.write_final_message_for_rows(&d, &rsp) }
+            } => { self.finish_txt(&d, &rsp) }
             // Write parquet data to file
             ReadStatPath {
                 format: Format::parquet,
@@ -134,7 +135,7 @@ impl ReadStatWriter {
             Ok(())
     }
 
-    fn write_final_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn finish_txt(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         //if let Some(pb) = &d.pb {
             let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()
@@ -353,7 +354,7 @@ impl ReadStatWriter {
             wtr.finish()?;
 
             // set message for what is being read/written
-            self.write_final_message_for_rows(&d, &rsp);
+            self.finish_txt(&d, &rsp);
 
             // return
             Ok(())
@@ -441,7 +442,7 @@ impl ReadStatWriter {
             // write
             let options = parquet_arrow2::write::WriteOptions {
                     write_statistics: true,
-                    compression: parquet_arrow2::write::Compression::Uncompressed,
+                    compression: parquet_arrow2::write::CompressionOptions::Uncompressed,
                     version: parquet_arrow2::write::Version::V2
             };
             let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
@@ -449,13 +450,27 @@ impl ReadStatWriter {
             if !self.wrote_start { wtr.start()? };
 
             if let Some(c) = d.chunk.clone() {
-                let iter = vec![Ok(c)];
+                let iter: Vec<Result<Chunk<Arc<dyn Array>>, ArrowError>> = vec![Ok(c)];
 
-                let row_groups = parquet_arrow2::write::RowGroupIterator::try_new(iter.into_iter(), &d.schema, options, vec![parquet_arrow2::write::Encoding::Plain])?;
+                let encodings: Vec<parquet_arrow2::write::Encoding> = d.schema
+                    .fields
+                    .iter()
+                    .map(|_| parquet_arrow2::write::Encoding::Plain)
+                    .collect();
+
+                // Follows write parquet high-level examples; not in current release (0.11.2)
+                /*
+                let encodings = &d.schema
+                    .fields
+                    .iter()
+                    .map(|f| parquet_arrow2::write::transverse(&f.data_type, |_| parquet_arrow2::write::Encoding::Plain))
+                    .collect();
+                */
+
+                let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, options, encodings)?;
 
                 for group in row_groups {
-                    let (group, len) = group?;
-                    wtr.write(group, len);
+                    wtr.write(group?);
                 }
             };
 
@@ -487,14 +502,14 @@ impl ReadStatWriter {
             // write
             let options = parquet_arrow2::write::WriteOptions {
                     write_statistics: true,
-                    compression: parquet_arrow2::write::Compression::Uncompressed,
+                    compression: parquet_arrow2::write::CompressionOptions::Uncompressed,
                     version: parquet_arrow2::write::Version::V2
             };
-            let wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
+            let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
             let _size = wtr.end(None)?;
 
             // set message for what is being read/written
-            self.write_final_message_for_rows(&d, &rsp);
+            self.finish_txt(&d, &rsp);
 
             // return
             Ok(())

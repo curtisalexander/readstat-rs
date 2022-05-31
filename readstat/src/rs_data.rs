@@ -1,4 +1,4 @@
-use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array};
+use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array, Float64Array, PrimitiveArray};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Schema, TimeUnit};
 /*
@@ -133,33 +133,69 @@ impl ReadStatData {
         Self { arrays, ..self }
     }
 
-    fn arrays_to_chunk(mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        
-        // TODO - resume here
+    fn vec_to_array(mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
 
-        // Build array references and save in chunk
+        
+        Ok(())
+    }
+
+    fn arrays_to_chunk(mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // TODO - resume here
         let arrays = self
             .arrays
-            .into_iter()
+            .iter()
             .map(|array| {
-                /*
-                match array.data_type() {
+                let array = match array.data_type() {
                     DataType::Float64 => {
                         let array = array
-                            .as_mut_any()
-                            .downcast_mut::<Float64Array>()
-                            .unwrap() as &dyn Array;
-                        Arc::new(array)
-                    },
+                            .as_any()
+                            .downcast_ref::<PrimitiveArray<f64>>()
+                            .unwrap();
+                        Arc::new(array) as Arc<dyn Array>
+                    }
                     _ => unreachable!()
-                }
-                */
-                let array = (*array).as_arc();
+                };
                 array
             })
             .collect();
+        // Build array references and save in chunk
+        /*
+        let arrays = &self
+            .arrays
+            .iter_mut()
+            .collect();
+            //.into_iter()
+            //.map(|array| {
+                //let array = (*array) as &dyn Array;
+               /*
+                let array = match array.data_type() {
+                    DataType::Float64 => {
+                        let array = array
+                            .as_mut_any()
+                            .downcast_ref::<Float64Array>()
+                            .unwrap();
+                            //.unwrap() as &dyn Array;
+
+//                            .into_mut()
+ //                           .unwrap_left() as &dyn Array;
+                        array
+                        //Arc::new(array)
+                    },
+                    _ => unreachable!()
+                };
+
+                array as &dyn Array
+                //array.as_arc()
+                // array.into()::<dyn MutableArray>().as_arc()
+                //array
+            */
+//                (*array).as_arc()
+ //           })
+  //          .collect::<Vec<_>>();
+        */
         // let arrays = self.arrays.iter_mut().map(|array| array.as_arc()).collect();
         self.chunk = Some(Chunk::try_new(arrays)?);
+        //self.chunk = Some(Chunk::try_new(arrays.into_iter().map(|a| {*a}).collect())?);
         // self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
 
         // reset
@@ -169,7 +205,7 @@ impl ReadStatData {
     }
 
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
-        // parse data and if successful then convert cols into a record batch
+        // parse data and if successful then convert cols into a chunk
         self.parse_data(&rsp)?;
         self.arrays_to_chunk()?;
         Ok(())

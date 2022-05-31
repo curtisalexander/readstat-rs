@@ -413,6 +413,8 @@ pub extern "C" fn handle_value(
         _ => unreachable!(),
     }
 
+
+
     // if row is complete
     if var_index == (d.var_count - 1) {
         d.chunk_rows_processed += 1;
