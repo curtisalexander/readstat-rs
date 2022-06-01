@@ -1,4 +1,4 @@
-use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array, Float64Array, PrimitiveArray};
+use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array, Float64Array};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Schema, TimeUnit};
 /*
@@ -89,7 +89,9 @@ impl ReadStatData {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
                     Arc::new(MutableUtf8Array::<i32>::with_capacity(rows))
                 }
-                ReadStatVarType::Int8 => Arc::new(MutablePrimitiveArray::<i8>::with_capacity(rows)),
+                ReadStatVarType::Int8 => {
+                    Arc::new(MutablePrimitiveArray::<i8>::with_capacity(rows))
+                }
                 ReadStatVarType::Int16 => {
                     Arc::new(MutablePrimitiveArray::<i16>::with_capacity(rows))
                 }
@@ -142,7 +144,7 @@ impl ReadStatData {
                     DataType::Float64 => {
                         let array = array
                             .as_any()
-                            .downcast_ref::<PrimitiveArray<f64>>()
+                            .downcast_ref::<Float64Array>()
                             .unwrap();
                         Arc::new(array.clone()) as Arc<dyn Array>
                         //Arc::new(array) as Arc<dyn Array>
