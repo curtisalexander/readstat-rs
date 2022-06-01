@@ -1,10 +1,3 @@
-/*
-use arrow::array::{
-    Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder,
-    StringBuilder, Time32SecondBuilder, TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
-    TimestampNanosecondBuilder, TimestampSecondBuilder,
-};
-*/
 use arrow2::array::{MutableUtf8Array, Int8Vec, Int16Vec, Int32Vec, Int64Vec, Float32Vec, Float64Vec};
 use arrow2::datatypes::{DataType, TimeUnit};
 use chrono::NaiveDateTime;
