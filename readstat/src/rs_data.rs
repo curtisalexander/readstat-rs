@@ -133,14 +133,7 @@ impl ReadStatData {
         Self { arrays, ..self }
     }
 
-    fn vec_to_array(mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
-
-        
-        Ok(())
-    }
-
-    fn arrays_to_chunk(mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        // TODO - resume here
+    fn arrays_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let arrays = self
             .arrays
             .iter()
@@ -151,7 +144,8 @@ impl ReadStatData {
                             .as_any()
                             .downcast_ref::<PrimitiveArray<f64>>()
                             .unwrap();
-                        Arc::new(array) as Arc<dyn Array>
+                        Arc::new(array.clone()) as Arc<dyn Array>
+                        //Arc::new(array) as Arc<dyn Array>
                     }
                     _ => unreachable!()
                 };
@@ -193,13 +187,15 @@ impl ReadStatData {
  //           })
   //          .collect::<Vec<_>>();
         */
+        // reset
+        {
+            self.arrays.clear();
+        }
         // let arrays = self.arrays.iter_mut().map(|array| array.as_arc()).collect();
         self.chunk = Some(Chunk::try_new(arrays)?);
         //self.chunk = Some(Chunk::try_new(arrays.into_iter().map(|a| {*a}).collect())?);
         // self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
 
-        // reset
-        self.arrays.clear();
 
         Ok(())
     }
