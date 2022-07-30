@@ -31,9 +31,9 @@ pub struct ReadStatData {
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
     // data
     // pub cols: Vec<Box<dyn ArrayBuilder>>,
-    pub arrays: Vec<Arc<dyn MutableArray>>,
+    pub arrays: Vec<Box<dyn MutableArray>>,
     pub schema: Schema,
-    pub chunk: Option<Chunk<Arc<dyn Array>>>,
+    pub chunk: Option<Chunk<Box<dyn Array>>>,
     // pub batch: RecordBatch,
     // batch rows
     pub chunk_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
@@ -80,47 +80,47 @@ impl ReadStatData {
 
     fn allocate_arrays(self) -> Self {
         let rows = self.chunk_rows_to_process;
-        let mut arrays: Vec<Arc<dyn MutableArray>> = Vec::with_capacity(self.var_count as usize);
+        let mut arrays: Vec<Box<dyn MutableArray>> = Vec::with_capacity(self.var_count as usize);
         for i in 0..self.var_count {
             // Get variable type
             let var_type = self.vars.get(&i).unwrap().var_type;
             // Allocate space
-            let array: Arc<dyn MutableArray> = match var_type {
+            let array: Box<dyn MutableArray> = match var_type {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-                    Arc::new(MutableUtf8Array::<i32>::with_capacity(rows))
+                    Box::new(MutableUtf8Array::<i32>::with_capacity(rows))
                 }
-                ReadStatVarType::Int8 => Arc::new(MutablePrimitiveArray::<i8>::with_capacity(rows)),
+                ReadStatVarType::Int8 => Box::new(MutablePrimitiveArray::<i8>::with_capacity(rows)),
                 ReadStatVarType::Int16 => {
-                    Arc::new(MutablePrimitiveArray::<i16>::with_capacity(rows))
+                    Box::new(MutablePrimitiveArray::<i16>::with_capacity(rows))
                 }
                 ReadStatVarType::Int32 => {
-                    Arc::new(MutablePrimitiveArray::<i32>::with_capacity(rows))
+                    Box::new(MutablePrimitiveArray::<i32>::with_capacity(rows))
                 }
                 ReadStatVarType::Float => {
-                    Arc::new(MutablePrimitiveArray::<f32>::with_capacity(rows))
+                    Box::new(MutablePrimitiveArray::<f32>::with_capacity(rows))
                 }
                 ReadStatVarType::Double => match self.vars.get(&i).unwrap().var_format_class {
-                    None => Arc::new(MutablePrimitiveArray::<f64>::with_capacity(rows)),
-                    Some(ReadStatFormatClass::Date) => Arc::new(
+                    None => Box::new(MutablePrimitiveArray::<f64>::with_capacity(rows)),
+                    Some(ReadStatFormatClass::Date) => Box::new(
                         MutablePrimitiveArray::<i32>::with_capacity(rows).to(DataType::Date32),
                     ),
-                    Some(ReadStatFormatClass::DateTime) => Arc::new(
+                    Some(ReadStatFormatClass::DateTime) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Second, None)),
                     ),
-                    Some(ReadStatFormatClass::DateTimeWithMilliseconds) => Arc::new(
+                    Some(ReadStatFormatClass::DateTimeWithMilliseconds) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
                     ),
-                    Some(ReadStatFormatClass::DateTimeWithMicroseconds) => Arc::new(
+                    Some(ReadStatFormatClass::DateTimeWithMicroseconds) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
                     ),
-                    Some(ReadStatFormatClass::DateTimeWithNanoseconds) => Arc::new(
+                    Some(ReadStatFormatClass::DateTimeWithNanoseconds) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
                     ),
-                    Some(ReadStatFormatClass::Time) => Arc::new(
+                    Some(ReadStatFormatClass::Time) => Box::new(
                         MutablePrimitiveArray::<i32>::with_capacity(rows)
                             .to(DataType::Time32(TimeUnit::Second)),
                     ),
@@ -141,7 +141,7 @@ impl ReadStatData {
                 let array = match array.data_type() {
                     DataType::Float64 => {
                         let array = array.as_any().downcast_ref::<Float64Array>().unwrap();
-                        Arc::new(array.clone()) as Arc<dyn Array>
+                        Box::new(array.clone()) as Box<dyn Array>
                         //Arc::new(array) as Arc<dyn Array>
                     }
                     _ => unreachable!(),
