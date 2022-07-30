@@ -1,4 +1,6 @@
-use arrow2::array::{MutableUtf8Array, Int8Vec, Int16Vec, Int32Vec, Int64Vec, Float32Vec, Float64Vec};
+use arrow2::array::{
+    Float32Vec, Float64Vec, Int16Vec, Int32Vec, Int64Vec, Int8Vec, MutableUtf8Array,
+};
 use arrow2::datatypes::{DataType, TimeUnit};
 use chrono::NaiveDateTime;
 use log::debug;
@@ -230,6 +232,13 @@ pub extern "C" fn handle_value(
             debug!("value is {:#?}", &value);
 
             // append to array
+            /*
+            d.arrays[var_index as usize]
+                .as_mut_any()
+                .downcast_mut::<MutableUtf8Array<i32>>()
+                .unwrap()
+                .push(if is_missing == 0 { Some(value) } else { None });
+            */
             d.arrays[var_index as usize]
                 .as_mut_any()
                 .downcast_mut::<MutableUtf8Array<i32>>()
@@ -327,9 +336,11 @@ pub extern "C" fn handle_value(
                             (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000,
                         )
                     }
-                    ReadStatFormatClass::DateTimeWithNanoseconds => ReadStatVar::ReadStat_DateTimeWithNanoseconds(
-                        (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
-                    ),
+                    ReadStatFormatClass::DateTimeWithNanoseconds => {
+                        ReadStatVar::ReadStat_DateTimeWithNanoseconds(
+                            (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
+                        )
+                    }
                     ReadStatFormatClass::Time => ReadStatVar::ReadStat_Time(value as i32),
                 },
             };
@@ -337,13 +348,12 @@ pub extern "C" fn handle_value(
             // append to builder
             match value {
                 ReadStatVar::ReadStat_Date(v) => {
-                    // append to array
                     d.arrays[var_index as usize]
                         .as_mut_any()
                         .downcast_mut::<Int32Vec>()
                         .unwrap()
                         .to(DataType::Date32)
-                        .push(if is_missing == 0 { Some(v) } else { None })
+                        .push(if is_missing == 0 { Some(v) } else { None });
                 }
                 ReadStatVar::ReadStat_DateTime(v) => {
                     // append to array
@@ -405,8 +415,6 @@ pub extern "C" fn handle_value(
         // exhaustive
         _ => unreachable!(),
     }
-
-
 
     // if row is complete
     if var_index == (d.var_count - 1) {

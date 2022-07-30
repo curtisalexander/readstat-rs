@@ -6,7 +6,6 @@ use arrow2::io::parquet::write::RowGroupIterator;
 use std::fs::OpenOptions;
 use std::io::stdout;
 use std::error::Error;
-use std::sync::Arc;
 use arrow2::io::csv as csv_arrow2;
 use arrow2::io::ipc as ipc_arrow2;
 use arrow2::io::ndjson as ndjson_arrow2;
@@ -450,7 +449,7 @@ impl ReadStatWriter {
             // if !self.wrote_start { wtr.start()? };
 
             if let Some(c) = d.chunk.clone() {
-                let iter: Vec<Result<Chunk<Arc<dyn Array>>, ArrowError>> = vec![Ok(c)];
+                let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
 
                 let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
                     .fields
