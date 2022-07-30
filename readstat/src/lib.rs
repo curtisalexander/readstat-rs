@@ -1,17 +1,14 @@
 #![allow(non_camel_case_types)]
-
+use clap::{clap_derive::ArgEnum, Parser, Subcommand, ValueHint};
 use colored::Colorize;
 use crossbeam::channel::unbounded;
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
-use serde::Serialize;
-use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
-use structopt::clap::arg_enum;
-use structopt::StructOpt;
+use std::{error::Error, fmt};
 
 mod cb;
 mod err;
@@ -31,13 +28,86 @@ pub use rs_metadata::{
 pub use rs_path::ReadStatPath;
 pub use rs_write::ReadStatWriter;
 
+// GLOBALS
 // Default rows to stream
 const STREAM_ROWS: u32 = 10000;
 
-// StructOpt
-#[derive(StructOpt, Debug)]
+// CLI
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+#[clap(propagate_version = true)]
 /// 💾 Command-line tool for working with SAS binary files; 🦀 Rust wrapper of ReadStat C library
-/// {n}    Display metadata{n}    Preview data{n}    Convert SAS file to csv, feather (or the Arrow IPC format), ndjson, or parquet format
+/// {n}    Display metadata{n}    Preview data{n}    Convert sas7bdat to csv, feather (Arrow IPC), ndjson, or parquet
+pub struct ReadStatCli {
+    #[clap(subcommand)]
+    command: ReadStatCliCommands,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReadStatCliCommands {
+    /// Display sas7bdat metadata
+    Metadata {
+        #[clap(value_hint = ValueHint::FilePath, value_parser)]
+        input: PathBuf,
+        /// Display sas7bdat metadata as json
+        #[clap(action, long)]
+        as_json: bool,
+        /// Do not display progress bar
+        #[clap(action, long)]
+        no_progress: bool,
+        /// Skip calculating row count{n}If only interested in variable metadata speeds up parsing
+        #[clap(action, long)]
+        skip_row_count: bool,
+    },
+    Preview {
+        /// Path to sas7bdat file
+        #[clap(value_parser)]
+        input: PathBuf,
+        /// Number of rows to write
+        #[clap(default_value = "10", long, value_parser)]
+        rows: u32,
+        /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
+        #[clap(arg_enum, ignore_case = true, long, value_parser)]
+        reader: Option<Reader>,
+        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
+        #[clap(long, value_parser)]
+        stream_rows: Option<u32>,
+        /// Do not display progress bar
+        #[clap(action, long)]
+        no_progress: bool,
+    },
+    /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
+    Data {
+        /// Path to sas7bdat file
+        #[clap(value_hint = ValueHint::FilePath, value_parser)]
+        input: PathBuf,
+        /// Output file path
+        #[clap(long, short = 'o', value_parser)]
+        output: Option<PathBuf>,
+        /// Output file format{n}Defaults to csv
+        #[clap(arg_enum, ignore_case = true, long, short = 'f', value_parser)]
+        format: Option<Format>,
+        /// Overwrite output file if it already exists
+        #[clap(action, long)]
+        overwrite: bool,
+        /// Number of rows to write
+        #[clap(long, value_parser)]
+        rows: Option<u32>,
+        /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
+        #[clap(arg_enum, ignore_case = true, long, value_parser)]
+        reader: Option<Reader>,
+        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
+        #[clap(long, value_parser)]
+        stream_rows: Option<u32>,
+        /// Do not display progress bar
+        #[clap(action, long)]
+        no_progress: bool,
+        /// Convert sas7bdat data in parallel
+        #[clap(action, long)]
+        parallel: bool,
+    },
+}
+/*
 pub enum ReadStat {
     /// Display sas7bdat metadata
     Metadata {
@@ -100,27 +170,36 @@ pub enum ReadStat {
         no_progress: bool,
         /// Convert sas7bdat data in parallel
         #[structopt(long)]
-        parallel: bool
+        parallel: bool,
     },
 }
+*/
 
-arg_enum! {
-    #[derive(Debug, Clone, Copy, Serialize)]
-    #[allow(non_camel_case_types)]
-    pub enum Format {
-        csv,
-        feather,
-        ndjson,
-        parquet
+#[derive(Debug, Clone, Copy, ArgEnum)]
+#[allow(non_camel_case_types)]
+pub enum Format {
+    csv,
+    feather,
+    ndjson,
+    parquet,
+}
+
+impl fmt::Display for Format {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", &self)
     }
 }
 
-arg_enum! {
-    #[derive(Debug, Clone, Copy, Serialize)]
-    #[allow(non_camel_case_types)]
-    pub enum Reader {
-        mem,
-        stream,
+#[derive(Debug, Clone, Copy, ArgEnum)]
+#[allow(non_camel_case_types)]
+pub enum Reader {
+    mem,
+    stream,
+}
+
+impl fmt::Display for Reader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", &self)
     }
 }
 
@@ -155,11 +234,11 @@ fn build_offsets(
     Ok(offsets)
 }
 
-pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
+pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
     env_logger::init();
 
-    match rs {
-        ReadStat::Metadata {
+    match rs.command {
+        ReadStatCliCommands::Metadata {
             input: in_path,
             as_json,
             no_progress: _,
@@ -177,7 +256,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
             // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
-            
+
             // Read metadata
             md.read_metadata(&rsp, skip_row_count)?;
 
@@ -187,7 +266,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
             // Return
             Ok(())
         }
-        ReadStat::Preview {
+        ReadStatCliCommands::Preview {
             input,
             rows,
             reader,
@@ -206,7 +285,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
-            
+
             // Read metadata
             md.read_metadata(&rsp, false)?;
 
@@ -252,13 +331,13 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
                 // Write
                 wtr.write(&d, &rsp)?;
-            
+
                 // Finish
                 if i == pairs_cnt {
                     wtr.finish(&d, &rsp)?;
                 }
             }
-            
+
             // Finish writer
             //wtr.finish(&d, &rsp)?;
 
@@ -272,7 +351,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
             };
             */
         }
-        ReadStat::Data {
+        ReadStatCliCommands::Data {
             input,
             output,
             format,
@@ -417,7 +496,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                     // Write
                     for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
                         wtr.write(&d, &rsp)?;
-                       
+
                         if i == (pairs_cnt - 1) {
                             wtr.finish(&d, &rsp)?;
                         }
