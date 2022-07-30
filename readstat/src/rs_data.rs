@@ -1,4 +1,4 @@
-use arrow2::array::{Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array, Float64Array};
+use arrow2::array::{Array, Float64Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Schema, TimeUnit};
 /*
@@ -89,9 +89,7 @@ impl ReadStatData {
                 ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
                     Arc::new(MutableUtf8Array::<i32>::with_capacity(rows))
                 }
-                ReadStatVarType::Int8 => {
-                    Arc::new(MutablePrimitiveArray::<i8>::with_capacity(rows))
-                }
+                ReadStatVarType::Int8 => Arc::new(MutablePrimitiveArray::<i8>::with_capacity(rows)),
                 ReadStatVarType::Int16 => {
                     Arc::new(MutablePrimitiveArray::<i16>::with_capacity(rows))
                 }
@@ -142,53 +140,50 @@ impl ReadStatData {
             .map(|array| {
                 let array = match array.data_type() {
                     DataType::Float64 => {
-                        let array = array
-                            .as_any()
-                            .downcast_ref::<Float64Array>()
-                            .unwrap();
+                        let array = array.as_any().downcast_ref::<Float64Array>().unwrap();
                         Arc::new(array.clone()) as Arc<dyn Array>
                         //Arc::new(array) as Arc<dyn Array>
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
                 array
             })
             .collect();
         // Build array references and save in chunk
         /*
-        let arrays = &self
-            .arrays
-            .iter_mut()
-            .collect();
-            //.into_iter()
-            //.map(|array| {
-                //let array = (*array) as &dyn Array;
-               /*
-                let array = match array.data_type() {
-                    DataType::Float64 => {
-                        let array = array
-                            .as_mut_any()
-                            .downcast_ref::<Float64Array>()
-                            .unwrap();
-                            //.unwrap() as &dyn Array;
+                let arrays = &self
+                    .arrays
+                    .iter_mut()
+                    .collect();
+                    //.into_iter()
+                    //.map(|array| {
+                        //let array = (*array) as &dyn Array;
+                       /*
+                        let array = match array.data_type() {
+                            DataType::Float64 => {
+                                let array = array
+                                    .as_mut_any()
+                                    .downcast_ref::<Float64Array>()
+                                    .unwrap();
+                                    //.unwrap() as &dyn Array;
 
-//                            .into_mut()
- //                           .unwrap_left() as &dyn Array;
-                        array
-                        //Arc::new(array)
-                    },
-                    _ => unreachable!()
-                };
+        //                            .into_mut()
+         //                           .unwrap_left() as &dyn Array;
+                                array
+                                //Arc::new(array)
+                            },
+                            _ => unreachable!()
+                        };
 
-                array as &dyn Array
-                //array.as_arc()
-                // array.into()::<dyn MutableArray>().as_arc()
-                //array
-            */
-//                (*array).as_arc()
- //           })
-  //          .collect::<Vec<_>>();
-        */
+                        array as &dyn Array
+                        //array.as_arc()
+                        // array.into()::<dyn MutableArray>().as_arc()
+                        //array
+                    */
+        //                (*array).as_arc()
+         //           })
+          //          .collect::<Vec<_>>();
+                */
         // reset
         {
             self.arrays.clear();
@@ -197,7 +192,6 @@ impl ReadStatData {
         self.chunk = Some(Chunk::try_new(arrays)?);
         //self.chunk = Some(Chunk::try_new(arrays.into_iter().map(|a| {*a}).collect())?);
         // self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
-
 
         Ok(())
     }
@@ -225,14 +219,14 @@ impl ReadStatData {
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
-                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
+                    .template("[{spinner:.green} {elapsed_precise}] {msg}")?,
             );
             let msg = format!(
                 "Parsing sas7bdat data from file {}",
                 &rsp.path.to_string_lossy().bright_red()
             );
             pb.set_message(msg);
-            pb.enable_steady_tick(120);
+            pb.enable_steady_tick(std::time::Duration::new(120, 0));
         }
 
         // initialize context
