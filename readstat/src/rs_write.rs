@@ -1,6 +1,6 @@
 use arrow2::array::Array;
 use arrow2::chunk::Chunk;
-use arrow2::error::ArrowError;
+use arrow2::error::Error as ArrowError;
 use arrow2::io::parquet::write::RowGroupIterator;
 // Create a writer struct
 use std::fs::OpenOptions;
@@ -447,15 +447,15 @@ impl ReadStatWriter {
             };
             let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
 
-            if !self.wrote_start { wtr.start()? };
+            // if !self.wrote_start { wtr.start()? };
 
             if let Some(c) = d.chunk.clone() {
                 let iter: Vec<Result<Chunk<Arc<dyn Array>>, ArrowError>> = vec![Ok(c)];
 
-                let encodings: Vec<parquet_arrow2::write::Encoding> = d.schema
+                let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
                     .fields
                     .iter()
-                    .map(|_| parquet_arrow2::write::Encoding::Plain)
+                    .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
                     .collect();
 
                 // Follows write parquet high-level examples; not in current release (0.11.2)
