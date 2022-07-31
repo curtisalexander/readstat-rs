@@ -352,6 +352,7 @@ pub extern "C" fn handle_value(
                         .as_mut_any()
                         .downcast_mut::<Int32Vec>()
                         .unwrap()
+                        .to_owned()
                         .to(DataType::Date32)
                         .push(if is_missing == 0 { Some(v) } else { None });
                 }
@@ -361,6 +362,7 @@ pub extern "C" fn handle_value(
                         .as_mut_any()
                         .downcast_mut::<Int64Vec>()
                         .unwrap()
+                        .to_owned()
                         .to(DataType::Timestamp(TimeUnit::Second, None))
                         .push(if is_missing == 0 { Some(v) } else { None });
                 }
@@ -370,6 +372,7 @@ pub extern "C" fn handle_value(
                         .as_mut_any()
                         .downcast_mut::<Int64Vec>()
                         .unwrap()
+                        .to_owned()
                         .to(DataType::Timestamp(TimeUnit::Millisecond, None))
                         .push(if is_missing == 0 { Some(v) } else { None });
                 }
@@ -379,6 +382,7 @@ pub extern "C" fn handle_value(
                         .as_mut_any()
                         .downcast_mut::<Int64Vec>()
                         .unwrap()
+                        .to_owned()
                         .to(DataType::Timestamp(TimeUnit::Microsecond, None))
                         .push(if is_missing == 0 { Some(v) } else { None });
                 }
@@ -388,6 +392,7 @@ pub extern "C" fn handle_value(
                         .as_mut_any()
                         .downcast_mut::<Int64Vec>()
                         .unwrap()
+                        .to_owned()
                         .to(DataType::Timestamp(TimeUnit::Nanosecond, None))
                         .push(if is_missing == 0 { Some(v) } else { None });
                 }
@@ -397,6 +402,7 @@ pub extern "C" fn handle_value(
                         .as_mut_any()
                         .downcast_mut::<Int32Vec>()
                         .unwrap()
+                        .to_owned()
                         .to(DataType::Time32(TimeUnit::Second))
                         .push(if is_missing == 0 { Some(v) } else { None });
                 }
