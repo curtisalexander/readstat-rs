@@ -26,6 +26,7 @@ use crate::ReadStatMetadata;
 use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
 
+/*
 pub enum ReadStatWriterFormat {
     // csv
     CsvFile(std::fs::File),
@@ -39,6 +40,7 @@ pub enum ReadStatWriterFormat {
     Parquet(std::fs::File),
     // Parquet(parquet_arrow2::write::FileWriter<std::fs::File>)
 }
+*/
 
 pub struct ReadStatWriter {
     //pub wtr: Option<ReadStatWriterFormat>,
@@ -234,7 +236,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp)?;
 
             // setup writer if not already started writing
             /*
@@ -265,7 +267,7 @@ impl ReadStatWriter {
                 cols
                     .iter()
                     .try_for_each(|batch|
-                        csv_arrow2::write::write_chunk(&mut f, batch, &options));
+                        csv_arrow2::write::write_chunk(&mut f, batch, &options))?;
             };
             
             // update
@@ -294,7 +296,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp)?;
 
             // setup writer if not already started writing
             /*
@@ -353,7 +355,7 @@ impl ReadStatWriter {
             wtr.finish()?;
 
             // set message for what is being read/written
-            self.finish_txt(&d, &rsp);
+            self.finish_txt(&d, &rsp)?;
 
             // return
             Ok(())
@@ -378,7 +380,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp)?;
             
             // setup writer if not already started writing
             /*
@@ -393,7 +395,7 @@ impl ReadStatWriter {
                 let serializer = ndjson_arrow2::write::Serializer::new(arrays, vec![]);
 
                 let mut wtr = ndjson_arrow2::write::FileWriter::new(f, serializer);
-                wtr.by_ref().collect::<Result<(), ArrowError>>();
+                wtr.by_ref().collect::<Result<(), ArrowError>>()?;
             }
 
             // update
@@ -422,7 +424,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp);
+            self.write_message_for_rows(&d, &rsp)?;
             
             // setup writer if not already started writing
             /*
@@ -469,7 +471,7 @@ impl ReadStatWriter {
                 let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, options, encodings)?;
 
                 for group in row_groups {
-                    wtr.write(group?);
+                    wtr.write(group?)?;
                 }
             };
 
@@ -508,7 +510,7 @@ impl ReadStatWriter {
             let _size = wtr.end(None)?;
 
             // set message for what is being read/written
-            self.finish_txt(&d, &rsp);
+            self.finish_txt(&d, &rsp)?;
 
             // return
             Ok(())
@@ -540,7 +542,7 @@ impl ReadStatWriter {
             cols
                 .iter()
                 .try_for_each(|batch|
-                    csv_arrow2::write::write_chunk(&mut stdout(), batch, &options));
+                    csv_arrow2::write::write_chunk(&mut stdout(), batch, &options))?;
         };
 
         // update
@@ -622,7 +624,7 @@ impl ReadStatWriter {
 
             // write
             let options = csv_arrow2::write::SerializeOptions::default();
-            csv_arrow2::write::write_header(&mut f, &vars, &options);
+            csv_arrow2::write::write_header(&mut f, &vars, &options)?;
                 
             // wrote header
             self.wrote_header = true;
@@ -652,7 +654,7 @@ impl ReadStatWriter {
 
         // write
         let options = csv_arrow2::write::SerializeOptions::default();
-        csv_arrow2::write::write_header(&mut stdout(), &vars, &options);
+        csv_arrow2::write::write_header(&mut stdout(), &vars, &options)?;
 
         // wrote header
         self.wrote_header = true;

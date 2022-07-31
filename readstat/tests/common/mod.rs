@@ -44,7 +44,7 @@ pub fn get_var_attrs<'a>(
     readstat::ReadStatVarType,
     Option<readstat::ReadStatFormatClass>,
     String,
-    &'a arrow::datatypes::DataType,
+    &'a arrow2::datatypes::DataType,
 ) {
     let m = get_metadata(&d, var_index);
     let s = &d.schema;
@@ -53,6 +53,6 @@ pub fn get_var_attrs<'a>(
         m.var_type,
         m.var_format_class,
         m.var_format.clone(),
-        s.field(var_index as usize).data_type(),
+        s.fields[var_index as usize].data_type(),
     )
 }

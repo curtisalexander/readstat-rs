@@ -1,4 +1,4 @@
-use arrow2::datatypes::{Schema, Field, DataType, TimeUnit};
+use arrow2::datatypes::{DataType, Field, Schema, TimeUnit};
 // use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use colored::Colorize;
 use log::debug;
