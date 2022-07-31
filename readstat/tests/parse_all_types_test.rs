@@ -1,6 +1,7 @@
-use arrow::{
-    array::{Float64Array, StringArray, TimestampSecondArray},
-    datatypes::DataType,
+use arrow2::{
+    array::{Float64Array, Int64Array, Utf8Array},
+    datatypes::{DataType, TimeUnit},
+    temporal_conversions::timestamp_s_to_datetime,
 };
 use chrono::NaiveDate;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
@@ -60,23 +61,22 @@ fn parse_all_types_int() {
 
     // arrow data type
     assert!(matches!(
-        d.schema.field(var_index as usize).data_type(),
+        d.schema.fields[var_index as usize].data_type(),
         DataType::Float64
     ));
 
     // int column
-    let col = d
-        .batch
-        .column(var_index as usize)
+    let col = d.chunk.unwrap().into_arrays()[var_index as usize]
         .as_any()
         .downcast_ref::<Float64Array>()
-        .unwrap();
+        .unwrap()
+        .to_owned();
 
     // non-missing value
     assert_eq!(col.value(0), 1234f64);
 
     // missing value
-    assert!(d.batch.column(0).data().is_null(2));
+    assert_eq!(col.validity().unwrap().get_bit(2), false);
 }
 
 #[test]
@@ -113,17 +113,16 @@ fn parse_all_types_string() {
 
     // arrow data type
     assert!(matches!(
-        d.schema.field(var_index as usize).data_type(),
+        d.schema.fields[var_index as usize].data_type(),
         DataType::Utf8
     ));
 
     // string column
-    let col = d
-        .batch
-        .column(var_index as usize)
+    let col = d.chunk.unwrap().into_arrays()[var_index as usize]
         .as_any()
-        .downcast_ref::<StringArray>()
-        .unwrap();
+        .downcast_ref::<Utf8Array<i32>>()
+        .unwrap()
+        .to_owned();
 
     // non-missing value
     assert_eq!(col.value(0), String::from("string"));
@@ -167,15 +166,16 @@ fn parse_all_types_datetime() {
     // variable format
     assert_eq!(m.var_format, String::from("DATETIME22"));
 
-    // non-missing value
-    let col = d
-        .batch
-        .column(var_index as usize)
+    // datetime column
+    let col = d.chunk.unwrap().into_arrays()[var_index as usize]
         .as_any()
-        .downcast_ref::<TimestampSecondArray>()
-        .unwrap();
+        .downcast_ref::<Int64Array>()
+        .unwrap()
+        .to_owned()
+        .to(DataType::Timestamp(TimeUnit::Second, None));
 
-    let dt = col.value_as_datetime(1).unwrap();
+    // non-missing value
+    let dt = timestamp_s_to_datetime(col.value(1));
     let dt_literal = NaiveDate::from_ymd(2021, 6, 1).and_hms_milli(13, 42, 25, 0);
 
     assert_eq!(dt, dt_literal);
@@ -277,7 +277,7 @@ fn parse_all_types_metadata() {
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
     ));
 
     // 6 - _datetime_with_ms
@@ -288,7 +288,7 @@ fn parse_all_types_metadata() {
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
     ));
 
     // 7 - _time
@@ -299,6 +299,6 @@ fn parse_all_types_metadata() {
     assert_eq!(vf, String::from("TIME"));
     assert!(matches!(
         adt,
-        DataType::Time32(arrow::datatypes::TimeUnit::Second)
+        DataType::Time32(arrow2::datatypes::TimeUnit::Second)
     ));
 }

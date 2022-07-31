@@ -1,4 +1,4 @@
-se arrow::{
+use arrow::{
     array::{Date32Array, StringArray},
     datatypes::DataType,
 };
