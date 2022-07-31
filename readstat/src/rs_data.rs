@@ -1,4 +1,7 @@
-use arrow2::array::{Array, Float64Array, MutableArray, MutablePrimitiveArray, MutableUtf8Array};
+use arrow2::array::{
+    Array, Float32Array, Float64Array, Int16Array, Int32Array, MutableArray, MutablePrimitiveArray,
+    MutableUtf8Array, Utf8Array,
+};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Schema, TimeUnit};
 /*
@@ -133,17 +136,88 @@ impl ReadStatData {
         Self { arrays, ..self }
     }
 
+    #[allow(unreachable_patterns)]
     fn arrays_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let arrays = self
             .arrays
             .iter()
-            .map(|array| {
+            .enumerate()
+            .map(|(i, array)| {
                 let array = match array.data_type() {
                     DataType::Float64 => {
-                        let array = array.as_any().downcast_ref::<Float64Array>().unwrap();
-                        Box::new(array.clone()) as Box<dyn Array>
-                        //Arc::new(array) as Arc<dyn Array>
+                        match self.vars.get(&(i as i32)).unwrap().var_format_class {
+                            None => {
+                                let array =
+                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
+                                Box::new(array.clone()) as Box<dyn Array>
+                            }
+                            Some(ReadStatFormatClass::Date) => {
+                                let array =
+                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
+                                Box::new(array.clone().to(DataType::Date32)) as Box<dyn Array>
+                            }
+                            Some(ReadStatFormatClass::DateTime) => {
+                                let array =
+                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
+                                Box::new(
+                                    array
+                                        .clone()
+                                        .to(DataType::Timestamp(TimeUnit::Second, None)),
+                                ) as Box<dyn Array>
+                            }
+                            Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
+                                let array =
+                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
+                                Box::new(
+                                    array
+                                        .clone()
+                                        .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
+                                ) as Box<dyn Array>
+                            }
+                            Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
+                                let array =
+                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
+                                Box::new(
+                                    array
+                                        .clone()
+                                        .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
+                                ) as Box<dyn Array>
+                            }
+                            Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
+                                let array =
+                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
+                                Box::new(
+                                    array
+                                        .clone()
+                                        .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
+                                ) as Box<dyn Array>
+                            }
+                            Some(ReadStatFormatClass::Time) => {
+                                let array =
+                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
+                                Box::new(array.clone().to(DataType::Time32(TimeUnit::Second)))
+                                    as Box<dyn Array>
+                            }
+                            _ => unreachable!(),
+                        }
                     }
+                    DataType::Float32 => {
+                        let array = (*array).as_any().downcast_ref::<Float32Array>().unwrap();
+                        Box::new(array.clone()) as Box<dyn Array>
+                    }
+                    DataType::Int8 | DataType::Int16 => {
+                        let array = (*array).as_any().downcast_ref::<Int16Array>().unwrap();
+                        Box::new(array.clone()) as Box<dyn Array>
+                    }
+                    DataType::Int32 => {
+                        let array = (*array).as_any().downcast_ref::<Int32Array>().unwrap();
+                        Box::new(array.clone()) as Box<dyn Array>
+                    }
+                    DataType::Utf8 => {
+                        let array = (*array).as_any().downcast_ref::<Utf8Array<i32>>().unwrap();
+                        Box::new(array.clone()) as Box<dyn Array>
+                    }
+                    // exhaustive
                     _ => unreachable!(),
                 };
                 array
