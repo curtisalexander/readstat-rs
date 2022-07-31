@@ -9,10 +9,7 @@ repository = "https://github.com/curtisalexander/readstat-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-# arrow2 = { version = "0.12", features = ["full"] }
-arrow2 = { git = "https://github.com/jorgecarleitao/arrow2.git", rev = "9f6be525fd94623dfd3055d99af2840dbbbf7884", features = [
-    "full",
-] }
+arrow2 = { version = "0.13", features = ["full"] }
 clap = { version = "3", features = ["derive"] }
 crossbeam = "0.8"
 csv = "1.1"

@@ -86,15 +86,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df5d25bc6d676271277120c41ef28760fe0a9f070677a58db621c0f983f9c20"
 dependencies = [
  "planus",
- "prost",
- "prost-derive",
+ "prost 0.10.4",
+ "prost-derive 0.10.1",
  "serde",
 ]
 
 [[package]]
 name = "arrow2"
-version = "0.12.0"
-source = "git+https://github.com/jorgecarleitao/arrow2.git?rev=9f6be525fd94623dfd3055d99af2840dbbbf7884#9f6be525fd94623dfd3055d99af2840dbbbf7884"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87a339834bf51ed376b8cf8fb0e8984531f560cd5c75c3c62c6e657836b6d094"
 dependencies = [
  "ahash",
  "arrow-format",
@@ -125,6 +126,7 @@ dependencies = [
  "multiversion",
  "num-traits",
  "odbc-api",
+ "orc-format",
  "parquet2",
  "regex",
  "serde",
@@ -1653,6 +1655,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da32515d9f6e6e489d7bc9d84c71b060db7247dc035bbe44eac88cf87486d8d5"
 
 [[package]]
+name = "orc-format"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "402a2dcf15f0a73c4fe33c622dec93adf95e05cb72d5b9a9af2bf51f3cc41f0b"
+dependencies = [
+ "fallible-streaming-iterator",
+ "flate2",
+ "prost 0.9.0",
+]
+
+[[package]]
 name = "os_str_bytes"
 version = "6.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1862,12 +1875,35 @@ dependencies = [
 
 [[package]]
 name = "prost"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "444879275cb4fd84958b1a1d5420d15e6fcf7c235fe47f053c9c2a80aceb6001"
+dependencies = [
+ "bytes",
+ "prost-derive 0.9.0",
+]
+
+[[package]]
+name = "prost"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71adf41db68aa0daaefc69bb30bcd68ded9b9abaad5d1fbb6304c4fb390e083e"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.10.1",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9cc1a3263e07e0bf68e96268f37665207b49560d98739662cdfaae215c720fe"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
