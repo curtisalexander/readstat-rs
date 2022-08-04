@@ -32,10 +32,13 @@ const STREAM_ROWS: u32 = 10000;
 
 // CLI
 #[derive(Parser, Debug)]
-#[clap(version, about, long_about = None)]
+#[clap(version)]
 #[clap(propagate_version = true)]
-/// 💾 Command-line tool for working with SAS binary files; 🦀 Rust wrapper of ReadStat C library
-/// {n}    Display metadata{n}    Preview data{n}    Convert sas7bdat to csv, feather (Arrow IPC), ndjson, or parquet
+/// 💾 Command-line tool for working with SAS binary files
+///
+/// 🦀 Rust wrapper of ReadStat C library
+///
+/// - Display metadata{n}- Preview data{n}- Convert data to csv, feather (Arrow IPC), ndjson, or parquet
 pub struct ReadStatCli {
     #[clap(subcommand)]
     command: ReadStatCliCommands,
@@ -57,6 +60,7 @@ pub enum ReadStatCliCommands {
         #[clap(action, long)]
         skip_row_count: bool,
     },
+    /// Preview sas7bdat data
     Preview {
         /// Path to sas7bdat file
         #[clap(value_parser)]
