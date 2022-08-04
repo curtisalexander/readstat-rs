@@ -1,32 +1,31 @@
-use arrow2::array::{
-    Array, Float32Array, Float64Array, Int16Array, Int32Array, MutableArray, MutablePrimitiveArray,
-    MutableUtf8Array, Utf8Array,
+use arrow2::{
+    array::{
+        Array, Float32Array, Float64Array, Int16Array, Int32Array, MutableArray,
+        MutablePrimitiveArray, MutableUtf8Array, Utf8Array,
+    },
+    chunk::Chunk,
+    datatypes::{DataType, Schema, TimeUnit},
 };
-use arrow2::chunk::Chunk;
-use arrow2::datatypes::{DataType, Schema, TimeUnit};
-/*
-use arrow::array::{
-    ArrayBuilder, ArrayRef, Date32Builder, Float32Builder, Float64Builder, Int16Builder,
-    Int32Builder, Int8Builder, StringBuilder, Time32SecondBuilder, TimestampSecondBuilder,
-};
-*/
-// use arrow::datatypes::Schema;
-// use arrow::record_batch::RecordBatch;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use num_traits::FromPrimitive;
 use path_abs::PathInfo;
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::os::raw::c_void;
-use std::sync::{atomic::AtomicUsize, Arc};
+use std::{
+    collections::BTreeMap,
+    error::Error,
+    os::raw::c_void,
+    sync::{atomic::AtomicUsize, Arc},
+};
 
-use crate::cb;
-use crate::rs_metadata::{ReadStatFormatClass, ReadStatMetadata, ReadStatVarType};
-use crate::rs_parser::ReadStatParser;
-use crate::rs_path::ReadStatPath;
-use crate::{ReadStatError, ReadStatVarMetadata};
+use crate::{
+    cb,
+    err::ReadStatError,
+    rs_metadata::{ReadStatMetadata, ReadStatVarMetadata},
+    rs_parser::ReadStatParser,
+    rs_path::ReadStatPath,
+    rs_var::{ReadStatVarFormatClass, ReadStatVarType},
+};
 
 pub struct ReadStatData {
     // metadata
@@ -104,26 +103,26 @@ impl ReadStatData {
                 }
                 ReadStatVarType::Double => match self.vars.get(&i).unwrap().var_format_class {
                     None => Box::new(MutablePrimitiveArray::<f64>::with_capacity(rows)),
-                    Some(ReadStatFormatClass::Date) => Box::new(
+                    Some(ReadStatVarFormatClass::Date) => Box::new(
                         MutablePrimitiveArray::<i32>::with_capacity(rows).to(DataType::Date32),
                     ),
-                    Some(ReadStatFormatClass::DateTime) => Box::new(
+                    Some(ReadStatVarFormatClass::DateTime) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Second, None)),
                     ),
-                    Some(ReadStatFormatClass::DateTimeWithMilliseconds) => Box::new(
+                    Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
                     ),
-                    Some(ReadStatFormatClass::DateTimeWithMicroseconds) => Box::new(
+                    Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
                     ),
-                    Some(ReadStatFormatClass::DateTimeWithNanoseconds) => Box::new(
+                    Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => Box::new(
                         MutablePrimitiveArray::<i64>::with_capacity(rows)
                             .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
                     ),
-                    Some(ReadStatFormatClass::Time) => Box::new(
+                    Some(ReadStatVarFormatClass::Time) => Box::new(
                         MutablePrimitiveArray::<i32>::with_capacity(rows)
                             .to(DataType::Time32(TimeUnit::Second)),
                     ),
@@ -151,12 +150,12 @@ impl ReadStatData {
                                     (*array).as_any().downcast_ref::<Float64Array>().unwrap();
                                 Box::new(array.clone()) as Box<dyn Array>
                             }
-                            Some(ReadStatFormatClass::Date) => {
+                            Some(ReadStatVarFormatClass::Date) => {
                                 let array =
                                     (*array).as_any().downcast_ref::<Float64Array>().unwrap();
                                 Box::new(array.clone().to(DataType::Date32)) as Box<dyn Array>
                             }
-                            Some(ReadStatFormatClass::DateTime) => {
+                            Some(ReadStatVarFormatClass::DateTime) => {
                                 let array =
                                     (*array).as_any().downcast_ref::<Float64Array>().unwrap();
                                 Box::new(
@@ -165,7 +164,7 @@ impl ReadStatData {
                                         .to(DataType::Timestamp(TimeUnit::Second, None)),
                                 ) as Box<dyn Array>
                             }
-                            Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
+                            Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
                                 let array =
                                     (*array).as_any().downcast_ref::<Float64Array>().unwrap();
                                 Box::new(
@@ -174,7 +173,7 @@ impl ReadStatData {
                                         .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
                                 ) as Box<dyn Array>
                             }
-                            Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
+                            Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
                                 let array =
                                     (*array).as_any().downcast_ref::<Float64Array>().unwrap();
                                 Box::new(
@@ -183,7 +182,7 @@ impl ReadStatData {
                                         .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
                                 ) as Box<dyn Array>
                             }
-                            Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
+                            Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
                                 let array =
                                     (*array).as_any().downcast_ref::<Float64Array>().unwrap();
                                 Box::new(
@@ -192,7 +191,7 @@ impl ReadStatData {
                                         .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
                                 ) as Box<dyn Array>
                             }
-                            Some(ReadStatFormatClass::Time) => {
+                            Some(ReadStatVarFormatClass::Time) => {
                                 let array =
                                     (*array).as_any().downcast_ref::<Float64Array>().unwrap();
                                 Box::new(array.clone().to(DataType::Time32(TimeUnit::Second)))

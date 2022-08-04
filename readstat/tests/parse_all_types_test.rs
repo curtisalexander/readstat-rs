@@ -160,7 +160,7 @@ fn parse_all_types_datetime() {
     // variable format class
     assert!(matches!(
         m.var_format_class,
-        Some(readstat::ReadStatFormatClass::DateTime)
+        Some(readstat::ReadStatVarFormatClass::DateTime)
     ));
 
     // variable format
@@ -265,7 +265,7 @@ fn parse_all_types_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 4);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::Date));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::Date));
     assert_eq!(vf, String::from("YYMMDD10"));
     assert!(matches!(adt, DataType::Date32));
 
@@ -273,7 +273,7 @@ fn parse_all_types_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 5);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::DateTime));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTime));
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
@@ -284,7 +284,7 @@ fn parse_all_types_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::DateTime));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTime));
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
@@ -295,7 +295,7 @@ fn parse_all_types_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::Time));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::Time));
     assert_eq!(vf, String::from("TIME"));
     assert!(matches!(
         adt,

@@ -5,11 +5,7 @@ use crossbeam::channel::unbounded;
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::thread;
-use std::{error::Error, fmt};
-
+use std::{error::Error, fmt, path::PathBuf, sync::Arc, thread};
 mod cb;
 mod err;
 mod formats;
@@ -17,15 +13,14 @@ mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
+mod rs_var;
 mod rs_write;
 
 pub use err::ReadStatError;
 pub use rs_data::ReadStatData;
-pub use rs_metadata::{
-    ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatMetadata, ReadStatVar,
-    ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
-};
+pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
+pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;
 
 // GLOBALS

@@ -42,7 +42,7 @@ pub fn get_var_attrs<'a>(
 ) -> (
     readstat::ReadStatVarTypeClass,
     readstat::ReadStatVarType,
-    Option<readstat::ReadStatFormatClass>,
+    Option<readstat::ReadStatVarFormatClass>,
     String,
     &'a arrow2::datatypes::DataType,
 ) {

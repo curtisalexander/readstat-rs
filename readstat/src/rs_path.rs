@@ -1,8 +1,10 @@
 use colored::Colorize;
 use path_abs::{PathAbs, PathInfo};
-use std::error::Error;
-use std::ffi::CString;
-use std::path::{Path, PathBuf};
+use std::{
+    error::Error,
+    ffi::CString,
+    path::{Path, PathBuf},
+};
 
 use crate::Format;
 

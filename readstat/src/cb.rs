@@ -1,21 +1,20 @@
-use arrow2::array::{
-    Float32Vec, Float64Vec, Int16Vec, Int32Vec, Int64Vec, Int8Vec, MutableUtf8Array,
+use arrow2::{
+    array::{Float32Vec, Float64Vec, Int16Vec, Int32Vec, Int64Vec, Int8Vec, MutableUtf8Array},
+    datatypes::{DataType, TimeUnit},
 };
-use arrow2::datatypes::{DataType, TimeUnit};
 use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
-use std::ffi::CStr;
-use std::os::raw::{c_char, c_int, c_void};
+use std::{
+    ffi::CStr,
+    os::raw::{c_char, c_int, c_void},
+};
 
 use crate::{
     formats,
     rs_data::ReadStatData,
-    rs_metadata::{
-        ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatVar, ReadStatVarMetadata,
-        ReadStatVarType, ReadStatVarTypeClass,
-    },
-    ReadStatMetadata,
+    rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata},
+    rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
 
 const DIGITS: usize = 14;
@@ -320,28 +319,28 @@ pub extern "C" fn handle_value(
             let value = match d.vars.get(&var_index).unwrap().var_format_class {
                 None => ReadStatVar::ReadStat_f64(value),
                 Some(fc) => match fc {
-                    ReadStatFormatClass::Date => {
+                    ReadStatVarFormatClass::Date => {
                         ReadStatVar::ReadStat_Date((value as i32).checked_sub(DAY_SHIFT).unwrap())
                     }
-                    ReadStatFormatClass::DateTime => ReadStatVar::ReadStat_DateTime(
+                    ReadStatVarFormatClass::DateTime => ReadStatVar::ReadStat_DateTime(
                         (value as i64).checked_sub(SEC_SHIFT).unwrap(),
                     ),
-                    ReadStatFormatClass::DateTimeWithMilliseconds => {
+                    ReadStatVarFormatClass::DateTimeWithMilliseconds => {
                         ReadStatVar::ReadStat_DateTimeWithMilliseconds(
                             (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000,
                         )
                     }
-                    ReadStatFormatClass::DateTimeWithMicroseconds => {
+                    ReadStatVarFormatClass::DateTimeWithMicroseconds => {
                         ReadStatVar::ReadStat_DateTimeWithMicroseconds(
                             (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000,
                         )
                     }
-                    ReadStatFormatClass::DateTimeWithNanoseconds => {
+                    ReadStatVarFormatClass::DateTimeWithNanoseconds => {
                         ReadStatVar::ReadStat_DateTimeWithNanoseconds(
                             (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
                         )
                     }
-                    ReadStatFormatClass::Time => ReadStatVar::ReadStat_Time(value as i32),
+                    ReadStatVarFormatClass::Time => ReadStatVar::ReadStat_Time(value as i32),
                 },
             };
 

@@ -1,18 +1,16 @@
 use arrow2::datatypes::{DataType, Field, Schema, TimeUnit};
-// use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::Serialize;
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::ffi::c_void;
-use std::os::raw::c_int;
+use std::{collections::BTreeMap, error::Error, ffi::c_void, os::raw::c_int};
 
 use crate::cb::{handle_metadata, handle_variable};
+use crate::err::ReadStatError;
 use crate::rs_parser::ReadStatParser;
-use crate::{ReadStatError, ReadStatPath};
+use crate::rs_path::ReadStatPath;
+use crate::rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
@@ -65,23 +63,23 @@ impl ReadStatMetadata {
                     ReadStatVarType::Int32 => DataType::Int32,
                     ReadStatVarType::Float => DataType::Float32,
                     ReadStatVarType::Double => match &vm.var_format_class {
-                        Some(ReadStatFormatClass::Date) => DataType::Date32,
-                        Some(ReadStatFormatClass::DateTime) => {
+                        Some(ReadStatVarFormatClass::Date) => DataType::Date32,
+                        Some(ReadStatVarFormatClass::DateTime) => {
                             DataType::Timestamp(TimeUnit::Second, None)
                         }
-                        Some(ReadStatFormatClass::DateTimeWithMilliseconds) => {
+                        Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
                             // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Millisecond, None)
                         }
-                        Some(ReadStatFormatClass::DateTimeWithMicroseconds) => {
+                        Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
                             // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Microsecond, None)
                         }
-                        Some(ReadStatFormatClass::DateTimeWithNanoseconds) => {
+                        Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
                             // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Nanosecond, None)
                         }
-                        Some(ReadStatFormatClass::Time) => DataType::Time32(TimeUnit::Second),
+                        Some(ReadStatVarFormatClass::Time) => DataType::Time32(TimeUnit::Second),
                         None => DataType::Float64,
                     },
                 };
@@ -181,7 +179,7 @@ pub struct ReadStatVarMetadata {
     pub var_type_class: ReadStatVarTypeClass,
     pub var_label: String,
     pub var_format: String,
-    pub var_format_class: Option<ReadStatFormatClass>,
+    pub var_format_class: Option<ReadStatVarFormatClass>,
 }
 
 impl ReadStatVarMetadata {
@@ -191,7 +189,7 @@ impl ReadStatVarMetadata {
         var_type_class: ReadStatVarTypeClass,
         var_label: String,
         var_format: String,
-        var_format_class: Option<ReadStatFormatClass>,
+        var_format_class: Option<ReadStatVarFormatClass>,
     ) -> Self {
         Self {
             var_name,
@@ -202,53 +200,4 @@ impl ReadStatVarMetadata {
             var_format_class,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
-pub enum ReadStatVarType {
-    String = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING as isize,
-    Int8 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 as isize,
-    Int16 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 as isize,
-    Int32 = readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 as isize,
-    Float = readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT as isize,
-    Double = readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE as isize,
-    StringRef = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF as isize,
-    Unknown,
-}
-
-#[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
-pub enum ReadStatVarTypeClass {
-    String = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_STRING as isize,
-    Numeric = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_NUMERIC as isize,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub enum ReadStatFormatClass {
-    Date,
-    DateTime,
-    DateTimeWithMilliseconds,
-    DateTimeWithMicroseconds,
-    DateTimeWithNanoseconds,
-    Time,
-}
-
-#[derive(Debug, Clone)]
-pub enum ReadStatVar {
-    ReadStat_String(String),
-    ReadStat_i8(i8),
-    ReadStat_i16(i16),
-    ReadStat_i32(i32),
-    ReadStat_f32(f32),
-    ReadStat_f64(f64),
-    ReadStat_Missing(()),
-    ReadStat_Date(i32),
-    ReadStat_DateTime(i64),
-    ReadStat_DateTimeWithMilliseconds(i64),
-    ReadStat_DateTimeWithMicroseconds(i64),
-    ReadStat_DateTimeWithNanoseconds(i64),
-    ReadStat_Time(i32),
-    // TODO
-    // ReadStat_TimeWithMilliseconds(i32),
-    // ReadStat_TimeWithMicroseconds(i32),
-    // ReadStat_TimeWithNanoseconds(i32),
 }

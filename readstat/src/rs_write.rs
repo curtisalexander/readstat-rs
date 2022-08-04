@@ -1,30 +1,31 @@
-use arrow2::array::Array;
-use arrow2::chunk::Chunk;
-use arrow2::error::Error as ArrowError;
-use arrow2::io::parquet::write::RowGroupIterator;
+use arrow2::{
+    array::Array,
+    chunk::Chunk,
+    error::Error as ArrowError,
+    io::{
+        parquet::write::RowGroupIterator,
+        csv as csv_arrow2,
+        ipc as ipc_arrow2,
+        ndjson as ndjson_arrow2,
+        parquet as parquet_arrow2,
+    },
+};
 // Create a writer struct
-use std::fs::OpenOptions;
-use std::io::stdout;
-use std::error::Error;
-use arrow2::io::csv as csv_arrow2;
-use arrow2::io::ipc as ipc_arrow2;
-use arrow2::io::ndjson as ndjson_arrow2;
-use arrow2::io::parquet as parquet_arrow2;
-// use arrow::csv as csv_arrow;
-// use arrow::ipc::writer::FileWriter;
-// use arrow::json::LineDelimitedWriter;
+use std::{
+    fs::OpenOptions,
+    io::stdout,
+    error::Error,
+};
 use colored::Colorize;
 // use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
-// use parquet::arrow::ArrowWriter;
-// use parquet::file::properties::WriterProperties;
 
 use crate::Format;
-use crate::ReadStatFormatClass;
-use crate::ReadStatMetadata;
 use crate::rs_data::ReadStatData;
+use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
+use crate::rs_var::ReadStatVarFormatClass;
 
 /*
 pub enum ReadStatWriterFormat {
@@ -721,12 +722,12 @@ impl ReadStatWriter {
                 v.var_label.bright_blue(),
                 (match &v.var_format_class {
                     Some(f) => match f {
-                        ReadStatFormatClass::Date => "Date",
-                        ReadStatFormatClass::DateTime |
-                        ReadStatFormatClass::DateTimeWithMilliseconds | 
-                        ReadStatFormatClass::DateTimeWithMicroseconds |
-                        ReadStatFormatClass::DateTimeWithNanoseconds => "DateTime",
-                        ReadStatFormatClass::Time => "Time",
+                        ReadStatVarFormatClass::Date => "Date",
+                        ReadStatVarFormatClass::DateTime |
+                        ReadStatVarFormatClass::DateTimeWithMilliseconds | 
+                        ReadStatVarFormatClass::DateTimeWithMicroseconds |
+                        ReadStatVarFormatClass::DateTimeWithNanoseconds => "DateTime",
+                        ReadStatVarFormatClass::Time => "Time",
                     },
                     None => "",
                 })

@@ -1,9 +1,9 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::rs_metadata::ReadStatFormatClass;
+use crate::rs_var::ReadStatVarFormatClass;
 
-pub fn match_var_format(v: &str) -> Option<ReadStatFormatClass> {
+pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
     lazy_static! {
         static ref RE_DATE: Regex = Regex::new(
             r#"(?xi)
@@ -57,17 +57,17 @@ pub fn match_var_format(v: &str) -> Option<ReadStatFormatClass> {
     };
 
     if RE_DATE.is_match(v) {
-        Some(ReadStatFormatClass::Date)
+        Some(ReadStatVarFormatClass::Date)
     } else if RE_DATETIME.is_match(v) {
-        Some(ReadStatFormatClass::DateTime)
+        Some(ReadStatVarFormatClass::DateTime)
     } else if RE_DATETIME_WITH_MILLI.is_match(v) {
-        Some(ReadStatFormatClass::DateTimeWithMilliseconds)
+        Some(ReadStatVarFormatClass::DateTimeWithMilliseconds)
     } else if RE_DATETIME_WITH_MICRO.is_match(v) {
-        Some(ReadStatFormatClass::DateTimeWithMicroseconds)
+        Some(ReadStatVarFormatClass::DateTimeWithMicroseconds)
     } else if RE_DATETIME_WITH_NANO.is_match(v) {
-        Some(ReadStatFormatClass::DateTimeWithNanoseconds)
+        Some(ReadStatVarFormatClass::DateTimeWithNanoseconds)
     } else if RE_TIME.is_match(v) {
-        Some(ReadStatFormatClass::Time)
+        Some(ReadStatVarFormatClass::Time)
     } else {
         None
     }

@@ -1,7 +1,9 @@
 use log::debug;
 use num_traits::FromPrimitive;
-use std::error::Error;
-use std::os::raw::{c_char, c_long, c_void};
+use std::{
+    error::Error,
+    os::raw::{c_char, c_long, c_void},
+};
 
 use crate::err::ReadStatError;
 
@@ -41,7 +43,10 @@ impl ReadStatParser {
         }
     }
 
-    pub fn set_row_limit(self, row_limit: Option<u32>) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn set_row_limit(
+        self,
+        row_limit: Option<u32>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         match row_limit {
             Some(r) => {
                 let set_row_limit_error =
@@ -64,7 +69,10 @@ impl ReadStatParser {
         }
     }
 
-    pub fn set_row_offset(self, row_offset: Option<u32>) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn set_row_offset(
+        self,
+        row_offset: Option<u32>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         match row_offset {
             Some(r) => {
                 let set_row_offset_error =
