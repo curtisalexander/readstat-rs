@@ -5,12 +5,10 @@ use arrow2::{
 use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
-use std::{
-    ffi::CStr,
-    os::raw::{c_char, c_int, c_void},
-};
+use std::os::raw::{c_char, c_int, c_void};
 
 use crate::{
+    common::ptr_to_string,
     formats,
     rs_data::ReadStatData,
     rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata},
@@ -25,15 +23,6 @@ enum ReadStatHandler {
     READSTAT_HANDLER_OK,
     READSTAT_HANDLER_ABORT,
     READSTAT_HANDLER_SKIP_VARIABLE,
-}
-
-// String out from C pointer
-pub unsafe fn ptr_to_string(x: *const i8) -> String {
-    if x.is_null() {
-        String::new()
-    } else {
-        CStr::from_ptr(x).to_str().unwrap().to_owned()
-    }
 }
 
 // C callback functions

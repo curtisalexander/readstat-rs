@@ -82,6 +82,10 @@ impl ReadStatData {
         }
     }
 
+    fn allocate_cols(self) -> Self {
+        todo!()
+    }
+
     fn allocate_arrays(self) -> Self {
         let rows = self.chunk_rows_to_process;
         let mut arrays: Vec<Box<dyn MutableArray>> = Vec::with_capacity(self.var_count as usize);

@@ -13,8 +13,8 @@ use arrow2::{
 // Create a writer struct
 use std::{
     fs::OpenOptions,
-    io::stdout,
     error::Error,
+    io::stdout,
 };
 use colored::Colorize;
 // use indicatif::{ProgressBar, ProgressStyle};

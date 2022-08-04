@@ -3,7 +3,7 @@ use num_derive::FromPrimitive;
 use serde::Serialize;
 use std::{collections::BTreeMap, os::raw::c_int};
 
-use crate::{cb, ReadStatVarMetadata};
+use crate::{common::ptr_to_string, rs_metadata::ReadStatVarMetadata};
 
 // Constants
 const DIGITS: usize = 14;
@@ -47,7 +47,7 @@ impl ReadStatVar {
                 } else {
                     // get value
                     let value =
-                        unsafe { cb::ptr_to_string(readstat_sys::readstat_string_value(value)) };
+                        unsafe { ptr_to_string(readstat_sys::readstat_string_value(value)) };
 
                     // debug
                     debug!("value is {:#?}", &value);

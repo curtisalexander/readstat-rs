@@ -7,6 +7,7 @@ use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
 use std::{error::Error, fmt, path::PathBuf, sync::Arc, thread};
 
+pub use common::build_offsets;
 pub use err::ReadStatError;
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
@@ -15,6 +16,7 @@ pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatV
 pub use rs_write::ReadStatWriter;
 
 mod cb;
+mod common;
 mod err;
 mod formats;
 mod rs_data;
@@ -131,38 +133,6 @@ impl fmt::Display for Reader {
         write!(f, "{:?}", &self)
     }
 }
-
-fn build_offsets(
-    row_count: u32,
-    stream_rows: u32,
-) -> Result<Vec<u32>, Box<dyn Error + Send + Sync>> {
-    // Get number of chunks
-    let chunks = if stream_rows < row_count {
-        if row_count % stream_rows == 0 {
-            row_count / stream_rows
-        } else {
-            (row_count / stream_rows) + 1
-        }
-    } else {
-        1
-    };
-
-    // Allocate and populate a vector for the offsets
-    let mut offsets: Vec<u32> = Vec::with_capacity(chunks as usize);
-
-    for c in 0..=chunks {
-        if c == 0 {
-            offsets.push(0);
-        } else if c == chunks {
-            offsets.push(row_count);
-        } else {
-            offsets.push(c * stream_rows);
-        }
-    }
-
-    Ok(offsets)
-}
-
 pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
     env_logger::init();
 
