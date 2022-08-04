@@ -171,9 +171,7 @@ impl ReadStatVar {
                                     (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
                                 ))
                             }
-                            ReadStatVarFormatClass::Time => {
-                                Self::ReadStat_Time(Some((value as i32)))
-                            }
+                            ReadStatVarFormatClass::Time => Self::ReadStat_Time(Some(value as i32)),
                         },
                     }
                 }
