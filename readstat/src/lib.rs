@@ -32,7 +32,7 @@ const STREAM_ROWS: u32 = 10000;
 
 // CLI
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(version, about, long_about = None)]
 #[clap(propagate_version = true)]
 /// 💾 Command-line tool for working with SAS binary files; 🦀 Rust wrapper of ReadStat C library
 /// {n}    Display metadata{n}    Preview data{n}    Convert sas7bdat to csv, feather (Arrow IPC), ndjson, or parquet
