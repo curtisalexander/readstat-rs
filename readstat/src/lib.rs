@@ -37,8 +37,6 @@ const STREAM_ROWS: u32 = 10000;
 /// 💾 Command-line tool for working with SAS binary files
 ///
 /// 🦀 Rust wrapper of ReadStat C library
-///
-/// - Display metadata{n}- Preview data{n}- Convert data to csv, feather (Arrow IPC), ndjson, or parquet
 pub struct ReadStatCli {
     #[clap(subcommand)]
     command: ReadStatCliCommands,
@@ -71,7 +69,7 @@ pub enum ReadStatCliCommands {
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[clap(arg_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}    ↑ rows = ↑ memory usage{n}    Ignored if reader is set to mem{n}    Defaults to 10,000 rows
+        /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
         #[clap(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
@@ -98,7 +96,7 @@ pub enum ReadStatCliCommands {
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[clap(arg_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}    ↑ rows = ↑ memory usage{n}    Ignored if reader is set to mem{n}    Defaults to 10,000 rows
+        /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
         #[clap(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
