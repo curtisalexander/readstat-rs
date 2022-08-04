@@ -6,6 +6,14 @@ use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
 use std::{error::Error, fmt, path::PathBuf, sync::Arc, thread};
+
+pub use err::ReadStatError;
+pub use rs_data::ReadStatData;
+pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
+pub use rs_path::ReadStatPath;
+pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
+pub use rs_write::ReadStatWriter;
+
 mod cb;
 mod err;
 mod formats;
@@ -15,13 +23,6 @@ mod rs_parser;
 mod rs_path;
 mod rs_var;
 mod rs_write;
-
-pub use err::ReadStatError;
-pub use rs_data::ReadStatData;
-pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
-pub use rs_path::ReadStatPath;
-pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
-pub use rs_write::ReadStatWriter;
 
 // GLOBALS
 // Default rows to stream
