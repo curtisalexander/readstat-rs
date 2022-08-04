@@ -140,7 +140,7 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ```
 
 ### Parallelism
-The `data` subcommand includes a parameter for `--parallel`.  If invoked with this parameter, the *reading* of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 50,000), then each chunk of rows is read in parallel.  Note that all processors on the users's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
+The `data` subcommand includes a parameter for `--parallel`.  If invoked with this parameter, the *reading* of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the users's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
 
 Note that although reading is in parallel, *writing* is still sequential.  Thus one should only anticipate moderate speed-ups as much of the time is spent writing.
 
@@ -152,7 +152,7 @@ Note that although reading is in parallel, *writing* is still sequential.  Thus 
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
 - `mem` &rarr; Parse and read the entire `sas7bdat` into memory before writing to either standard out or a file
 - `stream` (default) &rarr; Parse and read at most `stream-rows` into memory before writing to disk
-    - `stream-rows` may be set via the command line parameter `--stream-rows` or if elided will default to 50,000 rows
+    - `stream-rows` may be set via the command line parameter `--stream-rows` or if elided will default to 10,000 rows
 
 **Why is this useful?**
 - `mem` is useful for testing purposes

@@ -71,7 +71,7 @@ pub enum ReadStatCliCommands {
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[clap(arg_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
+        /// Number of rows to stream (read into memory) at a time{n}    ↑ rows = ↑ memory usage{n}    Ignored if reader is set to mem{n}    Defaults to 10,000 rows
         #[clap(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
@@ -98,7 +98,7 @@ pub enum ReadStatCliCommands {
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[clap(arg_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
+        /// Number of rows to stream (read into memory) at a time{n}    ↑ rows = ↑ memory usage{n}    Ignored if reader is set to mem{n}    Defaults to 10,000 rows
         #[clap(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
@@ -196,7 +196,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
 
             // Determine stream row count
-            // 📝 Default stream rows set to 50,000
+            // 📝 Default stream rows set to 10,000
             let total_rows_to_stream = match reader {
                 Some(Reader::stream) | None => match stream_rows {
                     Some(s) => s,
@@ -308,7 +308,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     };
 
                     // Determine stream row count
-                    // 📝 Default stream rows set to 50,000
+                    // 📝 Default stream rows set to 10,000
                     let total_rows_to_stream = match reader {
                         Some(Reader::stream) | None => match stream_rows {
                             Some(s) => s,
