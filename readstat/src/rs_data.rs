@@ -25,6 +25,7 @@ use crate::{
     rs_parser::ReadStatParser,
     rs_path::ReadStatPath,
     rs_var::{ReadStatVarFormatClass, ReadStatVarType},
+    ReadStatVar,
 };
 
 pub struct ReadStatData {
@@ -32,7 +33,7 @@ pub struct ReadStatData {
     pub var_count: i32,
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
     // data
-    // pub cols: Vec<Box<dyn ArrayBuilder>>,
+    pub cols: Vec<Vec<ReadStatVar>>,
     pub arrays: Vec<Box<dyn MutableArray>>,
     pub schema: Schema,
     pub chunk: Option<Chunk<Box<dyn Array>>>,
@@ -59,6 +60,7 @@ impl ReadStatData {
             var_count: 0,
             vars: BTreeMap::new(),
             // data
+            cols: Vec::new(),
             arrays: Vec::new(),
             // cols: Vec::new(),
             schema: Schema::default(),

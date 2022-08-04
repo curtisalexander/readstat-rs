@@ -82,7 +82,7 @@ pub enum ReadStatCliCommands {
         output: Option<PathBuf>,
         /// Output file format{n}Defaults to csv
         #[clap(arg_enum, ignore_case = true, long, short = 'f', value_parser)]
-        format: Option<Format>,
+        format: Option<OutFormat>,
         /// Overwrite output file if it already exists
         #[clap(action, long)]
         overwrite: bool,
@@ -103,84 +103,17 @@ pub enum ReadStatCliCommands {
         parallel: bool,
     },
 }
-/*
-pub enum ReadStat {
-    /// Display sas7bdat metadata
-    Metadata {
-        /// Path to sas7bdat file
-        #[structopt(parse(from_os_str))]
-        input: PathBuf,
-        /// Display sas7bdat metadata as json
-        #[structopt(long)]
-        as_json: bool,
-        /// Do not display progress bar
-        #[structopt(long)]
-        no_progress: bool,
-        /// Skip calculating row count{n}If only interested in variable metadata speeds up parsing
-        #[structopt(long)]
-        skip_row_count: bool,
-    },
-    /// Preview sas7bdat data
-    Preview {
-        /// Path to sas7bdat file
-        #[structopt(parse(from_os_str))]
-        input: PathBuf,
-        /// Number of rows to write
-        #[structopt(long, default_value = "10")]
-        rows: u32,
-        /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[structopt(long, possible_values = &Reader::variants(), case_insensitive=true)]
-        reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
-        #[structopt(long)]
-        stream_rows: Option<u32>,
-        /// Do not display progress bar
-        #[structopt(long)]
-        no_progress: bool,
-    },
-    /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
-    Data {
-        /// Path to sas7bdat file
-        #[structopt(parse(from_os_str))]
-        input: PathBuf,
-        /// Output file path
-        #[structopt(short = "o", long, parse(from_os_str))]
-        output: Option<PathBuf>,
-        /// Output file format{n}Defaults to csv
-        #[structopt(short = "f", long, possible_values = &Format::variants(), case_insensitive=true)]
-        format: Option<Format>,
-        /// Overwrite output file if it already exists
-        #[structopt(long)]
-        overwrite: bool,
-        /// Number of rows to write
-        #[structopt(long)]
-        rows: Option<u32>,
-        /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[structopt(long, possible_values = &Reader::variants(), case_insensitive=true)]
-        reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
-        #[structopt(long)]
-        stream_rows: Option<u32>,
-        /// Do not display progress bar
-        #[structopt(long)]
-        no_progress: bool,
-        /// Convert sas7bdat data in parallel
-        #[structopt(long)]
-        parallel: bool,
-    },
-}
-*/
 
 #[derive(Debug, Clone, Copy, ArgEnum)]
 #[allow(non_camel_case_types)]
-pub enum Format {
+pub enum OutFormat {
     csv,
     feather,
     ndjson,
     parquet,
 }
 
-impl fmt::Display for Format {
+impl fmt::Display for OutFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", &self)
     }
@@ -277,7 +210,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             );
 
             // output and format determine the type of writing to be performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv), false, false)?;
+            let rsp = ReadStatPath::new(sas_path, None, Some(OutFormat::csv), false, false)?;
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();

@@ -21,7 +21,7 @@ use colored::Colorize;
 use num_format::Locale;
 use num_format::ToFormattedString;
 
-use crate::Format;
+use crate::OutFormat;
 use crate::rs_data::ReadStatData;
 use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
@@ -62,22 +62,22 @@ impl ReadStatWriter {
             // Write csv data to file
             ReadStatPath {
                 out_path: Some(_),
-                format: Format::csv,
+                format: OutFormat::csv,
                 ..
             } => { self.finish_txt(&d, &rsp) },
             // Write feather data to file
             ReadStatPath {
-                format: Format::feather,
+                format: OutFormat::feather,
                 ..
             } => { self.finish_feather(&d, &rsp) }
             // Write ndjson data to file
             ReadStatPath {
-                format: Format::ndjson,
+                format: OutFormat::ndjson,
                 ..
             } => { self.finish_txt(&d, &rsp) }
             // Write parquet data to file
             ReadStatPath {
-                format: Format::parquet,
+                format: OutFormat::parquet,
                 ..
             } => { self.finish_parquet(&d, &rsp) },
             _ => Ok(())
@@ -178,13 +178,13 @@ impl ReadStatWriter {
             // Write data to standard out
             ReadStatPath {
                 out_path: None,
-                format: Format::csv,
+                format: OutFormat::csv,
                 ..
             } if self.wrote_header => self.write_data_to_stdout(&d),
             // Write header and data to standard out
             ReadStatPath {
                 out_path: None,
-                format: Format::csv,
+                format: OutFormat::csv,
                 ..
             } => {
                 self.write_header_to_stdout(&d)?;
@@ -193,13 +193,13 @@ impl ReadStatWriter {
             // Write csv data to file
             ReadStatPath {
                 out_path: Some(_),
-                format: Format::csv,
+                format: OutFormat::csv,
                 ..
             } if self.wrote_header => self.write_data_to_csv(&d, &rsp),
             // Write csv header to file
             ReadStatPath {
                 out_path: Some(_),
-                format: Format::csv,
+                format: OutFormat::csv,
                 ..
             } => {
                 self.write_header_to_csv(&d, &rsp)?;
@@ -207,17 +207,17 @@ impl ReadStatWriter {
             }
             // Write feather data to file
             ReadStatPath {
-                format: Format::feather,
+                format: OutFormat::feather,
                 ..
             } => self.write_data_to_feather(&d, &rsp),
             // Write ndjson data to file
             ReadStatPath {
-                format: Format::ndjson,
+                format: OutFormat::ndjson,
                 ..
             } => self.write_data_to_ndjson(&d, &rsp),
             // Write parquet data to file
             ReadStatPath {
-                format: Format::parquet,
+                format: OutFormat::parquet,
                 ..
             } => self.write_data_to_parquet(&d, &rsp),
         }

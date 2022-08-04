@@ -1,30 +1,186 @@
+use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
+use std::{collections::BTreeMap, os::raw::c_int};
+
+use crate::{cb, ReadStatVarMetadata};
+
+// Constants
+const DIGITS: usize = 14;
+const DAY_SHIFT: i32 = 3653;
+const SEC_SHIFT: i64 = 315619200;
 
 #[derive(Debug, Clone)]
 pub enum ReadStatVar {
-    ReadStat_String(String),
-    ReadStat_i8(i8),
-    ReadStat_i16(i16),
-    ReadStat_i32(i32),
-    ReadStat_f32(f32),
-    ReadStat_f64(f64),
-    ReadStat_Missing(()),
-    ReadStat_Date(i32),
-    ReadStat_DateTime(i64),
-    ReadStat_DateTimeWithMilliseconds(i64),
-    ReadStat_DateTimeWithMicroseconds(i64),
-    ReadStat_DateTimeWithNanoseconds(i64),
-    ReadStat_Time(i32),
+    ReadStat_String(Option<String>),
+    ReadStat_i8(Option<i8>),
+    ReadStat_i16(Option<i16>),
+    ReadStat_i32(Option<i32>),
+    ReadStat_f32(Option<f32>),
+    ReadStat_f64(Option<f64>),
+    ReadStat_Date(Option<i32>),
+    ReadStat_DateTime(Option<i64>),
+    ReadStat_DateTimeWithMilliseconds(Option<i64>),
+    ReadStat_DateTimeWithMicroseconds(Option<i64>),
+    ReadStat_DateTimeWithNanoseconds(Option<i64>),
+    ReadStat_Time(Option<i32>),
     // TODO
-    // ReadStat_TimeWithMilliseconds(i32),
-    // ReadStat_TimeWithMicroseconds(i32),
-    // ReadStat_TimeWithNanoseconds(i32),
+    // ReadStat_TimeWithMilliseconds(Option<i32>),
+    // ReadStat_TimeWithMicroseconds(Option<i32>),
+    // ReadStat_TimeWithNanoseconds(Option<i32>),
 }
 
 impl ReadStatVar {
-    fn get_readstat_value() {
-        todo!()
+    pub fn get_readstat_value(
+        value: readstat_sys::readstat_value_t,
+        value_type: readstat_sys::readstat_type_t,
+        is_missing: c_int,
+        vars: &BTreeMap<i32, ReadStatVarMetadata>,
+        var_index: i32,
+    ) -> Self {
+        match value_type {
+            readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
+            | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
+                if is_missing == 0 {
+                    // return
+                    Self::ReadStat_String(None)
+                } else {
+                    // get value
+                    let value =
+                        unsafe { cb::ptr_to_string(readstat_sys::readstat_string_value(value)) };
+
+                    // debug
+                    debug!("value is {:#?}", &value);
+
+                    // return
+                    Self::ReadStat_String(Some(value))
+                }
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
+                if is_missing == 0 {
+                    Self::ReadStat_i8(None)
+                } else {
+                    // get value
+                    let value = unsafe { readstat_sys::readstat_int8_value(value) };
+
+                    // debug
+                    debug!("value is {:#?}", value);
+
+                    // return
+                    Self::ReadStat_i8(Some(value))
+                }
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
+                if is_missing == 0 {
+                    Self::ReadStat_i16(None)
+                } else {
+                    // get value
+                    let value = unsafe { readstat_sys::readstat_int16_value(value) };
+
+                    // debug
+                    debug!("value is {:#?}", value);
+
+                    // return
+                    Self::ReadStat_i16(Some(value))
+                }
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
+                if is_missing == 0 {
+                    Self::ReadStat_i32(None)
+                } else {
+                    // get value
+                    let value = unsafe { readstat_sys::readstat_int32_value(value) };
+
+                    // debug
+                    debug!("value is {:#?}", value);
+
+                    // return
+                    Self::ReadStat_i32(Some(value))
+                }
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
+                if is_missing == 0 {
+                    Self::ReadStat_f32(None)
+                } else {
+                    // get value
+                    let value = unsafe { readstat_sys::readstat_float_value(value) };
+                    let value: f32 =
+                        lexical::parse(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
+                            .unwrap();
+
+                    // debug
+                    debug!("value is {:#?}", value);
+
+                    // return
+                    Self::ReadStat_f32(Some(value))
+                }
+            }
+            readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
+                let var_format_class = vars.get(&var_index).unwrap().var_format_class;
+
+                if is_missing == 0 {
+                    match var_format_class {
+                        None => Self::ReadStat_f64(None),
+                        Some(fc) => match fc {
+                            ReadStatVarFormatClass::Date => Self::ReadStat_Date(None),
+                            ReadStatVarFormatClass::DateTime => Self::ReadStat_DateTime(None),
+                            ReadStatVarFormatClass::DateTimeWithMilliseconds => {
+                                Self::ReadStat_DateTimeWithMilliseconds(None)
+                            }
+                            ReadStatVarFormatClass::DateTimeWithMicroseconds => {
+                                Self::ReadStat_DateTimeWithMicroseconds(None)
+                            }
+                            ReadStatVarFormatClass::DateTimeWithNanoseconds => {
+                                Self::ReadStat_DateTimeWithNanoseconds(None)
+                            }
+                            ReadStatVarFormatClass::Time => Self::ReadStat_Time(None),
+                        },
+                    }
+                } else {
+                    // get value
+                    let value = unsafe { readstat_sys::readstat_double_value(value) };
+                    let value: f64 =
+                        lexical::parse(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
+                            .unwrap();
+
+                    // debug
+                    debug!("value is {:#?}", value);
+
+                    // is double a value or is it really a date, time, or datetime?
+                    match var_format_class {
+                        None => Self::ReadStat_f64(Some(value)),
+                        Some(fc) => match fc {
+                            ReadStatVarFormatClass::Date => Self::ReadStat_Date(Some(
+                                (value as i32).checked_sub(DAY_SHIFT).unwrap(),
+                            )),
+                            ReadStatVarFormatClass::DateTime => Self::ReadStat_DateTime(Some(
+                                (value as i64).checked_sub(SEC_SHIFT).unwrap(),
+                            )),
+                            ReadStatVarFormatClass::DateTimeWithMilliseconds => {
+                                Self::ReadStat_DateTime(Some(
+                                    (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000,
+                                ))
+                            }
+                            ReadStatVarFormatClass::DateTimeWithMicroseconds => {
+                                Self::ReadStat_DateTime(Some(
+                                    (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000,
+                                ))
+                            }
+                            ReadStatVarFormatClass::DateTimeWithNanoseconds => {
+                                Self::ReadStat_DateTime(Some(
+                                    (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
+                                ))
+                            }
+                            ReadStatVarFormatClass::Time => {
+                                Self::ReadStat_Time(Some((value as i32)))
+                            }
+                        },
+                    }
+                }
+            }
+            // exhaustive
+            _ => unreachable!(),
+        }
     }
 }
 
