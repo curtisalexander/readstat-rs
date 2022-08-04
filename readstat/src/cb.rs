@@ -14,12 +14,8 @@ use crate::{
     formats,
     rs_data::ReadStatData,
     rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata},
-    rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
+    rs_var::{ReadStatVar, ReadStatVarType, ReadStatVarTypeClass},
 };
-
-const DIGITS: usize = 14;
-const DAY_SHIFT: i32 = 3653;
-const SEC_SHIFT: i64 = 315619200;
 
 // C types
 #[allow(dead_code)]
