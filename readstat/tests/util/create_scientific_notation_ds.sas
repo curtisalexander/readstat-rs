@@ -1,6 +1,7 @@
-libname out '/home/c4lex0/data';
+%let homedir = %sysget(HOME);
+libname data "&homedir./data";
 
-data out.float_parsing;
+data data.float_parsing;
   format note $100.;
          f best32.;
 

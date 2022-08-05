@@ -125,9 +125,12 @@ yyqrd
 ;;;;
 run;
 
+%let homedir = %sysget(HOME);
+libname data "&homedir./data";
+
 data _null_;
   set ds end=lastobs;
   
-  out_ds = "dates";
+  out_ds = "data.dates";
   call execute('%create_date_and_datetime_ds(cnt='||_N_||',last_call='||lastobs||',out_ds='||out_ds||',date_fmt='||fmt||')');
 run;
