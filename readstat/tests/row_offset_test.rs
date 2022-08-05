@@ -166,6 +166,12 @@ fn row_offset_date() {
     // variable format
     assert_eq!(m.var_format, String::from("YYMMDD10"));
 
+    // arrow data type
+    assert!(matches!(
+        d.schema.fields[var_index as usize].data_type(),
+        DataType::Date32
+    ));
+
     // arrays
     let arrays = d.chunk.unwrap().into_arrays();
 
