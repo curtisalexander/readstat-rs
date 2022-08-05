@@ -457,7 +457,7 @@ impl ReadStatWriter {
                 let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
                     .fields
                     .iter()
-                    .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::RleDictionary))
+                    .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
                     .collect();
 
                 // Follows write parquet high-level examples; not in current release (0.11.2)
