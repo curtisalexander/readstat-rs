@@ -41,7 +41,7 @@ impl ReadStatVar {
         match value_type {
             readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
             | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
-                if is_missing == 0 {
+                if is_missing == 1 {
                     // return
                     Self::ReadStat_String(None)
                 } else {
@@ -57,7 +57,7 @@ impl ReadStatVar {
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
-                if is_missing == 0 {
+                if is_missing == 1 {
                     Self::ReadStat_i8(None)
                 } else {
                     // get value
@@ -71,7 +71,7 @@ impl ReadStatVar {
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
-                if is_missing == 0 {
+                if is_missing == 1 {
                     Self::ReadStat_i16(None)
                 } else {
                     // get value
@@ -85,7 +85,7 @@ impl ReadStatVar {
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
-                if is_missing == 0 {
+                if is_missing == 1 {
                     Self::ReadStat_i32(None)
                 } else {
                     // get value
@@ -99,7 +99,7 @@ impl ReadStatVar {
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
-                if is_missing == 0 {
+                if is_missing == 1 {
                     Self::ReadStat_f32(None)
                 } else {
                     // get value
@@ -118,7 +118,7 @@ impl ReadStatVar {
             readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
                 let var_format_class = vars.get(&var_index).unwrap().var_format_class;
 
-                if is_missing == 0 {
+                if is_missing == 1 {
                     match var_format_class {
                         None => Self::ReadStat_f64(None),
                         Some(fc) => match fc {
