@@ -1,6 +1,7 @@
-use arrow::{
-    array::{Date32Array, StringArray},
+use arrow2::{
+    array::{Float64Array, Int32Array, Utf8Array},
     datatypes::DataType,
+    temporal_conversions::date32_to_date,
 };
 use chrono::NaiveDate;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
@@ -58,14 +59,23 @@ fn row_offset_int() {
 
     // arrow data type
     assert!(matches!(
-        d.schema.field(var_index as usize).data_type(),
+        d.schema.fields[var_index as usize].data_type(),
         DataType::Float64
     ));
 
+    // arrays
+    let arrays = d.chunk.unwrap().into_arrays();
+
     // int column
+    let col = arrays
+        .get(var_index as usize)
+        .unwrap()
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .unwrap();
 
     // missing value
-    assert!(d.batch.column(0).data().is_null(2));
+    assert!(!col.validity().unwrap().get_bit(var_index as usize));
 }
 
 #[test]
@@ -102,16 +112,19 @@ fn row_offset_string() {
 
     // arrow data type
     assert!(matches!(
-        d.schema.field(var_index as usize).data_type(),
+        d.schema.fields[var_index as usize].data_type(),
         DataType::Utf8
     ));
 
+    // arrays
+    let arrays = d.chunk.unwrap().into_arrays();
+
     // string column
-    let col = d
-        .batch
-        .column(var_index as usize)
+    let col = arrays
+        .get(var_index as usize)
+        .unwrap()
         .as_any()
-        .downcast_ref::<StringArray>()
+        .downcast_ref::<Utf8Array<i32>>()
         .unwrap();
 
     // non-missing value
@@ -147,21 +160,26 @@ fn row_offset_date() {
     // variable format class
     assert!(matches!(
         m.var_format_class,
-        Some(readstat::ReadStatFormatClass::Date)
+        Some(readstat::ReadStatVarFormatClass::Date)
     ));
 
     // variable format
     assert_eq!(m.var_format, String::from("YYMMDD10"));
 
-    // non-missing value
-    let col = d
-        .batch
-        .column(var_index as usize)
-        .as_any()
-        .downcast_ref::<Date32Array>()
-        .unwrap();
+    // arrays
+    let arrays = d.chunk.unwrap().into_arrays();
 
-    let date = col.value_as_date(0).unwrap();
+    // non-missing value
+    let col = arrays
+        .get(var_index as usize)
+        .unwrap()
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .unwrap()
+        .to_owned()
+        .to(DataType::Date32);
+
+    let date = date32_to_date(col.value(0));
     let date_literal = NaiveDate::from_ymd(2014, 5, 22);
 
     assert_eq!(date, date_literal);
@@ -251,7 +269,7 @@ fn row_offset_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 4);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::Date));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::Date));
     assert_eq!(vf, String::from("YYMMDD10"));
     assert!(matches!(adt, DataType::Date32));
 
@@ -259,32 +277,32 @@ fn row_offset_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 5);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::DateTime));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTime));
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
     ));
 
     // 6 - _datetime_with_ms
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::DateTime));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTime));
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
     ));
 
     // 7 - _time
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatFormatClass::Time));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::Time));
     assert_eq!(vf, String::from("TIME"));
     assert!(matches!(
         adt,
-        DataType::Time32(arrow::datatypes::TimeUnit::Second)
+        DataType::Time32(arrow2::datatypes::TimeUnit::Second)
     ));
 }
