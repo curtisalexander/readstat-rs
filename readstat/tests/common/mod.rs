@@ -1,30 +1,12 @@
+use path_abs::PathAbs;
 use std::error::Error;
 
-use path_abs::PathAbs;
-
-// used in tests
-pub fn setup_path<P>(ds: P) -> Result<readstat::ReadStatPath, Box<dyn Error + Send + Sync>>
-where
-    P: AsRef<std::path::Path>,
-{
-    // setup path
-    let sas_path = PathAbs::new(env!("CARGO_MANIFEST_DIR"))
-        .unwrap()
-        .as_path()
-        .join("tests")
-        .join("data")
-        .join(ds);
-    readstat::ReadStatPath::new(sas_path, None, None, false, false)
-}
-
-// used in tests
 #[allow(dead_code)]
 pub fn contains_var(d: &readstat::ReadStatData, var_index: i32) -> bool {
     // contains variable
     d.vars.contains_key(&var_index)
 }
 
-// used in tests
 #[allow(dead_code)]
 pub fn get_metadata<'a>(
     d: &'a readstat::ReadStatData,
@@ -34,7 +16,6 @@ pub fn get_metadata<'a>(
     d.vars.get(&var_index).unwrap()
 }
 
-// used in tests
 #[allow(dead_code)]
 pub fn get_var_attrs<'a>(
     d: &'a readstat::ReadStatData,
@@ -55,4 +36,18 @@ pub fn get_var_attrs<'a>(
         m.var_format.clone(),
         s.fields[var_index as usize].data_type(),
     )
+}
+
+pub fn setup_path<P>(ds: P) -> Result<readstat::ReadStatPath, Box<dyn Error + Send + Sync>>
+where
+    P: AsRef<std::path::Path>,
+{
+    // setup path
+    let sas_path = PathAbs::new(env!("CARGO_MANIFEST_DIR"))
+        .unwrap()
+        .as_path()
+        .join("tests")
+        .join("data")
+        .join(ds);
+    readstat::ReadStatPath::new(sas_path, None, None, false, false)
 }
