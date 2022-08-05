@@ -65,12 +65,16 @@ fn parse_all_types_int() {
         DataType::Float64
     ));
 
+    // arrays
+    let arrays = d.chunk.unwrap().into_arrays();
+
     // int column
-    let col = d.chunk.unwrap().into_arrays()[var_index as usize]
+    let col = arrays
+        .get(var_index as usize)
+        .unwrap()
         .as_any()
         .downcast_ref::<Float64Array>()
-        .unwrap()
-        .to_owned();
+        .unwrap();
 
     // non-missing value
     assert_eq!(col.value(0), 1234f64);
@@ -119,12 +123,16 @@ fn parse_all_types_string() {
         DataType::Utf8
     ));
 
+    // arrays
+    let arrays = d.chunk.unwrap().into_arrays();
+
     // string column
-    let col = d.chunk.unwrap().into_arrays()[var_index as usize]
+    let col = arrays
+        .get(var_index as usize)
+        .unwrap()
         .as_any()
         .downcast_ref::<Utf8Array<i32>>()
-        .unwrap()
-        .to_owned();
+        .unwrap();
 
     // non-missing value
     assert_eq!(col.value(0), String::from("string"));
@@ -168,8 +176,13 @@ fn parse_all_types_datetime() {
     // variable format
     assert_eq!(m.var_format, String::from("DATETIME22"));
 
+    // arrays
+    let arrays = d.chunk.unwrap().into_arrays();
+
     // datetime column
-    let col = d.chunk.unwrap().into_arrays()[var_index as usize]
+    let col = arrays
+        .get(var_index as usize)
+        .unwrap()
         .as_any()
         .downcast_ref::<Int64Array>()
         .unwrap()
