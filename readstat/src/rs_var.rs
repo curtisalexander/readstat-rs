@@ -139,12 +139,16 @@ impl ReadStatVar {
                 } else {
                     // get value
                     let value = unsafe { readstat_sys::readstat_double_value(value) };
+
+                    // debug
+                    debug!("value (before parsing) is {:#?}", value);
+
                     let value: f64 =
                         lexical::parse(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
                             .unwrap();
 
                     // debug
-                    debug!("value is {:#?}", value);
+                    debug!("value (after parsing) is {:#?}", value);
 
                     // is double a value or is it really a date, time, or datetime?
                     match var_format_class {
