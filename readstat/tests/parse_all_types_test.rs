@@ -82,7 +82,7 @@ fn parse_all_types_int() {
     // missing value
     // get_bit == true   ==>  a value exists (the bit for the slot is set)
     // get_bit == false  ==>  a missing value
-    assert_eq!(col.validity().unwrap().get_bit(2), false);
+    assert!(!col.validity().unwrap().get_bit(2));
 }
 
 #[test]
