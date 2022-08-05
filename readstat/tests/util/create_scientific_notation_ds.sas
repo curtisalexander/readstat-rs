@@ -2,11 +2,11 @@
 libname data "&homedir./data";
 
 data data.float_parsing;
-  format note $100.;
+  format note $100.
          f best32.;
 
   note = "Parsing error due to scientific notation";
-  f = 333039375527f64;
+  f = 333039375527;
   output;
 
   note = "No parsing error";
