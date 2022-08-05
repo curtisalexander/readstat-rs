@@ -1,8 +1,5 @@
 use arrow2::{
-    array::{
-        Array, Float32Array, Float64Array, Int16Array, Int32Array, MutableArray,
-        MutablePrimitiveArray, MutableUtf8Array, Utf8Array,
-    },
+    array::{Array, PrimitiveArray, Utf8Array},
     chunk::Chunk,
     datatypes::{DataType, Schema, TimeUnit},
 };
@@ -24,8 +21,7 @@ use crate::{
     rs_metadata::{ReadStatMetadata, ReadStatVarMetadata},
     rs_parser::ReadStatParser,
     rs_path::ReadStatPath,
-    rs_var::{ReadStatVarFormatClass, ReadStatVarType},
-    ReadStatVar,
+    rs_var::ReadStatVar,
 };
 
 pub struct ReadStatData {
@@ -34,11 +30,9 @@ pub struct ReadStatData {
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
     // data
     pub cols: Vec<Vec<ReadStatVar>>,
-    pub arrays: Vec<Box<dyn MutableArray>>,
     pub schema: Schema,
+    // chunk
     pub chunk: Option<Chunk<Box<dyn Array>>>,
-    // pub batch: RecordBatch,
-    // batch rows
     pub chunk_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
     pub chunk_row_start: usize,
     pub chunk_row_end: usize,
@@ -61,12 +55,9 @@ impl ReadStatData {
             vars: BTreeMap::new(),
             // data
             cols: Vec::new(),
-            arrays: Vec::new(),
-            // cols: Vec::new(),
             schema: Schema::default(),
+            // chunk
             chunk: None,
-            // batch: RecordBatch::new_empty(Arc::new(Schema::empty())),
-            // batch rows
             chunk_rows_to_process: 0,
             chunk_rows_processed: 0,
             chunk_row_start: 0,
@@ -83,194 +74,218 @@ impl ReadStatData {
     }
 
     fn allocate_cols(self) -> Self {
-        todo!()
-    }
-
-    fn allocate_arrays(self) -> Self {
-        let rows = self.chunk_rows_to_process;
-        let mut arrays: Vec<Box<dyn MutableArray>> = Vec::with_capacity(self.var_count as usize);
-        for i in 0..self.var_count {
-            // Get variable type
-            let var_type = self.vars.get(&i).unwrap().var_type;
-            // Allocate space
-            let array: Box<dyn MutableArray> = match var_type {
-                ReadStatVarType::String | ReadStatVarType::StringRef | ReadStatVarType::Unknown => {
-                    Box::new(MutableUtf8Array::<i32>::with_capacity(rows))
-                }
-                ReadStatVarType::Int8 => Box::new(MutablePrimitiveArray::<i8>::with_capacity(rows)),
-                ReadStatVarType::Int16 => {
-                    Box::new(MutablePrimitiveArray::<i16>::with_capacity(rows))
-                }
-                ReadStatVarType::Int32 => {
-                    Box::new(MutablePrimitiveArray::<i32>::with_capacity(rows))
-                }
-                ReadStatVarType::Float => {
-                    Box::new(MutablePrimitiveArray::<f32>::with_capacity(rows))
-                }
-                ReadStatVarType::Double => match self.vars.get(&i).unwrap().var_format_class {
-                    None => Box::new(MutablePrimitiveArray::<f64>::with_capacity(rows)),
-                    Some(ReadStatVarFormatClass::Date) => Box::new(
-                        MutablePrimitiveArray::<i32>::with_capacity(rows).to(DataType::Date32),
-                    ),
-                    Some(ReadStatVarFormatClass::DateTime) => Box::new(
-                        MutablePrimitiveArray::<i64>::with_capacity(rows)
-                            .to(DataType::Timestamp(TimeUnit::Second, None)),
-                    ),
-                    Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => Box::new(
-                        MutablePrimitiveArray::<i64>::with_capacity(rows)
-                            .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
-                    ),
-                    Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => Box::new(
-                        MutablePrimitiveArray::<i64>::with_capacity(rows)
-                            .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
-                    ),
-                    Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => Box::new(
-                        MutablePrimitiveArray::<i64>::with_capacity(rows)
-                            .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
-                    ),
-                    Some(ReadStatVarFormatClass::Time) => Box::new(
-                        MutablePrimitiveArray::<i32>::with_capacity(rows)
-                            .to(DataType::Time32(TimeUnit::Second)),
-                    ),
-                },
-            };
-
-            arrays.push(array);
+        let mut cols = Vec::with_capacity(self.var_count as usize);
+        for _ in 0..self.var_count {
+            cols.push(Vec::with_capacity(self.chunk_rows_to_process))
         }
-
-        Self { arrays, ..self }
+        Self { cols, ..self }
     }
 
-    #[allow(unreachable_patterns)]
-    fn arrays_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let arrays = self
-            .arrays
+    fn cols_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // for each column in cols
+        let arrays: Vec<Box<dyn Array>> = self
+            .cols
             .iter()
-            .enumerate()
-            .map(|(i, array)| {
-                let array = match array.data_type() {
-                    DataType::Float64 => {
-                        match self.vars.get(&(i as i32)).unwrap().var_format_class {
-                            None => {
-                                let array =
-                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
-                                Box::new(array.clone()) as Box<dyn Array>
-                            }
-                            Some(ReadStatVarFormatClass::Date) => {
-                                let array =
-                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
-                                Box::new(array.clone().to(DataType::Date32)) as Box<dyn Array>
-                            }
-                            Some(ReadStatVarFormatClass::DateTime) => {
-                                let array =
-                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
-                                Box::new(
-                                    array
-                                        .clone()
-                                        .to(DataType::Timestamp(TimeUnit::Second, None)),
-                                ) as Box<dyn Array>
-                            }
-                            Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
-                                let array =
-                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
-                                Box::new(
-                                    array
-                                        .clone()
-                                        .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
-                                ) as Box<dyn Array>
-                            }
-                            Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
-                                let array =
-                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
-                                Box::new(
-                                    array
-                                        .clone()
-                                        .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
-                                ) as Box<dyn Array>
-                            }
-                            Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
-                                let array =
-                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
-                                Box::new(
-                                    array
-                                        .clone()
-                                        .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
-                                ) as Box<dyn Array>
-                            }
-                            Some(ReadStatVarFormatClass::Time) => {
-                                let array =
-                                    (*array).as_any().downcast_ref::<Float64Array>().unwrap();
-                                Box::new(array.clone().to(DataType::Time32(TimeUnit::Second)))
-                                    as Box<dyn Array>
-                            }
-                            _ => unreachable!(),
-                        }
+            .map(|col| {
+                // what kind of column is this?
+                // grab the first element to determine the column type
+                let col_type = &col[0];
+
+                // convert from a Vec<ReadStatVar> into a Box<dyn Array>
+                let array: Box<dyn Array> = match col_type {
+                    ReadStatVar::ReadStat_String(_) => {
+                        // get the inner value
+                        let vec = col
+                            .into_iter()
+                            .map(|s| {
+                                if let ReadStatVar::ReadStat_String(v) = s {
+                                    v.clone()
+                                } else {
+                                    // should NEVER fall into this branch
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<String>>>();
+
+                        Box::new(<Utf8Array<i32>>::from(vec))
                     }
-                    DataType::Float32 => {
-                        let array = (*array).as_any().downcast_ref::<Float32Array>().unwrap();
-                        Box::new(array.clone()) as Box<dyn Array>
+                    ReadStatVar::ReadStat_i8(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|i| {
+                                if let ReadStatVar::ReadStat_i8(v) = i {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i8>>>();
+
+                        Box::new(<PrimitiveArray<i8>>::from(vec))
                     }
-                    DataType::Int8 | DataType::Int16 => {
-                        let array = (*array).as_any().downcast_ref::<Int16Array>().unwrap();
-                        Box::new(array.clone()) as Box<dyn Array>
+                    ReadStatVar::ReadStat_i16(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|i| {
+                                if let ReadStatVar::ReadStat_i16(v) = i {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i16>>>();
+
+                        Box::new(<PrimitiveArray<i16>>::from(vec))
                     }
-                    DataType::Int32 => {
-                        let array = (*array).as_any().downcast_ref::<Int32Array>().unwrap();
-                        Box::new(array.clone()) as Box<dyn Array>
+                    ReadStatVar::ReadStat_i32(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|i| {
+                                if let ReadStatVar::ReadStat_i32(v) = i {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i32>>>();
+
+                        Box::new(<PrimitiveArray<i32>>::from(vec))
                     }
-                    DataType::Utf8 => {
-                        let array = (*array).as_any().downcast_ref::<Utf8Array<i32>>().unwrap();
-                        Box::new(array.clone()) as Box<dyn Array>
+                    ReadStatVar::ReadStat_f32(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|f| {
+                                if let ReadStatVar::ReadStat_f32(v) = f {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<f32>>>();
+
+                        Box::new(<PrimitiveArray<f32>>::from(vec))
                     }
-                    // exhaustive
-                    _ => unreachable!(),
+                    ReadStatVar::ReadStat_f64(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|f| {
+                                if let ReadStatVar::ReadStat_f64(v) = f {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<f64>>>();
+
+                        Box::new(<PrimitiveArray<f64>>::from(vec))
+                    }
+                    ReadStatVar::ReadStat_Date(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|d| {
+                                if let ReadStatVar::ReadStat_Date(v) = d {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i32>>>();
+
+                        Box::new(<PrimitiveArray<i32>>::from(vec).to(DataType::Date32))
+                    }
+                    ReadStatVar::ReadStat_DateTime(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|dt| {
+                                if let ReadStatVar::ReadStat_DateTime(v) = dt {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i64>>>();
+
+                        Box::new(
+                            <PrimitiveArray<i64>>::from(vec)
+                                .to(DataType::Timestamp(TimeUnit::Second, None)),
+                        )
+                    }
+                    ReadStatVar::ReadStat_DateTimeWithMilliseconds(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|dt| {
+                                if let ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) = dt {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i64>>>();
+
+                        Box::new(
+                            <PrimitiveArray<i64>>::from(vec)
+                                .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
+                        )
+                    }
+                    ReadStatVar::ReadStat_DateTimeWithMicroseconds(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|dt| {
+                                if let ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) = dt {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i64>>>();
+
+                        Box::new(
+                            <PrimitiveArray<i64>>::from(vec)
+                                .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
+                        )
+                    }
+                    ReadStatVar::ReadStat_DateTimeWithNanoseconds(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|dt| {
+                                if let ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) = dt {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i64>>>();
+
+                        Box::new(
+                            <PrimitiveArray<i64>>::from(vec)
+                                .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
+                        )
+                    }
+                    ReadStatVar::ReadStat_Time(_) => {
+                        let vec = col
+                            .into_iter()
+                            .map(|t| {
+                                if let ReadStatVar::ReadStat_Time(v) = t {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i32>>>();
+
+                        Box::new(
+                            <PrimitiveArray<i32>>::from(vec).to(DataType::Time32(TimeUnit::Second)),
+                        )
+                    }
                 };
+
+                // return
                 array
             })
             .collect();
-        // Build array references and save in chunk
-        /*
-                let arrays = &self
-                    .arrays
-                    .iter_mut()
-                    .collect();
-                    //.into_iter()
-                    //.map(|array| {
-                        //let array = (*array) as &dyn Array;
-                       /*
-                        let array = match array.data_type() {
-                            DataType::Float64 => {
-                                let array = array
-                                    .as_mut_any()
-                                    .downcast_ref::<Float64Array>()
-                                    .unwrap();
-                                    //.unwrap() as &dyn Array;
 
-        //                            .into_mut()
-         //                           .unwrap_left() as &dyn Array;
-                                array
-                                //Arc::new(array)
-                            },
-                            _ => unreachable!()
-                        };
-
-                        array as &dyn Array
-                        //array.as_arc()
-                        // array.into()::<dyn MutableArray>().as_arc()
-                        //array
-                    */
-        //                (*array).as_arc()
-         //           })
-          //          .collect::<Vec<_>>();
-                */
-        // reset
-        {
-            self.arrays.clear();
-        }
-        // let arrays = self.arrays.iter_mut().map(|array| array.as_arc()).collect();
+        // convert into a chunk
         self.chunk = Some(Chunk::try_new(arrays)?);
-        //self.chunk = Some(Chunk::try_new(arrays.into_iter().map(|a| {*a}).collect())?);
-        // self.batch = RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?;
 
         Ok(())
     }
@@ -278,7 +293,7 @@ impl ReadStatData {
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         // parse data and if successful then convert cols into a chunk
         self.parse_data(&rsp)?;
-        self.arrays_to_chunk()?;
+        self.cols_to_chunk()?;
         Ok(())
     }
 
@@ -357,7 +372,7 @@ impl ReadStatData {
     pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
         self.set_metadata(md)
             .set_chunk_counts(row_start, row_end)
-            .allocate_arrays()
+            .allocate_cols()
     }
 
     fn set_chunk_counts(self, row_start: u32, row_end: u32) -> Self {

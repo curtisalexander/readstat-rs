@@ -1,7 +1,3 @@
-use arrow2::{
-    array::{Float32Vec, Float64Vec, Int16Vec, Int32Vec, Int64Vec, Int8Vec, MutableUtf8Array},
-    datatypes::{DataType, TimeUnit},
-};
 use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
