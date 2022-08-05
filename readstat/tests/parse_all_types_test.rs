@@ -176,6 +176,12 @@ fn parse_all_types_datetime() {
     // variable format
     assert_eq!(m.var_format, String::from("DATETIME22"));
 
+    // arrow data type
+    assert!(matches!(
+        d.schema.fields[var_index as usize].data_type(),
+        DataType::Timestamp(TimeUnit::Second, None)
+    ));
+
     // arrays
     let arrays = d.chunk.unwrap().into_arrays();
 
