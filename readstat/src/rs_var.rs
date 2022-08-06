@@ -104,12 +104,14 @@ impl ReadStatVar {
                 } else {
                     // get value
                     let value = unsafe { readstat_sys::readstat_float_value(value) };
-                    let value: f32 =
-                        lexical::parse(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
-                            .unwrap();
 
                     // debug
-                    debug!("value is {:#?}", value);
+                    debug!("value (before parsing) is {:#?}", value);
+
+                    let value: f32 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
+
+                    // debug
+                    debug!("value (after parsing) is {:#?}", value);
 
                     // return
                     Self::ReadStat_f32(Some(value))
@@ -143,9 +145,7 @@ impl ReadStatVar {
                     // debug
                     debug!("value (before parsing) is {:#?}", value);
 
-                    let value: f64 =
-                        lexical::parse(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
-                            .unwrap();
+                    let value: f64 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
 
                     // debug
                     debug!("value (after parsing) is {:#?}", value);
