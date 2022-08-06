@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, os::raw::c_int};
 use crate::{common::ptr_to_string, rs_metadata::ReadStatVarMetadata};
 
 // Constants
-const DIGITS: usize = 14;
+const DIGITS: usize = 15;
 const DAY_SHIFT: i32 = 3653;
 const SEC_SHIFT: i64 = 315619200;
 
