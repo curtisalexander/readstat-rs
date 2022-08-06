@@ -375,21 +375,6 @@ impl ReadStatWriter {
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
             
-            // setup writer if not already started writing
-
-            /*
-            if !self.wrote_start {
-                let options = parquet_arrow2::write::WriteOptions {
-                    write_statistics: true,
-                    compression: parquet_arrow2::write::Compression::Uncompressed,
-                    version: parquet_arrow2::write::Version::V2
-                };
-                let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema, options)?;
-
-                self.wtr = Some(ReadStatWriterFormat::Parquet(f));
-            };
-            */
-
             // write
             let options = parquet_arrow2::write::WriteOptions {
                     write_statistics: true,
@@ -398,7 +383,6 @@ impl ReadStatWriter {
             };
             let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
 
-            // if !self.wrote_start { wtr.start()? };
 
             if let Some(c) = d.chunk.clone() {
                 let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
@@ -408,15 +392,6 @@ impl ReadStatWriter {
                     .iter()
                     .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
                     .collect();
-
-                // Follows write parquet high-level examples; not in current release (0.11.2)
-                /*
-                let encodings = &d.schema
-                    .fields
-                    .iter()
-                    .map(|f| parquet_arrow2::write::transverse(&f.data_type, |_| parquet_arrow2::write::Encoding::Plain))
-                    .collect();
-                */
 
                 let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, options, encodings)?;
 
@@ -475,14 +450,6 @@ impl ReadStatWriter {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
-
-        // setup writer if not already started writing
-        /*
-        if !self.wrote_start {
-            // let mut wtr = csv::WriterBuilder::new().has_headers(false).from_path(stdout())?;
-            self.wtr = Some(ReadStatWriterFormat::CsvStdOut(stdout()));
-        };
-        */
 
         // write
         let options = csv_arrow2::write::SerializeOptions::default();
@@ -563,12 +530,6 @@ impl ReadStatWriter {
             // create file
             let mut f = std::fs::File::create(p)?;
             
-            // setup writer
-            //let mut wtr = csv::WriterBuilder::new().has_headers(true).from_path(f)?;
-            /*
-            self.wtr = Some(ReadStatWriterFormat::CsvFile(f));
-            */
-
             // Get variable names
             let vars: Vec<String> = d.vars.iter().map(|(_, m)| m.var_name.clone()).collect();
 
@@ -592,12 +553,6 @@ impl ReadStatWriter {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
-
-        // setup writer
-        // let mut wtr = csv::WriterBuilder::new().has_headers(true).from_writer(stdout())?;
-        /*
-        self.wtr = Some(ReadStatWriterFormat::CsvStdOut(stdout()));
-        */
 
         // Get variable names
         let vars: Vec<String> = d.vars.iter().map(|(_, m)| m.var_name.clone()).collect();
