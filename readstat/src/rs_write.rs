@@ -428,6 +428,7 @@ impl ReadStatWriter {
             self.write_message_for_rows(&d, &rsp)?;
             
             // setup writer if not already started writing
+
             /*
             if !self.wrote_start {
                 let options = parquet_arrow2::write::WriteOptions {
