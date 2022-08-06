@@ -8,26 +8,23 @@ pub fn contains_var(d: &readstat::ReadStatData, var_index: i32) -> bool {
 }
 
 #[allow(dead_code)]
-pub fn get_metadata<'a>(
-    d: &'a readstat::ReadStatData,
-    var_index: i32,
-) -> &'a readstat::ReadStatVarMetadata {
+pub fn get_metadata(d: &readstat::ReadStatData, var_index: i32) -> &readstat::ReadStatVarMetadata {
     // contains variable
     d.vars.get(&var_index).unwrap()
 }
 
 #[allow(dead_code)]
-pub fn get_var_attrs<'a>(
-    d: &'a readstat::ReadStatData,
+pub fn get_var_attrs(
+    d: &readstat::ReadStatData,
     var_index: i32,
 ) -> (
     readstat::ReadStatVarTypeClass,
     readstat::ReadStatVarType,
     Option<readstat::ReadStatVarFormatClass>,
     String,
-    &'a arrow2::datatypes::DataType,
+    &arrow2::datatypes::DataType,
 ) {
-    let m = get_metadata(&d, var_index);
+    let m = get_metadata(d, var_index);
     let s = &d.schema;
     (
         m.var_type_class,

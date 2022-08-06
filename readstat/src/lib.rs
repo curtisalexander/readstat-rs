@@ -209,7 +209,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
             let offsets_pairs = offsets.windows(2);
-            let pairs_cnt = *(&offsets_pairs.len());
+            let pairs_cnt = offsets_pairs.len();
 
             // Initialize writing
             let mut wtr = ReadStatWriter::new();
@@ -331,7 +331,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
                         // Create windows
                         let offsets_pairs = offsets.par_windows(2);
-                        let pairs_cnt = *(&offsets_pairs.len());
+                        let pairs_cnt = offsets_pairs.len();
 
                         // Run in parallel or not?
                         // Controlled via number of threads in the rayon threadpool
@@ -365,11 +365,11 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
 
                                 // Early return if an error
                                 if sent.is_err() {
-                                    return Err(From::from(
+                                    Err(From::from(
                                         "Error when attempting to send read data for writing",
-                                    ));
+                                    ))
                                 } else {
-                                    return Ok(());
+                                    Ok(())
                                 }
                             })
                             .filter_map(|r| -> Option<Box<dyn Error + Send + Sync>> {

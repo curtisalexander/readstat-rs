@@ -27,24 +27,8 @@ use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
 
-/*
-pub enum ReadStatWriterFormat {
-    // csv
-    CsvFile(std::fs::File),
-    // csv
-    CsvStdOut(std::io::Stdout),
-    // feather
-    Feather(ipc_arrow2::write::FileWriter<std::fs::File>),
-    // ndjson
-    //Ndjson(ndjson_arrow2::write::FileWriter<std::fs::File, ndjson_arrow2::write::Serializer<Chunk<>>>),
-    // parquet
-    Parquet(std::fs::File),
-    // Parquet(parquet_arrow2::write::FileWriter<std::fs::File>)
-}
-*/
-
+#[derive(Default)]
 pub struct ReadStatWriter {
-    //pub wtr: Option<ReadStatWriterFormat>,
     pub wrote_header: bool,
     pub wrote_start: bool,
 }
@@ -64,22 +48,22 @@ impl ReadStatWriter {
                 out_path: Some(_),
                 format: OutFormat::csv,
                 ..
-            } => { self.finish_txt(&d, &rsp) },
+            } => { self.finish_txt(d, rsp) },
             // Write feather data to file
             ReadStatPath {
                 format: OutFormat::feather,
                 ..
-            } => { self.finish_feather(&d, &rsp) }
+            } => { self.finish_feather(d, rsp) }
             // Write ndjson data to file
             ReadStatPath {
                 format: OutFormat::ndjson,
                 ..
-            } => { self.finish_txt(&d, &rsp) }
+            } => { self.finish_txt(d, rsp) }
             // Write parquet data to file
             ReadStatPath {
                 format: OutFormat::parquet,
                 ..
-            } => { self.finish_parquet(&d, &rsp) },
+            } => { self.finish_parquet(d, rsp) },
             _ => Ok(())
         }
 
@@ -180,46 +164,46 @@ impl ReadStatWriter {
                 out_path: None,
                 format: OutFormat::csv,
                 ..
-            } if self.wrote_header => self.write_data_to_stdout(&d),
+            } if self.wrote_header => self.write_data_to_stdout(d),
             // Write header and data to standard out
             ReadStatPath {
                 out_path: None,
                 format: OutFormat::csv,
                 ..
             } => {
-                self.write_header_to_stdout(&d)?;
-                self.write_data_to_stdout(&d)
+                self.write_header_to_stdout(d)?;
+                self.write_data_to_stdout(d)
             }
             // Write csv data to file
             ReadStatPath {
                 out_path: Some(_),
                 format: OutFormat::csv,
                 ..
-            } if self.wrote_header => self.write_data_to_csv(&d, &rsp),
+            } if self.wrote_header => self.write_data_to_csv(d, rsp),
             // Write csv header to file
             ReadStatPath {
                 out_path: Some(_),
                 format: OutFormat::csv,
                 ..
             } => {
-                self.write_header_to_csv(&d, &rsp)?;
-                self.write_data_to_csv(&d, &rsp)
+                self.write_header_to_csv(d, rsp)?;
+                self.write_data_to_csv(d, rsp)
             }
             // Write feather data to file
             ReadStatPath {
                 format: OutFormat::feather,
                 ..
-            } => self.write_data_to_feather(&d, &rsp),
+            } => self.write_data_to_feather(d, rsp),
             // Write ndjson data to file
             ReadStatPath {
                 format: OutFormat::ndjson,
                 ..
-            } => self.write_data_to_ndjson(&d, &rsp),
+            } => self.write_data_to_ndjson(d, rsp),
             // Write parquet data to file
             ReadStatPath {
                 format: OutFormat::parquet,
                 ..
-            } => self.write_data_to_parquet(&d, &rsp),
+            } => self.write_data_to_parquet(d, rsp),
         }
     }
 
@@ -237,28 +221,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp)?;
-
-            // setup writer if not already started writing
-            /*
-            self.wtr = if !self.wrote_start {
-                if let Some(pb) = d.pb {
-                    Some(ReadStatWriterFormat::CsvFile(csv_arrow::WriterBuilder::new()
-                        .has_headers(false)
-                        .build(pb.wrap_write(f))))
-                } else {
-                    Some(ReadStatWriterFormat::CsvFile(csv_arrow::WriterBuilder::new()
-                        .has_headers(false)
-                        .build(f)))
-                }
-            };
-            */
-            /*
-            if !self.wrote_start {
-                // let mut wtr = csv::WriterBuilder::new().has_headers(false).from_writer(f);
-                self.wtr = Some(ReadStatWriterFormat::CsvFile(f));
-            };
-            */
+            self.write_message_for_rows(d, rsp)?;
 
             // write
             let options = csv_arrow2::write::SerializeOptions::default();
@@ -297,16 +260,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp)?;
-
-            // setup writer if not already started writing
-            /*
-            if !self.wrote_start {
-                let options = ipc_arrow2::write::WriteOptions { compression: None };
-                let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
-                self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
-            };
-            */
+            self.write_message_for_rows(d, rsp)?;
 
             // write
             if let Some(c) = d.chunk.clone() {
@@ -356,7 +310,7 @@ impl ReadStatWriter {
             wtr.finish()?;
 
             // set message for what is being read/written
-            self.finish_txt(&d, &rsp)?;
+            self.finish_txt(d, rsp)?;
 
             // return
             Ok(())
@@ -381,17 +335,11 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp)?;
+            self.write_message_for_rows(d, rsp)?;
             
-            // setup writer if not already started writing
-            /*
-            if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::Ndjson(::new(f)));
-            };
-            */
             // write
             if let Some(c) = d.chunk.clone() {
-                let arrays = c.columns().into_iter().map(|a| Ok(a));
+                let arrays = c.columns().iter().map(Ok);
                 // let arrays = vec![Ok(c)].into_iter();
                 let serializer = ndjson_arrow2::write::Serializer::new(arrays, vec![]);
 
@@ -425,7 +373,7 @@ impl ReadStatWriter {
             };
 
             // set message for what is being read/written
-            self.write_message_for_rows(&d, &rsp)?;
+            self.write_message_for_rows(d, rsp)?;
             
             // setup writer if not already started writing
 
@@ -512,7 +460,7 @@ impl ReadStatWriter {
             let _size = wtr.end(None)?;
 
             // set message for what is being read/written
-            self.finish_txt(&d, &rsp)?;
+            self.finish_txt(d, rsp)?;
 
             // return
             Ok(())
@@ -667,9 +615,9 @@ impl ReadStatWriter {
 
     pub fn write_metadata(&self, md: &ReadStatMetadata, rsp: &ReadStatPath, as_json: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
         if as_json {
-            self.write_metadata_to_json(&md)
+            self.write_metadata_to_json(md)
         } else {
-            self.write_metadata_to_stdout(&md, &rsp)
+            self.write_metadata_to_stdout(md, rsp)
         }
     }
 

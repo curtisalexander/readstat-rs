@@ -12,7 +12,7 @@ use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct ReadStatMetadata {
     pub row_count: c_int,
     pub var_count: c_int,
@@ -158,15 +158,17 @@ impl ReadStatMetadata {
     }
 }
 
-#[derive(Clone, Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Debug, Default, FromPrimitive, Serialize)]
 pub enum ReadStatCompress {
+    #[default]
     None = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_NONE as isize,
     Rows = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_ROWS as isize,
     Binary = readstat_sys::readstat_compress_e_READSTAT_COMPRESS_BINARY as isize,
 }
 
-#[derive(Clone, Debug, FromPrimitive, Serialize)]
+#[derive(Clone, Debug, Default, FromPrimitive, Serialize)]
 pub enum ReadStatEndian {
+    #[default]
     None = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_NONE as isize,
     Little = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_LITTLE as isize,
     Big = readstat_sys::readstat_endian_e_READSTAT_ENDIAN_BIG as isize,

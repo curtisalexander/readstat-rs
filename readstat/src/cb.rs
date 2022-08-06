@@ -159,7 +159,7 @@ pub extern "C" fn handle_variable(
     m.vars.insert(
         index,
         ReadStatVarMetadata::new(
-            var_name.clone(),
+            var_name,
             var_type,
             var_type_class,
             var_label,

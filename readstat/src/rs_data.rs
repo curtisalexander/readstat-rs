@@ -24,6 +24,7 @@ use crate::{
     rs_var::ReadStatVar,
 };
 
+#[derive(Default)]
 pub struct ReadStatData {
     // metadata
     pub var_count: i32,
@@ -96,7 +97,7 @@ impl ReadStatData {
                     ReadStatVar::ReadStat_String(_) => {
                         // get the inner value
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|s| {
                                 if let ReadStatVar::ReadStat_String(v) = s {
                                     v.clone()
@@ -111,7 +112,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_i8(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|i| {
                                 if let ReadStatVar::ReadStat_i8(v) = i {
                                     *v
@@ -125,7 +126,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_i16(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|i| {
                                 if let ReadStatVar::ReadStat_i16(v) = i {
                                     *v
@@ -139,7 +140,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_i32(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|i| {
                                 if let ReadStatVar::ReadStat_i32(v) = i {
                                     *v
@@ -153,7 +154,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_f32(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|f| {
                                 if let ReadStatVar::ReadStat_f32(v) = f {
                                     *v
@@ -167,7 +168,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_f64(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|f| {
                                 if let ReadStatVar::ReadStat_f64(v) = f {
                                     *v
@@ -181,7 +182,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_Date(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|d| {
                                 if let ReadStatVar::ReadStat_Date(v) = d {
                                     *v
@@ -195,7 +196,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_DateTime(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|dt| {
                                 if let ReadStatVar::ReadStat_DateTime(v) = dt {
                                     *v
@@ -212,7 +213,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_DateTimeWithMilliseconds(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|dt| {
                                 if let ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) = dt {
                                     *v
@@ -229,7 +230,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_DateTimeWithMicroseconds(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|dt| {
                                 if let ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) = dt {
                                     *v
@@ -246,7 +247,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_DateTimeWithNanoseconds(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|dt| {
                                 if let ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) = dt {
                                     *v
@@ -263,7 +264,7 @@ impl ReadStatData {
                     }
                     ReadStatVar::ReadStat_Time(_) => {
                         let vec = col
-                            .into_iter()
+                            .iter()
                             .map(|t| {
                                 if let ReadStatVar::ReadStat_Time(v) = t {
                                     *v
@@ -292,7 +293,7 @@ impl ReadStatData {
 
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         // parse data and if successful then convert cols into a chunk
-        self.parse_data(&rsp)?;
+        self.parse_data(rsp)?;
         self.cols_to_chunk()?;
         Ok(())
     }
@@ -393,7 +394,7 @@ impl ReadStatData {
     fn set_metadata(self, md: ReadStatMetadata) -> Self {
         let var_count = md.var_count;
         let vars = md.vars;
-        let schema = md.schema.clone();
+        let schema = md.schema;
         Self {
             var_count,
             vars,
