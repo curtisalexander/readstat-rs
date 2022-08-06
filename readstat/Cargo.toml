@@ -7,7 +7,6 @@ description = "Rust wrapper of the ReadStat C library"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 arrow2 = { version = "0.13", features = ["full"] }
 clap = { version = "3", features = ["derive", "unicode", "wrap_help"] }

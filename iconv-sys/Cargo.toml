@@ -9,11 +9,6 @@ repository = "https://github.com/curtisalexander/readstat-rs/iconv-sys"
 links = "iconv"
 build = "build.rs"
 
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [build-dependencies]
 bindgen = "0.60"
 cc = "1.0"
-
-[dependencies]
