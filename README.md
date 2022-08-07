@@ -300,7 +300,7 @@ valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 ## [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 - :heavy_check_mark: Linux   &rarr; successfully builds and runs
     - [glibc](https://www.gnu.org/software/libc/)
-    - [musl](https://www.musl-libc.org/) (using the [jemalloc](readstat/Cargo.toml#L36) allocator)
+    - [musl](https://www.musl-libc.org/)
 - :heavy_check_mark: macOS   &rarr; successfully builds and runs
 - :heavy_check_mark: Windows &rarr; successfully builds and runs
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
