@@ -225,7 +225,7 @@ readstat data --help
 ## Floating Point Values
 :warning: Decimal values are rounded to contain only 15 decimal digits!
 
-For example, the number `1.1234567890123456` created within SAS would be returned as `1.123456789012345` within Rust.
+For example, the number `1.1234567890123456` created within SAS would be returned as `1.123456789012346` within Rust.
 
 Why does this happen?  Is this an implementation error?  No, rounding to only 15 decimal digits has been _purposely implemented_ within the Rust code.
 
