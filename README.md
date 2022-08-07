@@ -264,7 +264,7 @@ SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pg
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
 
-If values are read into memory as Arrow date, time, or datetime types, then when they are serialized (from an [Arrow record batch](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `ndjson`, or `parquet`) they are treated as dates, times, or datetimes and not as numeric values.
+If values are read into memory as Arrow date, time, or datetime types, then when they are written &mdash; from an [arrow2 `Chunk`](https://docs.rs/arrow2/latest/arrow2/chunk/struct.Chunk.html) to `csv`, `feather`, `ndjson`, or `parquet` &mdash; they are treated as dates, times, or datetimes and not as numeric values.
 
 Finally, [more work is planned](https://github.com/curtisalexander/readstat-rs/issues/21) to handle other SAS dates, times, and datetimes that have SAS formats other than those listed above.
 
