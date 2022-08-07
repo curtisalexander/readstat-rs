@@ -59,6 +59,12 @@ For details see the following.
 - [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L82)
 - [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L111-L114)
 
+Build
+```sh
+cd readstat-rs/readstat
+cargo build
+```
+
 ## Run
 After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out or json
