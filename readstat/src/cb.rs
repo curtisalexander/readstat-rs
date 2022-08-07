@@ -1,27 +1,15 @@
-use arrow::array::{
-    Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int8Builder,
-    StringBuilder, Time32SecondBuilder, TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
-    TimestampNanosecondBuilder, TimestampSecondBuilder,
-};
 use chrono::NaiveDateTime;
 use log::debug;
 use num_traits::FromPrimitive;
-use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 
 use crate::{
+    common::ptr_to_string,
     formats,
     rs_data::ReadStatData,
-    rs_metadata::{
-        ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatVar, ReadStatVarMetadata,
-        ReadStatVarType, ReadStatVarTypeClass,
-    },
-    ReadStatMetadata,
+    rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata},
+    rs_var::{ReadStatVar, ReadStatVarType, ReadStatVarTypeClass},
 };
-
-const DIGITS: usize = 14;
-const DAY_SHIFT: i32 = 3653;
-const SEC_SHIFT: i64 = 315619200;
 
 // C types
 #[allow(dead_code)]
@@ -31,15 +19,6 @@ enum ReadStatHandler {
     READSTAT_HANDLER_OK,
     READSTAT_HANDLER_ABORT,
     READSTAT_HANDLER_SKIP_VARIABLE,
-}
-
-// String out from C pointer
-unsafe fn ptr_to_string(x: *const i8) -> String {
-    if x.is_null() {
-        String::new()
-    } else {
-        CStr::from_ptr(x).to_str().unwrap().to_owned()
-    }
 }
 
 // C callback functions
@@ -180,7 +159,7 @@ pub extern "C" fn handle_variable(
     m.vars.insert(
         index,
         ReadStatVarMetadata::new(
-            var_name.clone(),
+            var_name,
             var_type,
             var_type_class,
             var_label,
@@ -207,318 +186,25 @@ pub extern "C" fn handle_value(
         unsafe { readstat_sys::readstat_value_type(value) };
     let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
 
-    debug!("batch_rows_to_process is {}", d.batch_rows_to_process);
-    debug!("batch_row_start is {}", d.batch_row_start);
-    debug!("batch_row_end is {}", d.batch_row_end);
-    debug!("batch_rows_processed is {}", d.batch_rows_processed);
+    debug!("chunk_rows_to_process is {}", d.chunk_rows_to_process);
+    debug!("chunk_row_start is {}", d.chunk_row_start);
+    debug!("chunk_row_end is {}", d.chunk_row_end);
+    debug!("chunk_rows_processed is {}", d.chunk_rows_processed);
     debug!("var_count is {}", d.var_count);
     debug!("obs_index is {}", obs_index);
     debug!("var_index is {}", var_index);
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
-    // get value and push into cols
-    match value_type {
-        readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
-        | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
-            // get value
-            let value = unsafe {
-                CStr::from_ptr(readstat_sys::readstat_string_value(value))
-                    .to_str()
-                    .unwrap()
-                    .to_owned()
-            };
+    // get value and push into arrays
+    let value = ReadStatVar::get_readstat_value(value, value_type, is_missing, &d.vars, var_index);
 
-            // debug
-            debug!("value is {:#?}", &value);
-
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<StringBuilder>()
-                    .unwrap()
-                    .append_value(value)
-                    .unwrap();
-            } else {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<StringBuilder>()
-                    .unwrap()
-                    .append_null()
-                    .unwrap();
-            }
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
-            // get value
-            let value = unsafe { readstat_sys::readstat_int8_value(value) };
-
-            // debug
-            debug!("value is {:#?}", value);
-
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Int8Builder>()
-                    .unwrap()
-                    .append_value(value)
-                    .unwrap();
-            } else {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Int8Builder>()
-                    .unwrap()
-                    .append_null()
-                    .unwrap();
-            }
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
-            // get value
-            let value = unsafe { readstat_sys::readstat_int16_value(value) };
-
-            // debug
-            debug!("value is {:#?}", value);
-
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Int16Builder>()
-                    .unwrap()
-                    .append_value(value)
-                    .unwrap();
-            } else {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Int16Builder>()
-                    .unwrap()
-                    .append_null()
-                    .unwrap();
-            }
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
-            // get value
-            let value = unsafe { readstat_sys::readstat_int32_value(value) };
-
-            // debug
-            debug!("value is {:#?}", value);
-
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Int32Builder>()
-                    .unwrap()
-                    .append_value(value)
-                    .unwrap();
-            } else {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Int32Builder>()
-                    .unwrap()
-                    .append_null()
-                    .unwrap();
-            }
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
-            // Format as string to truncate float to only contain 14 decimal digits
-            // Parse back into float so that the trailing zeroes are trimmed when serializing
-            // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
-            let value = unsafe { readstat_sys::readstat_float_value(value) };
-            let value =
-                lexical::parse::<f32, _>(format!("{1:.0$}", DIGITS, lexical::to_string(value)))
-                    .unwrap();
-
-            // debug
-            debug!("value is {:#?}", value);
-
-            // append to builder
-            if is_missing == 0 {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Float32Builder>()
-                    .unwrap()
-                    .append_value(value)
-                    .unwrap();
-            } else {
-                d.cols[var_index as usize]
-                    .as_any_mut()
-                    .downcast_mut::<Float32Builder>()
-                    .unwrap()
-                    .append_null()
-                    .unwrap();
-            }
-        }
-        readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-            // Format as string to truncate float to only contain 14 decimal digits
-            // Parse back into float so that the trailing zeroes are trimmed when serializing
-            // TODO: Is there an alternative that does not require conversion from and to a float?  // get value
-            let value = unsafe { readstat_sys::readstat_double_value(value) };
-            debug!("value (before truncation) is {:#?}", value);
-            let value: f64 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
-            // debug
-            debug!("value (after truncation) is {:#?}", value);
-
-            // is double actually a date?
-            let value = match d.vars.get(&var_index).unwrap().var_format_class {
-                None => ReadStatVar::ReadStat_f64(value),
-                Some(fc) => match fc {
-                    ReadStatFormatClass::Date => {
-                        ReadStatVar::ReadStat_Date((value as i32).checked_sub(DAY_SHIFT).unwrap())
-                    }
-                    ReadStatFormatClass::DateTime => ReadStatVar::ReadStat_DateTime(
-                        (value as i64).checked_sub(SEC_SHIFT).unwrap(),
-                    ),
-                    ReadStatFormatClass::DateTimeWithMilliseconds => {
-                        ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000,
-                        )
-                    }
-                    ReadStatFormatClass::DateTimeWithMicroseconds => {
-                        ReadStatVar::ReadStat_DateTime(
-                            (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000,
-                        )
-                    }
-                    ReadStatFormatClass::DateTimeWithNanoseconds => ReadStatVar::ReadStat_DateTime(
-                        (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
-                    ),
-                    ReadStatFormatClass::Time => ReadStatVar::ReadStat_Time(value as i32),
-                },
-            };
-
-            // append to builder
-            match value {
-                ReadStatVar::ReadStat_Date(v) => {
-                    if is_missing == 0 {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Date32Builder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    } else {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Date32Builder>()
-                            .unwrap()
-                            .append_null()
-                            .unwrap();
-                    }
-                }
-                ReadStatVar::ReadStat_DateTime(v) => {
-                    if is_missing == 0 {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampSecondBuilder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    } else {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampSecondBuilder>()
-                            .unwrap()
-                            .append_null()
-                            .unwrap();
-                    }
-                }
-                ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) => {
-                    if is_missing == 0 {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampMillisecondBuilder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    } else {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampMillisecondBuilder>()
-                            .unwrap()
-                            .append_null()
-                            .unwrap();
-                    }
-                }
-                ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) => {
-                    if is_missing == 0 {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampMicrosecondBuilder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    } else {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampMicrosecondBuilder>()
-                            .unwrap()
-                            .append_null()
-                            .unwrap();
-                    }
-                }
-                ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) => {
-                    if is_missing == 0 {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampNanosecondBuilder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    } else {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<TimestampNanosecondBuilder>()
-                            .unwrap()
-                            .append_null()
-                            .unwrap();
-                    }
-                }
-                ReadStatVar::ReadStat_Time(v) => {
-                    if is_missing == 0 {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Time32SecondBuilder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    } else {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Time32SecondBuilder>()
-                            .unwrap()
-                            .append_null()
-                            .unwrap();
-                    }
-                }
-                ReadStatVar::ReadStat_f64(v) => {
-                    if is_missing == 0 {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Float64Builder>()
-                            .unwrap()
-                            .append_value(v)
-                            .unwrap();
-                    } else {
-                        d.cols[var_index as usize]
-                            .as_any_mut()
-                            .downcast_mut::<Float64Builder>()
-                            .unwrap()
-                            .append_null()
-                            .unwrap();
-                    }
-                }
-                // exhaustive
-                _ => unreachable!(),
-            }
-        }
-        // exhaustive
-        _ => unreachable!(),
-    }
+    // push into cols
+    d.cols[var_index as usize].push(value);
 
     // if row is complete
     if var_index == (d.var_count - 1) {
-        d.batch_rows_processed += 1;
+        d.chunk_rows_processed += 1;
         if let Some(trp) = &d.total_rows_processed {
             trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }

@@ -2,7 +2,10 @@
 /*   - Base SAS ==> https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lepg/p1gqlhpk5ffltmn1h6iqmzv6mzv7.htm */
 /*   - DS2 ==> https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ds2pg/n0v130wmh3hmuzn1t7y5y4pgxa69.htm */
 
-data all_types;
+%let homedir = %sysget(HOME);
+libname data "&homedir./data";
+
+data data.all_types;
 
   format _int best12.
          _float best12.

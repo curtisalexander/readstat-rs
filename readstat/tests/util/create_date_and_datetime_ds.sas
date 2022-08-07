@@ -53,7 +53,11 @@
 
 %mend;
 
-%create_date_and_datetime_ds(out_ds=date_and_datetime_ds
+* library ;
+%let homedir = %sysget(HOME);
+libname data "&homedir./data";
+
+%create_date_and_datetime_ds(out_ds=data.date_and_datetime_ds
                             ,date_list=%str(b8601da
                                            |b8601dn
                                            |date

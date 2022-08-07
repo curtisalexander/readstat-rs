@@ -1,165 +1,145 @@
 #![allow(non_camel_case_types)]
-
+use clap::{clap_derive::ArgEnum, Parser, Subcommand, ValueHint};
 use colored::Colorize;
 use crossbeam::channel::unbounded;
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
-use serde::Serialize;
-use std::error::Error;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::thread;
-use structopt::clap::arg_enum;
-use structopt::StructOpt;
+use std::{error::Error, fmt, path::PathBuf, sync::Arc, thread};
+
+pub use common::build_offsets;
+pub use err::ReadStatError;
+pub use rs_data::ReadStatData;
+pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
+pub use rs_path::ReadStatPath;
+pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
+pub use rs_write::ReadStatWriter;
 
 mod cb;
+mod common;
 mod err;
 mod formats;
 mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
+mod rs_var;
 mod rs_write;
 
-pub use err::ReadStatError;
-pub use rs_data::ReadStatData;
-pub use rs_metadata::{
-    ReadStatCompress, ReadStatEndian, ReadStatFormatClass, ReadStatMetadata, ReadStatVar,
-    ReadStatVarMetadata, ReadStatVarType, ReadStatVarTypeClass,
-};
-pub use rs_path::ReadStatPath;
-pub use rs_write::ReadStatWriter;
-
+// GLOBALS
 // Default rows to stream
 const STREAM_ROWS: u32 = 10000;
 
-// StructOpt
-#[derive(StructOpt, Debug)]
-/// 💾 Command-line tool for working with SAS binary files; 🦀 Rust wrapper of ReadStat C library
-/// {n}    Display metadata{n}    Preview data{n}    Convert SAS file to csv, feather (or the Arrow IPC format), ndjson, or parquet format
-pub enum ReadStat {
+// CLI
+#[derive(Parser, Debug)]
+#[clap(version)]
+#[clap(propagate_version = true)]
+/// 💾 Command-line tool for working with SAS binary files
+///
+/// 🦀 Rust wrapper of ReadStat C library
+pub struct ReadStatCli {
+    #[clap(subcommand)]
+    command: ReadStatCliCommands,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReadStatCliCommands {
     /// Display sas7bdat metadata
     Metadata {
-        /// Path to sas7bdat file
-        #[structopt(parse(from_os_str))]
+        #[clap(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
         /// Display sas7bdat metadata as json
-        #[structopt(long)]
+        #[clap(action, long)]
         as_json: bool,
         /// Do not display progress bar
-        #[structopt(long)]
+        #[clap(action, long)]
         no_progress: bool,
         /// Skip calculating row count{n}If only interested in variable metadata speeds up parsing
-        #[structopt(long)]
+        #[clap(action, long)]
         skip_row_count: bool,
     },
     /// Preview sas7bdat data
     Preview {
         /// Path to sas7bdat file
-        #[structopt(parse(from_os_str))]
+        #[clap(value_parser)]
         input: PathBuf,
         /// Number of rows to write
-        #[structopt(long, default_value = "10")]
+        #[clap(default_value = "10", long, value_parser)]
         rows: u32,
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[structopt(long, possible_values = &Reader::variants(), case_insensitive=true)]
+        #[clap(arg_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
-        #[structopt(long)]
+        /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
+        #[clap(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
-        #[structopt(long)]
+        #[clap(action, long)]
         no_progress: bool,
     },
     /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
     Data {
         /// Path to sas7bdat file
-        #[structopt(parse(from_os_str))]
+        #[clap(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
         /// Output file path
-        #[structopt(short = "o", long, parse(from_os_str))]
+        #[clap(long, short = 'o', value_parser)]
         output: Option<PathBuf>,
         /// Output file format{n}Defaults to csv
-        #[structopt(short = "f", long, possible_values = &Format::variants(), case_insensitive=true)]
-        format: Option<Format>,
+        #[clap(arg_enum, ignore_case = true, long, short = 'f', value_parser)]
+        format: Option<OutFormat>,
         /// Overwrite output file if it already exists
-        #[structopt(long)]
+        #[clap(action, long)]
         overwrite: bool,
         /// Number of rows to write
-        #[structopt(long)]
+        #[clap(long, value_parser)]
         rows: Option<u32>,
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[structopt(long, possible_values = &Reader::variants(), case_insensitive=true)]
+        #[clap(arg_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}Note: ↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 50,000 rows
-        #[structopt(long)]
+        /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
+        #[clap(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
-        #[structopt(long)]
+        #[clap(action, long)]
         no_progress: bool,
         /// Convert sas7bdat data in parallel
-        #[structopt(long)]
-        parallel: bool
+        #[clap(action, long)]
+        parallel: bool,
     },
 }
 
-arg_enum! {
-    #[derive(Debug, Clone, Copy, Serialize)]
-    #[allow(non_camel_case_types)]
-    pub enum Format {
-        csv,
-        feather,
-        ndjson,
-        parquet
+#[derive(Debug, Clone, Copy, ArgEnum)]
+#[allow(non_camel_case_types)]
+pub enum OutFormat {
+    csv,
+    feather,
+    ndjson,
+    parquet,
+}
+
+impl fmt::Display for OutFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", &self)
     }
 }
 
-arg_enum! {
-    #[derive(Debug, Clone, Copy, Serialize)]
-    #[allow(non_camel_case_types)]
-    pub enum Reader {
-        mem,
-        stream,
-    }
+#[derive(Debug, Clone, Copy, ArgEnum)]
+#[allow(non_camel_case_types)]
+pub enum Reader {
+    mem,
+    stream,
 }
 
-fn build_offsets(
-    row_count: u32,
-    stream_rows: u32,
-) -> Result<Vec<u32>, Box<dyn Error + Send + Sync>> {
-    // Get number of chunks
-    let chunks = if stream_rows < row_count {
-        if row_count % stream_rows == 0 {
-            row_count / stream_rows
-        } else {
-            (row_count / stream_rows) + 1
-        }
-    } else {
-        1
-    };
-
-    // Allocate and populate a vector for the offsets
-    let mut offsets: Vec<u32> = Vec::with_capacity(chunks as usize);
-
-    for c in 0..=chunks {
-        if c == 0 {
-            offsets.push(0);
-        } else if c == chunks {
-            offsets.push(row_count);
-        } else {
-            offsets.push(c * stream_rows);
-        }
+impl fmt::Display for Reader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", &self)
     }
-
-    Ok(offsets)
 }
-
-pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
+pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
     env_logger::init();
 
-    match rs {
-        ReadStat::Metadata {
+    match rs.command {
+        ReadStatCliCommands::Metadata {
             input: in_path,
             as_json,
             no_progress: _,
@@ -177,6 +157,8 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
             // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
+
+            // Read metadata
             md.read_metadata(&rsp, skip_row_count)?;
 
             // Write metadata
@@ -185,7 +167,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
             // Return
             Ok(())
         }
-        ReadStat::Preview {
+        ReadStatCliCommands::Preview {
             input,
             rows,
             reader,
@@ -200,17 +182,19 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
             );
 
             // output and format determine the type of writing to be performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(Format::csv), false, false)?;
+            let rsp = ReadStatPath::new(sas_path, None, Some(OutFormat::csv), false, false)?;
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
+
+            // Read metadata
             md.read_metadata(&rsp, false)?;
 
             // Determine row count
             let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
 
             // Determine stream row count
-            // 📝 Default stream rows set to 50,000
+            // 📝 Default stream rows set to 10,000
             let total_rows_to_stream = match reader {
                 Some(Reader::stream) | None => match stream_rows {
                     Some(s) => s,
@@ -225,7 +209,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
             let offsets_pairs = offsets.windows(2);
-            let pairs_cnt = *(&offsets_pairs.len());
+            let pairs_cnt = offsets_pairs.len();
 
             // Initialize writing
             let mut wtr = ReadStatWriter::new();
@@ -248,13 +232,13 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
                 // Write
                 wtr.write(&d, &rsp)?;
-            
+
                 // Finish
                 if i == pairs_cnt {
                     wtr.finish(&d, &rsp)?;
                 }
             }
-            
+
             // Finish writer
             //wtr.finish(&d, &rsp)?;
 
@@ -268,7 +252,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
             };
             */
         }
-        ReadStat::Data {
+        ReadStatCliCommands::Data {
             input,
             output,
             format,
@@ -322,7 +306,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                     };
 
                     // Determine stream row count
-                    // 📝 Default stream rows set to 50,000
+                    // 📝 Default stream rows set to 10,000
                     let total_rows_to_stream = match reader {
                         Some(Reader::stream) | None => match stream_rows {
                             Some(s) => s,
@@ -347,7 +331,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                     thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
                         // Create windows
                         let offsets_pairs = offsets.par_windows(2);
-                        let pairs_cnt = *(&offsets_pairs.len());
+                        let pairs_cnt = offsets_pairs.len();
 
                         // Run in parallel or not?
                         // Controlled via number of threads in the rayon threadpool
@@ -381,11 +365,11 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
 
                                 // Early return if an error
                                 if sent.is_err() {
-                                    return Err(From::from(
+                                    Err(From::from(
                                         "Error when attempting to send read data for writing",
-                                    ));
+                                    ))
                                 } else {
-                                    return Ok(());
+                                    Ok(())
                                 }
                             })
                             .filter_map(|r| -> Option<Box<dyn Error + Send + Sync>> {
@@ -413,7 +397,7 @@ pub fn run(rs: ReadStat) -> Result<(), Box<dyn Error + Send + Sync>> {
                     // Write
                     for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
                         wtr.write(&d, &rsp)?;
-                       
+
                         if i == (pairs_cnt - 1) {
                             wtr.finish(&d, &rsp)?;
                         }

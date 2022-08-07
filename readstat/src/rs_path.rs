@@ -1,10 +1,12 @@
 use colored::Colorize;
 use path_abs::{PathAbs, PathInfo};
-use std::error::Error;
-use std::ffi::CString;
-use std::path::{Path, PathBuf};
+use std::{
+    error::Error,
+    ffi::CString,
+    path::{Path, PathBuf},
+};
 
-use crate::Format;
+use crate::OutFormat;
 
 const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
@@ -14,7 +16,7 @@ pub struct ReadStatPath {
     pub extension: String,
     pub cstring_path: CString,
     pub out_path: Option<PathBuf>,
-    pub format: Format,
+    pub format: OutFormat,
     pub overwrite: bool,
     pub no_write: bool,
 }
@@ -23,7 +25,7 @@ impl ReadStatPath {
     pub fn new(
         path: PathBuf,
         out_path: Option<PathBuf>,
-        format: Option<Format>,
+        format: Option<OutFormat>,
         overwrite: bool,
         no_write: bool,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -61,9 +63,11 @@ impl ReadStatPath {
         CString::new(rust_str).map_err(|_| From::from("Invalid path"))
     }
 
-    fn validate_format(format: Option<Format>) -> Result<Format, Box<dyn Error + Send + Sync>> {
+    fn validate_format(
+        format: Option<OutFormat>,
+    ) -> Result<OutFormat, Box<dyn Error + Send + Sync>> {
         match format {
-            None => Ok(Format::csv),
+            None => Ok(OutFormat::csv),
             Some(f) => Ok(f),
         }
     }
@@ -88,7 +92,7 @@ impl ReadStatPath {
 
     fn validate_out_extension(
         path: &Path,
-        format: Format,
+        format: OutFormat,
     ) -> Result<Option<PathBuf>, Box<dyn Error + Send + Sync>> {
         path.extension()
             .and_then(|e| e.to_str())
@@ -100,7 +104,10 @@ impl ReadStatPath {
                     format.to_string().bright_green()
                 ))),
                 |e| match format {
-                    Format::csv | Format::ndjson | Format::feather | Format::parquet => {
+                    OutFormat::csv
+                    | OutFormat::ndjson
+                    | OutFormat::feather
+                    | OutFormat::parquet => {
                         if e == format.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {

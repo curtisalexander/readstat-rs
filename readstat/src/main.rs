@@ -1,7 +1,8 @@
-use structopt::StructOpt;
+use clap::Parser;
+use readstat::ReadStatCli;
 
 fn main() {
-    let args = readstat::ReadStat::from_args();
+    let args = ReadStatCli::parse();
     if let Err(e) = readstat::run(args) {
         println!("Stopping with error: {}", e);
         std::process::exit(1);

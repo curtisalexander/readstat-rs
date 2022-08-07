@@ -18,18 +18,49 @@ The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as 
 
 ### Build
 
-#### Linux and macOS
-Building is as straightforward as `cargo build`.
+#### Clone
+Ensure submodules are also cloned.
+
+```sh
+git clone --recurse-submodules https://github.com/curtisalexander/readstat-rs.git
+```
+
+#### Linux
+Install developer tools
+
+```sh
+# unixodbc-dev needed for full compilation of arrow2
+sudo apt install build-essential clang unixodbc-dev
+```
+
+Build
+```sh
+cd readstat-rs/readstat
+cargo build
+```
+
+#### macOS
+Install developer tools
+
+```sh
+xcode-select --install
+```
+
+Build
+```sh
+cd readstat-rs/readstat
+cargo build
+```
 
 #### Windows
-Building on Windows requires [LLVM 12](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
+Building on Windows requires [LLVM](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
 
 For details see the following.
 - [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L82)
-- [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L70-L79)
+- [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L111-L114)
 
 ## Run
-After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/structopt/latest/structopt/#external-subcommands).  Currently, the following subcommands have been implemented:
+After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out or json
     - row count
     - variable count
@@ -140,7 +171,7 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ```
 
 ### Parallelism
-The `data` subcommand includes a parameter for `--parallel`.  If invoked with this parameter, the *reading* of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 50,000), then each chunk of rows is read in parallel.  Note that all processors on the users's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
+The `data` subcommand includes a parameter for `--parallel`.  If invoked with this parameter, the *reading* of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the users's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
 
 Note that although reading is in parallel, *writing* is still sequential.  Thus one should only anticipate moderate speed-ups as much of the time is spent writing.
 
@@ -152,7 +183,7 @@ Note that although reading is in parallel, *writing* is still sequential.  Thus 
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
 - `mem` &rarr; Parse and read the entire `sas7bdat` into memory before writing to either standard out or a file
 - `stream` (default) &rarr; Parse and read at most `stream-rows` into memory before writing to disk
-    - `stream-rows` may be set via the command line parameter `--stream-rows` or if elided will default to 50,000 rows
+    - `stream-rows` may be set via the command line parameter `--stream-rows` or if elided will default to 10,000 rows
 
 **Why is this useful?**
 - `mem` is useful for testing purposes
@@ -186,15 +217,15 @@ readstat data --help
 ```
 
 ## Floating Point Truncation
-:warning: Decimal values are truncated to contain only 14 decimal digits!
+:warning: Decimal values are rounded to contain only 15 decimal digits!
 
-For example, the number `1.123456789012345` created within SAS would be returned as `1.12345678901234` within Rust.
+For example, the number `1.1234567890123456` created within SAS would be returned as `1.123456789012345` within Rust.
 
-Why does this happen?  Is this an implementation error?  No, truncation to only 14 decimal digits has been _purposely implemented_ within the Rust code.
+Why does this happen?  Is this an implementation error?  No, rounding to only 15 decimal digits has been _purposely implemented_ within the Rust code.
 
 As a specific example, when testing with the [cars.sas7bdat](data/README.md) dataset (which was created originally on Windows), the numeric value `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits) within Rust.  Values created on Windows with an x64 processor are only accurate to 15 digits.
 
-Only utilizing 14 decimal digits [mirrors the approach](https://github.com/WizardMac/ReadStat/blob/master/src/bin/write/mod_csv.c#L147) of the [ReadStat binary](https://github.com/WizardMac/ReadStat#command-line-usage) when writing to `csv`.
+For comparison, the [ReadStat binary](https://github.com/WizardMac/ReadStat#command-line-usage) [truncates to 14 decimal places](https://github.com/WizardMac/ReadStat/blob/master/src/bin/write/mod_csv.c#L147) of the [ReadStat binary](https://github.com/WizardMac/ReadStat#command-line-usage) when writing to `csv`.
 
 Finally, SAS represents all numeric values in floating-point representation which creates a challenge for **all** parsed numerics!
 

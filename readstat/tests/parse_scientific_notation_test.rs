@@ -1,4 +1,4 @@
-use arrow::{array::Float64Array, datatypes::DataType};
+use arrow2::{array::Float64Array, datatypes::DataType};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
 mod common;
@@ -56,14 +56,17 @@ fn parse_scientific_notation() {
 
     // arrow data type
     assert!(matches!(
-        d.schema.field(var_index as usize).data_type(),
+        d.schema.fields[var_index as usize].data_type(),
         DataType::Float64
     ));
 
+    // arrays
+    let arrays = d.chunk.unwrap().into_arrays();
+
     // float column
-    let float_col = d
-        .batch
-        .column(var_index as usize)
+    let float_col = arrays
+        .get(var_index as usize)
+        .unwrap()
         .as_any()
         .downcast_ref::<Float64Array>()
         .unwrap();
