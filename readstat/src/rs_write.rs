@@ -10,16 +10,15 @@ use arrow2::{
         parquet as parquet_arrow2,
     },
 };
-// Create a writer struct
+use colored::Colorize;
+// use indicatif::{ProgressBar, ProgressStyle};
+use num_format::Locale;
+use num_format::ToFormattedString;
 use std::{
     fs::OpenOptions,
     error::Error,
     io::stdout,
 };
-use colored::Colorize;
-// use indicatif::{ProgressBar, ProgressStyle};
-use num_format::Locale;
-use num_format::ToFormattedString;
 
 use crate::OutFormat;
 use crate::rs_data::ReadStatData;
@@ -361,6 +360,13 @@ impl ReadStatWriter {
 
     fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
+            // write options
+            let options = parquet_arrow2::write::WriteOptions {
+                    write_statistics: true,
+                    compression: parquet_arrow2::write::CompressionOptions::Snappy,
+                    version: parquet_arrow2::write::Version::V2
+            };
+
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
@@ -375,14 +381,7 @@ impl ReadStatWriter {
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
             
-            // write
-            let options = parquet_arrow2::write::WriteOptions {
-                    write_statistics: true,
-                    compression: parquet_arrow2::write::CompressionOptions::Uncompressed,
-                    version: parquet_arrow2::write::Version::V2
-            };
             let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
-
 
             if let Some(c) = d.chunk.clone() {
                 let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
@@ -428,7 +427,7 @@ impl ReadStatWriter {
             // write
             let options = parquet_arrow2::write::WriteOptions {
                     write_statistics: true,
-                    compression: parquet_arrow2::write::CompressionOptions::Uncompressed,
+                    compression: parquet_arrow2::write::CompressionOptions::Snappy,
                     version: parquet_arrow2::write::Version::V2
             };
             let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
