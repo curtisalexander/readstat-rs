@@ -3,11 +3,10 @@ use arrow2::{
     chunk::Chunk,
     error::Error as ArrowError,
     io::{
-        parquet::write::RowGroupIterator,
         csv as csv_arrow2,
         ipc as ipc_arrow2,
         ndjson as ndjson_arrow2,
-        parquet as parquet_arrow2,
+        parquet::{self as parquet_arrow2, write::RowGroupIterator},
     },
 };
 use colored::Colorize;
@@ -15,8 +14,8 @@ use colored::Colorize;
 use num_format::Locale;
 use num_format::ToFormattedString;
 use std::{
-    fs::OpenOptions,
     error::Error,
+    fs::{OpenOptions},
     io::stdout,
 };
 
@@ -26,8 +25,17 @@ use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
 
+pub enum ReadStatWriterFormat {
+    Csv(std::fs::File),
+    CsvStdout(std::io::Stdout),
+    Feather(Box<ipc_arrow2::write::FileWriter<std::fs::File>>),
+    Ndjson(std::fs::File),
+    Parquet((Box<parquet_arrow2::write::FileWriter<std::fs::File>>, parquet_arrow2::write::WriteOptions))
+}
+
 #[derive(Default)]
 pub struct ReadStatWriter {
+    pub wtr: Option<ReadStatWriterFormat>,
     pub wrote_header: bool,
     pub wrote_start: bool,
 }
@@ -35,6 +43,7 @@ pub struct ReadStatWriter {
 impl ReadStatWriter {
     pub fn new() -> Self {
         Self {
+            wtr: None,
             wrote_header: false,
             wrote_start: false,
         }
@@ -209,35 +218,40 @@ impl ReadStatWriter {
     fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let mut f = if self.wrote_start {
-                OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
 
-            // write
-            let options = csv_arrow2::write::SerializeOptions::default();
-
-            if let Some(c) = d.chunk.clone() {
-                let cols = &[c];
-                cols
-                    .iter()
-                    .try_for_each(|batch|
-                        csv_arrow2::write::write_chunk(&mut f, batch, &options))?;
+            // setup writer
+            if !self.wrote_start {
+                self.wtr = Some(ReadStatWriterFormat::Csv(f))
             };
-            
-            // update
-            self.wrote_start = true;
 
-            // return
-            Ok(())
+            // write
+            if let Some(ReadStatWriterFormat::Csv(f)) = &mut self.wtr {
+                let options = csv_arrow2::write::SerializeOptions::default();
+
+                if let Some(c) = d.chunk.clone() {
+                    let cols = &[c];
+                    cols
+                        .iter()
+                        .try_for_each(|batch|
+                            csv_arrow2::write::write_chunk(f, batch, &options))?;
+                };
+
+                // update
+                self.wrote_start = true;
+                Ok(())
+            } else {
+                Err(From::from(
+                    "Error writing csv as associated writer is not for the csv format"
+                ))
+            }
         } else {
             Err(From::from(
                 "Error writing csv as output path is set to None",
@@ -248,31 +262,39 @@ impl ReadStatWriter {
     fn write_data_to_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
 
-            // write
-            if let Some(c) = d.chunk.clone() {
-                let options = ipc_arrow2::write::WriteOptions { compression: None };
-                let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
-                wtr.write(&c, None)?;
+            // setup writer
+            if !self.wrote_start {
+                let options = ipc_arrow2::write::WriteOptions { compression: Some(ipc_arrow2::write::Compression::ZSTD) };
+                
+                let wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
+
+                self.wtr = Some(ReadStatWriterFormat::Feather(Box::new(wtr)));
             };
 
-            // update
-            self.wrote_start = true; 
+            // write
+            if let Some(ReadStatWriterFormat::Feather(wtr)) = &mut self.wtr {
+                if let Some(c) = d.chunk.clone() {
+                    wtr.write(&c, None)?;
+                };
 
-            // return
-            Ok(())
+                // update
+                self.wrote_start = true;
+
+                Ok(())
+            } else {
+                Err(From::from(
+                    "Error writing feather as associated writer is not for the feather format"
+                ))
+            }
         } else {
             Err(From::from(
                 "Error writing feather file as output path is set to None",
@@ -281,41 +303,16 @@ impl ReadStatWriter {
     }
 
     fn finish_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
-
-
-            // setup writer if not already started writing
-            /*
-            if !self.wrote_start {
-                let options = ipc_arrow2::write::WriteOptions { compression: None };
-                let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
-                self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
-            };
-            */
-
-            // write
-            let options = ipc_arrow2::write::WriteOptions { compression: None };
-            let mut wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
+        if let Some(ReadStatWriterFormat::Feather(wtr)) = &mut self.wtr {
             wtr.finish()?;
 
             // set message for what is being read/written
             self.finish_txt(d, rsp)?;
-
-            // return
+            
             Ok(())
         } else {
             Err(From::from(
-                "Error writing feather file as output path is set to None",
+                "Error writing feather as associated writer is not for the feather format"
             ))
         }
     }
@@ -323,34 +320,44 @@ impl ReadStatWriter {
     fn write_data_to_ndjson(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
             
+            // setup writer
+            if !self.wrote_start {
+                self.wtr = Some(ReadStatWriterFormat::Ndjson(f));
+            };
+
             // write
-            if let Some(c) = d.chunk.clone() {
-                let arrays = c.columns().iter().map(Ok);
-                // let arrays = vec![Ok(c)].into_iter();
-                let serializer = ndjson_arrow2::write::Serializer::new(arrays, vec![]);
+            if let Some(ReadStatWriterFormat::Ndjson(f)) = &mut self.wtr {
+                if let Some(c) = d.chunk.clone() {
+                    let arrays = c.columns().iter().map(Ok);
+                    
+                    // serializer
+                    let serializer = ndjson_arrow2::write::Serializer::new(arrays, vec![]);
 
-                let mut wtr = ndjson_arrow2::write::FileWriter::new(f, serializer);
-                wtr.by_ref().collect::<Result<(), ArrowError>>()?;
+                    // writer
+                    let mut wtr = ndjson_arrow2::write::FileWriter::new(f, serializer);
+                    
+                    // drive iterator
+                    wtr.by_ref().collect::<Result<(), ArrowError>>()?;
+                }
+
+                // update
+                self.wrote_start = true;
+
+                Ok(())
+            } else {
+                Err(From::from(
+                    "Error writing ndjson as associated writer is not for the ndjson format"
+                ))
             }
-
-            // update
-            self.wrote_start = true;
-
-            // return
-            Ok(())
         } else {
             Err(From::from(
                 "Error writing ndjson file as output path is set to None",
@@ -360,50 +367,55 @@ impl ReadStatWriter {
 
     fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
-            // write options
-            let options = parquet_arrow2::write::WriteOptions {
-                    write_statistics: true,
-                    compression: parquet_arrow2::write::CompressionOptions::Snappy,
-                    version: parquet_arrow2::write::Version::V2
-            };
-
             // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
-            
-            let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
 
-            if let Some(c) = d.chunk.clone() {
-                let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
+            // setup writer
+            if !self.wrote_start {
+                let options = parquet_arrow2::write::WriteOptions {
+                        write_statistics: true,
+                        compression: parquet_arrow2::write::CompressionOptions::Snappy,
+                        version: parquet_arrow2::write::Version::V2
+                };
 
-                let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
-                    .fields
-                    .iter()
-                    .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
-                    .collect();
-
-                let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, options, encodings)?;
-
-                for group in row_groups {
-                    wtr.write(group?)?;
-                }
+                let wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
+                
+                self.wtr = Some(ReadStatWriterFormat::Parquet((Box::new(wtr), options)));
             };
 
-            // update
-            self.wrote_start = true;
+            // write
+            if let Some(ReadStatWriterFormat::Parquet((wtr, options))) = &mut self.wtr {
+                if let Some(c) = d.chunk.clone() {
+                    let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
 
-            // return
-            Ok(())
+                    let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
+                        .fields
+                        .iter()
+                        .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
+                        .collect();
+
+                    let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, *options, encodings)?;
+
+                    for group in row_groups {
+                        wtr.write(group?)?;
+                    }
+                }
+                // update
+                self.wrote_start = true;
+
+                Ok(())
+            } else {
+                Err(From::from(
+                    "Error writing parquet as associated writer is not for the parquet format"
+                ))
+            }
         } else {
             Err(From::from(
                 "Error writing parquet file as output path is set to None",
@@ -412,35 +424,16 @@ impl ReadStatWriter {
     }
 
     fn finish_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                std::fs::File::create(p)?
-            };
-
-            // write
-            let options = parquet_arrow2::write::WriteOptions {
-                    write_statistics: true,
-                    compression: parquet_arrow2::write::CompressionOptions::Snappy,
-                    version: parquet_arrow2::write::Version::V2
-            };
-            let mut wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
+        if let Some(ReadStatWriterFormat::Parquet((wtr, _))) = &mut self.wtr {
             let _size = wtr.end(None)?;
 
             // set message for what is being read/written
             self.finish_txt(d, rsp)?;
-
-            // return
+            
             Ok(())
         } else {
             Err(From::from(
-                "Error writing parquet file as output path is set to None",
+                "Error writing parquet as associated writer is not for the parquet format"
             ))
         }
     }
@@ -450,22 +443,33 @@ impl ReadStatWriter {
             pb.finish_and_clear()
         }
 
-        // write
-        let options = csv_arrow2::write::SerializeOptions::default();
-
-        if let Some(c) = d.chunk.clone() {
-            let cols = &[c];
-            cols
-                .iter()
-                .try_for_each(|batch|
-                    csv_arrow2::write::write_chunk(&mut stdout(), batch, &options))?;
+        // writer setup
+        if !self.wrote_start {
+            self.wtr = Some(ReadStatWriterFormat::CsvStdout(stdout()));
         };
 
-        // update
-        self.wrote_start = true;
+        // write
+        if let Some(ReadStatWriterFormat::CsvStdout(f)) = &mut self.wtr {
 
-        // return
-        Ok(())
+            let options = csv_arrow2::write::SerializeOptions::default();
+    
+            if let Some(c) = d.chunk.clone() {
+                let cols = &[c];
+                cols
+                    .iter()
+                    .try_for_each(|batch|
+                        csv_arrow2::write::write_chunk(f, batch, &options))?;
+            };
+
+            // update
+            self.wrote_start = true;
+
+            Ok(())
+        } else {
+            Err(From::from(
+                "Error writing to csv as associated writer is not for the csv format"
+            ))
+        }
     }
 
     fn write_header_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
