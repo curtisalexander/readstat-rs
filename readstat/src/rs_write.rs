@@ -15,7 +15,7 @@ use num_format::Locale;
 use num_format::ToFormattedString;
 use std::{
     error::Error,
-    fs::{OpenOptions},
+    fs::OpenOptions,
     io::stdout,
 };
 
@@ -25,12 +25,24 @@ use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
 
+pub struct ReadStatParquetWriter {
+    wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>,
+    options: parquet_arrow2::write::WriteOptions,
+    encodings: Vec<Vec<parquet_arrow2::write::Encoding>>,
+}
+
+impl ReadStatParquetWriter {
+    fn new(wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>, options: parquet_arrow2::write::WriteOptions, encodings: Vec<Vec<parquet_arrow2::write::Encoding>>) -> Self {
+        Self { wtr, options, encodings }
+    }
+}
+
 pub enum ReadStatWriterFormat {
     Csv(std::fs::File),
     CsvStdout(std::io::Stdout),
     Feather(Box<ipc_arrow2::write::FileWriter<std::fs::File>>),
     Ndjson(std::fs::File),
-    Parquet((Box<parquet_arrow2::write::FileWriter<std::fs::File>>, parquet_arrow2::write::WriteOptions))
+    Parquet(ReadStatParquetWriter)
 }
 
 #[derive(Default)]
@@ -380,31 +392,31 @@ impl ReadStatWriter {
             // setup writer
             if !self.wrote_start {
                 let options = parquet_arrow2::write::WriteOptions {
-                        write_statistics: true,
-                        compression: parquet_arrow2::write::CompressionOptions::Snappy,
-                        version: parquet_arrow2::write::Version::V2
+                    write_statistics: true,
+                    compression: parquet_arrow2::write::CompressionOptions::Snappy,
+                    version: parquet_arrow2::write::Version::V2
                 };
+
+                let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
+                    .fields
+                    .iter()
+                    .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
+                    .collect();
 
                 let wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
                 
-                self.wtr = Some(ReadStatWriterFormat::Parquet((Box::new(wtr), options)));
-            };
+                self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(Box::new(wtr), options, encodings)));
+            }
 
             // write
-            if let Some(ReadStatWriterFormat::Parquet((wtr, options))) = &mut self.wtr {
+            if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
                 if let Some(c) = d.chunk.clone() {
                     let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
 
-                    let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
-                        .fields
-                        .iter()
-                        .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
-                        .collect();
-
-                    let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, *options, encodings)?;
+                    let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, pwtr.options, pwtr.encodings.clone())?;
 
                     for group in row_groups {
-                        wtr.write(group?)?;
+                        pwtr.wtr.write(group?)?;
                     }
                 }
                 // update
@@ -424,8 +436,8 @@ impl ReadStatWriter {
     }
 
     fn finish_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if let Some(ReadStatWriterFormat::Parquet((wtr, _))) = &mut self.wtr {
-            let _size = wtr.end(None)?;
+        if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
+            let _size = pwtr.wtr.end(None)?;
 
             // set message for what is being read/written
             self.finish_txt(d, rsp)?;
