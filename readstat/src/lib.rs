@@ -324,9 +324,6 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     // Create channels
                     let (s, r) = unbounded();
 
-                    // Initialize writing
-                    let mut wtr = ReadStatWriter::new();
-
                     // Process data in batches (i.e. stream chunks of rows)
                     thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
                         // Create windows
@@ -395,6 +392,10 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     });
 
                     // Write
+
+                    // Initialize writing
+                    let mut wtr = ReadStatWriter::new();
+
                     for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
                         wtr.write(&d, &rsp)?;
 
