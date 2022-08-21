@@ -16,7 +16,7 @@ use num_format::ToFormattedString;
 use std::{
     error::Error,
     fs::OpenOptions,
-    io::{stdout, BufWriter},
+    io::stdout,
 };
 
 use crate::OutFormat;
@@ -26,22 +26,22 @@ use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
 
 pub struct ReadStatParquetWriter {
-    wtr: Box<parquet_arrow2::write::FileWriter<BufWriter<std::fs::File>>>,
+    wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>,
     options: parquet_arrow2::write::WriteOptions,
     encodings: Vec<Vec<parquet_arrow2::write::Encoding>>,
 }
 
 impl ReadStatParquetWriter {
-    fn new(wtr: Box<parquet_arrow2::write::FileWriter<BufWriter<std::fs::File>>>, options: parquet_arrow2::write::WriteOptions, encodings: Vec<Vec<parquet_arrow2::write::Encoding>>) -> Self {
+    fn new(wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>, options: parquet_arrow2::write::WriteOptions, encodings: Vec<Vec<parquet_arrow2::write::Encoding>>) -> Self {
         Self { wtr, options, encodings }
     }
 }
 
 pub enum ReadStatWriterFormat {
-    Csv(BufWriter<std::fs::File>),
+    Csv(std::fs::File),
     CsvStdout(std::io::Stdout),
-    Feather(Box<ipc_arrow2::write::FileWriter<BufWriter<std::fs::File>>>),
-    Ndjson(BufWriter<std::fs::File>),
+    Feather(Box<ipc_arrow2::write::FileWriter<std::fs::File>>),
+    Ndjson(std::fs::File),
     Parquet(ReadStatParquetWriter)
 }
 
@@ -230,11 +230,11 @@ impl ReadStatWriter {
     fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = BufWriter::new(OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?);
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -274,11 +274,11 @@ impl ReadStatWriter {
     fn write_data_to_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = BufWriter::new(OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?);
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -332,11 +332,11 @@ impl ReadStatWriter {
     fn write_data_to_ndjson(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = BufWriter::new(OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?);
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -380,11 +380,11 @@ impl ReadStatWriter {
     fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = BufWriter::new(OpenOptions::new()
+            let f = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?);
+                    .open(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
