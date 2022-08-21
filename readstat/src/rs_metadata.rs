@@ -2,6 +2,7 @@ use arrow2::datatypes::{DataType, Field, Schema, TimeUnit};
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
+use num_format::{Locale, ToFormattedString};
 use num_traits::FromPrimitive;
 use serde::Serialize;
 use std::{collections::BTreeMap, error::Error, ffi::c_void, os::raw::c_int};
@@ -156,6 +157,84 @@ impl ReadStatMetadata {
             )),
         }
     }
+
+    pub fn write_metadata(&self, rsp: &ReadStatPath, as_json: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if as_json {
+            self.write_metadata_to_json()
+        } else {
+            self.write_metadata_to_stdout(rsp)
+        }
+    }
+
+    pub fn write_metadata_to_json(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match serde_json::to_string_pretty(&self) {
+            Ok(s) => { println!("{}", s); Ok(()) }
+            Err(e) => { Err(From::from(format!("Error converting to json: {}", e))) }
+        }
+    }
+
+    pub fn write_metadata_to_stdout(&self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+        println!(
+            "Metadata for the file {}\n",
+            rsp.path.to_string_lossy().bright_yellow()
+        );
+        println!(
+            "{}: {}",
+            "Row count".green(),
+            self.row_count.to_formatted_string(&Locale::en)
+        );
+        println!(
+            "{}: {}",
+            "Variable count".red(),
+            self.var_count.to_formatted_string(&Locale::en)
+        );
+        println!("{}: {}", "Table name".blue(), self.table_name);
+        println!("{}: {}", "Table label".cyan(), self.file_label);
+        println!("{}: {}", "File encoding".yellow(), self.file_encoding);
+        println!("{}: {}", "Format version".green(), self.version);
+        println!(
+            "{}: {}",
+            "Bitness".red(),
+            if self.is64bit == 0 {
+                "32-bit"
+            } else {
+                "64-bit"
+            }
+        );
+        println!("{}: {}", "Creation time".blue(), self.creation_time);
+        println!("{}: {}", "Modified time".cyan(), self.modified_time);
+        println!("{}: {:#?}", "Compression".yellow(), self.compression);
+        println!("{}: {:#?}", "Byte order".green(), self.endianness);
+        println!("{}:", "Variable names".purple());
+        for (k, v) in self.vars.iter() {
+            println!(
+                "{}: {} {{ type class: {}, type: {}, label: {}, format class: {}, format: {}, arrow logical data type: {}, arrow physical data type: {} }}",
+                (*k).to_formatted_string(&Locale::en),
+                v.var_name.bright_purple(),
+                format!("{:#?}", v.var_type_class).bright_green(),
+                format!("{:#?}", v.var_type).bright_red(),
+                v.var_label.bright_blue(),
+                (match &v.var_format_class {
+                    Some(f) => match f {
+                        ReadStatVarFormatClass::Date => "Date",
+                        ReadStatVarFormatClass::DateTime |
+                        ReadStatVarFormatClass::DateTimeWithMilliseconds | 
+                        ReadStatVarFormatClass::DateTimeWithMicroseconds |
+                        ReadStatVarFormatClass::DateTimeWithNanoseconds => "DateTime",
+                        ReadStatVarFormatClass::Time => "Time",
+                    },
+                    None => "",
+                })
+                .bright_cyan(),
+                v.var_format.bright_yellow(),
+                format!("{:#?}", self.schema.fields[*k as usize].data_type().to_logical_type()).bright_green(),
+                format!("{:#?}", self.schema.fields[*k as usize].data_type().to_physical_type()).bright_red(),
+            );
+        }
+
+        Ok(())
+    }
+
 }
 
 #[derive(Clone, Debug, Default, FromPrimitive, Serialize)]

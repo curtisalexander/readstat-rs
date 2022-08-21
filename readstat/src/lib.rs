@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 use clap::{clap_derive::ArgEnum, Parser, Subcommand, ValueHint};
 use colored::Colorize;
-use crossbeam::channel::unbounded;
+use crossbeam::channel::bounded;
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
@@ -13,7 +13,6 @@ pub use rs_data::ReadStatData;
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
 pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
-pub use rs_write::ReadStatWriter;
 
 mod cb;
 mod common;
@@ -162,7 +161,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             md.read_metadata(&rsp, skip_row_count)?;
 
             // Write metadata
-            ReadStatWriter::new().write_metadata(&md, &rsp, as_json)?;
+            md.write_metadata(&rsp, as_json)?;
 
             // Return
             Ok(())
@@ -211,9 +210,6 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             let offsets_pairs = offsets.windows(2);
             let pairs_cnt = offsets_pairs.len();
 
-            // Initialize writing
-            let mut wtr = ReadStatWriter::new();
-
             // Process data in batches (i.e. stream chunks of rows)
             // Read data - for each iteration create a new instance of ReadStatData
             for (i, w) in offsets_pairs.enumerate() {
@@ -231,16 +227,13 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                 d.read_data(&rsp)?;
 
                 // Write
-                wtr.write(&d, &rsp)?;
+                d.write(&rsp)?;
 
                 // Finish
                 if i == pairs_cnt {
-                    wtr.finish(&d, &rsp)?;
+                    d.write_finish(&rsp)?;
                 }
             }
-
-            // Finish writer
-            //wtr.finish(&d, &rsp)?;
 
             // Return
             Ok(())
@@ -287,7 +280,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     md.read_metadata(&rsp, false)?;
 
                     // Write metadata
-                    ReadStatWriter::new().write_metadata(&md, &rsp, false)?;
+                    md.write_metadata(&rsp, false)?;
 
                     // Return
                     Ok(())
@@ -322,7 +315,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
 
                     // Create channels
-                    let (s, r) = unbounded();
+                    // TODO: What should the cap be for the channel?
+                    let (s, r) = bounded(10);
 
                     // Process data in batches (i.e. stream chunks of rows)
                     thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -392,19 +386,15 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     });
 
                     // Write
-
-                    // Initialize writing
-                    let mut wtr = ReadStatWriter::new();
-
-                    for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
-                        wtr.write(&d, &rsp)?;
+                    for (i, (mut d, rsp, pairs_cnt)) in r.iter().enumerate() {
+                        d.write(&rsp)?;
 
                         if i == (pairs_cnt - 1) {
-                            wtr.finish(&d, &rsp)?;
+                            d.write_finish(&rsp)?;
                         }
 
                         // Explicitly drop to save on memory
-                        drop(d);
+                        std::mem::drop(d);
                     }
 
                     // Return
