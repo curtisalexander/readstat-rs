@@ -33,4 +33,5 @@ serde_json = "1"
 [dev-dependencies]
 assert_cmd = "2.0"
 assert_fs = "1.0"
+polars = { version = "0.23", features = ["parquet"] }
 predicates = "2.1"
