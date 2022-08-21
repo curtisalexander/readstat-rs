@@ -419,6 +419,7 @@ impl ReadStatWriter {
                         pwtr.wtr.write(group?)?;
                     }
                 }
+
                 // update
                 self.wrote_start = true;
 
