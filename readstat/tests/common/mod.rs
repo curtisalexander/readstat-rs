@@ -1,5 +1,5 @@
 use path_abs::PathAbs;
-use std::error::Error;
+use std::{error::Error, result::Result};
 
 #[allow(dead_code)]
 pub fn contains_var(d: &readstat::ReadStatData, var_index: i32) -> bool {
@@ -35,6 +35,7 @@ pub fn get_var_attrs(
     )
 }
 
+#[allow(dead_code)]
 pub fn setup_path<P>(ds: P) -> Result<readstat::ReadStatPath, Box<dyn Error + Send + Sync>>
 where
     P: AsRef<std::path::Path>,

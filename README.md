@@ -223,13 +223,13 @@ readstat data --help
 ```
 
 ## Floating Point Values
-:warning: Decimal values are rounded to contain only 15 decimal digits!
+:warning: Decimal values are rounded to contain only 14 decimal digits!
 
-For example, the number `1.1234567890123456` created within SAS would be returned as `1.123456789012346` within Rust.
+For example, the number `1.1234567890123456` created within SAS would be returned as `1.12345678901235` within Rust.
 
-Why does this happen?  Is this an implementation error?  No, rounding to only 15 decimal digits has been _purposely implemented_ within the Rust code.
+Why does this happen?  Is this an implementation error?  No, rounding to only 14 decimal digits has been _purposely implemented_ within the Rust code.
 
-As a specific example, when testing with the [cars.sas7bdat](data/README.md) dataset (which was created originally on Windows), the numeric value `4.6` as observed within SAS was being returned as `4.6000000000000005` (16 digits) within Rust.  Values created on Windows with an x64 processor are only accurate to 15 digits.
+As a specific example, when testing with the [cars.sas7bdat](data/README.md) dataset (which was created originally on Windows), the numeric value `4.6` as observed within SAS was being returned as `4.600000000000001` (15 digits) within Rust.  Values created on Windows with an x64 processor are only accurate to 15 digits.
 
 For comparison, the [ReadStat binary](https://github.com/WizardMac/ReadStat#command-line-usage) [truncates to 14 decimal places](https://github.com/WizardMac/ReadStat/blob/master/src/bin/write/mod_csv.c#L147) of the [ReadStat binary](https://github.com/WizardMac/ReadStat#command-line-usage) when writing to `csv`.
 

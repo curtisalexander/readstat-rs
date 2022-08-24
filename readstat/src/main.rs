@@ -4,8 +4,8 @@ use readstat::ReadStatCli;
 fn main() {
     let args = ReadStatCli::parse();
     if let Err(e) = readstat::run(args) {
-        println!("Stopping with error: {}", e);
-        std::process::exit(1);
+        eprintln!("Stopping with error: {}", e);
+        std::process::exit(2);
     }
     std::process::exit(0);
 }
