@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 use clap::{clap_derive::ArgEnum, Parser, Subcommand, ValueHint};
 use colored::Colorize;
-use crossbeam::channel::unbounded;
+use crossbeam::channel::bounded;
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
@@ -321,8 +321,10 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
 
-                    // Create channels
-                    let (s, r) = unbounded();
+                    // Create channels with a capacity of 10
+                    // Unbounded channels can result in extreme memory usage if files are large and
+                    //   the reader significantly outpaces the writer
+                    let (s, r) = bounded(10);
 
                     // Process data in batches (i.e. stream chunks of rows)
                     thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
