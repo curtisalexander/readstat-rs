@@ -4,28 +4,60 @@ use assert_fs::NamedTempFile;
 use polars::prelude::*;
 use std::{fs::File, path::PathBuf, process::Command, result::Result};
 
+enum OverwriteOption {
+    Overwrite(NamedTempFile),
+    DoNotOverwrite,
+}
+
 fn cli_data_to_parquet(
     base_file_name: &str,
+    overwrite: OverwriteOption,
     rows_to_stream: Option<u32>,
 ) -> Result<(Command, NamedTempFile), Box<dyn std::error::Error>> {
-    let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
-
     let mut cmd = Command::cargo_bin("readstat")?;
 
-    if let Some(rows) = rows_to_stream {
-        cmd.arg("data")
-            .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-            .args(["--format", "parquet"])
-            .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-            .args(["--stream-rows", rows.to_string().as_str()])
-            .arg("--overwrite");
-    } else {
-        cmd.arg("data")
-            .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-            .args(["--format", "parquet"])
-            .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-            .arg("--overwrite");
-    }
+    let tempfile = match (overwrite, rows_to_stream) {
+        (OverwriteOption::Overwrite(tempfile), Some(rows)) => {
+            cmd.arg("data")
+                .arg(format!("tests/data/{}.sas7bdat", base_file_name))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .arg("--overwrite");
+
+            tempfile
+        }
+        (OverwriteOption::DoNotOverwrite, Some(rows)) => {
+            let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+
+            cmd.arg("data")
+                .arg(format!("tests/data/{}.sas7bdat", base_file_name))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()]);
+
+            tempfile
+        }
+        (OverwriteOption::Overwrite(tempfile), None) => {
+            cmd.arg("data")
+                .arg(format!("tests/data/{}.sas7bdat", base_file_name))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .arg("--overwrite");
+
+            tempfile
+        }
+        (OverwriteOption::DoNotOverwrite, None) => {
+            let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+
+            cmd.arg("data")
+                .arg(format!("tests/data/{}.sas7bdat", base_file_name))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()]);
+
+            tempfile
+        }
+    };
 
     Ok((cmd, tempfile))
 }
@@ -40,7 +72,8 @@ fn parquet_to_df(path: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>>
 
 #[test]
 fn cars_to_parquet() {
-    let (mut cmd, tempfile) = cli_data_to_parquet("cars", None).unwrap();
+    let (mut cmd, tempfile) =
+        cli_data_to_parquet("cars", OverwriteOption::DoNotOverwrite, None).unwrap();
 
     cmd.assert().success().stdout(predicate::str::contains(
         "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
@@ -58,7 +91,36 @@ fn cars_to_parquet() {
 
 #[test]
 fn cars_to_parquet_with_streaming() {
-    let (mut cmd, tempfile) = cli_data_to_parquet("cars", Some(500)).unwrap();
+    let (mut cmd, tempfile) =
+        cli_data_to_parquet("cars", OverwriteOption::DoNotOverwrite, Some(500)).unwrap();
+
+    cmd.assert().success().stdout(predicate::str::contains(
+        "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
+    ));
+
+    let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+
+    let (height, width) = df.shape();
+
+    assert_eq!(height, 1081);
+    assert_eq!(width, 13);
+
+    tempfile.close().unwrap();
+}
+
+#[test]
+fn cars_to_parquet_overwrite() {
+    // first stream
+    let (mut cmd, tempfile) =
+        cli_data_to_parquet("cars", OverwriteOption::DoNotOverwrite, Some(500)).unwrap();
+
+    cmd.assert().success().stdout(predicate::str::contains(
+        "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
+    ));
+
+    // next do not stream
+    let (mut cmd, tempfile) =
+        cli_data_to_parquet("cars", OverwriteOption::Overwrite(tempfile), None).unwrap();
 
     cmd.assert().success().stdout(predicate::str::contains(
         "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",

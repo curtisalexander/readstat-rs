@@ -230,11 +230,19 @@ impl ReadStatWriter {
     fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = OpenOptions::new()
+            let f = if self.wrote_start {
+                OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?;
+                    .open(p)?
+            } else {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(p)?
+            };
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -274,11 +282,19 @@ impl ReadStatWriter {
     fn write_data_to_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = OpenOptions::new()
+            let f = if self.wrote_start {
+                OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?;
+                    .open(p)?
+            } else {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(p)?
+            };
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -332,11 +348,19 @@ impl ReadStatWriter {
     fn write_data_to_ndjson(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = OpenOptions::new()
+            let f = if self.wrote_start {
+                OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?;
+                    .open(p)?
+            } else {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(p)?
+            };
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -380,11 +404,19 @@ impl ReadStatWriter {
     fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
-            let f = OpenOptions::new()
+            let f = if self.wrote_start {
+                OpenOptions::new()
                     .write(true)
                     .create(true)
                     .append(true)
-                    .open(p)?;
+                    .open(p)?
+            } else {
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(p)?
+            };
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
