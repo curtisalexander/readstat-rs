@@ -31,7 +31,25 @@ fn parquet_to_df(path: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>>
 
 #[test]
 fn cars_to_parquet() {
-    let (mut cmd, tempfile) = cli_data_to_parquet("cars").unwrap();
+    let (mut cmd, tempfile) = cli_data_to_parquet("cars", None).unwrap();
+
+    cmd.assert().success().stdout(predicate::str::contains(
+        "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
+    ));
+
+    let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+
+    let (height, width) = df.shape();
+
+    assert_eq!(height, 1081);
+    assert_eq!(width, 13);
+
+    tempfile.close().unwrap();
+}
+
+#[test]
+fn cars_to_parquet_with_streaming() {
+    let (mut cmd, tempfile) = cli_data_to_parquet("cars", Some(500)).unwrap();
 
     cmd.assert().success().stdout(predicate::str::contains(
         "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
