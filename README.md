@@ -177,9 +177,9 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ```
 
 ### Parallelism
-The `data` subcommand includes a parameter for `--parallel`.  If invoked with this parameter, the *reading* of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the users's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
+The `data` subcommand includes a parameter for `--parallel` &mdash; if invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
 
-Note that although reading is in parallel, *writing* is still sequential.  Thus one should only anticipate moderate speed-ups as much of the time is spent writing.
+Note that although reading is in parallel, _**writing**_ is still sequential.  Thus one should only anticipate moderate speed-ups as much of the time is spent writing.
 
 :heavy_exclamation_mark: Utilizing the `--parallel` parameter will increase memory usage &mdash; there will be multiple threads simultaneously reading chunks from the `sas7bdat`.  In addition because all processors are utilized, CPU usage will maxed out during reading.
 
