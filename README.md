@@ -6,7 +6,7 @@ Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
 
 Get [metadata](#metadata), [preview data](#preview-data), or [convert data](#data) to [`csv`](https://en.wikipedia.org/wiki/Comma-separated_values), [`feather`](https://arrow.apache.org/docs/python/feather.html) (or the [Arrow IPC format](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)), [`ndjson`](http://ndjson.org/), or [`parquet`](https://parquet.apache.org/) formats.
 
-## ReadStat & arrow2
+## :key: Dependencies
 The command-line tool is developed in Rust and is only possible due to the following excellent projects:
 - The [ReadStat](https://github.com/WizardMac/ReadStat) C library developed by [Evan Miller](https://www.evanmiller.org)
 - The [arrow2](https://github.com/jorgecarleitao/arrow2) Rust crate developed by [Jorge Leitao](https://github.com/jorgecarleitao)
@@ -14,6 +14,13 @@ The command-line tool is developed in Rust and is only possible due to the follo
 The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arrow2` crate is used to convert the read `sas7bdat` data into the [Arrow](https://arrow.apache.org/) memory format. Once in the `Arrow` memory format, the data can be written to other file formats.
 
 The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
+
+## Quickstart
+
+Convert the first 50,000 rows of `example.sas7bdat` (by performing the read in parallel) to the file `example.parquet`, overwriting the file if it already exists.
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 50000 --overwrite --parallel
+```
 
 ## Install
 
