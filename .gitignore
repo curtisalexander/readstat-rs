@@ -4,10 +4,11 @@
 /readstat/tests/data/*.ndjson
 /readstat/tests/data/*.parquet
 # environment
+.idea/
 .vscode/
 # starts with _ are larger files to exclude
 /readstat/tests/data/_*.sas7bdat
 # target
-/iconv-sys/target
-/readstat/target
-/readstat-sys/target
+/iconv-sys/target/
+/readstat/target/
+/readstat-sys/target/
