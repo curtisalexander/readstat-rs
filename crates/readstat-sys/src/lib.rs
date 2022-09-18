@@ -1,3 +1,4 @@
+#![allow(clippy::useless_transmute)]
 #![allow(dead_code)]
 #![allow(deref_nullptr)]
 #![allow(non_upper_case_globals)]
