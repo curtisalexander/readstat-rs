@@ -30,15 +30,15 @@ jobs:
           default: true
           override: true
       - name: Build
-        run: cd readstat && cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
+        run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
-        run: cd readstat && tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
+        run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            readstat/target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+            target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-linux-musl:
@@ -65,15 +65,15 @@ jobs:
       - name: Add musl-tools
         run: sudo apt-get update -y && sudo apt-get upgrade -y && sudo apt-get install build-essential musl musl-dev musl-tools libclang-dev clang -y
       - name: Build
-        run: cd readstat && cargo build --release --target x86_64-unknown-linux-musl && strip target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}
+        run: cargo build --release --target x86_64-unknown-linux-musl && strip target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}
       - name: Zip
-        run: cd readstat && tar czvf target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/${{ env.target }}/release ${{ env.PACKAGE_NAME }}
+        run: tar czvf target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/${{ env.target }}/release ${{ env.PACKAGE_NAME }}
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            readstat/target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+            target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-win:
@@ -101,26 +101,26 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ${{ runner.temp }}\llvm
-          key: llvm-14.0.0
+          key: llvm-14.0.6
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
         with:
-          version: "14.0.0"
+          version: "14.0.6"
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
       - name: Build
         run: |
             $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
-            cd readstat && cargo build --release
+            cargo build --release
       - name: Zip
-        run: Compress-Archive -Path readstat\target\release\${{ env.PACKAGE_NAME }}.exe -DestinationPath readstat\target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip  -CompressionLevel Optimal
+        run: Compress-Archive -Path target\release\${{ env.PACKAGE_NAME }}.exe -DestinationPath target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip  -CompressionLevel Optimal
         shell: powershell
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            readstat\target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
+            target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-mac:
@@ -143,14 +143,14 @@ jobs:
           default: true
           override: true
       - name: Build
-        run: cd readstat && cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
+        run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
-        run: cd readstat && tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
+        run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            readstat/target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+            target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
