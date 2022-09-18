@@ -4,5 +4,7 @@ members = [
     "crates/iconv-sys",
     "crates/readstat",
     "crates/readstat-sys",
+
+    # internal
     "crates/readstat-tests",
 ]
