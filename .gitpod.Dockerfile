@@ -2,7 +2,6 @@ FROM gitpod/workspace-rust
 
 USER gitpod
 
-
 RUN sudo apt-get update -qq \
  && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
         llvm-dev \
