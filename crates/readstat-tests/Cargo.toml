@@ -5,13 +5,13 @@ authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2021"
 
 [dependencies]
+arrow2 = { version = "0.14", features = ["full"] }
 assert_cmd = "2.0"
 assert_fs = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
 path_abs = "0.5"
 polars = { version = "0.24", features = ["parquet"] }
 predicates = "2.1"
-arrow2 = { version = "0.14", features = ["full"] }
-chrono = { version = "0.4", features = ["serde"] }
 readstat = { path = "../readstat" }
 
 [[test]]
