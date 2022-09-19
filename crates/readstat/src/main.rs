@@ -1,3 +1,5 @@
+extern crate readstat_sys;
+
 use clap::Parser;
 use readstat::ReadStatCli;
 

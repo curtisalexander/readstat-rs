@@ -1,6 +1,6 @@
 [package]
 name = "readstat"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2021"
 description = "Rust wrapper of the ReadStat C library"
@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 
 [dependencies]
-arrow2 = { version = "0.13", features = ["full"] }
+arrow2 = { version = "0.14", features = ["full"] }
 clap = { version = "3", features = ["derive", "unicode", "wrap_help"] }
 crossbeam = "0.8"
 csv = "1.1"
@@ -29,9 +29,3 @@ regex = "1.5"
 readstat-sys = { path = "../readstat-sys", version = "0.2.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-[dev-dependencies]
-assert_cmd = "2.0"
-assert_fs = "1.0"
-polars = { version = "0.23", features = ["parquet"] }
-predicates = "2.1"

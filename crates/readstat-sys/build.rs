@@ -36,6 +36,7 @@ fn main() {
         .file(sas.join("readstat_sas_rle.c"))
         .file(sas.join("readstat_xport.c"))
         .file(sas.join("readstat_xport_read.c"))
+        .file(sas.join("readstat_xport_parse_format.c"))
         .file(sas.join("readstat_xport_write.c"))
         .file(spss.join("readstat_por.c"))
         .file(spss.join("readstat_por_parse.c"))
@@ -76,8 +77,7 @@ fn main() {
     // Linking
     if target.contains("windows-msvc") {
         // Path to libclang
-        if env::var_os("LIBCLANG_PATH").is_some() {
-        } else {
+        if env::var_os("LIBCLANG_PATH").is_none() {
             println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
         }
         println!("cargo:rustc-link-lib=static=iconv");
@@ -155,6 +155,8 @@ fn main() {
         .allowlist_function("readstat_parse_sas7bcat")
         .allowlist_function("readstat_parse_xport")
         .allowlist_function("readstat_parser_free")
+        // Parsing - Format
+        .allowlist_function("xport_parse_format")
         // Types
         // Error
         .allowlist_type("readstat_error_t")

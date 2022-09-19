@@ -1,14 +1,12 @@
 # data
-/readstat/tests/data/*.csv
-/readstat/tests/data/*.feather
-/readstat/tests/data/*.ndjson
-/readstat/tests/data/*.parquet
+/crates/readstat-tests/tests/data/*.csv
+/crates/readstat-tests/tests/data/*.feather
+/crates/readstat-tests/tests/data/*.ndjson
+/crates/readstat-tests/tests/data/*.parquet
+# starts with _ are larger files to exclude
+/crates/readstat-tests/tests/data/_*.sas7bdat
 # environment
 .idea/
 .vscode/
-# starts with _ are larger files to exclude
-/readstat/tests/data/_*.sas7bdat
 # target
-/iconv-sys/target/
-/readstat/target/
-/readstat-sys/target/
+/target/

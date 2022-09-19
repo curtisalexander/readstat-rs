@@ -67,12 +67,11 @@ cargo build
 Building on Windows requires [LLVM](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
 
 For details see the following.
-- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs#L78-L82)
+- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/crates/readstat-sys/build.rs#L78-L82)
 - [Building in Github Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L111-L114)
 
 Build
 ```sh
-cd readstat-rs/readstat
 cargo build
 ```
 
@@ -280,23 +279,23 @@ If values are read into memory as Arrow date, time, or datetime types, then when
 Finally, [more work is planned](https://github.com/curtisalexander/readstat-rs/issues/21) to handle other SAS dates, times, and datetimes that have SAS formats other than those listed above.
 
 ## Testing
-To perform unit / integration tests, run the following within the `readstat` directory.
+To perform unit / integration tests, run the following.
 
 ```
 cargo test
 ```
 
 ### Datasets
-Formally tested (via integration tests) against the following datasets.  See the [README.md](readstat/tests/data/README.md) for data sources.
+Formally tested (via integration tests) against the following datasets.  See the [README.md](crates/readstat-tests/tests/data/README.md) for data sources.
 - [ ] `ahs2019n.sas7bdat` &rarr; US Census data
 - [X] `all_types.sas7bdat` &rarr; SAS dataset containing all SAS types
 - [X] `cars.sas7bdat` &rarr; SAS cars dataset
 - [X] `hasmissing.sas7bdat` &rarr; SAS dataset containing missing values
 - [ ] `intel.sas7bdat`
 - [ ] `messydata.sas7bdat`
-- [ ] `rand_ds.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas)
-- [X] `rand_ds_largepage_err.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `2M`
-- [X] `rand_ds_largepage_ok.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `1M`
+- [ ] `rand_ds.sas7bdat` &rarr; Created using [create_rand_ds.sas](crates/readstat-tests/util/create_rand_ds.sas)
+- [X] `rand_ds_largepage_err.sas7bdat` &rarr; Created using [create_rand_ds.sas](crates/readstat-tests/util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `2M`
+- [X] `rand_ds_largepage_ok.sas7bdat` &rarr; Created using [create_rand_ds.sas](crates/readstat-tests/util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `1M`
 - [X] `scientific_notation.sas7bdat` &rarr; Used to test float parsing
 - [ ] `somedata.sas7bdat`
 - [ ] `somemiss.sas7bdat`
@@ -326,14 +325,14 @@ To run, execute the following from within the `readstat` directory.
 
 ```powershell
 # Windows
-hyperfine --warmup 5 "ReadStat_App.exe -f tests\data\cars.sas7bdat tests\data\cars_c.csv" ".\target\release\readstat.exe data tests\data\cars.sas7bdat --output tests\data\cars_rust.csv"
+hyperfine --warmup 5 "ReadStat_App.exe -f crates\readstat-tests\tests\data\cars.sas7bdat tests\data\cars_c.csv" ".\target\release\readstat.exe data crates\readstat-tests\tests\data\cars.sas7bdat --output crates\readstat-tests\tests\data\cars_rust.csv"
 ```
 
 :memo: First experiments on Windows are challenging to interpret due to file caching.  Need further research into utilizing the `--prepare` option provided by `hyperfine` on Windows.
 
 ```sh
 # Linux and macOS
-hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f tests/data/cars.sas7bdat tests/data/cars_c.csv" "./target/release/readstat data tests/data/cars.sas7bdat --output tests/data/cars_rust.csv"
+hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f crates/readstat-tests/tests/data/cars.sas7bdat crates/readstat-tests/tests/data/cars_c.csv" "./target/release/readstat data tests/data/cars.sas7bdat --output crates/readstat-tests/tests/data/cars_rust.csv"
 ```
 
 Other, future, benchmarking may be performed when/if [channels and threads](https://github.com/curtisalexander/readstat-rs/issues/28) are developed.

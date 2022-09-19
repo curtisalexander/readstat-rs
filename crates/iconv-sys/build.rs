@@ -1,10 +1,11 @@
 extern crate bindgen;
 
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-
+#[cfg(windows)]
 fn main() {
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+
     let project_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
     let root = project_dir.join("vendor").join("libiconv-win-build");
@@ -73,4 +74,10 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+}
+
+// no-op for not windows as not needed
+#[cfg(not(windows))]
+fn main() {
+    ()
 }

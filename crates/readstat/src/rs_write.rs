@@ -3,9 +3,7 @@ use arrow2::{
     chunk::Chunk,
     error::Error as ArrowError,
     io::{
-        csv as csv_arrow2,
-        ipc as ipc_arrow2,
-        ndjson as ndjson_arrow2,
+        csv as csv_arrow2, ipc as ipc_arrow2, ndjson as ndjson_arrow2,
         parquet::{self as parquet_arrow2, write::RowGroupIterator},
     },
 };
@@ -13,17 +11,13 @@ use colored::Colorize;
 // use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
-use std::{
-    error::Error,
-    fs::OpenOptions,
-    io::stdout,
-};
+use std::{error::Error, fs::OpenOptions, io::stdout};
 
-use crate::OutFormat;
 use crate::rs_data::ReadStatData;
 use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
+use crate::OutFormat;
 
 pub struct ReadStatParquetWriter {
     wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>,
@@ -32,8 +26,16 @@ pub struct ReadStatParquetWriter {
 }
 
 impl ReadStatParquetWriter {
-    fn new(wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>, options: parquet_arrow2::write::WriteOptions, encodings: Vec<Vec<parquet_arrow2::write::Encoding>>) -> Self {
-        Self { wtr, options, encodings }
+    fn new(
+        wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>,
+        options: parquet_arrow2::write::WriteOptions,
+        encodings: Vec<Vec<parquet_arrow2::write::Encoding>>,
+    ) -> Self {
+        Self {
+            wtr,
+            options,
+            encodings,
+        }
     }
 }
 
@@ -42,7 +44,7 @@ pub enum ReadStatWriterFormat {
     CsvStdout(std::io::Stdout),
     Feather(Box<ipc_arrow2::write::FileWriter<std::fs::File>>),
     Ndjson(std::fs::File),
-    Parquet(ReadStatParquetWriter)
+    Parquet(ReadStatParquetWriter),
 }
 
 #[derive(Default)]
@@ -61,35 +63,38 @@ impl ReadStatWriter {
         }
     }
 
-    pub fn finish(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>>{
+    pub fn finish(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         match rsp {
             // Write csv data to file
             ReadStatPath {
                 out_path: Some(_),
                 format: OutFormat::csv,
                 ..
-            } => { self.finish_txt(d, rsp) },
+            } => self.finish_txt(d, rsp),
             // Write feather data to file
             ReadStatPath {
                 format: OutFormat::feather,
                 ..
-            } => { self.finish_feather(d, rsp) }
+            } => self.finish_feather(d, rsp),
             // Write ndjson data to file
             ReadStatPath {
                 format: OutFormat::ndjson,
                 ..
-            } => { self.finish_txt(d, rsp) }
+            } => self.finish_txt(d, rsp),
             // Write parquet data to file
             ReadStatPath {
                 format: OutFormat::parquet,
                 ..
-            } => { self.finish_parquet(d, rsp) },
-            _ => Ok(())
+            } => self.finish_parquet(d, rsp),
+            _ => Ok(()),
         }
-
     }
 
-    fn _write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath)  {
+    fn _write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath) {
         if let Some(pb) = &d.pb {
             let in_f = if let Some(f) = rsp.path.file_name() {
                 f.to_string_lossy().bright_red()
@@ -113,71 +118,88 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_message_for_rows(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_message_for_rows(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         //if let Some(pb) = &d.pb {
-            let in_f = if let Some(f) = rsp.path.file_name() {
-                f.to_string_lossy().bright_red()
-            } else {
-                String::from("___").bright_red()
-            };
+        let in_f = if let Some(f) = rsp.path.file_name() {
+            f.to_string_lossy().bright_red()
+        } else {
+            String::from("___").bright_red()
+        };
 
-            let out_f = if let Some(p) = &rsp.out_path {
-                if let Some(f) = p.file_name() {
-                    f.to_string_lossy().bright_green()
-                } else {
-                    String::from("___").bright_green()
-                }
+        let out_f = if let Some(p) = &rsp.out_path {
+            if let Some(f) = p.file_name() {
+                f.to_string_lossy().bright_green()
             } else {
                 String::from("___").bright_green()
-            };
+            }
+        } else {
+            String::from("___").bright_green()
+        };
 
-            let rows = d.chunk_rows_processed.to_formatted_string(&Locale::en).truecolor(255, 132, 0);
+        let rows = d
+            .chunk_rows_processed
+            .to_formatted_string(&Locale::en)
+            .truecolor(255, 132, 0);
 
-            let msg = format!("Wrote {} rows from file {} into {}", rows, in_f, out_f);
+        let msg = format!("Wrote {} rows from file {} into {}", rows, in_f, out_f);
 
-            println!("{}", msg);
-            //pb.set_message(msg);
+        println!("{}", msg);
+        //pb.set_message(msg);
         //}
-            Ok(())
+        Ok(())
     }
 
-    fn finish_txt(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn finish_txt(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         //if let Some(pb) = &d.pb {
-            let in_f = if let Some(f) = rsp.path.file_name() {
-                f.to_string_lossy().bright_red()
-            } else {
-                String::from("___").bright_red()
-            };
+        let in_f = if let Some(f) = rsp.path.file_name() {
+            f.to_string_lossy().bright_red()
+        } else {
+            String::from("___").bright_red()
+        };
 
-            let out_f = if let Some(p) = &rsp.out_path {
-                if let Some(f) = p.file_name() {
-                    f.to_string_lossy().bright_green()
-                } else {
-                    String::from("___").bright_green()
-                }
+        let out_f = if let Some(p) = &rsp.out_path {
+            if let Some(f) = p.file_name() {
+                f.to_string_lossy().bright_green()
             } else {
                 String::from("___").bright_green()
-            };
+            }
+        } else {
+            String::from("___").bright_green()
+        };
 
-            let rows = if let Some(trp) = &d.total_rows_processed {
-                trp
-                    .load(std::sync::atomic::Ordering::SeqCst)
-                    .to_formatted_string(&Locale::en)
-                    .truecolor(255, 132, 0)
-            } else {
-                0.to_formatted_string(&Locale::en).truecolor(255, 132, 0)
-            };
+        let rows = if let Some(trp) = &d.total_rows_processed {
+            trp.load(std::sync::atomic::Ordering::SeqCst)
+                .to_formatted_string(&Locale::en)
+                .truecolor(255, 132, 0)
+        } else {
+            0.to_formatted_string(&Locale::en).truecolor(255, 132, 0)
+        };
 
-            let msg = format!("In total, wrote {} rows from file {} into {}", rows, in_f, out_f);
+        let msg = format!(
+            "In total, wrote {} rows from file {} into {}",
+            rows, in_f, out_f
+        );
 
-            println!("{}", msg);
-            
-            //pb.set_message(msg);
+        println!("{}", msg);
+
+        //pb.set_message(msg);
         //}
-            Ok(())
+        Ok(())
     }
 
-    pub fn write(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn write(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         match rsp {
             // Write data to standard out
             ReadStatPath {
@@ -227,7 +249,11 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_data_to_csv(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -258,10 +284,8 @@ impl ReadStatWriter {
 
                 if let Some(c) = d.chunk.clone() {
                     let cols = &[c];
-                    cols
-                        .iter()
-                        .try_for_each(|batch|
-                            csv_arrow2::write::write_chunk(f, batch, &options))?;
+                    cols.iter()
+                        .try_for_each(|batch| csv_arrow2::write::write_chunk(f, batch, &options))?;
                 };
 
                 // update
@@ -269,7 +293,7 @@ impl ReadStatWriter {
                 Ok(())
             } else {
                 Err(From::from(
-                    "Error writing csv as associated writer is not for the csv format"
+                    "Error writing csv as associated writer is not for the csv format",
                 ))
             }
         } else {
@@ -279,7 +303,11 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_data_to_feather(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -301,8 +329,10 @@ impl ReadStatWriter {
 
             // setup writer
             if !self.wrote_start {
-                let options = ipc_arrow2::write::WriteOptions { compression: Some(ipc_arrow2::write::Compression::ZSTD) };
-                
+                let options = ipc_arrow2::write::WriteOptions {
+                    compression: Some(ipc_arrow2::write::Compression::ZSTD),
+                };
+
                 let wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
 
                 self.wtr = Some(ReadStatWriterFormat::Feather(Box::new(wtr)));
@@ -320,7 +350,7 @@ impl ReadStatWriter {
                 Ok(())
             } else {
                 Err(From::from(
-                    "Error writing feather as associated writer is not for the feather format"
+                    "Error writing feather as associated writer is not for the feather format",
                 ))
             }
         } else {
@@ -330,22 +360,30 @@ impl ReadStatWriter {
         }
     }
 
-    fn finish_feather(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn finish_feather(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(ReadStatWriterFormat::Feather(wtr)) = &mut self.wtr {
             wtr.finish()?;
 
             // set message for what is being read/written
             self.finish_txt(d, rsp)?;
-            
+
             Ok(())
         } else {
             Err(From::from(
-                "Error writing feather as associated writer is not for the feather format"
+                "Error writing feather as associated writer is not for the feather format",
             ))
         }
     }
 
-    fn write_data_to_ndjson(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_data_to_ndjson(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -364,7 +402,7 @@ impl ReadStatWriter {
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
-            
+
             // setup writer
             if !self.wrote_start {
                 self.wtr = Some(ReadStatWriterFormat::Ndjson(f));
@@ -374,13 +412,13 @@ impl ReadStatWriter {
             if let Some(ReadStatWriterFormat::Ndjson(f)) = &mut self.wtr {
                 if let Some(c) = d.chunk.clone() {
                     let arrays = c.columns().iter().map(Ok);
-                    
+
                     // serializer
                     let serializer = ndjson_arrow2::write::Serializer::new(arrays, vec![]);
 
                     // writer
                     let mut wtr = ndjson_arrow2::write::FileWriter::new(f, serializer);
-                    
+
                     // drive iterator
                     wtr.by_ref().collect::<Result<(), ArrowError>>()?;
                 }
@@ -391,7 +429,7 @@ impl ReadStatWriter {
                 Ok(())
             } else {
                 Err(From::from(
-                    "Error writing ndjson as associated writer is not for the ndjson format"
+                    "Error writing ndjson as associated writer is not for the ndjson format",
                 ))
             }
         } else {
@@ -401,7 +439,11 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_data_to_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_data_to_parquet(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -426,18 +468,27 @@ impl ReadStatWriter {
                 let options = parquet_arrow2::write::WriteOptions {
                     write_statistics: true,
                     compression: parquet_arrow2::write::CompressionOptions::Snappy,
-                    version: parquet_arrow2::write::Version::V2
+                    version: parquet_arrow2::write::Version::V2,
                 };
 
-                let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d.schema
+                let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d
+                    .schema
                     .fields
                     .iter()
-                    .map(|f| parquet_arrow2::write::transverse(&f.data_type,  |_| parquet_arrow2::write::Encoding::Plain))
+                    .map(|f| {
+                        parquet_arrow2::write::transverse(&f.data_type, |_| {
+                            parquet_arrow2::write::Encoding::Plain
+                        })
+                    })
                     .collect();
 
                 let wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
-                
-                self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(Box::new(wtr), options, encodings)));
+
+                self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(
+                    Box::new(wtr),
+                    options,
+                    encodings,
+                )));
             }
 
             // write
@@ -445,7 +496,12 @@ impl ReadStatWriter {
                 if let Some(c) = d.chunk.clone() {
                     let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
 
-                    let row_groups = RowGroupIterator::try_new(iter.into_iter(), &d.schema, pwtr.options, pwtr.encodings.clone())?;
+                    let row_groups = RowGroupIterator::try_new(
+                        iter.into_iter(),
+                        &d.schema,
+                        pwtr.options,
+                        pwtr.encodings.clone(),
+                    )?;
 
                     for group in row_groups {
                         pwtr.wtr.write(group?)?;
@@ -458,7 +514,7 @@ impl ReadStatWriter {
                 Ok(())
             } else {
                 Err(From::from(
-                    "Error writing parquet as associated writer is not for the parquet format"
+                    "Error writing parquet as associated writer is not for the parquet format",
                 ))
             }
         } else {
@@ -468,22 +524,29 @@ impl ReadStatWriter {
         }
     }
 
-    fn finish_parquet(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn finish_parquet(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
             let _size = pwtr.wtr.end(None)?;
 
             // set message for what is being read/written
             self.finish_txt(d, rsp)?;
-            
+
             Ok(())
         } else {
             Err(From::from(
-                "Error writing parquet as associated writer is not for the parquet format"
+                "Error writing parquet as associated writer is not for the parquet format",
             ))
         }
     }
 
-    fn write_data_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_data_to_stdout(
+        &mut self,
+        d: &ReadStatData,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -495,15 +558,12 @@ impl ReadStatWriter {
 
         // write
         if let Some(ReadStatWriterFormat::CsvStdout(f)) = &mut self.wtr {
-
             let options = csv_arrow2::write::SerializeOptions::default();
-    
+
             if let Some(c) = d.chunk.clone() {
                 let cols = &[c];
-                cols
-                    .iter()
-                    .try_for_each(|batch|
-                        csv_arrow2::write::write_chunk(f, batch, &options))?;
+                cols.iter()
+                    .try_for_each(|batch| csv_arrow2::write::write_chunk(f, batch, &options))?;
             };
 
             // update
@@ -512,12 +572,16 @@ impl ReadStatWriter {
             Ok(())
         } else {
             Err(From::from(
-                "Error writing to csv as associated writer is not for the csv format"
+                "Error writing to csv as associated writer is not for the csv format",
             ))
         }
     }
 
-    fn write_header_to_csv(&mut self, d: &ReadStatData, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_header_to_csv(
+        &mut self,
+        d: &ReadStatData,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
             // spinner
             /*
@@ -577,14 +641,14 @@ impl ReadStatWriter {
 
             // create file
             let mut f = std::fs::File::create(p)?;
-            
+
             // Get variable names
             let vars: Vec<String> = d.vars.iter().map(|(_, m)| m.var_name.clone()).collect();
 
             // write
             let options = csv_arrow2::write::SerializeOptions::default();
             csv_arrow2::write::write_header(&mut f, &vars, &options)?;
-                
+
             // wrote header
             self.wrote_header = true;
 
@@ -597,7 +661,10 @@ impl ReadStatWriter {
         }
     }
 
-    fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_header_to_stdout(
+        &mut self,
+        d: &ReadStatData,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -616,7 +683,12 @@ impl ReadStatWriter {
         Ok(())
     }
 
-    pub fn write_metadata(&self, md: &ReadStatMetadata, rsp: &ReadStatPath, as_json: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn write_metadata(
+        &self,
+        md: &ReadStatMetadata,
+        rsp: &ReadStatPath,
+        as_json: bool,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if as_json {
             self.write_metadata_to_json(md)
         } else {
@@ -624,14 +696,24 @@ impl ReadStatWriter {
         }
     }
 
-    pub fn write_metadata_to_json(&self, md: &ReadStatMetadata) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn write_metadata_to_json(
+        &self,
+        md: &ReadStatMetadata,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         match serde_json::to_string_pretty(md) {
-            Ok(s) => { println!("{}", s); Ok(()) }
-            Err(e) => { Err(From::from(format!("Error converting to json: {}", e))) }
+            Ok(s) => {
+                println!("{}", s);
+                Ok(())
+            }
+            Err(e) => Err(From::from(format!("Error converting to json: {}", e))),
         }
     }
 
-    pub fn write_metadata_to_stdout(&self, md: &ReadStatMetadata, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn write_metadata_to_stdout(
+        &self,
+        md: &ReadStatMetadata,
+        rsp: &ReadStatPath,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         println!(
             "Metadata for the file {}\n",
             rsp.path.to_string_lossy().bright_yellow()
@@ -653,11 +735,7 @@ impl ReadStatWriter {
         println!(
             "{}: {}",
             "Bitness".red(),
-            if md.is64bit == 0 {
-                "32-bit"
-            } else {
-                "64-bit"
-            }
+            if md.is64bit == 0 { "32-bit" } else { "64-bit" }
         );
         println!("{}: {}", "Creation time".blue(), md.creation_time);
         println!("{}: {}", "Modified time".cyan(), md.modified_time);
