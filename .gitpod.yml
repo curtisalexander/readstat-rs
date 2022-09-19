@@ -4,7 +4,7 @@ image:
 tasks:
     - name: Build & Test
       init: >
-          cd readstat && cargo build && cargo test
+          cargo build && cargo test
 
 github:
     prebuilds:
