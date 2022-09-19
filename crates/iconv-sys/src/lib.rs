@@ -5,4 +5,6 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
+// Only needed for Windows
+#[cfg(windows)]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

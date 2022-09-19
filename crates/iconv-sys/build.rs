@@ -76,6 +76,7 @@ fn main() {
         .expect("Couldn't write bindings!");
 }
 
+// no-op for not windows as not needed
 #[cfg(not(windows))]
 fn main() {
     ()
