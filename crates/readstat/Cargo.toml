@@ -9,7 +9,7 @@ repository = "https://github.com/curtisalexander/readstat-rs"
 
 [dependencies]
 arrow2 = { version = "0.14", features = ["io_csv", "io_ipc", "io_ipc_compression", "io_json", "io_parquet", "io_parquet_compression"] }
-clap = { version = "3", features = ["derive", "unicode", "wrap_help"] }
+clap = { version = "4", features = ["derive", "unicode", "wrap_help"] }
 crossbeam = "0.8"
 csv = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
