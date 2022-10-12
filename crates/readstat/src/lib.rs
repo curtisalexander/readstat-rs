@@ -1,5 +1,5 @@
 #![allow(non_camel_case_types)]
-use clap::{clap_derive::ArgEnum, Parser, Subcommand, ValueHint};
+use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 use colored::Colorize;
 use crossbeam::channel::bounded;
 use log::debug;
@@ -32,13 +32,13 @@ const STREAM_ROWS: u32 = 10000;
 
 // CLI
 #[derive(Parser, Debug)]
-#[clap(version)]
-#[clap(propagate_version = true)]
+#[command(version)]
+#[command(propagate_version = true)]
 /// 💾 Command-line tool for working with SAS binary files
 ///
 /// 🦀 Rust wrapper of ReadStat C library
 pub struct ReadStatCli {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: ReadStatCliCommands,
 }
 
@@ -46,69 +46,69 @@ pub struct ReadStatCli {
 pub enum ReadStatCliCommands {
     /// Display sas7bdat metadata
     Metadata {
-        #[clap(value_hint = ValueHint::FilePath, value_parser)]
+        #[arg(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
         /// Display sas7bdat metadata as json
-        #[clap(action, long)]
+        #[arg(action, long)]
         as_json: bool,
         /// Do not display progress bar
-        #[clap(action, long)]
+        #[arg(action, long)]
         no_progress: bool,
         /// Skip calculating row count{n}If only interested in variable metadata speeds up parsing
-        #[clap(action, long)]
+        #[arg(action, long)]
         skip_row_count: bool,
     },
     /// Preview sas7bdat data
     Preview {
         /// Path to sas7bdat file
-        #[clap(value_parser)]
+        #[arg(value_parser)]
         input: PathBuf,
         /// Number of rows to write
-        #[clap(default_value = "10", long, value_parser)]
+        #[arg(default_value = "10", long, value_parser)]
         rows: u32,
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[clap(arg_enum, ignore_case = true, long, value_parser)]
+        #[arg(value_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
         /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
-        #[clap(long, value_parser)]
+        #[arg(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
-        #[clap(action, long)]
+        #[arg(action, long)]
         no_progress: bool,
     },
     /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
     Data {
         /// Path to sas7bdat file
-        #[clap(value_hint = ValueHint::FilePath, value_parser)]
+        #[arg(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
         /// Output file path
-        #[clap(long, short = 'o', value_parser)]
+        #[arg(long, short = 'o', value_parser)]
         output: Option<PathBuf>,
         /// Output file format{n}Defaults to csv
-        #[clap(arg_enum, ignore_case = true, long, short = 'f', value_parser)]
+        #[arg(ignore_case = true, long, short = 'f', value_enum, value_parser)]
         format: Option<OutFormat>,
         /// Overwrite output file if it already exists
-        #[clap(action, long)]
+        #[arg(action, long)]
         overwrite: bool,
         /// Number of rows to write
-        #[clap(long, value_parser)]
+        #[arg(long, value_parser)]
         rows: Option<u32>,
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
-        #[clap(arg_enum, ignore_case = true, long, value_parser)]
+        #[arg(ignore_case = true, long, value_enum, value_parser)]
         reader: Option<Reader>,
         /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
-        #[clap(long, value_parser)]
+        #[arg(long, value_parser)]
         stream_rows: Option<u32>,
         /// Do not display progress bar
-        #[clap(action, long)]
+        #[arg(action, long)]
         no_progress: bool,
         /// Convert sas7bdat data in parallel
-        #[clap(action, long)]
+        #[arg(action, long)]
         parallel: bool,
     },
 }
 
-#[derive(Debug, Clone, Copy, ArgEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 #[allow(non_camel_case_types)]
 pub enum OutFormat {
     csv,
@@ -123,7 +123,7 @@ impl fmt::Display for OutFormat {
     }
 }
 
-#[derive(Debug, Clone, Copy, ArgEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 #[allow(non_camel_case_types)]
 pub enum Reader {
     mem,
