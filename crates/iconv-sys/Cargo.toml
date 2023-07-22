@@ -10,5 +10,5 @@ links = "iconv"
 build = "build.rs"
 
 [build-dependencies]
-bindgen = "0.60"
+bindgen = "0.66"
 cc = "1.0"
