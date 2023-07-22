@@ -333,7 +333,7 @@ impl ReadStatWriter {
                     compression: Some(ipc_arrow2::write::Compression::ZSTD),
                 };
 
-                let wtr = ipc_arrow2::write::FileWriter::try_new(f, &d.schema, None, options)?;
+                let wtr = ipc_arrow2::write::FileWriter::try_new(f, d.schema.clone(), None, options)?;
 
                 self.wtr = Some(ReadStatWriterFormat::Feather(Box::new(wtr)));
             };
@@ -469,6 +469,7 @@ impl ReadStatWriter {
                     write_statistics: true,
                     compression: parquet_arrow2::write::CompressionOptions::Snappy,
                     version: parquet_arrow2::write::Version::V2,
+                    data_pagesize_limit: None 
                 };
 
                 let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d
