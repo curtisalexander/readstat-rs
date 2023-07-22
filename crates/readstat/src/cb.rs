@@ -59,17 +59,16 @@ pub extern "C" fn handle_metadata(
     .format("%Y-%m-%d %H:%M:%S")
     .to_string();
     let compression = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_get_compression(metadata) as i32
+        readstat_sys::readstat_get_compression(metadata)
     }) {
         Some(t) => t,
         None => ReadStatCompress::None,
     };
-    let endianness = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_get_endianness(metadata) as i32
-    }) {
-        Some(t) => t,
-        None => ReadStatEndian::None,
-    };
+    let endianness =
+        match FromPrimitive::from_i32(unsafe { readstat_sys::readstat_get_endianness(metadata) }) {
+            Some(t) => t,
+            None => ReadStatEndian::None,
+        };
 
     debug!("row_count is {}", rc);
     debug!("var_count is {}", vc);
@@ -132,14 +131,14 @@ pub extern "C" fn handle_variable(
 
     // get variable metadata
     let var_type = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_variable_get_type(variable) as i32
+        readstat_sys::readstat_variable_get_type(variable)
     }) {
         Some(t) => t,
         None => ReadStatVarType::Unknown,
     };
 
     let var_type_class = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_variable_get_type_class(variable) as i32
+        readstat_sys::readstat_variable_get_type_class(variable)
     }) {
         Some(t) => t,
         None => ReadStatVarTypeClass::Numeric,
