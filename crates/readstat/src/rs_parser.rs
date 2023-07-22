@@ -31,7 +31,7 @@ impl ReadStatParser {
             &set_metadata_handler_error
         );
 
-        match FromPrimitive::from_i32(set_metadata_handler_error as i32) {
+        match FromPrimitive::from_i32(set_metadata_handler_error) {
             Some(ReadStatError::READSTAT_OK) => Ok(self),
             Some(e) => Err(From::from(format!(
                 "Unable to set metdata handler: {:#?}",
@@ -57,7 +57,7 @@ impl ReadStatParser {
                     &set_row_limit_error
                 );
 
-                match FromPrimitive::from_i32(set_row_limit_error as i32) {
+                match FromPrimitive::from_i32(set_row_limit_error) {
                     Some(ReadStatError::READSTAT_OK) => Ok(self),
                     Some(e) => Err(From::from(format!("Unable to set row limit: {:#?}", e))),
                     None => Err(From::from(
@@ -83,7 +83,7 @@ impl ReadStatParser {
                     &set_row_offset_error
                 );
 
-                match FromPrimitive::from_i32(set_row_offset_error as i32) {
+                match FromPrimitive::from_i32(set_row_offset_error) {
                     Some(ReadStatError::READSTAT_OK) => Ok(self),
                     Some(e) => Err(From::from(format!("Unable to set row limit: {:#?}", e))),
                     None => Err(From::from(
@@ -107,7 +107,7 @@ impl ReadStatParser {
             &set_variable_handler_error
         );
 
-        match FromPrimitive::from_i32(set_variable_handler_error as i32) {
+        match FromPrimitive::from_i32(set_variable_handler_error) {
             Some(ReadStatError::READSTAT_OK) => Ok(self),
             Some(e) => Err(From::from(format!(
                 "Unable to set variable handler: {:#?}",
@@ -131,7 +131,7 @@ impl ReadStatParser {
             &set_value_handler_error
         );
 
-        match FromPrimitive::from_i32(set_value_handler_error as i32) {
+        match FromPrimitive::from_i32(set_value_handler_error) {
             Some(ReadStatError::READSTAT_OK) => Ok(self),
             Some(e) => Err(From::from(format!("Unable to set value handler: {:#?}", e))),
             None => Err(From::from(

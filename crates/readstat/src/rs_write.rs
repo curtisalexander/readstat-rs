@@ -644,7 +644,7 @@ impl ReadStatWriter {
             let mut f = std::fs::File::create(p)?;
 
             // Get variable names
-            let vars: Vec<String> = d.vars.iter().map(|(_, m)| m.var_name.clone()).collect();
+            let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
 
             // write
             let options = csv_arrow2::write::SerializeOptions::default();
@@ -671,7 +671,7 @@ impl ReadStatWriter {
         }
 
         // Get variable names
-        let vars: Vec<String> = d.vars.iter().map(|(_, m)| m.var_name.clone()).collect();
+        let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
 
         // write
         let options = csv_arrow2::write::SerializeOptions::default();
