@@ -17,8 +17,7 @@ jobs:
     steps:
       - name: Get git tag version
         id: get_version
-        # run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-        run: echo "name=VERSION::${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v2
         with:
@@ -49,8 +48,7 @@ jobs:
     steps:
       - name: Get git tag version
         id: get_version
-        # run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-        run: echo "name=VERSION::${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v2
         with:
@@ -85,8 +83,7 @@ jobs:
     steps:
       - name: Get git tag version
         id: get_version
-        # run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-        run: echo "name=VERSION::${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         shell: bash
       - name: Checkout
         uses: actions/checkout@v2
@@ -133,8 +130,7 @@ jobs:
     steps:
       - name: Get git tag version
         id: get_version
-        # run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-        run: echo "name=VERSION::${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v2
         with:
@@ -165,8 +161,7 @@ jobs:
     steps:
       - name: Get git tag version
         id: get_version
-        # run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-        run: echo "name=VERSION::${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v2
         with:
