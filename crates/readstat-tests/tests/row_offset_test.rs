@@ -186,7 +186,7 @@ fn row_offset_date() {
         .to(DataType::Date32);
 
     let date = date32_to_date(col.value(0));
-    let date_literal = NaiveDate::from_ymd(2014, 5, 22);
+    let date_literal = NaiveDate::from_ymd_opt(2014, 5, 22).unwrap();
 
     assert_eq!(date, date_literal);
 }
