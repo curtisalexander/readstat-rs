@@ -141,7 +141,8 @@ impl ReadStatMetadata {
         }
         */
 
-        match FromPrimitive::from_i32(error) {
+        #[allow(clippy::useless_conversion)]
+        match FromPrimitive::from_i32(error.try_into().unwrap()) {
             Some(ReadStatError::READSTAT_OK) => {
                 // if successful, initialize schema
                 self.schema = self.initialize_schema();
