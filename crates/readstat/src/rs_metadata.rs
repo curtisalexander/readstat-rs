@@ -53,8 +53,8 @@ impl ReadStatMetadata {
         // build up Schema
         let fields: Vec<Field> = self
             .vars
-            .iter()
-            .map(|(_idx, vm)| {
+            .values()
+            .map(|vm| {
                 let var_dt = match &vm.var_type {
                     ReadStatVarType::String
                     | ReadStatVarType::StringRef
@@ -141,7 +141,8 @@ impl ReadStatMetadata {
         }
         */
 
-        match FromPrimitive::from_i32(error as i32) {
+        #[allow(clippy::useless_conversion)]
+        match FromPrimitive::from_i32(error.try_into().unwrap()) {
             Some(ReadStatError::READSTAT_OK) => {
                 // if successful, initialize schema
                 self.schema = self.initialize_schema();

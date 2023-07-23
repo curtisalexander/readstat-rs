@@ -216,7 +216,10 @@ fn skip_row_count_datetime() {
 
     // non-missing value
     let dt = timestamp_s_to_datetime(col.value(1));
-    let dt_literal = NaiveDate::from_ymd(2021, 6, 1).and_hms_milli(13, 42, 25, 0);
+    let dt_literal = NaiveDate::from_ymd_opt(2021, 6, 1)
+        .unwrap()
+        .and_hms_milli_opt(13, 42, 25, 0)
+        .unwrap();
 
     assert_eq!(dt, dt_literal);
 }

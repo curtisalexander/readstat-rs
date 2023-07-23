@@ -1,6 +1,6 @@
 [package]
 name = "readstat"
-version = "0.11.0"
+version = "0.12.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2021"
 description = "Rust wrapper of the ReadStat C library"
@@ -8,19 +8,26 @@ license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 
 [dependencies]
-arrow2 = { version = "0.14", features = ["io_csv", "io_ipc", "io_ipc_compression", "io_json", "io_parquet", "io_parquet_compression"] }
+arrow2 = { version = "0.17", features = [
+    "io_csv",
+    "io_ipc",
+    "io_ipc_compression",
+    "io_json",
+    "io_parquet",
+    "io_parquet_compression",
+] }
 clap = { version = "4", features = ["derive", "unicode", "wrap_help"] }
 crossbeam = "0.8"
 csv = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 colored = "2.0"
-env_logger = "0.9"
+env_logger = "0.10"
 indicatif = "0.17"
 lazy_static = "1.4"
 lexical = "6.1"
 log = "0.4"
 num_cpus = "1.13"
-num-derive = "0.3"
+num-derive = "0.4"
 num-format = "0.4"
 num-traits = "0.2"
 path_abs = "0.5"

@@ -33,7 +33,7 @@ pub extern "C" fn handle_metadata(
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let mut m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
+    let m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
     // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
@@ -44,26 +44,36 @@ pub extern "C" fn handle_metadata(
         unsafe { ptr_to_string(readstat_sys::readstat_get_file_encoding(metadata)) };
     let version: c_int = unsafe { readstat_sys::readstat_get_file_format_version(metadata) };
     let is64bit = unsafe { readstat_sys::readstat_get_file_format_is_64bit(metadata) };
-    let ct = NaiveDateTime::from_timestamp(
+    let ct = NaiveDateTime::from_timestamp_opt(
         unsafe { readstat_sys::readstat_get_creation_time(metadata) },
         0,
     )
+    .expect("Panics (returns None) on the out-of-range number of seconds (more than 262 000 years away from common era) and/or invalid nanosecond (2 seconds or more")
     .format("%Y-%m-%d %H:%M:%S")
     .to_string();
-    let mt = NaiveDateTime::from_timestamp(
+    let mt = NaiveDateTime::from_timestamp_opt(
         unsafe { readstat_sys::readstat_get_modified_time(metadata) },
         0,
     )
+    .expect("Panics (returns None) on the out-of-range number of seconds (more than 262 000 years away from common era) and/or invalid nanosecond (2 seconds or more")
     .format("%Y-%m-%d %H:%M:%S")
     .to_string();
+
+    #[allow(clippy::useless_conversion)]
     let compression = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_get_compression(metadata) as i32
+        readstat_sys::readstat_get_compression(metadata)
+            .try_into()
+            .unwrap()
     }) {
         Some(t) => t,
         None => ReadStatCompress::None,
     };
+
+    #[allow(clippy::useless_conversion)]
     let endianness = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_get_endianness(metadata) as i32
+        readstat_sys::readstat_get_endianness(metadata)
+            .try_into()
+            .unwrap()
     }) {
         Some(t) => t,
         None => ReadStatEndian::None,
@@ -129,15 +139,21 @@ pub extern "C" fn handle_variable(
     let m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
 
     // get variable metadata
+    #[allow(clippy::useless_conversion)]
     let var_type = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_variable_get_type(variable) as i32
+        readstat_sys::readstat_variable_get_type(variable)
+            .try_into()
+            .unwrap()
     }) {
         Some(t) => t,
         None => ReadStatVarType::Unknown,
     };
 
+    #[allow(clippy::useless_conversion)]
     let var_type_class = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_variable_get_type_class(variable) as i32
+        readstat_sys::readstat_variable_get_type_class(variable)
+            .try_into()
+            .unwrap()
     }) {
         Some(t) => t,
         None => ReadStatVarTypeClass::Numeric,

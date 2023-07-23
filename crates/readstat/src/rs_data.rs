@@ -340,7 +340,8 @@ impl ReadStatData {
             .set_row_offset(Some(self.chunk_row_start.try_into().unwrap()))?
             .parse_sas7bdat(ppath, ctx);
 
-        match FromPrimitive::from_i32(error as i32) {
+        #[allow(clippy::useless_conversion)]
+        match FromPrimitive::from_i32(error.try_into().unwrap()) {
             Some(ReadStatError::READSTAT_OK) => Ok(()),
             Some(e) => Err(From::from(format!(
                 "Error when attempting to parse sas7bdat: {:#?}",
