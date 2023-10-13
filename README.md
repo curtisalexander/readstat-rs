@@ -66,7 +66,6 @@ sudo apt install build-essential clang unixodbc-dev
 
 Build
 ```sh
-cd readstat-rs/readstat
 cargo build
 ```
 
@@ -79,7 +78,6 @@ xcode-select --install
 
 Build
 ```sh
-cd readstat-rs/readstat
 cargo build
 ```
 
