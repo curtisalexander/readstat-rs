@@ -22,12 +22,32 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 
 ## Install
 
-### Download a Release
+## Download a Release
 \[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
 
-### Build
+## Setup
+Move the `readstat` binary to a known directory and add the binary to the user's [PATH](https://en.wikipedia.org/wiki/PATH_(variable)).
 
-#### Clone
+### Linux & macOS
+Ensure the path to `readstat` is added to the appropriate shell configuration file.
+
+### Windows
+For Windows users, path configuration may be found within the Environment Variables menu.  Executing the following from the command line opens the Environment Variables menu for the current user.
+
+```sh
+rundll32.exe sysdm.cpl,EditEnvironmentVariables
+```
+
+## Run
+Run the binary.
+
+```sh
+readstat --help
+```
+
+## Build
+
+### Clone
 Ensure submodules are also cloned.
 
 ```sh
@@ -36,7 +56,7 @@ git clone --recurse-submodules https://github.com/curtisalexander/readstat-rs.gi
 
 The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
 
-#### Linux
+### Linux
 Install developer tools
 
 ```sh
@@ -50,7 +70,7 @@ cd readstat-rs/readstat
 cargo build
 ```
 
-#### macOS
+### macOS
 Install developer tools
 
 ```sh
@@ -63,8 +83,10 @@ cd readstat-rs/readstat
 cargo build
 ```
 
-#### Windows
-Building on Windows requires [LLVM](https://releases.llvm.org/download.html) be downloaded and installed.  In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
+### Windows
+Building on Windows requires [LLVM](https://releases.llvm.org/download.html) and [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) be downloaded and installed.
+
+In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](https://github.com/curtisalexander/readstat-rs/blob/main/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
 
 For details see the following.
 - [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/crates/readstat-sys/build.rs#L78-L82)
@@ -76,7 +98,7 @@ cargo build
 ```
 
 ## Run
-After [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
+After either [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out or json
     - row count
     - variable count
