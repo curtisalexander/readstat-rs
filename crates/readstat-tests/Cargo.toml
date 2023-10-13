@@ -1,16 +1,16 @@
 [package]
 name = "readstat-tests"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2021"
 
 [dev-dependencies]
-arrow2 = { version = "0.17", features = ["full"] }
+arrow2 = { version = "0.18", features = ["full"] }
 assert_cmd = "2.0"
 assert_fs = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 path_abs = "0.5"
-polars = { version = "0.31", features = ["parquet"] }
+polars = { version = "0.33", features = ["parquet"] }
 predicates = "3"
 readstat = { path = "../readstat" }
 

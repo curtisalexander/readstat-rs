@@ -1,5 +1,4 @@
 [workspace]
-
 members = [
     "crates/iconv-sys",
     "crates/readstat",
@@ -8,3 +7,4 @@ members = [
     # internal
     "crates/readstat-tests",
 ]
+resolver = "2"

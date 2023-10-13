@@ -10,7 +10,7 @@ links = "readstat"
 build = "build.rs"
 
 [build-dependencies]
-bindgen = "0.66"
+bindgen = "0.68"
 cc = "1.0"
 
 [target.'cfg(windows)'.dependencies]
