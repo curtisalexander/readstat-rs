@@ -22,23 +22,23 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 
 ## Install
 
-## Download a Release
+### Download a Release
 \[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
 
-## Setup
+### Setup
 Move the `readstat` binary to a known directory and add the binary to the user's [PATH](https://en.wikipedia.org/wiki/PATH_(variable)).
 
-### Linux & macOS
+#### Linux & macOS
 Ensure the path to `readstat` is added to the appropriate shell configuration file.
 
-### Windows
+#### Windows
 For Windows users, path configuration may be found within the Environment Variables menu.  Executing the following from the command line opens the Environment Variables menu for the current user.
 
 ```sh
 rundll32.exe sysdm.cpl,EditEnvironmentVariables
 ```
 
-## Run
+### Run
 Run the binary.
 
 ```sh
