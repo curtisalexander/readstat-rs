@@ -23,12 +23,10 @@ jobs:
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain
         with:
           toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
@@ -54,12 +52,10 @@ jobs:
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain
         with:
           toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Add target
         run: rustup target add x86_64-unknown-linux-musl
       - name: Add musl-tools
@@ -90,12 +86,10 @@ jobs:
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain
         with:
           toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Cache LLVM and Clang
         id: cache-llvm
         uses: actions/cache@v3
@@ -136,12 +130,10 @@ jobs:
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain
         with:
           toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
@@ -167,12 +159,11 @@ jobs:
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain
         with:
           toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
