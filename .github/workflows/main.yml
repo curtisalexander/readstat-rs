@@ -19,16 +19,13 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
@@ -50,16 +47,13 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Add target
         run: rustup target add x86_64-unknown-linux-musl
       - name: Add musl-tools
@@ -86,16 +80,13 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         shell: bash
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Cache LLVM and Clang
         id: cache-llvm
         uses: actions/cache@v3
@@ -132,16 +123,13 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
@@ -163,16 +151,13 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ env.target }}
-          default: true
-          override: true
+          targets: ${{ env.target }}
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
