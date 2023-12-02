@@ -92,11 +92,11 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ${{ runner.temp }}\llvm
-          key: llvm-16.0.5
+          key: llvm-17.0.5
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
         with:
-          version: "16.0.5"
+          version: "17.0.5"
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
       - name: Build
@@ -105,7 +105,6 @@ jobs:
             cargo build --release
       - name: Zip
         run: Compress-Archive -Path target\release\${{ env.PACKAGE_NAME }}.exe -DestinationPath target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip  -CompressionLevel Optimal
-        shell: powershell
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
