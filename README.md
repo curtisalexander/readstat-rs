@@ -355,7 +355,7 @@ hyperfine --warmup 5 "ReadStat_App.exe -f crates\readstat-tests\tests\data\cars.
 hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f crates/readstat-tests/tests/data/cars.sas7bdat crates/readstat-tests/tests/data/cars_c.csv" "./target/release/readstat data tests/data/cars.sas7bdat --output crates/readstat-tests/tests/data/cars_rust.csv"
 ```
 
-Other, future, benchmarking may be performed when/if [channels and threads](https://github.com/curtisalexander/readstat-rs/issues/28) are developed.
+Other, future, benchmarking may be performed now that [channels and threads](https://github.com/curtisalexander/readstat-rs/issues/28) have been developed.
 
 ## Profiling
 Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/flamegraph).
