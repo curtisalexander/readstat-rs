@@ -92,11 +92,12 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ${{ runner.temp }}\llvm
-          key: llvm-17.0.5
+          key: llvm-17.0.2
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
         with:
-          version: "17.0.5"
+          # versions - https://github.com/KyleMayes/install-llvm-action/blob/master/index.ts
+          version: "17.0.2"
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
       - name: Build
