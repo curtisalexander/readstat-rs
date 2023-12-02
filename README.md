@@ -238,7 +238,7 @@ RUST_LOG=debug readstat ...
 ```
 
 ```powershell
-# Windows
+# Windows PowerShell
 $env:RUST_LOG="debug"; readstat ...
 ```
 
