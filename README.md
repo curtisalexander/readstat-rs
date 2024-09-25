@@ -4,7 +4,7 @@
 # readstat-rs
 Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
 
-Get [metadata](#metadata), [preview data](#preview-data), or [convert data](#data) to [`csv`](https://en.wikipedia.org/wiki/Comma-separated_values), [`feather`](https://arrow.apache.org/docs/python/feather.html) (or the [Arrow IPC format](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)), [`ndjson`](http://ndjson.org/), or [`parquet`](https://parquet.apache.org/) formats.
+Get [metadata](#metadata), [preview data](#preview-data), or [convert data](#data) to [`csv`](https://en.wikipedia.org/wiki/Comma-separated_values), [`feather`](https://arrow.apache.org/docs/python/feather.html) (or the [Arrow IPC format](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)), [`ndjson`](https://github.com/ndjson/ndjson-spec), or [`parquet`](https://parquet.apache.org/) formats.
 
 ## :key: Dependencies
 The command-line tool is developed in Rust and is only possible due to the following _**excellent**_ projects:
