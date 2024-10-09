@@ -18,6 +18,7 @@ use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
 use crate::OutFormat;
+use crate::ParquetCompression;
 
 pub struct ReadStatParquetWriter {
     wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>,
@@ -467,7 +468,42 @@ impl ReadStatWriter {
             if !self.wrote_start {
                 let options = parquet_arrow2::write::WriteOptions {
                     write_statistics: true,
-                    compression: parquet_arrow2::write::CompressionOptions::Snappy,
+                    compression: match rsp.compression {
+                        Some(ParquetCompression::Uncompressed) => parquet_arrow2::write::CompressionOptions::Uncompressed,
+                        Some(ParquetCompression::Snappy) => parquet_arrow2::write::CompressionOptions::Snappy,
+                        Some(ParquetCompression::Gzip) => {
+                            if let Some(level) = rsp.compression_level {
+                                let gzip_level = parquet_arrow2::write::GzipLevel::try_new(level.try_into()
+                                    .map_err(|_| "Invalid Gzip compression level")?
+                                ).map_err(|_| "Invalid Gzip compression level")?;
+                                parquet_arrow2::write::CompressionOptions::Gzip(Some(gzip_level))
+                            } else {
+                                parquet_arrow2::write::CompressionOptions::Gzip(None)
+                            }
+                        },
+                        Some(ParquetCompression::Lzo) => parquet_arrow2::write::CompressionOptions::Lzo,
+                        Some(ParquetCompression::Brotli) => {
+                            if let Some(level) = rsp.compression_level {
+                                let brotli_level = parquet_arrow2::write::BrotliLevel::try_new(level.try_into()
+                                    .map_err(|_| "Invalid Brotli compression level")?
+                                ).map_err(|_| "Invalid Brotli compression level")?;
+                                parquet_arrow2::write::CompressionOptions::Brotli(Some(brotli_level))
+                            } else {
+                                parquet_arrow2::write::CompressionOptions::Brotli(None)
+                            }
+                        },
+                        Some(ParquetCompression::Zstd) => {
+                            if let Some(level) = rsp.compression_level {
+                                let zstd_level = parquet_arrow2::write::ZstdLevel::try_new(level.try_into()
+                                    .map_err(|_| "Invalid Zstd compression level")?
+                                ).map_err(|_| "Invalid Zstd compression level")?;
+                                parquet_arrow2::write::CompressionOptions::Zstd(Some(zstd_level))
+                            } else {
+                                parquet_arrow2::write::CompressionOptions::Zstd(None)
+                            }
+                        },
+                        None => parquet_arrow2::write::CompressionOptions::Snappy,
+                    },
                     version: parquet_arrow2::write::Version::V2,
                     data_pagesize_limit: None 
                 };

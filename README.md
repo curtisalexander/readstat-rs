@@ -206,6 +206,12 @@ To write the first 100 rows of parsed data (as `parquet`) to a file, invoke the 
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 100
 ```
 
+To write parsed data (as `parquet`) to a file with specific compression settings, invoke the following:
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --compression zstd --compression-level 3
+```
+
 ### Parallelism
 The `data` subcommand includes a parameter for `--parallel` &mdash; if invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
 

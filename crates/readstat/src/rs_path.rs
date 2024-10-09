@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::OutFormat;
+use crate::ParquetCompression;
 
 const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
@@ -19,6 +20,8 @@ pub struct ReadStatPath {
     pub format: OutFormat,
     pub overwrite: bool,
     pub no_write: bool,
+    pub compression: Option<ParquetCompression>,
+    pub compression_level: Option<u32>,
 }
 
 impl ReadStatPath {
@@ -28,6 +31,8 @@ impl ReadStatPath {
         format: Option<OutFormat>,
         overwrite: bool,
         no_write: bool,
+        compression: Option<ParquetCompression>,
+        compression_level: Option<u32>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_in_extension(&p)?;
@@ -47,6 +52,8 @@ impl ReadStatPath {
             format: f,
             overwrite,
             no_write,
+            compression,
+            compression_level,
         })
     }
 
