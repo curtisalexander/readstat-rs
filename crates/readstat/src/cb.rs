@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::DateTime;
 use log::debug;
 use num_traits::FromPrimitive;
 use std::os::raw::{c_char, c_int, c_void};
@@ -44,14 +44,14 @@ pub extern "C" fn handle_metadata(
         unsafe { ptr_to_string(readstat_sys::readstat_get_file_encoding(metadata)) };
     let version: c_int = unsafe { readstat_sys::readstat_get_file_format_version(metadata) };
     let is64bit = unsafe { readstat_sys::readstat_get_file_format_is_64bit(metadata) };
-    let ct = NaiveDateTime::from_timestamp_opt(
+    let ct = DateTime::from_timestamp(
         unsafe { readstat_sys::readstat_get_creation_time(metadata) },
         0,
     )
     .expect("Panics (returns None) on the out-of-range number of seconds (more than 262 000 years away from common era) and/or invalid nanosecond (2 seconds or more")
     .format("%Y-%m-%d %H:%M:%S")
     .to_string();
-    let mt = NaiveDateTime::from_timestamp_opt(
+    let mt = DateTime::from_timestamp   (
         unsafe { readstat_sys::readstat_get_modified_time(metadata) },
         0,
     )
