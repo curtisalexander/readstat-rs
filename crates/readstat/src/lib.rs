@@ -147,7 +147,7 @@ pub enum ParquetCompression {
     Uncompressed,
     Snappy,
     Gzip,
-    Lzo,
+    Lz4Raw,
     Brotli,
     Zstd,
 }
