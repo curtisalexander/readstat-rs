@@ -259,7 +259,6 @@ impl ReadStatWriter {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
-                    .write(true)
                     .create(true)
                     .append(true)
                     .open(p)?
@@ -313,7 +312,6 @@ impl ReadStatWriter {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
-                    .write(true)
                     .create(true)
                     .append(true)
                     .open(p)?
@@ -389,7 +387,6 @@ impl ReadStatWriter {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
-                    .write(true)
                     .create(true)
                     .append(true)
                     .open(p)?
@@ -449,7 +446,6 @@ impl ReadStatWriter {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
                 OpenOptions::new()
-                    .write(true)
                     .create(true)
                     .append(true)
                     .open(p)?
@@ -481,7 +477,7 @@ impl ReadStatWriter {
                                 parquet_arrow2::write::CompressionOptions::Gzip(None)
                             }
                         },
-                        Some(ParquetCompression::Lzo) => parquet_arrow2::write::CompressionOptions::Lzo,
+                        Some(ParquetCompression::Lz4Raw) => parquet_arrow2::write::CompressionOptions::Lz4Raw,
                         Some(ParquetCompression::Brotli) => {
                             if let Some(level) = rsp.compression_level {
                                 let brotli_level = parquet_arrow2::write::BrotliLevel::try_new(level.try_into()
