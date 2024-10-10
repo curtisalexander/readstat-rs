@@ -47,5 +47,5 @@ where
         .join("tests")
         .join("data")
         .join(ds);
-    readstat::ReadStatPath::new(sas_path, None, None, false, false)
+    readstat::ReadStatPath::new(sas_path, None, None, false, false, None, None)
 }

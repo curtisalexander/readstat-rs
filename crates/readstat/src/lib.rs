@@ -105,6 +105,12 @@ pub enum ReadStatCliCommands {
         /// Convert sas7bdat data in parallel
         #[arg(action, long)]
         parallel: bool,
+        /// Parquet compression algorithm
+        #[arg(long, value_enum, value_parser)]
+        compression: Option<ParquetCompression>,
+        /// Parquet compression level (if applicable)
+        #[arg(long, value_parser = clap::value_parser!(u32).range(0..=22))]
+        compression_level: Option<u32>,
     },
 }
 
@@ -135,6 +141,23 @@ impl fmt::Display for Reader {
         write!(f, "{:?}", &self)
     }
 }
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum ParquetCompression {
+    Uncompressed,
+    Snappy,
+    Gzip,
+    Lz4Raw,
+    Brotli,
+    Zstd,
+}
+
+impl fmt::Display for ParquetCompression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", &self)
+    }
+}
+
 pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
     env_logger::init();
 
@@ -153,7 +176,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             );
 
             // out_path and format determine the type of writing performed
-            let rsp = ReadStatPath::new(sas_path, None, None, false, false)?;
+            let rsp = ReadStatPath::new(sas_path, None, None, false, false, None, None)?;
 
             // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
@@ -182,7 +205,15 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             );
 
             // output and format determine the type of writing to be performed
-            let rsp = ReadStatPath::new(sas_path, None, Some(OutFormat::csv), false, false)?;
+            let rsp = ReadStatPath::new(
+                sas_path,
+                None,
+                Some(OutFormat::csv),
+                false,
+                false,
+                None,
+                None,
+            )?;
 
             // instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
@@ -262,6 +293,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             no_progress,
             overwrite,
             parallel,
+            compression,
+            compression_level,
         } => {
             // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
@@ -271,7 +304,15 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             );
 
             // output and format determine the type of writing to be performed
-            let rsp = ReadStatPath::new(sas_path, output, format, overwrite, false)?;
+            let rsp = ReadStatPath::new(
+                sas_path,
+                output,
+                format,
+                overwrite,
+                false,
+                compression,
+                compression_level,
+            )?;
 
             // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();

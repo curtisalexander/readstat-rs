@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::OutFormat;
+use crate::ParquetCompression;
 
 const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
@@ -19,6 +20,8 @@ pub struct ReadStatPath {
     pub format: OutFormat,
     pub overwrite: bool,
     pub no_write: bool,
+    pub compression: Option<ParquetCompression>,
+    pub compression_level: Option<u32>,
 }
 
 impl ReadStatPath {
@@ -28,6 +31,8 @@ impl ReadStatPath {
         format: Option<OutFormat>,
         overwrite: bool,
         no_write: bool,
+        compression: Option<ParquetCompression>,
+        compression_level: Option<u32>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_in_extension(&p)?;
@@ -38,6 +43,20 @@ impl ReadStatPath {
             None => op,
             Some(op) => Self::validate_out_extension(&op, f)?,
         };
+        let cl: Option<u32> = match compression {
+            None => match compression_level {
+                None => None,
+                Some(_) => {
+                    println!(
+                        "Ignoring value of {} as {} was not set",
+                        String::from("--compression-level").bright_cyan(),
+                        String::from("--compression").bright_cyan()
+                    );
+                    None
+                }
+            },
+            Some(pc) => Self::validate_compression_level(pc, compression_level)?,
+        };
 
         Ok(Self {
             path: p,
@@ -47,6 +66,8 @@ impl ReadStatPath {
             format: f,
             overwrite,
             no_write,
+            compression,
+            compression_level: cl,
         })
     }
 
@@ -166,6 +187,65 @@ impl ReadStatPath {
                 "File {} does not exist!",
                 abs_path.to_string_lossy().bright_yellow()
             )))
+        }
+    }
+
+    fn validate_compression_level(
+        compression: ParquetCompression,
+        compression_level: Option<u32>,
+    ) -> Result<Option<u32>, Box<dyn Error + Send + Sync>> {
+        match compression {
+            ParquetCompression::Uncompressed => match compression_level {
+                None => Ok(compression_level),
+                Some(_) => {
+                    println!("Compression level is not required for compression={}, ignoring value of {}", String::from("uncompressed").bright_magenta(), String::from("--compression-level").bright_cyan());
+                    Ok(None)
+                }
+            },
+            ParquetCompression::Snappy => match compression_level {
+                None => Ok(compression_level),
+                Some(_) => {
+                    println!("Compression level is not required for compression={}, ignoring value of {}", String::from("snappy").bright_magenta(), String::from("--compression-level").bright_cyan());
+                    Ok(None)
+                }
+            },
+            ParquetCompression::Lz4Raw => match compression_level {
+                None => Ok(compression_level),
+                Some(_) => {
+                    println!("Compression level is not required for compression={}, ignoring value of {}", String::from("lz4-raw").bright_magenta(), String::from("--compression-level").bright_cyan());
+                    Ok(None)
+                }
+            },
+            ParquetCompression::Gzip => match compression_level {
+                None => Ok(compression_level),
+                Some(c) => {
+                    if c <= 9 {
+                        Ok(Some(c))
+                    } else {
+                        Err(From::from(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-9.", c.to_string().bright_yellow(), String::from("gzip").bright_cyan())))
+                    }
+                }
+            },
+            ParquetCompression::Brotli => match compression_level {
+                None => Ok(compression_level),
+                Some(c) => {
+                    if c <= 11 {
+                        Ok(Some(c))
+                    } else {
+                        Err(From::from(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-11.", c.to_string().bright_yellow(), String::from("brotli").bright_cyan())))
+                    }
+                }
+            },
+            ParquetCompression::Zstd => match compression_level {
+                None => Ok(compression_level),
+                Some(c) => {
+                    if c <= 22 {
+                        Ok(Some(c))
+                    } else {
+                        Err(From::from(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-22.", c.to_string().bright_yellow(), String::from("zstd").bright_cyan())))
+                    }
+                }
+            },
         }
     }
 }
