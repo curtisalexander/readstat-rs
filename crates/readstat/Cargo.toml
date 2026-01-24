@@ -8,14 +8,15 @@ license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 
 [dependencies]
-arrow2 = { version = "0.18", features = [
-    "io_csv",
-    "io_ipc",
-    "io_ipc_compression",
-    "io_json",
-    "io_parquet",
-    "io_parquet_compression",
-] }
+# Arrow ecosystem crates
+arrow = { version = "54", features = ["chrono-tz"] }
+arrow-array = "54"
+arrow-cast = "54"
+arrow-csv = "54"
+arrow-ipc = { version = "54", features = ["zstd"] }
+arrow-json = "54"
+arrow-schema = "54"
+parquet = { version = "54", features = ["snap", "zstd", "brotli", "flate2", "lz4"] }
 clap = { version = "4", features = ["derive", "unicode", "wrap_help"] }
 crossbeam = "0.8"
 csv = "1.3"

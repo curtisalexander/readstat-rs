@@ -1,12 +1,12 @@
-use arrow2::{
-    array::Array,
-    chunk::Chunk,
-    error::Error as ArrowError,
-    io::{
-        csv as csv_arrow2, ipc as ipc_arrow2, ndjson as ndjson_arrow2,
-        parquet::{self as parquet_arrow2, write::RowGroupIterator},
-    },
+use arrow_csv::WriterBuilder as CsvWriterBuilder;
+use arrow_ipc::writer::FileWriter as IpcFileWriter;
+use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
+use parquet::{
+    arrow::ArrowWriter as ParquetArrowWriter,
+    basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel},
+    file::properties::WriterProperties,
 };
+use std::sync::Arc;
 use colored::Colorize;
 // use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
@@ -18,32 +18,21 @@ use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
 use crate::OutFormat;
-use crate::ParquetCompression;
 
 pub struct ReadStatParquetWriter {
-    wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>,
-    options: parquet_arrow2::write::WriteOptions,
-    encodings: Vec<Vec<parquet_arrow2::write::Encoding>>,
+    wtr: Option<ParquetArrowWriter<std::fs::File>>,
 }
 
 impl ReadStatParquetWriter {
-    fn new(
-        wtr: Box<parquet_arrow2::write::FileWriter<std::fs::File>>,
-        options: parquet_arrow2::write::WriteOptions,
-        encodings: Vec<Vec<parquet_arrow2::write::Encoding>>,
-    ) -> Self {
-        Self {
-            wtr,
-            options,
-            encodings,
-        }
+    fn new(wtr: ParquetArrowWriter<std::fs::File>) -> Self {
+        Self { wtr: Some(wtr) }
     }
 }
 
 pub enum ReadStatWriterFormat {
     Csv(std::fs::File),
     CsvStdout(std::io::Stdout),
-    Feather(Box<ipc_arrow2::write::FileWriter<std::fs::File>>),
+    Feather(IpcFileWriter<std::fs::File>),
     Ndjson(std::fs::File),
     Parquet(ReadStatParquetWriter),
 }
@@ -280,12 +269,12 @@ impl ReadStatWriter {
 
             // write
             if let Some(ReadStatWriterFormat::Csv(f)) = &mut self.wtr {
-                let options = csv_arrow2::write::SerializeOptions::default();
-
-                if let Some(c) = d.chunk.clone() {
-                    let cols = &[c];
-                    cols.iter()
-                        .try_for_each(|batch| csv_arrow2::write::write_chunk(f, batch, &options))?;
+                if let Some(batch) = &d.batch {
+                    // Build writer without header (header written separately)
+                    let mut writer = CsvWriterBuilder::new()
+                        .with_header(false)
+                        .build(f);
+                    writer.write(batch)?;
                 };
 
                 // update
@@ -328,19 +317,14 @@ impl ReadStatWriter {
 
             // setup writer
             if !self.wrote_start {
-                let options = ipc_arrow2::write::WriteOptions {
-                    compression: Some(ipc_arrow2::write::Compression::ZSTD),
-                };
-
-                let wtr = ipc_arrow2::write::FileWriter::try_new(f, d.schema.clone(), None, options)?;
-
-                self.wtr = Some(ReadStatWriterFormat::Feather(Box::new(wtr)));
+                let wtr = IpcFileWriter::try_new(f, &d.schema)?;
+                self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
             };
 
             // write
             if let Some(ReadStatWriterFormat::Feather(wtr)) = &mut self.wtr {
-                if let Some(c) = d.chunk.clone() {
-                    wtr.write(&c, None)?;
+                if let Some(batch) = &d.batch {
+                    wtr.write(batch)?;
                 };
 
                 // update
@@ -408,17 +392,11 @@ impl ReadStatWriter {
 
             // write
             if let Some(ReadStatWriterFormat::Ndjson(f)) = &mut self.wtr {
-                if let Some(c) = d.chunk.clone() {
-                    let arrays = c.columns().iter().map(Ok);
-
-                    // serializer
-                    let serializer = ndjson_arrow2::write::Serializer::new(arrays, vec![]);
-
-                    // writer
-                    let mut wtr = ndjson_arrow2::write::FileWriter::new(f, serializer);
-
-                    // drive iterator
-                    wtr.by_ref().collect::<Result<(), ArrowError>>()?;
+                if let Some(batch) = &d.batch {
+                    // Create a line-delimited JSON writer
+                    let mut writer = JsonLineDelimitedWriter::new(f);
+                    writer.write(batch)?;
+                    writer.finish()?;
                 }
 
                 // update
@@ -462,82 +440,59 @@ impl ReadStatWriter {
 
             // setup writer
             if !self.wrote_start {
-                let options = parquet_arrow2::write::WriteOptions {
-                    write_statistics: true,
-                    compression: match rsp.compression {
-                        Some(ParquetCompression::Uncompressed) => parquet_arrow2::write::CompressionOptions::Uncompressed,
-                        Some(ParquetCompression::Snappy) => parquet_arrow2::write::CompressionOptions::Snappy,
-                        Some(ParquetCompression::Gzip) => {
-                            if let Some(level) = rsp.compression_level {
-                                let gzip_level = parquet_arrow2::write::GzipLevel::try_new(level.try_into()
-                                    .map_err(|_| "Invalid Gzip compression level")?
-                                ).map_err(|_| "Invalid Gzip compression level")?;
-                                parquet_arrow2::write::CompressionOptions::Gzip(Some(gzip_level))
-                            } else {
-                                parquet_arrow2::write::CompressionOptions::Gzip(None)
-                            }
-                        },
-                        Some(ParquetCompression::Lz4Raw) => parquet_arrow2::write::CompressionOptions::Lz4Raw,
-                        Some(ParquetCompression::Brotli) => {
-                            if let Some(level) = rsp.compression_level {
-                                let brotli_level = parquet_arrow2::write::BrotliLevel::try_new(level.try_into()
-                                    .map_err(|_| "Invalid Brotli compression level")?
-                                ).map_err(|_| "Invalid Brotli compression level")?;
-                                parquet_arrow2::write::CompressionOptions::Brotli(Some(brotli_level))
-                            } else {
-                                parquet_arrow2::write::CompressionOptions::Brotli(None)
-                            }
-                        },
-                        Some(ParquetCompression::Zstd) => {
-                            if let Some(level) = rsp.compression_level {
-                                let zstd_level = parquet_arrow2::write::ZstdLevel::try_new(level.try_into()
-                                    .map_err(|_| "Invalid Zstd compression level")?
-                                ).map_err(|_| "Invalid Zstd compression level")?;
-                                parquet_arrow2::write::CompressionOptions::Zstd(Some(zstd_level))
-                            } else {
-                                parquet_arrow2::write::CompressionOptions::Zstd(None)
-                            }
-                        },
-                        None => parquet_arrow2::write::CompressionOptions::Snappy,
+                let compression = match rsp.compression {
+                    Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
+                    Some(crate::ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
+                    Some(crate::ParquetCompression::Gzip) => {
+                        if let Some(level) = rsp.compression_level {
+                            let gzip_level = GzipLevel::try_new(level.try_into()
+                                .map_err(|_| "Invalid Gzip compression level")?
+                            ).map_err(|e| format!("Invalid Gzip compression level: {}", e))?;
+                            ParquetCompressionCodec::GZIP(gzip_level)
+                        } else {
+                            ParquetCompressionCodec::GZIP(GzipLevel::default())
+                        }
                     },
-                    version: parquet_arrow2::write::Version::V2,
-                    data_pagesize_limit: None 
+                    Some(crate::ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
+                    Some(crate::ParquetCompression::Brotli) => {
+                        if let Some(level) = rsp.compression_level {
+                            let brotli_level = BrotliLevel::try_new(level.try_into()
+                                .map_err(|_| "Invalid Brotli compression level")?
+                            ).map_err(|e| format!("Invalid Brotli compression level: {}", e))?;
+                            ParquetCompressionCodec::BROTLI(brotli_level)
+                        } else {
+                            ParquetCompressionCodec::BROTLI(BrotliLevel::default())
+                        }
+                    },
+                    Some(crate::ParquetCompression::Zstd) => {
+                        if let Some(level) = rsp.compression_level {
+                            let zstd_level = ZstdLevel::try_new(level.try_into()
+                                .map_err(|_| "Invalid Zstd compression level")?
+                            ).map_err(|e| format!("Invalid Zstd compression level: {}", e))?;
+                            ParquetCompressionCodec::ZSTD(zstd_level)
+                        } else {
+                            ParquetCompressionCodec::ZSTD(ZstdLevel::default())
+                        }
+                    },
+                    None => ParquetCompressionCodec::SNAPPY,
                 };
 
-                let encodings: Vec<Vec<parquet_arrow2::write::Encoding>> = d
-                    .schema
-                    .fields
-                    .iter()
-                    .map(|f| {
-                        parquet_arrow2::write::transverse(&f.data_type, |_| {
-                            parquet_arrow2::write::Encoding::Plain
-                        })
-                    })
-                    .collect();
+                let props = WriterProperties::builder()
+                    .set_compression(compression)
+                    .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
+                    .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+                    .build();
 
-                let wtr = parquet_arrow2::write::FileWriter::try_new(f, d.schema.clone(), options)?;
+                let wtr = ParquetArrowWriter::try_new(f, Arc::new(d.schema.clone()), Some(props))?;
 
-                self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(
-                    Box::new(wtr),
-                    options,
-                    encodings,
-                )));
+                self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(wtr)));
             }
 
             // write
             if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
-                if let Some(c) = d.chunk.clone() {
-                    let iter: Vec<Result<Chunk<Box<dyn Array>>, ArrowError>> = vec![Ok(c)];
-
-                    let row_groups = RowGroupIterator::try_new(
-                        iter.into_iter(),
-                        &d.schema,
-                        pwtr.options,
-                        pwtr.encodings.clone(),
-                    )?;
-
-                    for group in row_groups {
-                        pwtr.wtr.write(group?)?;
+                if let Some(batch) = &d.batch {
+                    if let Some(ref mut wtr) = pwtr.wtr {
+                        wtr.write(batch)?;
                     }
                 }
 
@@ -563,7 +518,10 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
-            let _size = pwtr.wtr.end(None)?;
+            // Take ownership of the writer to close it
+            if let Some(wtr) = pwtr.wtr.take() {
+                wtr.close()?;
+            }
 
             // set message for what is being read/written
             self.finish_txt(d, rsp)?;
@@ -591,12 +549,12 @@ impl ReadStatWriter {
 
         // write
         if let Some(ReadStatWriterFormat::CsvStdout(f)) = &mut self.wtr {
-            let options = csv_arrow2::write::SerializeOptions::default();
-
-            if let Some(c) = d.chunk.clone() {
-                let cols = &[c];
-                cols.iter()
-                    .try_for_each(|batch| csv_arrow2::write::write_chunk(f, batch, &options))?;
+            if let Some(batch) = &d.batch {
+                // Build writer without header (header written separately)
+                let mut writer = CsvWriterBuilder::new()
+                    .with_header(false)
+                    .build(f);
+                writer.write(batch)?;
             };
 
             // update
@@ -616,71 +574,15 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(p) = &rsp.out_path {
-            // spinner
-            /*
-            if let Some(pb) = d.pb {
-                pb.finish_at_current_pos();
-            }
-            */
-
-            // spinner
-            /*
-            if !d.no_progress {
-                d.pb = Some(ProgressBar::new(!0));
-            }
-            if let Some(pb) = d.pb {
-                pb.set_style(
-                    ProgressStyle::default_spinner()
-                        .template("[{spinner:.green} {elapsed_precise} | {bytes}] {msg}"),
-                );
-
-                let in_f = if let Some(f) = rsp.path.file_name() {
-                    f.to_string_lossy().bright_red()
-                } else {
-                    String::from("___").bright_red()
-                };
-
-                let out_f = if let Some(p) = rsp.out_path {
-                    if let Some(f) = p.file_name() {
-                        f.to_string_lossy().bright_green()
-                    } else {
-                        String::from("___").bright_green()
-                    }
-                } else {
-                    String::from("___").bright_green()
-                };
-
-                let msg = format!("Writing file {} as {}", in_f, out_f);
-
-                pb.set_message(msg);
-                pb.enable_steady_tick(120);
-            }
-            */
-            // progress bar
-            /*
-            if !self.no_progress {
-                self.pb = Some(ProgressBar::new(self.row_count as u64));
-            }
-            if let Some(pb) = &self.pb {
-                pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("[{spinner:.green} {elapsed_precise}] {bar:30.cyan/blue} {pos:>7}/{len:7} {msg}")
-                        .progress_chars("##-"),
-                );
-                pb.set_message("Rows processed");
-                pb.enable_steady_tick(120);
-            }
-            */
-
             // create file
             let mut f = std::fs::File::create(p)?;
 
             // Get variable names
             let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
 
-            // write
-            let options = csv_arrow2::write::SerializeOptions::default();
-            csv_arrow2::write::write_header(&mut f, &vars, &options)?;
+            // write header manually as CSV line
+            use std::io::Write;
+            writeln!(f, "{}", vars.join(","))?;
 
             // wrote header
             self.wrote_header = true;
@@ -705,9 +607,8 @@ impl ReadStatWriter {
         // Get variable names
         let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
 
-        // write
-        let options = csv_arrow2::write::SerializeOptions::default();
-        csv_arrow2::write::write_header(&mut stdout(), &vars, &options)?;
+        // write header manually as CSV line
+        println!("{}", vars.join(","));
 
         // wrote header
         self.wrote_header = true;
@@ -796,8 +697,8 @@ impl ReadStatWriter {
                 })
                 .bright_cyan(),
                 v.var_format.bright_yellow(),
-                format!("{:#?}", md.schema.fields[*k as usize].data_type().to_logical_type()).bright_green(),
-                format!("{:#?}", md.schema.fields[*k as usize].data_type().to_physical_type()).bright_red(),
+                format!("{:#?}", md.schema.fields[*k as usize].data_type()).bright_green(),
+                format!("{:#?}", md.schema.fields[*k as usize].data_type()).bright_red(),
             );
         }
 

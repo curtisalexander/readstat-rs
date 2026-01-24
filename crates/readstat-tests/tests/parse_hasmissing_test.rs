@@ -1,7 +1,5 @@
-use arrow2::{
-    array::{Float64Array, Utf8Array},
-    datatypes::DataType,
-};
+use arrow::datatypes::DataType;
+use arrow_array::{Array, Float64Array, StringArray};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
 mod common;
@@ -63,26 +61,24 @@ fn parse_hasmissing() {
     // arrow data type
     assert!(matches!(d.schema.fields[0].data_type(), DataType::Utf8));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
     // non-missing column value from column that has no missing values
     // column = 1 (index 0) -> row = 1 (index 0)
-    let string_col_with_non_missing = arrays
+    let string_col_with_non_missing = columns
         .get(0)
         .unwrap()
         .as_any()
-        .downcast_ref::<Utf8Array<i32>>()
+        .downcast_ref::<StringArray>()
         .unwrap();
 
-    assert_eq!(
-        string_col_with_non_missing.value(0),
-        String::from("00101").as_str()
-    );
+    assert_eq!(string_col_with_non_missing.value(0), "00101");
 
     // non-missing column value from column that has missing values
     // column = 4 (index 3) -> row = 2 (index 1)
-    let float_col_with_non_missing = arrays
+    let float_col_with_non_missing = columns
         .get(3)
         .unwrap()
         .as_any()
@@ -93,23 +89,23 @@ fn parse_hasmissing() {
 
     // missing column value from column that has missing values
     // column = 5 (index 4)
-    let float_col_with_missing = arrays
+    let float_col_with_missing = columns
         .get(4)
         .unwrap()
         .as_any()
         .downcast_ref::<Float64Array>()
         .unwrap();
-    let float_col_with_missing_miss_count = float_col_with_missing.validity().unwrap().unset_bits();
+    let float_col_with_missing_miss_count = float_col_with_missing.null_count();
 
     assert_eq!(float_col_with_missing_miss_count, 1);
 
     // column = 5 (index 4) -> row = 1 (index 0)
-    let float_col_with_missing_is_not_null = float_col_with_missing.validity().unwrap().get_bit(0);
+    let float_col_with_missing_is_not_null = !float_col_with_missing.is_null(0);
 
     assert!(float_col_with_missing_is_not_null);
 
     // column = 5 (index 4) -> row = 2 (index 1)
-    let float_col_with_missing_is_null = float_col_with_missing.validity().unwrap().get_bit(1);
+    let float_col_with_missing_is_null = float_col_with_missing.is_null(1);
 
-    assert!(!float_col_with_missing_is_null);
+    assert!(float_col_with_missing_is_null);
 }
