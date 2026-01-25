@@ -10,17 +10,13 @@ on:
     tags:
       - "*"
 
-  # Manual trigger from GitHub Actions UI
+  # Manual trigger from GitHub Actions UI (build-only, no releases)
   workflow_dispatch:
     inputs:
       version:
         description: 'Version string for artifacts (e.g., v0.14.0 or dev)'
         required: false
         default: 'dev'
-      create_release:
-        description: 'Create GitHub release with artifacts'
-        type: boolean
-        default: false
 
   # API trigger for external tools (e.g., Claude Code)
   repository_dispatch:
@@ -61,9 +57,8 @@ jobs:
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
@@ -106,9 +101,8 @@ jobs:
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
           files: |
             target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
@@ -163,9 +157,8 @@ jobs:
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
         env:
@@ -204,9 +197,8 @@ jobs:
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
@@ -245,9 +237,8 @@ jobs:
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
