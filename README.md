@@ -1,5 +1,4 @@
 [![readstat-rs](https://github.com/curtisalexander/readstat-rs/workflows/readstat-rs/badge.svg)](https://github.com/curtisalexander/readstat-rs/actions)
-[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-908a85?logo=gitpod)](https://gitpod.io/#https://github.com/curtisalexander/readstat-rs)
 
 # readstat-rs
 Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
