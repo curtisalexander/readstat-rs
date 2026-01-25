@@ -5,9 +5,26 @@ env:
   CARGO_TERM_COLOR: always
 
 on:
+  # Trigger on tag push (for releases)
   push:
     tags:
       - "*"
+
+  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string for artifacts (e.g., v0.14.0 or dev)'
+        required: false
+        default: 'dev'
+      create_release:
+        description: 'Create GitHub release with artifacts'
+        type: boolean
+        default: false
+
+  # API trigger for external tools (e.g., Claude Code)
+  repository_dispatch:
+    types: [build, test, release]
 
 jobs:
   build-linux-gnu:
@@ -15,9 +32,16 @@ jobs:
     env:
       target: x86_64-unknown-linux-gnu
     steps:
-      - name: Get git tag version
+      - name: Get version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -30,9 +54,14 @@ jobs:
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
         run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
+          path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
         with:
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -43,9 +72,16 @@ jobs:
     env:
       target: x86_64-unknown-linux-musl
     steps:
-      - name: Get git tag version
+      - name: Get version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -62,9 +98,14 @@ jobs:
         run: cargo build --release --target x86_64-unknown-linux-musl && strip target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}
       - name: Zip
         run: tar czvf target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/${{ env.target }}/release ${{ env.PACKAGE_NAME }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
+          path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
         with:
           files: |
             target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -75,9 +116,16 @@ jobs:
     env:
       target: x86_64-pc-windows-msvc
     steps:
-      - name: Get git tag version
+      - name: Get version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
         shell: bash
       - name: Checkout
         uses: actions/checkout@v4
@@ -106,9 +154,14 @@ jobs:
             cargo build --release
       - name: Zip
         run: Compress-Archive -Path target\release\${{ env.PACKAGE_NAME }}.exe -DestinationPath target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip  -CompressionLevel Optimal
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
+          path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
         with:
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
@@ -119,9 +172,16 @@ jobs:
     env:
       target: x86_64-apple-darwin
     steps:
-      - name: Get git tag version
+      - name: Get version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -134,9 +194,14 @@ jobs:
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
         run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
+          path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
         with:
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -147,9 +212,16 @@ jobs:
     env:
       target: aarch64-apple-darwin
     steps:
-      - name: Get git tag version
+      - name: Get version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -162,9 +234,14 @@ jobs:
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
         run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
+          path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || (github.event_name == 'repository_dispatch' && github.event.action == 'release')
         with:
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
