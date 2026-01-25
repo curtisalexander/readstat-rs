@@ -424,12 +424,10 @@ Trigger a build manually from the GitHub Actions web interface (build-only, no r
 
 Trigger builds programmatically using the GitHub API. This is useful for automation tools like Claude Code.
 
-:memo: Unlike manual triggers, API triggers support creating releases via the `release` event type.
-
 #### Using `gh` CLI
 
 ```sh
-# Trigger a build (no release)
+# Trigger a build
 gh api repos/curtisalexander/readstat-rs/dispatches \
   -f event_type=build
 
@@ -437,11 +435,6 @@ gh api repos/curtisalexander/readstat-rs/dispatches \
 gh api repos/curtisalexander/readstat-rs/dispatches \
   -f event_type=build \
   -F client_payload='{"version":"test-build-123"}'
-
-# Trigger a release build
-gh api repos/curtisalexander/readstat-rs/dispatches \
-  -f event_type=release \
-  -F client_payload='{"version":"v0.14.0"}'
 ```
 
 #### Using `curl`
@@ -460,21 +453,17 @@ To have Claude Code trigger a CI build, use this prompt:
 
 > Trigger a CI build for readstat-rs by running: `gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=build`
 
-Or for a release build:
-
-> Trigger a release build for readstat-rs version v0.14.0 by running: `gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=release -F client_payload='{"version":"v0.14.0"}'`
-
 ### Event Types
 
 Repository dispatch event types for API triggers:
 
 | Event Type | Description |
 |------------|-------------|
-| `build`    | Build all targets, upload artifacts, no GitHub Release |
+| `build`    | Build all targets and upload artifacts |
 | `test`     | Same as `build` (alias for clarity) |
-| `release`  | Build all targets and create a GitHub Release with artifacts |
+| `release`  | Same as `build` (reserved for future use) |
 
-:warning: These event types only apply to API triggers (`repository_dispatch`). Manual UI triggers always build without creating releases.
+:memo: API triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
 ### Artifacts
 
