@@ -5,19 +5,16 @@ authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2021"
 
 [dev-dependencies]
-arrow2 = { version = "0.18", features = [
-    "io_csv",
-    "io_ipc",
-    "io_ipc_compression",
-    "io_json",
-    "io_parquet",
-    "io_parquet_compression",
-] }
-assert_cmd = "2.0"
-assert_fs = "1.0"
+# Arrow ecosystem crates
+arrow = { version = "57" }
+arrow-array = "57"
+arrow-cast = "57"
+arrow-schema = "57"
+assert_cmd = "2.1"
+assert_fs = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 path_abs = "0.5"
-polars = { version = "0.43", features = ["parquet"] }
+polars = { version = "0.52", features = ["parquet"] }
 predicates = "3"
 readstat = { path = "../readstat" }
 

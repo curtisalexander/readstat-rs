@@ -1,7 +1,8 @@
-use arrow2::{
-    array::{Array, PrimitiveArray, Utf8Array},
-    chunk::Chunk,
-    datatypes::{DataType, Schema, TimeUnit},
+use arrow::datatypes::Schema;
+use arrow_array::{
+    ArrayRef, Date32Array, Float32Array, Float64Array, Int16Array, Int32Array,
+    Int8Array, RecordBatch, StringArray, Time32SecondArray, TimestampMicrosecondArray,
+    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
 };
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -24,7 +25,6 @@ use crate::{
     rs_var::ReadStatVar,
 };
 
-#[derive(Default)]
 pub struct ReadStatData {
     // metadata
     pub var_count: i32,
@@ -32,8 +32,8 @@ pub struct ReadStatData {
     // data
     pub cols: Vec<Vec<ReadStatVar>>,
     pub schema: Schema,
-    // chunk
-    pub chunk: Option<Chunk<Box<dyn Array>>>,
+    // record batch (replaces chunk)
+    pub batch: Option<RecordBatch>,
     pub chunk_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
     pub chunk_row_start: usize,
     pub chunk_row_end: usize,
@@ -48,6 +48,12 @@ pub struct ReadStatData {
     pub errors: Vec<String>,
 }
 
+impl Default for ReadStatData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReadStatData {
     pub fn new() -> Self {
         Self {
@@ -56,9 +62,9 @@ impl ReadStatData {
             vars: BTreeMap::new(),
             // data
             cols: Vec::new(),
-            schema: Schema::default(),
-            // chunk
-            chunk: None,
+            schema: Schema::empty(),
+            // record batch
+            batch: None,
             chunk_rows_to_process: 0,
             chunk_rows_processed: 0,
             chunk_row_start: 0,
@@ -82,9 +88,9 @@ impl ReadStatData {
         Self { cols, ..self }
     }
 
-    fn cols_to_chunk(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn cols_to_batch(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         // for each column in cols
-        let arrays: Vec<Box<dyn Array>> = self
+        let arrays: Vec<ArrayRef> = self
             .cols
             .iter()
             .map(|col| {
@@ -92,8 +98,8 @@ impl ReadStatData {
                 // grab the first element to determine the column type
                 let col_type = &col[0];
 
-                // convert from a Vec<ReadStatVar> into a Box<dyn Array>
-                let array: Box<dyn Array> = match col_type {
+                // convert from a Vec<ReadStatVar> into an ArrayRef
+                let array: ArrayRef = match col_type {
                     ReadStatVar::ReadStat_String(_) => {
                         // get the inner value
                         let vec = col
@@ -108,7 +114,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<String>>>();
 
-                        Box::new(<Utf8Array<i32>>::from(vec))
+                        Arc::new(StringArray::from(vec))
                     }
                     ReadStatVar::ReadStat_i8(_) => {
                         let vec = col
@@ -122,7 +128,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i8>>>();
 
-                        Box::new(<PrimitiveArray<i8>>::from(vec))
+                        Arc::new(Int8Array::from(vec))
                     }
                     ReadStatVar::ReadStat_i16(_) => {
                         let vec = col
@@ -136,7 +142,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i16>>>();
 
-                        Box::new(<PrimitiveArray<i16>>::from(vec))
+                        Arc::new(Int16Array::from(vec))
                     }
                     ReadStatVar::ReadStat_i32(_) => {
                         let vec = col
@@ -150,7 +156,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i32>>>();
 
-                        Box::new(<PrimitiveArray<i32>>::from(vec))
+                        Arc::new(Int32Array::from(vec))
                     }
                     ReadStatVar::ReadStat_f32(_) => {
                         let vec = col
@@ -164,7 +170,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<f32>>>();
 
-                        Box::new(<PrimitiveArray<f32>>::from(vec))
+                        Arc::new(Float32Array::from(vec))
                     }
                     ReadStatVar::ReadStat_f64(_) => {
                         let vec = col
@@ -178,7 +184,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<f64>>>();
 
-                        Box::new(<PrimitiveArray<f64>>::from(vec))
+                        Arc::new(Float64Array::from(vec))
                     }
                     ReadStatVar::ReadStat_Date(_) => {
                         let vec = col
@@ -192,7 +198,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i32>>>();
 
-                        Box::new(<PrimitiveArray<i32>>::from(vec).to(DataType::Date32))
+                        Arc::new(Date32Array::from(vec))
                     }
                     ReadStatVar::ReadStat_DateTime(_) => {
                         let vec = col
@@ -206,10 +212,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i64>>>();
 
-                        Box::new(
-                            <PrimitiveArray<i64>>::from(vec)
-                                .to(DataType::Timestamp(TimeUnit::Second, None)),
-                        )
+                        Arc::new(TimestampSecondArray::from(vec))
                     }
                     ReadStatVar::ReadStat_DateTimeWithMilliseconds(_) => {
                         let vec = col
@@ -223,10 +226,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i64>>>();
 
-                        Box::new(
-                            <PrimitiveArray<i64>>::from(vec)
-                                .to(DataType::Timestamp(TimeUnit::Millisecond, None)),
-                        )
+                        Arc::new(TimestampMillisecondArray::from(vec))
                     }
                     ReadStatVar::ReadStat_DateTimeWithMicroseconds(_) => {
                         let vec = col
@@ -240,10 +240,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i64>>>();
 
-                        Box::new(
-                            <PrimitiveArray<i64>>::from(vec)
-                                .to(DataType::Timestamp(TimeUnit::Microsecond, None)),
-                        )
+                        Arc::new(TimestampMicrosecondArray::from(vec))
                     }
                     ReadStatVar::ReadStat_DateTimeWithNanoseconds(_) => {
                         let vec = col
@@ -257,10 +254,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i64>>>();
 
-                        Box::new(
-                            <PrimitiveArray<i64>>::from(vec)
-                                .to(DataType::Timestamp(TimeUnit::Nanosecond, None)),
-                        )
+                        Arc::new(TimestampNanosecondArray::from(vec))
                     }
                     ReadStatVar::ReadStat_Time(_) => {
                         let vec = col
@@ -274,9 +268,7 @@ impl ReadStatData {
                             })
                             .collect::<Vec<Option<i32>>>();
 
-                        Box::new(
-                            <PrimitiveArray<i32>>::from(vec).to(DataType::Time32(TimeUnit::Second)),
-                        )
+                        Arc::new(Time32SecondArray::from(vec))
                     }
                 };
 
@@ -285,16 +277,16 @@ impl ReadStatData {
             })
             .collect();
 
-        // convert into a chunk
-        self.chunk = Some(Chunk::try_new(arrays)?);
+        // convert into a RecordBatch
+        self.batch = Some(RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?);
 
         Ok(())
     }
 
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
-        // parse data and if successful then convert cols into a chunk
+        // parse data and if successful then convert cols into a record batch
         self.parse_data(rsp)?;
-        self.cols_to_chunk()?;
+        self.cols_to_batch()?;
         Ok(())
     }
 

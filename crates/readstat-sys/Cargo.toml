@@ -10,8 +10,8 @@ links = "readstat"
 build = "build.rs"
 
 [build-dependencies]
-bindgen = "0.70"
-cc = "1.0"
+bindgen = "0.72"
+cc = "1.2"
 
 [target.'cfg(windows)'.dependencies]
 iconv-sys = { path = "../iconv-sys", version = "0.2.0" }

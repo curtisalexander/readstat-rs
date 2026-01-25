@@ -26,7 +26,7 @@ pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
     lazy_static! {
         static ref RE_DATETIME_WITH_MILLI: Regex = Regex::new(
             r#"(?xi)
-            (^DATETIME[0-9]{1,2}\.\[0-9]{3}$)
+            (^DATETIME[0-9]{1,2}\.[0-9]{1,3}$)
             "#
         )
         .unwrap();
@@ -34,7 +34,7 @@ pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
     lazy_static! {
         static ref RE_DATETIME_WITH_MICRO: Regex = Regex::new(
             r#"(?xi)
-            (^DATETIME[0-9]{1,2}\.[0-9]{6}$)
+            (^DATETIME[0-9]{1,2}\.[0-9]{4,6}$)
             "#
         )
         .unwrap();
@@ -42,7 +42,7 @@ pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
     lazy_static! {
         static ref RE_DATETIME_WITH_NANO: Regex = Regex::new(
             r#"(?xi)
-            (^DATETIME[0-9]{1,2}\.[0-9]{9}$)
+            (^DATETIME[0-9]{1,2}\.[0-9]{7,9}$)
             "#
         )
         .unwrap();

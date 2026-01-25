@@ -1,8 +1,5 @@
-use arrow2::{
-    array::{Float64Array, Int32Array, Utf8Array},
-    datatypes::DataType,
-    temporal_conversions::date32_to_date,
-};
+use arrow::datatypes::{DataType, TimeUnit};
+use arrow_array::{Array, Date32Array, Float64Array, StringArray};
 use chrono::NaiveDate;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
@@ -63,11 +60,12 @@ fn row_offset_int() {
         DataType::Float64
     ));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
     // int column
-    let col = arrays
+    let col = columns
         .get(var_index as usize)
         .unwrap()
         .as_any()
@@ -75,7 +73,7 @@ fn row_offset_int() {
         .unwrap();
 
     // missing value
-    assert!(!col.validity().unwrap().get_bit(var_index as usize));
+    assert!(col.is_null(var_index as usize));
 }
 
 #[test]
@@ -116,19 +114,20 @@ fn row_offset_string() {
         DataType::Utf8
     ));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
     // string column
-    let col = arrays
+    let col = columns
         .get(var_index as usize)
         .unwrap()
         .as_any()
-        .downcast_ref::<Utf8Array<i32>>()
+        .downcast_ref::<StringArray>()
         .unwrap();
 
     // non-missing value
-    assert_eq!(col.value(0), String::from("stringy string"));
+    assert_eq!(col.value(0), "stringy string");
 }
 
 #[test]
@@ -172,20 +171,22 @@ fn row_offset_date() {
         DataType::Date32
     ));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
     // non-missing value
-    let col = arrays
+    let col = columns
         .get(var_index as usize)
         .unwrap()
         .as_any()
-        .downcast_ref::<Int32Array>()
-        .unwrap()
-        .to_owned()
-        .to(DataType::Date32);
+        .downcast_ref::<Date32Array>()
+        .unwrap();
 
-    let date = date32_to_date(col.value(0));
+    // Convert Date32 value to NaiveDate
+    // Date32 stores days since Unix epoch (1970-01-01)
+    let days_since_epoch = col.value(0);
+    let date = NaiveDate::from_num_days_from_ce_opt(days_since_epoch + 719163).unwrap();
     let date_literal = NaiveDate::from_ymd_opt(2014, 5, 22).unwrap();
 
     assert_eq!(date, date_literal);
@@ -287,18 +288,18 @@ fn row_offset_metadata() {
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(TimeUnit::Second, None)
     ));
 
     // 6 - _datetime_with_ms
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTime));
-    assert_eq!(vf, String::from("DATETIME22"));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds));
+    assert_eq!(vf, String::from("DATETIME22.3"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(TimeUnit::Millisecond, None)
     ));
 
     // 7 - _time
@@ -309,6 +310,6 @@ fn row_offset_metadata() {
     assert_eq!(vf, String::from("TIME"));
     assert!(matches!(
         adt,
-        DataType::Time32(arrow2::datatypes::TimeUnit::Second)
+        DataType::Time32(TimeUnit::Second)
     ));
 }

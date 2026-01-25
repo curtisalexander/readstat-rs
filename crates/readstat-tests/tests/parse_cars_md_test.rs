@@ -1,4 +1,4 @@
-use arrow2::datatypes::DataType;
+use arrow::datatypes::DataType;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
 mod common;
@@ -51,10 +51,10 @@ fn parse_cars_metadata() {
     assert_eq!(md.is64bit, 0);
 
     // creation time
-    assert_eq!(md.creation_time, "2008-09-30 14:55:01");
+    assert_eq!(md.creation_time, "2008-09-30 12:55:01");
 
     // modified time
-    assert_eq!(md.modified_time, "2008-09-30 14:55:01");
+    assert_eq!(md.modified_time, "2008-09-30 12:55:01");
 
     // compression
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));

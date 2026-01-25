@@ -1,4 +1,5 @@
-use arrow2::{array::Float64Array, datatypes::DataType};
+use arrow::datatypes::DataType;
+use arrow_array::Float64Array;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
 mod common;
@@ -60,11 +61,12 @@ fn parse_scientific_notation() {
         DataType::Float64
     ));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
     // float column
-    let float_col = arrays
+    let float_col = columns
         .get(var_index as usize)
         .unwrap()
         .as_any()

@@ -1,3 +1,4 @@
+use arrow::datatypes::DataType;
 use path_abs::PathAbs;
 use std::{error::Error, result::Result};
 
@@ -22,7 +23,7 @@ pub fn get_var_attrs(
     readstat::ReadStatVarType,
     Option<readstat::ReadStatVarFormatClass>,
     String,
-    &arrow2::datatypes::DataType,
+    &DataType,
 ) {
     let m = get_metadata(d, var_index);
     let s = &d.schema;

@@ -1,9 +1,6 @@
-use arrow2::{
-    array::{Float64Array, Int64Array, Utf8Array},
-    datatypes::{DataType, TimeUnit},
-    temporal_conversions::timestamp_s_to_datetime,
-};
-use chrono::NaiveDate;
+use arrow::datatypes::{DataType, TimeUnit};
+use arrow_array::{Array, Float64Array, StringArray, TimestampSecondArray};
+use chrono::{NaiveDate, TimeZone, Utc};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
 mod common;
@@ -65,11 +62,12 @@ fn parse_all_types_int() {
         DataType::Float64
     ));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
     // int column
-    let col = arrays
+    let col = columns
         .get(var_index as usize)
         .unwrap()
         .as_any()
@@ -80,9 +78,9 @@ fn parse_all_types_int() {
     assert_eq!(col.value(0), 1234f64);
 
     // missing value
-    // get_bit == true   ==>  a value exists (the bit for the slot is set)
-    // get_bit == false  ==>  a missing value
-    assert!(!col.validity().unwrap().get_bit(2));
+    // is_null == true   ==>  a missing value
+    // is_null == false  ==>  a value exists
+    assert!(col.is_null(2));
 }
 
 #[test]
@@ -123,22 +121,23 @@ fn parse_all_types_string() {
         DataType::Utf8
     ));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
     // string column
-    let col = arrays
+    let col = columns
         .get(var_index as usize)
         .unwrap()
         .as_any()
-        .downcast_ref::<Utf8Array<i32>>()
+        .downcast_ref::<StringArray>()
         .unwrap();
 
     // non-missing value
-    assert_eq!(col.value(0), String::from("string"));
+    assert_eq!(col.value(0), "string");
 
     // non-missing value
-    assert_eq!(col.value(2), String::from("stringy string"));
+    assert_eq!(col.value(2), "stringy string");
 }
 
 #[test]
@@ -182,21 +181,21 @@ fn parse_all_types_datetime() {
         DataType::Timestamp(TimeUnit::Second, None)
     ));
 
-    // arrays
-    let arrays = d.chunk.unwrap().into_arrays();
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
 
-    // datetime column
-    let col = arrays
+    // datetime column - access as TimestampSecondArray
+    let col = columns
         .get(var_index as usize)
         .unwrap()
         .as_any()
-        .downcast_ref::<Int64Array>()
-        .unwrap()
-        .to_owned()
-        .to(DataType::Timestamp(TimeUnit::Second, None));
+        .downcast_ref::<TimestampSecondArray>()
+        .unwrap();
 
-    // non-missing value
-    let dt = timestamp_s_to_datetime(col.value(1));
+    // non-missing value - convert timestamp seconds to datetime
+    let timestamp_seconds = col.value(1);
+    let dt = Utc.timestamp_opt(timestamp_seconds, 0).unwrap().naive_utc();
     let dt_literal = NaiveDate::from_ymd_opt(2021, 6, 1)
         .unwrap()
         .and_hms_milli_opt(13, 42, 25, 0)
@@ -301,18 +300,18 @@ fn parse_all_types_metadata() {
     assert_eq!(vf, String::from("DATETIME22"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(TimeUnit::Second, None)
     ));
 
     // 6 - _datetime_with_ms
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTime));
-    assert_eq!(vf, String::from("DATETIME22"));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds));
+    assert_eq!(vf, String::from("DATETIME22.3"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(arrow2::datatypes::TimeUnit::Second, None)
+        DataType::Timestamp(TimeUnit::Millisecond, None)
     ));
 
     // 7 - _time
@@ -323,6 +322,6 @@ fn parse_all_types_metadata() {
     assert_eq!(vf, String::from("TIME"));
     assert!(matches!(
         adt,
-        DataType::Time32(arrow2::datatypes::TimeUnit::Second)
+        DataType::Time32(TimeUnit::Second)
     ));
 }

@@ -10,6 +10,7 @@ enum OverwriteOption {
     DoNotOverwrite,
 }
 
+#[allow(deprecated)]
 fn cli_data_to_parquet(
     base_file_name: &str,
     overwrite: OverwriteOption,

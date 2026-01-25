@@ -1,4 +1,4 @@
-use arrow2::datatypes::{DataType, Field, Schema, TimeUnit};
+use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
@@ -12,7 +12,7 @@ use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
     pub row_count: c_int,
     pub var_count: c_int,
@@ -30,6 +30,12 @@ pub struct ReadStatMetadata {
     pub schema: Schema,
 }
 
+impl Default for ReadStatMetadata {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReadStatMetadata {
     pub fn new() -> Self {
         Self {
@@ -45,7 +51,7 @@ impl ReadStatMetadata {
             compression: ReadStatCompress::None,
             endianness: ReadStatEndian::None,
             vars: BTreeMap::new(),
-            schema: Schema::default(),
+            schema: Schema::empty(),
         }
     }
 
@@ -87,8 +93,7 @@ impl ReadStatMetadata {
             })
             .collect();
 
-        Schema::from(fields)
-        // Schema::new(fields)
+        Schema::new(fields)
     }
 
     pub fn read_metadata(
