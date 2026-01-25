@@ -410,14 +410,15 @@ git push origin --delete v0.1.0
 
 ### 2. Manual Trigger (GitHub UI)
 
-Trigger a build manually from the GitHub Actions web interface:
+Trigger a build manually from the GitHub Actions web interface (build-only, no releases):
 
 1. Go to the [Actions tab](https://github.com/curtisalexander/readstat-rs/actions)
 2. Select the **readstat-rs** workflow
 3. Click **Run workflow**
 4. Optionally specify:
    - **Version string**: Label for artifacts (default: `dev`)
-   - **Create GitHub release**: Whether to publish a release (default: unchecked)
+
+:memo: Manual triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
 ### 3. API Trigger (External Tools)
 
@@ -426,7 +427,7 @@ Trigger builds programmatically using the GitHub API. This is useful for automat
 #### Using `gh` CLI
 
 ```sh
-# Trigger a build (no release)
+# Trigger a build
 gh api repos/curtisalexander/readstat-rs/dispatches \
   -f event_type=build
 
@@ -434,11 +435,6 @@ gh api repos/curtisalexander/readstat-rs/dispatches \
 gh api repos/curtisalexander/readstat-rs/dispatches \
   -f event_type=build \
   -F client_payload='{"version":"test-build-123"}'
-
-# Trigger a release build
-gh api repos/curtisalexander/readstat-rs/dispatches \
-  -f event_type=release \
-  -F client_payload='{"version":"v0.14.0"}'
 ```
 
 #### Using `curl`
@@ -457,17 +453,17 @@ To have Claude Code trigger a CI build, use this prompt:
 
 > Trigger a CI build for readstat-rs by running: `gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=build`
 
-Or for a release build:
-
-> Trigger a release build for readstat-rs version v0.14.0 by running: `gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=release -F client_payload='{"version":"v0.14.0"}'`
-
 ### Event Types
+
+Repository dispatch event types for API triggers:
 
 | Event Type | Description |
 |------------|-------------|
-| `build`    | Build all targets, upload artifacts, no GitHub Release |
+| `build`    | Build all targets and upload artifacts |
 | `test`     | Same as `build` (alias for clarity) |
-| `release`  | Build all targets and create a GitHub Release with artifacts |
+| `release`  | Same as `build` (reserved for future use) |
+
+:memo: API triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
 ### Artifacts
 
