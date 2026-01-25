@@ -410,18 +410,21 @@ git push origin --delete v0.1.0
 
 ### 2. Manual Trigger (GitHub UI)
 
-Trigger a build manually from the GitHub Actions web interface:
+Trigger a build manually from the GitHub Actions web interface (build-only, no releases):
 
 1. Go to the [Actions tab](https://github.com/curtisalexander/readstat-rs/actions)
 2. Select the **readstat-rs** workflow
 3. Click **Run workflow**
 4. Optionally specify:
    - **Version string**: Label for artifacts (default: `dev`)
-   - **Create GitHub release**: Whether to publish a release (default: unchecked)
+
+:memo: Manual triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
 ### 3. API Trigger (External Tools)
 
 Trigger builds programmatically using the GitHub API. This is useful for automation tools like Claude Code.
+
+:memo: Unlike manual triggers, API triggers support creating releases via the `release` event type.
 
 #### Using `gh` CLI
 
@@ -463,11 +466,15 @@ Or for a release build:
 
 ### Event Types
 
+Repository dispatch event types for API triggers:
+
 | Event Type | Description |
 |------------|-------------|
 | `build`    | Build all targets, upload artifacts, no GitHub Release |
 | `test`     | Same as `build` (alias for clarity) |
 | `release`  | Build all targets and create a GitHub Release with artifacts |
+
+:warning: These event types only apply to API triggers (`repository_dispatch`). Manual UI triggers always build without creating releases.
 
 ### Artifacts
 
