@@ -325,11 +325,11 @@ fn parse_all_types_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTime));
-    assert_eq!(vf, String::from("DATETIME22"));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds));
+    assert_eq!(vf, String::from("DATETIME22.3"));
     assert!(matches!(
         adt,
-        DataType::Timestamp(TimeUnit::Second, None)
+        DataType::Timestamp(TimeUnit::Millisecond, None)
     ));
 
     // 7 - _time

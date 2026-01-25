@@ -109,13 +109,13 @@ fn migration_schema_data_types() {
         "_datetime should be Timestamp(Second)"
     );
 
-    // Field 6: _datetime_with_ms -> Timestamp(Second, None)
+    // Field 6: _datetime_with_ms -> Timestamp(Millisecond, None)
     assert!(
         matches!(
             schema.fields[6].data_type(),
-            DataType::Timestamp(TimeUnit::Second, None)
+            DataType::Timestamp(TimeUnit::Millisecond, None)
         ),
-        "_datetime_with_ms should be Timestamp(Second)"
+        "_datetime_with_ms should be Timestamp(Millisecond)"
     );
 
     // Field 7: _time -> Time32(Second)

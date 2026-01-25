@@ -161,17 +161,17 @@ impl ReadStatVar {
                                 (value as i64).checked_sub(SEC_SHIFT).unwrap(),
                             )),
                             ReadStatVarFormatClass::DateTimeWithMilliseconds => {
-                                Self::ReadStat_DateTime(Some(
+                                Self::ReadStat_DateTimeWithMilliseconds(Some(
                                     (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000,
                                 ))
                             }
                             ReadStatVarFormatClass::DateTimeWithMicroseconds => {
-                                Self::ReadStat_DateTime(Some(
+                                Self::ReadStat_DateTimeWithMicroseconds(Some(
                                     (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000,
                                 ))
                             }
                             ReadStatVarFormatClass::DateTimeWithNanoseconds => {
-                                Self::ReadStat_DateTime(Some(
+                                Self::ReadStat_DateTimeWithNanoseconds(Some(
                                     (value as i64).checked_sub(SEC_SHIFT).unwrap() * 1000000000,
                                 ))
                             }

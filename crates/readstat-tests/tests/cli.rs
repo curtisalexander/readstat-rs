@@ -3,6 +3,7 @@ use predicates::prelude::*; // Used for writing assertions
                             // use std::process::Command; // Run programs
 
 #[test]
+#[allow(deprecated)]
 fn cli_file_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(mut cmd) = Command::cargo_bin("readstat") {
         cmd.arg("data").arg("tests/data/adataset.sas7bdat");

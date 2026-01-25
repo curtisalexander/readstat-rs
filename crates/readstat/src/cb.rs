@@ -51,7 +51,7 @@ pub extern "C" fn handle_metadata(
     .expect("Panics (returns None) on the out-of-range number of seconds (more than 262 000 years away from common era) and/or invalid nanosecond (2 seconds or more")
     .format("%Y-%m-%d %H:%M:%S")
     .to_string();
-    let mt = DateTime::from_timestamp   (
+    let mt = DateTime::from_timestamp(
         unsafe { readstat_sys::readstat_get_modified_time(metadata) },
         0,
     )
