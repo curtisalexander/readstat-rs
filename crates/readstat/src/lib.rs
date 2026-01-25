@@ -105,6 +105,9 @@ pub enum ReadStatCliCommands {
         /// Convert sas7bdat data in parallel
         #[arg(action, long)]
         parallel: bool,
+        /// Write output data in parallel{n}Only effective when parallel is enabled{n}May write batches out of order for Parquet/Feather
+        #[arg(action, long)]
+        parallel_write: bool,
         /// Parquet compression algorithm
         #[arg(long, value_enum, value_parser)]
         compression: Option<ParquetCompression>,
@@ -293,6 +296,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             no_progress,
             overwrite,
             parallel,
+            parallel_write,
             compression,
             compression_level,
         } => {
@@ -361,6 +365,15 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
 
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
+
+                    // Determine if we should use parallel writes (check before spawning reader thread)
+                    let use_parallel_writes = parallel && parallel_write &&
+                        matches!(rsp.format, OutFormat::parquet);
+
+                    // Clone rsp parameters for use in parallel write mode if needed
+                    let out_path_clone = rsp.out_path.clone();
+                    let compression_clone = rsp.compression;
+                    let compression_level_clone = rsp.compression_level;
 
                     // Create channels with a capacity of 10
                     // Unbounded channels can result in extreme memory usage if files are large and
@@ -436,18 +449,65 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
 
                     // Write
 
-                    // Initialize writing
-                    let mut wtr = ReadStatWriter::new();
+                    if use_parallel_writes {
+                        // Parallel write mode for Parquet: write batches to temp files in parallel, then merge
+                        let batches: Vec<_> = r.iter().collect();
 
-                    for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
-                        wtr.write(&d, &rsp)?;
+                        if !batches.is_empty() {
+                            let schema = batches[0].0.schema.clone();
+                            let temp_dir = if let Some(out_path) = &out_path_clone {
+                                match out_path.parent() {
+                                    Ok(parent) => parent.to_path_buf(),
+                                    Err(_) => std::env::current_dir()?,
+                                }
+                            } else {
+                                return Err(From::from("No output path specified for parallel write"));
+                            };
 
-                        if i == (pairs_cnt - 1) {
-                            wtr.finish(&d, &rsp)?;
+                            // Write batches in parallel to temporary files
+                            let temp_files: Vec<PathBuf> = batches.par_iter().enumerate()
+                                .map(|(i, (d, _rsp, _))| -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+                                    let temp_file = temp_dir.join(format!(".readstat_temp_{}.parquet", i));
+
+                                    if let Some(batch) = &d.batch {
+                                        ReadStatWriter::write_batch_to_parquet(
+                                            batch,
+                                            &schema,
+                                            &temp_file,
+                                            compression_clone,
+                                            compression_level_clone,
+                                        )?;
+                                    }
+
+                                    Ok(temp_file)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+
+                            // Merge temp files into final output
+                            if let Some(out_path) = &out_path_clone {
+                                ReadStatWriter::merge_parquet_files(
+                                    &temp_files,
+                                    out_path,
+                                    &schema,
+                                    compression_clone,
+                                    compression_level_clone,
+                                )?;
+                            }
                         }
+                    } else {
+                        // Sequential write mode (default) with BufWriter optimizations
+                        let mut wtr = ReadStatWriter::new();
 
-                        // Explicitly drop to save on memory
-                        drop(d);
+                        for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
+                            wtr.write(&d, &rsp)?;
+
+                            if i == (pairs_cnt - 1) {
+                                wtr.finish(&d, &rsp)?;
+                            }
+
+                            // Explicitly drop to save on memory
+                            drop(d);
+                        }
                     }
 
                     // Return
