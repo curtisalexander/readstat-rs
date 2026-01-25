@@ -1,5 +1,5 @@
 use arrow::datatypes::{DataType, TimeUnit};
-use arrow_array::{Array, Float64Array, StringArray, TimestampSecondArray};
+use arrow_array::{Array, Float64Array, StringArray, TimestampMillisecondArray, TimestampSecondArray};
 use chrono::{NaiveDate, TimeZone, Utc};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
@@ -324,4 +324,79 @@ fn parse_all_types_metadata() {
         adt,
         DataType::Time32(TimeUnit::Second)
     ));
+}
+
+#[test]
+fn parse_all_types_datetime_with_milliseconds() {
+    let (rsp, _md, mut d) = init();
+
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
+
+    // variable index and name for _datetime_with_ms
+    let var_index = 6;
+
+    // contains variable
+    let contains_var = common::contains_var(&d, var_index);
+    assert!(contains_var);
+
+    // metadata
+    let m = common::get_metadata(&d, var_index);
+
+    // variable type class
+    assert!(matches!(
+        m.var_type_class,
+        readstat::ReadStatVarTypeClass::Numeric
+    ));
+
+    // variable type
+    assert!(matches!(m.var_type, readstat::ReadStatVarType::Double));
+
+    // variable format class
+    assert!(matches!(
+        m.var_format_class,
+        Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds)
+    ));
+
+    // variable format
+    assert_eq!(m.var_format, String::from("DATETIME22.3"));
+
+    // arrow data type
+    assert!(matches!(
+        d.schema.fields[var_index as usize].data_type(),
+        DataType::Timestamp(TimeUnit::Millisecond, None)
+    ));
+
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
+
+    // datetime column - access as TimestampMillisecondArray
+    let col = columns
+        .get(var_index as usize)
+        .unwrap()
+        .as_any()
+        .downcast_ref::<TimestampMillisecondArray>()
+        .unwrap();
+
+    // Row 0: '01JAN2021:10:49:39.333'dt - 333 milliseconds
+    let timestamp_millis = col.value(0);
+    let dt = Utc.timestamp_millis_opt(timestamp_millis).unwrap().naive_utc();
+    let dt_literal = NaiveDate::from_ymd_opt(2021, 1, 1)
+        .unwrap()
+        .and_hms_milli_opt(10, 49, 39, 333)
+        .unwrap();
+    assert_eq!(dt, dt_literal, "Row 0: Expected 2021-01-01 10:49:39.333");
+
+    // Row 1: '01JUN2021:13:42:25.943'dt - 943 milliseconds
+    let timestamp_millis = col.value(1);
+    let dt = Utc.timestamp_millis_opt(timestamp_millis).unwrap().naive_utc();
+    let dt_literal = NaiveDate::from_ymd_opt(2021, 6, 1)
+        .unwrap()
+        .and_hms_milli_opt(13, 42, 25, 943)
+        .unwrap();
+    assert_eq!(dt, dt_literal, "Row 1: Expected 2021-06-01 13:42:25.943");
+
+    // Row 2: missing value
+    assert!(col.is_null(2));
 }
