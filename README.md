@@ -9,9 +9,9 @@ Get [metadata](#metadata), [preview data](#preview-data), or [convert data](#dat
 ## :key: Dependencies
 The command-line tool is developed in Rust and is only possible due to the following _**excellent**_ projects:
 - The [ReadStat](https://github.com/WizardMac/ReadStat) C library developed by [Evan Miller](https://www.evanmiller.org)
-- The [arrow2](https://github.com/jorgecarleitao/arrow2) Rust crate developed by [Jorge Leitao](https://github.com/jorgecarleitao)
+- The [arrow](https://github.com/apache/arrow-rs) Rust crate developed by the Apache Arrow community
 
-The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arrow2` crate is used to convert the read `sas7bdat` data into the [Arrow](https://arrow.apache.org/) memory format. Once in the `Arrow` memory format, the data can be written to other file formats.
+The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arrow` crate is used to convert the read `sas7bdat` data into the [Arrow](https://arrow.apache.org/) memory format. Once in the `Arrow` memory format, the data can be written to other file formats.
 
 ## Quickstart
 
@@ -300,7 +300,7 @@ SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pg
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
 
-If values are read into memory as Arrow date, time, or datetime types, then when they are written &mdash; from an [arrow2 `Chunk`](https://docs.rs/arrow2/latest/arrow2/chunk/struct.Chunk.html) to `csv`, `feather`, `ndjson`, or `parquet` &mdash; they are treated as dates, times, or datetimes and not as numeric values.
+If values are read into memory as Arrow date, time, or datetime types, then when they are written &mdash; from an Arrow [`RecordBatch`](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `ndjson`, or `parquet` &mdash; they are treated as dates, times, or datetimes and not as numeric values.
 
 Finally, [more work is planned](https://github.com/curtisalexander/readstat-rs/issues/21) to handle other SAS dates, times, and datetimes that have SAS formats other than those listed above.
 
@@ -376,15 +376,14 @@ Flamegraph is written to `readstat/flamegraph.svg`.
 :memo: Have yet to utilize flamegraphs in order to improve performance.
 
 ## GitHub Actions
-Below is the rough `git tag` dance to delete and/or add tags to [trigger GitHub Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L7-L10).
+
+The CI/CD workflow can be triggered in multiple ways:
+
+### 1. Tag Push (Release)
+
+Push a tag to trigger a full release build with GitHub Release artifacts:
 
 ```sh
-# delete local tag
-git tag --delete v0.1.0
-
-# delete remote tag
-git push origin --delete v0.1.0
-
 # add and commit local changes
 git add .
 git commit -m "commit msg"
@@ -398,6 +397,81 @@ git tag -a v0.1.0 -m "v0.1.0"
 # push local tag to remote
 git push origin --tags
 ```
+
+To delete and recreate tags:
+
+```sh
+# delete local tag
+git tag --delete v0.1.0
+
+# delete remote tag
+git push origin --delete v0.1.0
+```
+
+### 2. Manual Trigger (GitHub UI)
+
+Trigger a build manually from the GitHub Actions web interface:
+
+1. Go to the [Actions tab](https://github.com/curtisalexander/readstat-rs/actions)
+2. Select the **readstat-rs** workflow
+3. Click **Run workflow**
+4. Optionally specify:
+   - **Version string**: Label for artifacts (default: `dev`)
+   - **Create GitHub release**: Whether to publish a release (default: unchecked)
+
+### 3. API Trigger (External Tools)
+
+Trigger builds programmatically using the GitHub API. This is useful for automation tools like Claude Code.
+
+#### Using `gh` CLI
+
+```sh
+# Trigger a build (no release)
+gh api repos/curtisalexander/readstat-rs/dispatches \
+  -f event_type=build
+
+# Trigger a build with custom version label
+gh api repos/curtisalexander/readstat-rs/dispatches \
+  -f event_type=build \
+  -F client_payload='{"version":"test-build-123"}'
+
+# Trigger a release build
+gh api repos/curtisalexander/readstat-rs/dispatches \
+  -f event_type=release \
+  -F client_payload='{"version":"v0.14.0"}'
+```
+
+#### Using `curl`
+
+```sh
+curl -X POST \
+  -H "Authorization: token $GITHUB_TOKEN" \
+  -H "Accept: application/vnd.github.v3+json" \
+  https://api.github.com/repos/curtisalexander/readstat-rs/dispatches \
+  -d '{"event_type": "build", "client_payload": {"version": "dev"}}'
+```
+
+### 4. Claude Code Integration
+
+To have Claude Code trigger a CI build, use this prompt:
+
+> Trigger a CI build for readstat-rs by running: `gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=build`
+
+Or for a release build:
+
+> Trigger a release build for readstat-rs version v0.14.0 by running: `gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=release -F client_payload='{"version":"v0.14.0"}'`
+
+### Event Types
+
+| Event Type | Description |
+|------------|-------------|
+| `build`    | Build all targets, upload artifacts, no GitHub Release |
+| `test`     | Same as `build` (alias for clarity) |
+| `release`  | Build all targets and create a GitHub Release with artifacts |
+
+### Artifacts
+
+All builds (regardless of trigger method) upload artifacts that can be downloaded from the workflow run page. Artifacts are retained for the default GitHub Actions retention period.
 
 ## Goals
 
