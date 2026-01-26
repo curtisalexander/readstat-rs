@@ -361,6 +361,52 @@ To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  F
 valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 ```
 
+## Benchmarking
+Performance benchmarks are implemented using [Criterion.rs](https://github.com/bheisler/criterion.rs) to measure and track performance across key operations.
+
+### Quick Start
+```sh
+cd crates/readstat
+cargo bench
+open target/criterion/report/index.html  # View HTML reports
+```
+
+### What Gets Measured
+- **Reading Performance**: Metadata parsing, chunked vs single-read, throughput
+- **Writing Performance**: CSV, Parquet, Feather, NDJSON with various compression algorithms
+- **Data Conversion**: SAS types to Arrow RecordBatch overhead
+- **Parallel Operations**: Buffer size optimization, parallel write performance
+- **End-to-End Pipeline**: Complete read + write workflows (most important)
+
+### Sample Results
+```
+metadata_reading/cars.sas7bdat
+                        time:   [935.21 µs 943.52 µs 952.41 µs]
+
+read_single_chunk/cars.sas7bdat
+                        thrpt:  [~150-200K rows/sec]
+
+end_to_end_conversion/parquet
+                        thrpt:  [~50-70K rows/sec]
+```
+
+### Usage
+```sh
+# Run specific benchmark group
+cargo bench metadata_reading
+cargo bench write_parquet_compression
+
+# Compare against baseline
+cargo bench --save-baseline main
+# ... make changes ...
+cargo bench --baseline main
+
+# Profile with flamegraph
+cargo flamegraph --bench readstat_benchmarks -- --bench
+```
+
+For comprehensive benchmarking documentation, see [BENCHMARKING.md](BENCHMARKING.md) and [benches/README.md](crates/readstat/benches/README.md).
+
 ## [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 - :heavy_check_mark: Linux   &rarr; successfully builds and runs
     - [glibc](https://www.gnu.org/software/libc/)
