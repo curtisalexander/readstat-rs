@@ -13,7 +13,8 @@ use colored::Colorize;
 // use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
-use std::{error::Error, fs::{self, OpenOptions, File}, io::{stdout, BufWriter}, path::PathBuf};
+use std::{error::Error, fs::{self, OpenOptions, File}, io::{stdout, BufWriter, Seek, SeekFrom}, path::PathBuf};
+use tempfile::SpooledTempFile;
 
 use crate::rs_data::ReadStatData;
 use crate::rs_metadata::ReadStatMetadata;
@@ -56,18 +57,17 @@ impl ReadStatWriter {
     }
 
     /// Write a single batch to a Parquet file (for parallel writes)
+    /// Uses SpooledTempFile to keep data in memory until buffer_size_bytes threshold
     pub fn write_batch_to_parquet(
         batch: &RecordBatch,
         schema: &Schema,
         output_path: &PathBuf,
         compression: Option<crate::ParquetCompression>,
         compression_level: Option<u32>,
+        buffer_size_bytes: usize,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(output_path)?;
+        // Create a SpooledTempFile that keeps data in memory until buffer_size_bytes
+        let mut spooled_file = SpooledTempFile::new(buffer_size_bytes);
 
         let compression_codec = match compression {
             Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
@@ -112,14 +112,24 @@ impl ReadStatWriter {
             .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
             .build();
 
+        // Write to SpooledTempFile (in memory until threshold, then spills to temp disk file)
         let mut wtr = ParquetArrowWriter::try_new(
-            BufWriter::new(f),
+            &mut spooled_file,
             Arc::new(schema.clone()),
             Some(props)
         )?;
 
         wtr.write(batch)?;
         wtr.close()?;
+
+        // Now copy from SpooledTempFile to the actual output file
+        spooled_file.seek(SeekFrom::Start(0))?;
+        let mut output_file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(output_path)?;
+        std::io::copy(&mut spooled_file, &mut output_file)?;
 
         Ok(())
     }

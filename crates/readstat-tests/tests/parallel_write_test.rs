@@ -82,6 +82,7 @@ fn test_parallel_write_parquet_basic() {
                 &temp_file,
                 None,
                 None,
+                100 * 1024 * 1024, // 100 MB buffer
             ).unwrap();
             temp_files.push(temp_file);
         }
@@ -160,6 +161,7 @@ fn test_parallel_write_parquet_out_of_order() {
                 &temp_file,
                 None,
                 None,
+                100 * 1024 * 1024, // 100 MB buffer
             ).unwrap();
 
             temp_files.push(temp_file);
@@ -236,6 +238,7 @@ fn test_parallel_write_parquet_with_compression() {
             &output_path,
             Some(readstat::ParquetCompression::Snappy),
             None,
+            100 * 1024 * 1024, // 100 MB buffer
         ).unwrap();
 
         // Verify the output file exists
@@ -291,16 +294,102 @@ fn test_bufwriter_optimization_verification() {
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {
-        // Write using the method that should use BufWriter internally
+        // Write using the method that should use SpooledTempFile internally
         ReadStatWriter::write_batch_to_parquet(
             batch,
             &d.schema,
             &output_path,
             None,
             None,
+            100 * 1024 * 1024, // 100 MB buffer
         ).unwrap();
 
         assert!(output_path.exists());
+    }
+
+    cleanup_test_output(&output_path);
+}
+
+#[test]
+fn test_spooled_tempfile_small_buffer() {
+    // Test with a very small buffer to ensure spilling to disk works
+    // This verifies that data larger than the buffer still writes correctly
+    let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
+    let mut md = ReadStatMetadata::new();
+    md.read_metadata(&rsp_in, false).unwrap();
+
+    let output_path = setup_test_output("spooled_small_buffer.parquet");
+    cleanup_test_output(&output_path);
+
+    let mut d = ReadStatData::new()
+        .set_no_progress(true)
+        .init(md.clone(), 0, md.row_count as u32);
+    d.read_data(&rsp_in).unwrap();
+
+    if let Some(batch) = &d.batch {
+        // Use a very small buffer (1 KB) to force spilling to disk
+        ReadStatWriter::write_batch_to_parquet(
+            batch,
+            &d.schema,
+            &output_path,
+            None,
+            None,
+            1024, // Only 1 KB buffer - should spill to disk
+        ).unwrap();
+
+        assert!(output_path.exists());
+
+        // Read back and verify content
+        let file = fs::File::open(&output_path).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let mut reader = builder.build().unwrap();
+
+        if let Some(batch_result) = reader.next() {
+            let read_batch: RecordBatch = batch_result.unwrap();
+            assert_eq!(read_batch.num_rows(), batch.num_rows());
+        }
+    }
+
+    cleanup_test_output(&output_path);
+}
+
+#[test]
+fn test_spooled_tempfile_large_buffer() {
+    // Test with a large buffer to keep everything in memory
+    let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
+    let mut md = ReadStatMetadata::new();
+    md.read_metadata(&rsp_in, false).unwrap();
+
+    let output_path = setup_test_output("spooled_large_buffer.parquet");
+    cleanup_test_output(&output_path);
+
+    let mut d = ReadStatData::new()
+        .set_no_progress(true)
+        .init(md.clone(), 0, md.row_count as u32);
+    d.read_data(&rsp_in).unwrap();
+
+    if let Some(batch) = &d.batch {
+        // Use a very large buffer (1 GB) to keep everything in memory
+        ReadStatWriter::write_batch_to_parquet(
+            batch,
+            &d.schema,
+            &output_path,
+            None,
+            None,
+            1024 * 1024 * 1024, // 1 GB buffer - should stay in memory
+        ).unwrap();
+
+        assert!(output_path.exists());
+
+        // Read back and verify content
+        let file = fs::File::open(&output_path).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let mut reader = builder.build().unwrap();
+
+        if let Some(batch_result) = reader.next() {
+            let read_batch: RecordBatch = batch_result.unwrap();
+            assert_eq!(read_batch.num_rows(), batch.num_rows());
+        }
     }
 
     cleanup_test_output(&output_path);

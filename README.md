@@ -212,13 +212,42 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ```
 
 ### Parallelism
-The `data` subcommand includes a parameter for `--parallel` &mdash; if invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
+The `data` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
 
-Note that although reading is in parallel, _**writing**_ is still sequential.  Thus, one should only anticipate moderate speed-ups as much of the time is spent writing.
+#### Parallel Reading (`--parallel`)
+If invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
 
 :heavy_exclamation_mark: Utilizing the `--parallel` parameter will increase memory usage &mdash; there will be multiple threads simultaneously reading chunks from the `sas7bdat`.  In addition, because all processors are utilized, CPU usage may be maxed out during reading.
 
 :warning: Also, note that utilizing the `--parallel` parameter may write rows out of order from the original `sas7bdat`.
+
+#### Parallel Writing (`--parallel-write`)
+When combined with `--parallel`, the `--parallel-write` flag enables _**parallel writing**_ for Parquet format files. This can significantly improve write performance for large datasets by:
+- Writing record batches to temporary files in parallel using all available processors
+- Merging the temporary files into the final output
+- Using spooled temporary files that keep data in memory until a threshold is reached
+
+**Note:** Parallel writing currently only supports the Parquet format. Other formats (CSV, Feather, NDJSON) will use optimized sequential writes with BufWriter.
+
+Example usage:
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --parallel --parallel-write
+```
+
+#### Memory Buffer Size (`--parallel-write-buffer-mb`)
+Controls the memory buffer size (in MB) before spilling to disk during parallel writes. Defaults to 100 MB. Valid range: 1-10240 MB.
+
+Smaller buffers will cause data to spill to disk sooner, while larger buffers keep more data in memory. Choose based on your available memory and dataset size:
+- **Small datasets (< 100 MB)**: Use default or larger buffer to keep everything in memory
+- **Large datasets (> 1 GB)**: Consider smaller buffer (10-50 MB) to manage memory usage
+- **Memory-constrained systems**: Use smaller buffer (1-10 MB)
+
+Example with custom buffer size:
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --parallel --parallel-write --parallel-write-buffer-mb 200
+```
+
+:heavy_exclamation_mark: Parallel writing may write batches out of order. This is acceptable for Parquet files as the row order is preserved when merged.
 
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.

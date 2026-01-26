@@ -108,6 +108,9 @@ pub enum ReadStatCliCommands {
         /// Write output data in parallel{n}Only effective when parallel is enabled{n}May write batches out of order for Parquet/Feather
         #[arg(action, long)]
         parallel_write: bool,
+        /// Memory buffer size in MB before spilling to disk during parallel writes{n}Defaults to 100 MB{n}Only effective when parallel-write is enabled
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=10240), default_value = "100")]
+        parallel_write_buffer_mb: u64,
         /// Parquet compression algorithm
         #[arg(long, value_enum, value_parser)]
         compression: Option<ParquetCompression>,
@@ -297,6 +300,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             overwrite,
             parallel,
             parallel_write,
+            parallel_write_buffer_mb,
             compression,
             compression_level,
         } => {
@@ -374,6 +378,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     let out_path_clone = rsp.out_path.clone();
                     let compression_clone = rsp.compression;
                     let compression_level_clone = rsp.compression_level;
+                    let buffer_size_bytes = parallel_write_buffer_mb * 1024 * 1024; // Convert MB to bytes
 
                     // Create channels with a capacity of 10
                     // Unbounded channels can result in extreme memory usage if files are large and
@@ -464,7 +469,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                                 return Err(From::from("No output path specified for parallel write"));
                             };
 
-                            // Write batches in parallel to temporary files
+                            // Write batches in parallel to temporary files using SpooledTempFile
                             let temp_files: Vec<PathBuf> = batches.par_iter().enumerate()
                                 .map(|(i, (d, _rsp, _))| -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
                                     let temp_file = temp_dir.join(format!(".readstat_temp_{}.parquet", i));
@@ -476,6 +481,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                                             &temp_file,
                                             compression_clone,
                                             compression_level_clone,
+                                            buffer_size_bytes as usize,
                                         )?;
                                     }
 
