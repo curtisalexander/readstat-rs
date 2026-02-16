@@ -6,8 +6,14 @@ Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) b
     - http://www2.census.gov/programs-surveys/ahs/2019/AHS%202019%20National%20PUF%20v1.1%20Flat%20SAS.zip
     - Must be downloaded manually as currently ignored by `git` (i.e. has been added to the repository `.gitignore` file)
     - Renamed to be `_ahs2019n.sas7bdat` in order to be picked up by the `_*.sas7bdat` pattern in the `.gitignore` file
+- `all_dates.sas7bdat` &rarr; SAS dataset containing all possible date formats
+    - Created using [create_date_time_datetime_ds.sas](../../util/create_date_time_datetime_ds.sas)
+- `all_datetimes.sas7bdat` &rarr; SAS dataset containing all possible datetime formats
+    - Created using [create_date_time_datetime_ds.sas](../../util/create_date_time_datetime_ds.sas)
+- `all_times.sas7bdat` &rarr; SAS dataset containing all possible time formats
+    - Created using [create_date_time_datetime_ds.sas](../../util/create_date_time_datetime_ds.sas)
 - `all_types.sas7bdat` &rarr; SAS dataset containing all SAS types
-    - Created using [create_all_types.sas](../util/create_all_types.sas)
+    - Created using [create_all_types.sas](../../util/create_all_types.sas)
 - `cars.sas7bdat` &rarr; SAS cars dataset
     - https://www.alanelliott.com/sas/ED2_FILES.html
 - `hasmissing.sas7bdat` &rarr; SAS dataset containing missing values
