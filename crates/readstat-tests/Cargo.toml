@@ -14,6 +14,7 @@ parquet = "57"
 assert_cmd = "2.1"
 assert_fs = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
+escargot = "0.5"
 path_abs = "0.5"
 polars = { version = "0.52", features = ["parquet"] }
 predicates = "3"

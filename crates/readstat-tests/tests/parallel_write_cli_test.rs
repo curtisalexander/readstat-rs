@@ -1,6 +1,28 @@
 use assert_cmd::Command;
 use assert_fs::prelude::*;
 use std::path::PathBuf;
+use std::sync::OnceLock;
+
+/// Cache the built binary path to avoid rebuilding for each test.
+static READSTAT_BIN: OnceLock<PathBuf> = OnceLock::new();
+
+/// Helper function to get the readstat binary command.
+/// Uses escargot to build and locate the binary in the workspace (once).
+fn readstat_cmd() -> Command {
+    let bin_path = READSTAT_BIN.get_or_init(|| {
+        let bin = escargot::CargoBuild::new()
+            .bin("readstat")
+            .current_release()
+            .current_target()
+            .manifest_path("../readstat/Cargo.toml")
+            .run()
+            .expect("Failed to build readstat binary");
+
+        bin.path().to_path_buf()
+    });
+
+    Command::new(bin_path)
+}
 
 #[test]
 fn test_parallel_write_cli_option() {
@@ -15,7 +37,7 @@ fn test_parallel_write_cli_option() {
         .join("all_types.sas7bdat");
 
     // Run the CLI with parallel write enabled
-    let mut cmd = Command::cargo_bin("readstat").unwrap();
+    let mut cmd = readstat_cmd();
     cmd.arg("data")
         .arg(&test_data_path)
         .arg("--output")
@@ -48,7 +70,7 @@ fn test_parallel_write_buffer_size_cli_option() {
         .join("all_types.sas7bdat");
 
     // Run the CLI with custom buffer size
-    let mut cmd = Command::cargo_bin("readstat").unwrap();
+    let mut cmd = readstat_cmd();
     cmd.arg("data")
         .arg(&test_data_path)
         .arg("--output")
@@ -83,7 +105,7 @@ fn test_parallel_write_buffer_size_default() {
         .join("all_types.sas7bdat");
 
     // Run the CLI without specifying buffer size (should use default 100 MB)
-    let mut cmd = Command::cargo_bin("readstat").unwrap();
+    let mut cmd = readstat_cmd();
     cmd.arg("data")
         .arg(&test_data_path)
         .arg("--output")
@@ -114,7 +136,7 @@ fn test_parallel_write_buffer_size_small() {
         .join("data")
         .join("all_types.sas7bdat");
 
-    let mut cmd = Command::cargo_bin("readstat").unwrap();
+    let mut cmd = readstat_cmd();
     cmd.arg("data")
         .arg(&test_data_path)
         .arg("--output")
@@ -146,7 +168,7 @@ fn test_parallel_write_buffer_size_large() {
         .join("data")
         .join("all_types.sas7bdat");
 
-    let mut cmd = Command::cargo_bin("readstat").unwrap();
+    let mut cmd = readstat_cmd();
     cmd.arg("data")
         .arg(&test_data_path)
         .arg("--output")
@@ -178,7 +200,7 @@ fn test_parallel_write_without_parallel_reads() {
         .join("data")
         .join("all_types.sas7bdat");
 
-    let mut cmd = Command::cargo_bin("readstat").unwrap();
+    let mut cmd = readstat_cmd();
     cmd.arg("data")
         .arg(&test_data_path)
         .arg("--output")
