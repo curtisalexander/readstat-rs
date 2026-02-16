@@ -12,3 +12,5 @@
 /target/
 # cargo
 Cargo.lock
+# claude
+.claude/
