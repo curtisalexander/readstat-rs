@@ -1,16 +1,36 @@
-use ::predicates::prelude::*; // Used for writing assertions
-use assert_cmd::Command; // Add methods on commands
+use ::predicates::prelude::*;
+use assert_cmd::Command;
 use assert_fs::NamedTempFile;
 use polars::prelude::*;
 use readstat::ParquetCompression;
-use std::{fs::File, path::PathBuf, result::Result};
+use std::{fs::File, path::PathBuf, result::Result, sync::OnceLock};
+
+/// Cache the built binary path to avoid rebuilding for each test.
+static READSTAT_BIN: OnceLock<PathBuf> = OnceLock::new();
+
+/// Helper function to get the readstat binary command.
+/// Uses escargot to build and locate the binary in the workspace (once).
+fn readstat_cmd() -> Command {
+    let bin_path = READSTAT_BIN.get_or_init(|| {
+        let bin = escargot::CargoBuild::new()
+            .bin("readstat")
+            .current_release()
+            .current_target()
+            .manifest_path("../readstat/Cargo.toml")
+            .run()
+            .expect("Failed to build readstat binary");
+
+        bin.path().to_path_buf()
+    });
+
+    Command::new(bin_path)
+}
 
 enum OverwriteOption {
     Overwrite(NamedTempFile),
     DoNotOverwrite,
 }
 
-#[allow(deprecated)]
 fn cli_data_to_parquet(
     base_file_name: &str,
     overwrite: OverwriteOption,
@@ -18,8 +38,8 @@ fn cli_data_to_parquet(
     compression: Option<ParquetCompression>,
     compression_level: Option<u32>,
 ) -> Result<(Command, NamedTempFile), Box<dyn std::error::Error>> {
-    if let Ok(mut cmd) = Command::cargo_bin("readstat") {
-        let tempfile = match (overwrite, rows_to_stream, compression, compression_level) {
+    let mut cmd = readstat_cmd();
+    let tempfile = match (overwrite, rows_to_stream, compression, compression_level) {
             // Overwrite | Streaming | No Compression | No Compression Level
             (OverwriteOption::Overwrite(tempfile), Some(rows), None, None) => {
                 cmd.arg("data")
@@ -338,10 +358,7 @@ fn cli_data_to_parquet(
             _ => unreachable!(),
         };
 
-        Ok((cmd, tempfile))
-    } else {
-        Err(From::from("readstat binary does not exist"))
-    }
+    Ok((cmd, tempfile))
 }
 
 fn parquet_to_df(path: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {

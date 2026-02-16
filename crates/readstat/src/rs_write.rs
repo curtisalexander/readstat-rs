@@ -1,6 +1,8 @@
+use arrow_array::RecordBatch;
 use arrow_csv::WriterBuilder as CsvWriterBuilder;
 use arrow_ipc::writer::FileWriter as IpcFileWriter;
 use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
+use arrow_schema::Schema;
 use parquet::{
     arrow::ArrowWriter as ParquetArrowWriter,
     basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel},
@@ -11,7 +13,8 @@ use colored::Colorize;
 // use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
-use std::{error::Error, fs::OpenOptions, io::stdout};
+use std::{error::Error, fs::{self, OpenOptions, File}, io::{stdout, BufWriter, Seek, SeekFrom}, path::PathBuf};
+use tempfile::SpooledTempFile;
 
 use crate::rs_data::ReadStatData;
 use crate::rs_metadata::ReadStatMetadata;
@@ -20,20 +23,20 @@ use crate::rs_var::ReadStatVarFormatClass;
 use crate::OutFormat;
 
 pub struct ReadStatParquetWriter {
-    wtr: Option<ParquetArrowWriter<std::fs::File>>,
+    wtr: Option<ParquetArrowWriter<BufWriter<std::fs::File>>>,
 }
 
 impl ReadStatParquetWriter {
-    fn new(wtr: ParquetArrowWriter<std::fs::File>) -> Self {
+    fn new(wtr: ParquetArrowWriter<BufWriter<std::fs::File>>) -> Self {
         Self { wtr: Some(wtr) }
     }
 }
 
 pub enum ReadStatWriterFormat {
-    Csv(std::fs::File),
+    Csv(BufWriter<std::fs::File>),
     CsvStdout(std::io::Stdout),
-    Feather(IpcFileWriter<std::fs::File>),
-    Ndjson(std::fs::File),
+    Feather(IpcFileWriter<BufWriter<std::fs::File>>),
+    Ndjson(BufWriter<std::fs::File>),
     Parquet(ReadStatParquetWriter),
 }
 
@@ -51,6 +54,167 @@ impl ReadStatWriter {
             wrote_header: false,
             wrote_start: false,
         }
+    }
+
+    /// Write a single batch to a Parquet file (for parallel writes)
+    /// Uses SpooledTempFile to keep data in memory until buffer_size_bytes threshold
+    pub fn write_batch_to_parquet(
+        batch: &RecordBatch,
+        schema: &Schema,
+        output_path: &PathBuf,
+        compression: Option<crate::ParquetCompression>,
+        compression_level: Option<u32>,
+        buffer_size_bytes: usize,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Create a SpooledTempFile that keeps data in memory until buffer_size_bytes
+        let mut spooled_file = SpooledTempFile::new(buffer_size_bytes);
+
+        let compression_codec = match compression {
+            Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
+            Some(crate::ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
+            Some(crate::ParquetCompression::Gzip) => {
+                if let Some(level) = compression_level {
+                    let gzip_level = GzipLevel::try_new(level.try_into()
+                        .map_err(|_| "Invalid Gzip compression level")?
+                    ).map_err(|e| format!("Invalid Gzip compression level: {}", e))?;
+                    ParquetCompressionCodec::GZIP(gzip_level)
+                } else {
+                    ParquetCompressionCodec::GZIP(GzipLevel::default())
+                }
+            },
+            Some(crate::ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
+            Some(crate::ParquetCompression::Brotli) => {
+                if let Some(level) = compression_level {
+                    let brotli_level = BrotliLevel::try_new(level.try_into()
+                        .map_err(|_| "Invalid Brotli compression level")?
+                    ).map_err(|e| format!("Invalid Brotli compression level: {}", e))?;
+                    ParquetCompressionCodec::BROTLI(brotli_level)
+                } else {
+                    ParquetCompressionCodec::BROTLI(BrotliLevel::default())
+                }
+            },
+            Some(crate::ParquetCompression::Zstd) => {
+                if let Some(level) = compression_level {
+                    let zstd_level = ZstdLevel::try_new(level.try_into()
+                        .map_err(|_| "Invalid Zstd compression level")?
+                    ).map_err(|e| format!("Invalid Zstd compression level: {}", e))?;
+                    ParquetCompressionCodec::ZSTD(zstd_level)
+                } else {
+                    ParquetCompressionCodec::ZSTD(ZstdLevel::default())
+                }
+            },
+            None => ParquetCompressionCodec::SNAPPY,
+        };
+
+        let props = WriterProperties::builder()
+            .set_compression(compression_codec)
+            .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
+            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+            .build();
+
+        // Write to SpooledTempFile (in memory until threshold, then spills to temp disk file)
+        let mut wtr = ParquetArrowWriter::try_new(
+            &mut spooled_file,
+            Arc::new(schema.clone()),
+            Some(props)
+        )?;
+
+        wtr.write(batch)?;
+        wtr.close()?;
+
+        // Now copy from SpooledTempFile to the actual output file
+        spooled_file.seek(SeekFrom::Start(0))?;
+        let mut output_file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(output_path)?;
+        std::io::copy(&mut spooled_file, &mut output_file)?;
+
+        Ok(())
+    }
+
+    /// Merge multiple Parquet files into one by reading and rewriting all batches
+    pub fn merge_parquet_files(
+        temp_files: &[PathBuf],
+        output_path: &PathBuf,
+        schema: &Schema,
+        compression: Option<crate::ParquetCompression>,
+        compression_level: Option<u32>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(output_path)?;
+
+        let compression_codec = match compression {
+            Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
+            Some(crate::ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
+            Some(crate::ParquetCompression::Gzip) => {
+                if let Some(level) = compression_level {
+                    let gzip_level = GzipLevel::try_new(level.try_into()
+                        .map_err(|_| "Invalid Gzip compression level")?
+                    ).map_err(|e| format!("Invalid Gzip compression level: {}", e))?;
+                    ParquetCompressionCodec::GZIP(gzip_level)
+                } else {
+                    ParquetCompressionCodec::GZIP(GzipLevel::default())
+                }
+            },
+            Some(crate::ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
+            Some(crate::ParquetCompression::Brotli) => {
+                if let Some(level) = compression_level {
+                    let brotli_level = BrotliLevel::try_new(level.try_into()
+                        .map_err(|_| "Invalid Brotli compression level")?
+                    ).map_err(|e| format!("Invalid Brotli compression level: {}", e))?;
+                    ParquetCompressionCodec::BROTLI(brotli_level)
+                } else {
+                    ParquetCompressionCodec::BROTLI(BrotliLevel::default())
+                }
+            },
+            Some(crate::ParquetCompression::Zstd) => {
+                if let Some(level) = compression_level {
+                    let zstd_level = ZstdLevel::try_new(level.try_into()
+                        .map_err(|_| "Invalid Zstd compression level")?
+                    ).map_err(|e| format!("Invalid Zstd compression level: {}", e))?;
+                    ParquetCompressionCodec::ZSTD(zstd_level)
+                } else {
+                    ParquetCompressionCodec::ZSTD(ZstdLevel::default())
+                }
+            },
+            None => ParquetCompressionCodec::SNAPPY,
+        };
+
+        let props = WriterProperties::builder()
+            .set_compression(compression_codec)
+            .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
+            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+            .build();
+
+        let mut writer = ParquetArrowWriter::try_new(
+            BufWriter::new(f),
+            Arc::new(schema.clone()),
+            Some(props)
+        )?;
+
+        // Read each temp file and write its batches to the final file
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+        for temp_file in temp_files {
+            let file = File::open(temp_file)?;
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+            let mut reader = builder.build()?;
+
+            while let Some(batch) = reader.next() {
+                writer.write(&batch?)?;
+            }
+
+            // Clean up temp file
+            fs::remove_file(temp_file)?;
+        }
+
+        writer.close()?;
+        Ok(())
     }
 
     pub fn finish(
@@ -262,9 +426,9 @@ impl ReadStatWriter {
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
 
-            // setup writer
+            // setup writer with BufWriter for better performance
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::Csv(f))
+                self.wtr = Some(ReadStatWriterFormat::Csv(BufWriter::new(f)))
             };
 
             // write
@@ -315,9 +479,9 @@ impl ReadStatWriter {
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
 
-            // setup writer
+            // setup writer with BufWriter for better performance
             if !self.wrote_start {
-                let wtr = IpcFileWriter::try_new(f, &d.schema)?;
+                let wtr = IpcFileWriter::try_new(BufWriter::new(f), &d.schema)?;
                 self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
             };
 
@@ -385,9 +549,9 @@ impl ReadStatWriter {
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
 
-            // setup writer
+            // setup writer with BufWriter for better performance
             if !self.wrote_start {
-                self.wtr = Some(ReadStatWriterFormat::Ndjson(f));
+                self.wtr = Some(ReadStatWriterFormat::Ndjson(BufWriter::new(f)));
             };
 
             // write
@@ -483,7 +647,8 @@ impl ReadStatWriter {
                     .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
                     .build();
 
-                let wtr = ParquetArrowWriter::try_new(f, Arc::new(d.schema.clone()), Some(props))?;
+                // Use BufWriter for better performance
+                let wtr = ParquetArrowWriter::try_new(BufWriter::new(f), Arc::new(d.schema.clone()), Some(props))?;
 
                 self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(wtr)));
             }

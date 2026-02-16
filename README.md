@@ -212,13 +212,42 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ```
 
 ### Parallelism
-The `data` subcommand includes a parameter for `--parallel` &mdash; if invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
+The `data` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
 
-Note that although reading is in parallel, _**writing**_ is still sequential.  Thus, one should only anticipate moderate speed-ups as much of the time is spent writing.
+#### Parallel Reading (`--parallel`)
+If invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
 
 :heavy_exclamation_mark: Utilizing the `--parallel` parameter will increase memory usage &mdash; there will be multiple threads simultaneously reading chunks from the `sas7bdat`.  In addition, because all processors are utilized, CPU usage may be maxed out during reading.
 
 :warning: Also, note that utilizing the `--parallel` parameter may write rows out of order from the original `sas7bdat`.
+
+#### Parallel Writing (`--parallel-write`)
+When combined with `--parallel`, the `--parallel-write` flag enables _**parallel writing**_ for Parquet format files. This can significantly improve write performance for large datasets by:
+- Writing record batches to temporary files in parallel using all available processors
+- Merging the temporary files into the final output
+- Using spooled temporary files that keep data in memory until a threshold is reached
+
+**Note:** Parallel writing currently only supports the Parquet format. Other formats (CSV, Feather, NDJSON) will use optimized sequential writes with BufWriter.
+
+Example usage:
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --parallel --parallel-write
+```
+
+#### Memory Buffer Size (`--parallel-write-buffer-mb`)
+Controls the memory buffer size (in MB) before spilling to disk during parallel writes. Defaults to 100 MB. Valid range: 1-10240 MB.
+
+Smaller buffers will cause data to spill to disk sooner, while larger buffers keep more data in memory. Choose based on your available memory and dataset size:
+- **Small datasets (< 100 MB)**: Use default or larger buffer to keep everything in memory
+- **Large datasets (> 1 GB)**: Consider smaller buffer (10-50 MB) to manage memory usage
+- **Memory-constrained systems**: Use smaller buffer (1-10 MB)
+
+Example with custom buffer size:
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --parallel --parallel-write --parallel-write-buffer-mb 200
+```
+
+:heavy_exclamation_mark: Parallel writing may write batches out of order. This is acceptable for Parquet files as the row order is preserved when merged.
 
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
@@ -331,6 +360,52 @@ To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  F
 ```
 valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 ```
+
+## Benchmarking
+Performance benchmarks are implemented using [Criterion.rs](https://github.com/bheisler/criterion.rs) to measure and track performance across key operations.
+
+### Quick Start
+```sh
+cd crates/readstat
+cargo bench
+open target/criterion/report/index.html  # View HTML reports
+```
+
+### What Gets Measured
+- **Reading Performance**: Metadata parsing, chunked vs single-read, throughput
+- **Writing Performance**: CSV, Parquet, Feather, NDJSON with various compression algorithms
+- **Data Conversion**: SAS types to Arrow RecordBatch overhead
+- **Parallel Operations**: Buffer size optimization, parallel write performance
+- **End-to-End Pipeline**: Complete read + write workflows (most important)
+
+### Sample Results
+```
+metadata_reading/cars.sas7bdat
+                        time:   [935.21 µs 943.52 µs 952.41 µs]
+
+read_single_chunk/cars.sas7bdat
+                        thrpt:  [~150-200K rows/sec]
+
+end_to_end_conversion/parquet
+                        thrpt:  [~50-70K rows/sec]
+```
+
+### Usage
+```sh
+# Run specific benchmark group
+cargo bench metadata_reading
+cargo bench write_parquet_compression
+
+# Compare against baseline
+cargo bench --save-baseline main
+# ... make changes ...
+cargo bench --baseline main
+
+# Profile with flamegraph
+cargo flamegraph --bench readstat_benchmarks -- --bench
+```
+
+For comprehensive benchmarking documentation, see [BENCHMARKING.md](BENCHMARKING.md) and [benches/README.md](crates/readstat/benches/README.md).
 
 ## [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 - :heavy_check_mark: Linux   &rarr; successfully builds and runs
