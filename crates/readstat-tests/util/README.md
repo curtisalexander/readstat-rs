@@ -11,13 +11,11 @@ Utility programs to aid development
     - datetime
     - time
 
-### [create_date_and_datetime_ds.sas](create_date_and_datetime_ds.sas)
-- SAS macro that creates a `sas7bdat` file containing various date and datetimes
-- Iteration performed in the macro
-
-### [create_date_and_datetime_ds2.sas](create_date_and_datetime_ds2.sas)
-- SAS macro that creates a `sas7bdat` file containing various date and datetimes
-- Iteration driven by the `data` step
+### [create_date_time_datetime_ds.sas](create_date_time_datetime_ds.sas)
+- SAS macro that creates a `sas7bdat` file containing all possible dates, times, and datetimes in the datasets:
+    - `all_dates`
+    - `all_times`
+    - `all_datetimes`
 
 ### [create_rand_ds.sas](create_rand_ds.sas)
 - SAS macro that creates a `sas7bdat` file containing random data
