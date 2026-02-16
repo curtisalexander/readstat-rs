@@ -10,7 +10,6 @@ use parquet::{
 };
 use std::sync::Arc;
 use colored::Colorize;
-// use indicatif::{ProgressBar, ProgressStyle};
 use num_format::Locale;
 use num_format::ToFormattedString;
 use std::{error::Error, fs::{self, OpenOptions, File}, io::{stdout, BufWriter, Seek, SeekFrom}, path::PathBuf};
@@ -277,33 +276,34 @@ impl ReadStatWriter {
         d: &ReadStatData,
         rsp: &ReadStatPath,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        //if let Some(pb) = &d.pb {
-        let in_f = if let Some(f) = rsp.path.file_name() {
-            f.to_string_lossy().bright_red()
-        } else {
-            String::from("___").bright_red()
-        };
+        // Only print messages if there's no progress bar
+        // If there's a progress bar, it will handle showing progress
+        if d.pb.is_none() {
+            let in_f = if let Some(f) = rsp.path.file_name() {
+                f.to_string_lossy().bright_red()
+            } else {
+                String::from("___").bright_red()
+            };
 
-        let out_f = if let Some(p) = &rsp.out_path {
-            if let Some(f) = p.file_name() {
-                f.to_string_lossy().bright_green()
+            let out_f = if let Some(p) = &rsp.out_path {
+                if let Some(f) = p.file_name() {
+                    f.to_string_lossy().bright_green()
+                } else {
+                    String::from("___").bright_green()
+                }
             } else {
                 String::from("___").bright_green()
-            }
-        } else {
-            String::from("___").bright_green()
-        };
+            };
 
-        let rows = d
-            .chunk_rows_processed
-            .to_formatted_string(&Locale::en)
-            .truecolor(255, 132, 0);
+            let rows = d
+                .chunk_rows_processed
+                .to_formatted_string(&Locale::en)
+                .truecolor(255, 132, 0);
 
-        let msg = format!("Wrote {} rows from file {} into {}", rows, in_f, out_f);
+            let msg = format!("Wrote {} rows from file {} into {}", rows, in_f, out_f);
 
-        println!("{}", msg);
-        //pb.set_message(msg);
-        //}
+            println!("{}", msg);
+        }
         Ok(())
     }
 

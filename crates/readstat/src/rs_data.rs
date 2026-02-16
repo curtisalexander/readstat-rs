@@ -295,13 +295,11 @@ impl ReadStatData {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        // spinner
-        // TODO - uncomment when ready to reimplement progress bar
-        /*
-        if !self.no_progress {
-            self.pb = Some(ProgressBar::new(!0));
+        // Update progress bar with rows processed for this chunk
+        if let Some(pb) = &self.pb {
+            // Increment by the number of rows we're about to process in this chunk
+            pb.inc(self.chunk_rows_to_process as u64);
         }
-        */
 
         if let Some(pb) = &self.pb {
             pb.set_style(
@@ -413,6 +411,13 @@ impl ReadStatData {
     pub fn set_total_rows_processed(self, total_rows_processed: Arc<AtomicUsize>) -> Self {
         Self {
             total_rows_processed: Some(total_rows_processed),
+            ..self
+        }
+    }
+
+    pub fn set_progress_bar(self, pb: ProgressBar) -> Self {
+        Self {
+            pb: Some(pb),
             ..self
         }
     }

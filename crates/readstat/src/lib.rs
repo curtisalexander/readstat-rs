@@ -2,6 +2,7 @@
 use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 use colored::Colorize;
 use crossbeam::channel::bounded;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
@@ -243,6 +244,19 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             // Initialize AtomicUsize to contain total rows processed
             let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
+            // Create progress bar if not disabled
+            let pb = if !no_progress {
+                let pb = ProgressBar::new(total_rows_to_process as u64);
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")?
+                        .progress_chars("##-")
+                );
+                Some(pb)
+            } else {
+                None
+            };
+
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
             let offsets_pairs = offsets.windows(2);
@@ -264,6 +278,11 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     .set_total_rows_processed(total_rows_processed.clone())
                     .init(md.clone(), row_start, row_end);
 
+                // Set progress bar if available
+                if let Some(ref pb) = pb {
+                    d = d.set_progress_bar(pb.clone());
+                }
+
                 // Read
                 d.read_data(&rsp)?;
 
@@ -279,15 +298,13 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
             // Finish writer
             //wtr.finish(&d, &rsp)?;
 
+            // Finish progress bar
+            if let Some(pb) = pb {
+                pb.finish_with_message("Done");
+            }
+
             // Return
             Ok(())
-
-            // progress bar
-            /*
-            if let Some(pb) = &d.pb {
-                pb.finish_at_current_pos()
-            };
-            */
         }
         ReadStatCliCommands::Data {
             input,
@@ -367,6 +384,19 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     // Initialize AtomicUsize to contain total rows processed
                     let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
+                    // Create progress bar if not disabled
+                    let pb = if !no_progress {
+                        let pb = ProgressBar::new(total_rows_to_process as u64);
+                        pb.set_style(
+                            ProgressStyle::default_bar()
+                                .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")?
+                                .progress_chars("##-")
+                        );
+                        Some(pb)
+                    } else {
+                        None
+                    };
+
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
 
@@ -384,6 +414,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     // Unbounded channels can result in extreme memory usage if files are large and
                     //   the reader significantly outpaces the writer
                     let (s, r) = bounded(10);
+
+                    // Clone progress bar for the spawned thread
+                    let pb_thread = pb.clone();
 
                     // Process data in batches (i.e. stream chunks of rows)
                     thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -414,6 +447,11 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                                     .set_total_rows_to_process(total_rows_to_process as usize)
                                     .set_total_rows_processed(total_rows_processed.clone())
                                     .init(md.clone(), row_start, row_end);
+
+                                // Set progress bar if available
+                                if let Some(ref pb) = pb_thread {
+                                    d = d.set_progress_bar(pb.clone());
+                                }
 
                                 // Read
                                 d.read_data(&rsp)?;
@@ -516,15 +554,13 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                         }
                     }
 
+                    // Finish progress bar
+                    if let Some(pb) = pb {
+                        pb.finish_with_message("Done");
+                    }
+
                     // Return
                     Ok(())
-
-                    // progress bar
-                    /*
-                    if let Some(pb) = &d.pb {
-                        pb.finish_at_current_pos()
-                    };
-                    */
 
                     // get and optionally write data - single or multi-threaded
                     /*
