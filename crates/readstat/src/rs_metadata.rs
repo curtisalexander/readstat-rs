@@ -4,7 +4,7 @@ use log::debug;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::Serialize;
-use std::{collections::BTreeMap, error::Error, ffi::c_void, os::raw::c_int};
+use std::{collections::{BTreeMap, HashMap}, error::Error, ffi::c_void, os::raw::c_int};
 
 use crate::cb::{handle_metadata, handle_variable};
 use crate::err::ReadStatError;
@@ -89,11 +89,26 @@ impl ReadStatMetadata {
                         None => DataType::Float64,
                     },
                 };
-                Field::new(&vm.var_name, var_dt, true)
+
+                // Add column label as field metadata if not empty
+                let mut field = Field::new(&vm.var_name, var_dt, true);
+                if !vm.var_label.is_empty() {
+                    let mut metadata = HashMap::new();
+                    metadata.insert("label".to_string(), vm.var_label.clone());
+                    field = field.with_metadata(metadata);
+                }
+                field
             })
             .collect();
 
-        Schema::new(fields)
+        // Add table label as schema metadata if not empty
+        if !self.file_label.is_empty() {
+            let mut schema_metadata = HashMap::new();
+            schema_metadata.insert("table_label".to_string(), self.file_label.clone());
+            Schema::new_with_metadata(fields, schema_metadata)
+        } else {
+            Schema::new(fields)
+        }
     }
 
     pub fn read_metadata(
