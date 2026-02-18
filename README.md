@@ -264,6 +264,62 @@ To write parsed data (as `parquet`) to a file with specific compression settings
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --compression zstd --compression-level 3
 ```
 
+### Column Selection
+
+Select specific columns to include when converting or previewing data.
+
+#### Step 1: View available columns
+
+```sh
+readstat metadata /some/dir/to/example.sas7bdat
+```
+
+Or as JSON for programmatic use with `jq`:
+
+```sh
+readstat metadata /some/dir/to/example.sas7bdat --as-json \
+  | jq '.vars | to_entries[] | .value.var_name'
+```
+
+Or with Python:
+
+```sh
+readstat metadata /some/dir/to/example.sas7bdat --as-json \
+  | python -c "
+import json, sys
+md = json.load(sys.stdin)
+for v in md['vars'].values():
+    print(v['var_name'])
+"
+```
+
+#### Step 2: Select columns on the command line
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output out.parquet --format parquet --columns Brand,Model,EngineSize
+```
+
+#### Step 2 (alt): Select columns from a file
+
+Create `columns.txt`:
+```
+# Columns to extract from the dataset
+Brand
+Model
+EngineSize
+```
+
+Then pass it to the CLI:
+```sh
+readstat data /some/dir/to/example.sas7bdat --output out.parquet --format parquet --columns-file columns.txt
+```
+
+#### Preview with column selection
+
+```sh
+readstat preview /some/dir/to/example.sas7bdat --columns Brand,Model,EngineSize
+```
+
 ### Parallelism
 The `data` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
 

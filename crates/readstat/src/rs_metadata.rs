@@ -10,7 +10,7 @@ use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
-use std::{collections::{BTreeMap, HashMap}, ffi::c_void, os::raw::c_int};
+use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::c_void, os::raw::c_int, path::Path};
 
 use crate::cb::{handle_metadata, handle_variable};
 use crate::err::{check_c_error, ReadStatError};
@@ -200,6 +200,95 @@ impl ReadStatMetadata {
         // if successful, initialize schema
         self.schema = self.initialize_schema();
         Ok(())
+    }
+
+    /// Parses a columns file, returning column names.
+    ///
+    /// Lines starting with `#` are treated as comments and blank lines are skipped.
+    /// Each remaining line is trimmed and used as a column name.
+    pub fn parse_columns_file(path: &Path) -> Result<Vec<String>, ReadStatError> {
+        let contents = std::fs::read_to_string(path)?;
+        let names: Vec<String> = contents
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|line| line.to_string())
+            .collect();
+        Ok(names)
+    }
+
+    /// Validates column names against the dataset's variables and returns a mapping
+    /// of original variable index to new contiguous index.
+    ///
+    /// Returns `Ok(None)` if `columns` is `None` (no filtering requested).
+    /// Returns `Err(ColumnsNotFound)` if any requested names are not in the dataset.
+    pub fn resolve_selected_columns(
+        &self,
+        columns: Option<Vec<String>>,
+    ) -> Result<Option<BTreeMap<i32, i32>>, ReadStatError> {
+        let columns = match columns {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        // Deduplicate while preserving order isn't needed - we use dataset order
+        let requested: BTreeSet<String> = columns.into_iter().collect();
+
+        // Build a name -> index lookup
+        let name_to_index: HashMap<&str, i32> = self
+            .vars
+            .iter()
+            .map(|(&idx, vm)| (vm.var_name.as_str(), idx))
+            .collect();
+
+        // Check for invalid names
+        let not_found: Vec<String> = requested
+            .iter()
+            .filter(|name| !name_to_index.contains_key(name.as_str()))
+            .cloned()
+            .collect();
+
+        if !not_found.is_empty() {
+            let available: Vec<String> = self
+                .vars
+                .values()
+                .map(|vm| vm.var_name.clone())
+                .collect();
+            return Err(ReadStatError::ColumnsNotFound {
+                requested: not_found,
+                available,
+            });
+        }
+
+        // Build mapping: original_var_index -> new_contiguous_index
+        // Iterate in original dataset order (BTreeMap is sorted by key)
+        let mut mapping = BTreeMap::new();
+        let mut new_index = 0i32;
+        for (&orig_index, vm) in &self.vars {
+            if requested.contains(&vm.var_name) {
+                mapping.insert(orig_index, new_index);
+                new_index += 1;
+            }
+        }
+
+        Ok(Some(mapping))
+    }
+
+    /// Returns a new `ReadStatMetadata` with only the selected variables,
+    /// re-keyed with contiguous indices starting from 0.
+    pub fn filter_to_selected_columns(&self, mapping: &BTreeMap<i32, i32>) -> Self {
+        let mut new_vars = BTreeMap::new();
+        for (&orig_index, &new_index) in mapping {
+            if let Some(vm) = self.vars.get(&orig_index) {
+                new_vars.insert(new_index, vm.clone());
+            }
+        }
+
+        let mut filtered = self.clone();
+        filtered.vars = new_vars;
+        filtered.var_count = mapping.len() as c_int;
+        filtered.schema = filtered.initialize_schema();
+        filtered
     }
 }
 
