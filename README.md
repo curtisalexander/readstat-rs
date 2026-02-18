@@ -68,6 +68,8 @@ Build
 cargo build
 ```
 
+**iconv and zlib**: Linked dynamically against the system-provided libraries. On most distributions these are available by default. No explicit link directives are emitted in the build script &mdash; the system linker resolves them automatically.
+
 ### macOS
 Install developer tools
 
@@ -79,6 +81,8 @@ Build
 ```sh
 cargo build
 ```
+
+**iconv and zlib**: Linked dynamically against the system-provided libraries that ship with macOS (via `cargo:rustc-link-lib=iconv` and `cargo:rustc-link-lib=z` in the [readstat-sys build script](crates/readstat-sys/build.rs)). No additional packages need to be installed.
 
 ### Windows
 Building on Windows requires [LLVM](https://releases.llvm.org/download.html) and [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) be downloaded and installed.
@@ -93,6 +97,19 @@ Build
 ```sh
 cargo build
 ```
+
+**iconv and zlib**: Both are linked statically on Windows.
+- **iconv** is compiled from source using the vendored [libiconv-win-build](https://github.com/kiyolee/libiconv-win-build) submodule (located at `crates/iconv-sys/vendor/libiconv-win-build/`) via the [iconv-sys](crates/iconv-sys/) crate.
+- **zlib** is compiled from source via the [libz-sys](https://crates.io/crates/libz-sys) crate.
+- Both `iconv-sys` and `libz-sys` are Windows-only dependencies (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](crates/readstat-sys/Cargo.toml)).
+
+### Linking Summary
+
+| Platform | iconv | zlib |
+|----------|-------|------|
+| Linux (glibc/musl) | Dynamic (system) | Dynamic (system) |
+| macOS (x86/ARM) | Dynamic (system) | Dynamic (system) |
+| Windows (MSVC) | Static (vendored submodule) | Static (libz-sys) |
 
 ## Run
 After either [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
@@ -129,6 +146,30 @@ To write metadata to json, invoke the following.  This is useful for reading the
 
 ```sh
 readstat metadata /some/dir/to/example.sas7bdat --as-json
+```
+
+The JSON output contains file-level metadata and a `vars` object keyed by variable index.  This makes it straightforward to search for a particular column by piping the output to [`jq`](https://jqlang.github.io/jq/) or Python.
+
+#### Search for a column with `jq`
+
+```sh
+# Find the variable entry whose var_name matches "Make"
+readstat metadata /some/dir/to/example.sas7bdat --as-json \
+  | jq '.vars | to_entries[] | select(.value.var_name == "Make") | .value'
+```
+
+#### Search for a column with Python
+
+```sh
+# Find the variable entry whose var_name matches "Make"
+readstat metadata /some/dir/to/example.sas7bdat --as-json \
+  | python -c "
+import json, sys
+md = json.load(sys.stdin)
+match = [v for v in md['vars'].values() if v['var_name'] == 'Make']
+if match:
+    print(json.dumps(match[0], indent=2))
+"
 ```
 
 ### Preview Data
