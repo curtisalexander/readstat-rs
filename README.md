@@ -37,6 +37,15 @@ For Windows users, path configuration may be found within the Environment Variab
 rundll32.exe sysdm.cpl,EditEnvironmentVariables
 ```
 
+Alternatively, update the user-level `PATH` in PowerShell (replace `C:\path\to\readstat` with the actual directory):
+
+```powershell
+$currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+[Environment]::SetEnvironmentVariable("Path", "$currentPath;C:\path\to\readstat", "User")
+```
+
+After running the above, restart your terminal for the change to take effect.
+
 ### Run
 Run the binary.
 
@@ -68,7 +77,9 @@ Build
 cargo build
 ```
 
-**iconv and zlib**: Linked dynamically against the system-provided libraries. On most distributions these are available by default. No explicit link directives are emitted in the build script &mdash; the system linker resolves them automatically.
+**iconv**: Linked dynamically against the system-provided library. On most distributions it is available by default. No explicit link directives are emitted in the build script &mdash; the system linker resolves it automatically.
+
+**zlib**: Linked via the [libz-sys](https://crates.io/crates/libz-sys) crate, which will use the system-provided zlib if available or compile from source as a fallback.
 
 ### macOS
 Install developer tools
@@ -82,12 +93,14 @@ Build
 cargo build
 ```
 
-**iconv and zlib**: Linked dynamically against the system-provided libraries that ship with macOS (via `cargo:rustc-link-lib=iconv` and `cargo:rustc-link-lib=z` in the [readstat-sys build script](crates/readstat-sys/build.rs)). No additional packages need to be installed.
+**iconv**: Linked dynamically against the system-provided library that ships with macOS (via `cargo:rustc-link-lib=iconv` in the [readstat-sys build script](crates/readstat-sys/build.rs)). No additional packages need to be installed.
+
+**zlib**: Linked via the [libz-sys](https://crates.io/crates/libz-sys) crate, which will use the system-provided zlib that ships with macOS.
 
 ### Windows
 Building on Windows requires [LLVM](https://releases.llvm.org/download.html) and [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) be downloaded and installed.
 
-In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set then the [readstat-sys build script](crates/readstat-sys/build.rs) assumes the needed path to be `C:\Program Files\LLVM\lib`.
+In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set, the [readstat-sys build script](crates/readstat-sys/build.rs) will check the default path `C:\Program Files\LLVM\lib` and fail with instructions if it does not exist.
 
 For details see the following.
 - [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/crates/readstat-sys/build.rs#L78-L82)
@@ -98,18 +111,17 @@ Build
 cargo build
 ```
 
-**iconv and zlib**: Both are linked statically on Windows.
-- **iconv** is compiled from source using the vendored [libiconv-win-build](https://github.com/kiyolee/libiconv-win-build) submodule (located at `crates/iconv-sys/vendor/libiconv-win-build/`) via the [iconv-sys](crates/iconv-sys/) crate.
-- **zlib** is compiled from source via the [libz-sys](https://crates.io/crates/libz-sys) crate.
-- Both `iconv-sys` and `libz-sys` are Windows-only dependencies (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](crates/readstat-sys/Cargo.toml)).
+**iconv**: Compiled from source using the vendored [libiconv-win-build](https://github.com/kiyolee/libiconv-win-build) submodule (located at `crates/iconv-sys/vendor/libiconv-win-build/`) via the [iconv-sys](crates/iconv-sys/) crate. `iconv-sys` is a Windows-only dependency (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](crates/readstat-sys/Cargo.toml)).
+
+**zlib**: Compiled from source via the [libz-sys](https://crates.io/crates/libz-sys) crate (statically linked).
 
 ### Linking Summary
 
 | Platform | iconv | zlib |
 |----------|-------|------|
-| Linux (glibc/musl) | Dynamic (system) | Dynamic (system) |
-| macOS (x86/ARM) | Dynamic (system) | Dynamic (system) |
-| Windows (MSVC) | Static (vendored submodule) | Static (libz-sys) |
+| Linux (glibc/musl) | Dynamic (system) | libz-sys (prefers system, falls back to source) |
+| macOS (x86/ARM) | Dynamic (system) | libz-sys (uses system) |
+| Windows (MSVC) | Static (vendored submodule) | libz-sys (compiled from source, static) |
 
 ## Run
 After either [building](#build) or [installing](#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:

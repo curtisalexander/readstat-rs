@@ -81,9 +81,28 @@ fn main() {
     // Linking
     // Note: zlib linking is handled by the libz-sys crate dependency
     if target.contains("windows-msvc") {
-        // Path to libclang
+        // Ensure LIBCLANG_PATH is set so bindgen can find libclang.dll
         if env::var_os("LIBCLANG_PATH").is_none() {
-            println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
+            let default = PathBuf::from(r"C:\Program Files\LLVM\lib");
+            if !default.exists() {
+                panic!(
+                    "\n\
+                    \n  error: LIBCLANG_PATH is not set and the default path does not exist:\
+                    \n           {}\
+                    \n\
+                    \n  bindgen requires libclang to generate Rust bindings.\
+                    \n  Install LLVM from https://releases.llvm.org/download.html\
+                    \n  then set the LIBCLANG_PATH environment variable.\
+                    \n\
+                    \n  PowerShell (user-level, persistent):\
+                    \n    [Environment]::SetEnvironmentVariable(\"LIBCLANG_PATH\", \"C:\\Program Files\\LLVM\\lib\", \"User\")\
+                    \n\
+                    \n  After setting the variable, restart your terminal.\
+                    \n",
+                    default.display()
+                );
+            }
+            env::set_var("LIBCLANG_PATH", &default);
         }
         println!("cargo:rustc-link-lib=static=iconv");
     } else if target.contains("apple-darwin") {
