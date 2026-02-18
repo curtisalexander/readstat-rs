@@ -52,15 +52,22 @@ Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs), Rayon, 
 ### `readstat-sys` (v0.2.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
-`build.rs` compiles ~20 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Platform-specific linking:
-- **Windows**: statically links iconv-sys and libz-sys; needs LIBCLANG_PATH
-- **macOS**: dynamic iconv and zlib
-- **Linux**: system libraries
+`build.rs` compiles ~20 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib:
+
+| Platform | iconv | zlib | Notes |
+|----------|-------|------|-------|
+| **Windows** (`windows-msvc`) | Static — compiled from vendored `iconv-sys` submodule | Static — compiled via `libz-sys` crate | Both are `cfg(windows)` dependencies; needs `LIBCLANG_PATH` |
+| **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | Dynamic — system `libz` | Linked via `cargo:rustc-link-lib=iconv` / `cargo:rustc-link-lib=z` |
+| **Linux** (gnu/musl) | Dynamic — system library | Dynamic — system library | No explicit link directives; system linker resolves automatically |
+
+Header include paths are propagated between crates using Cargo's `links` key:
+- `iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`
+- `libz-sys` sets `cargo:include=...` which becomes `DEP_Z_INCLUDE` in `readstat-sys`
 
 ### `iconv-sys` (v0.2.0) — iconv FFI (Windows)
 **Path**: `crates/iconv-sys/`
 
-Windows-only. Compiles libiconv from `vendor/libiconv-win-build/` submodule.
+Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-win-build/` git submodule using the `cc` crate, producing a static library. On non-Windows platforms the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
