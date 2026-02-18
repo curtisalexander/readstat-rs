@@ -79,16 +79,15 @@ fn main() {
     }
 
     // Linking
+    // Note: zlib linking is handled by the libz-sys crate dependency
     if target.contains("windows-msvc") {
         // Path to libclang
         if env::var_os("LIBCLANG_PATH").is_none() {
             println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
         }
         println!("cargo:rustc-link-lib=static=iconv");
-        println!("cargo:rustc-link-lib=static=z");
     } else if target.contains("apple-darwin") {
         println!("cargo:rustc-link-lib=iconv");
-        println!("cargo:rustc-link-lib=z");
     }
 
     // Compile
