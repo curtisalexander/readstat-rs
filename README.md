@@ -367,7 +367,10 @@ All 118 SAS date, time, and datetime formats are recognized and parsed appropria
 SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lrcon/p1wj0wt2ebe2a0n1lv4lem9hdc0v.htm) internally as numeric values.  To distinguish among dates, times, datetimes, or numeric values, a SAS format is read from the variable metadata.  If the format matches a recognized SAS date, time, or datetime format then the numeric value is converted and read into memory using one of the Arrow types:
 - [Date32Type](https://docs.rs/arrow/latest/arrow/datatypes/struct.Date32Type.html)
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
+- [Time64MicrosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time64MicrosecondType.html) &mdash; for time formats with microsecond precision (e.g. `TIME15.6`, decimal places 4&ndash;6)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
+- [TimestampMillisecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMillisecondType.html) &mdash; for datetime formats with millisecond precision (e.g. `DATETIME22.3`, decimal places 1&ndash;3)
+- [TimestampMicrosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMicrosecondType.html) &mdash; for datetime formats with microsecond precision (e.g. `DATETIME22.6`, decimal places 4&ndash;6)
 
 If values are read into memory as Arrow date, time, or datetime types, then when they are written &mdash; from an Arrow [`RecordBatch`](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `ndjson`, or `parquet` &mdash; they are treated as dates, times, or datetimes and not as numeric values.
 
@@ -380,7 +383,10 @@ cargo test
 
 ### Datasets
 Formally tested (via integration tests) against the following datasets.  See the [README.md](crates/readstat-tests/tests/data/README.md) for data sources.
-- [ ] `ahs2019n.sas7bdat` &rarr; US Census data
+- [ ] `ahs2019n.sas7bdat` &rarr; US Census data (download via [download_ahs.sh](crates/readstat-tests/util/download_ahs.sh) or [download_ahs.ps1](crates/readstat-tests/util/download_ahs.ps1))
+- [X] `all_dates.sas7bdat` &rarr; SAS dataset containing all possible date formats
+- [X] `all_datetimes.sas7bdat` &rarr; SAS dataset containing all possible datetime formats
+- [X] `all_times.sas7bdat` &rarr; SAS dataset containing all possible time formats
 - [X] `all_types.sas7bdat` &rarr; SAS dataset containing all SAS types
 - [X] `cars.sas7bdat` &rarr; SAS cars dataset
 - [X] `hasmissing.sas7bdat` &rarr; SAS dataset containing missing values
@@ -390,7 +396,7 @@ Formally tested (via integration tests) against the following datasets.  See the
 - [X] `rand_ds_largepage_err.sas7bdat` &rarr; Created using [create_rand_ds.sas](crates/readstat-tests/util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `2M`
 - [X] `rand_ds_largepage_ok.sas7bdat` &rarr; Created using [create_rand_ds.sas](crates/readstat-tests/util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `1M`
 - [X] `scientific_notation.sas7bdat` &rarr; Used to test float parsing
-- [ ] `somedata.sas7bdat`
+- [X] `somedata.sas7bdat` &rarr; Used to test Parquet label preservation
 - [ ] `somemiss.sas7bdat`
 
 ### Valgrind
@@ -444,7 +450,7 @@ cargo bench --baseline main
 cargo flamegraph --bench readstat_benchmarks -- --bench
 ```
 
-For comprehensive benchmarking documentation, see [BENCHMARKING.md](BENCHMARKING.md) and [benches/README.md](crates/readstat/benches/README.md).
+For comprehensive benchmarking documentation, see [BENCHMARKING.md](docs/BENCHMARKING.md) and [benches/README.md](crates/readstat/benches/README.md).
 
 ## [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 - :heavy_check_mark: Linux   &rarr; successfully builds and runs
