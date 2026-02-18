@@ -144,7 +144,7 @@ jobs:
           path: ${{ runner.temp }}\llvm
           key: llvm-21.1.8
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1
+        uses: KyleMayes/install-llvm-action@v2
         with:
           # versions - https://github.com/KyleMayes/install-llvm-action/blob/master/assets.json
           version: "21.1.8"
