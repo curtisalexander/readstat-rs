@@ -61,3 +61,19 @@ fn parse_largepage_ok() {
     // endianness
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
 }
+
+#[test]
+fn parse_largepage_ok_data() {
+    let (rsp, _md, mut d) = init();
+
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
+
+    let batch = d.batch.unwrap();
+
+    // Verify all 2000 rows were read
+    assert_eq!(batch.num_rows(), 2000);
+
+    // Verify all 110 columns are present
+    assert_eq!(batch.num_columns(), 110);
+}

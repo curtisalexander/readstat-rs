@@ -109,3 +109,123 @@ fn parse_hasmissing() {
 
     assert!(float_col_with_missing_is_null);
 }
+
+#[test]
+fn parse_hasmissing_metadata() {
+    let rsp = common::setup_path("hasmissing.sas7bdat").unwrap();
+    let mut md = ReadStatMetadata::new();
+    md.read_metadata(&rsp, false).unwrap();
+    let mut d = ReadStatData::new()
+        .set_no_progress(true)
+        .init(md.clone(), 0, md.row_count as u32);
+
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
+
+    // row count
+    assert_eq!(md.row_count, 50);
+
+    // variable count
+    assert_eq!(md.var_count, 9);
+
+    // table name
+    assert_eq!(md.table_name, String::from("HASMISSING"));
+
+    // table label
+    assert_eq!(md.file_label, String::from(""));
+
+    // file encoding
+    assert_eq!(md.file_encoding, String::from("WINDOWS-1252"));
+
+    // format version
+    assert_eq!(md.version, 9);
+
+    // bitness
+    assert_eq!(md.is64bit, 0);
+
+    // creation time
+    assert_eq!(md.creation_time, "2014-11-18 14:44:33");
+
+    // modified time
+    assert_eq!(md.modified_time, "2014-11-18 14:44:33");
+
+    // compression
+    assert!(matches!(md.compression, readstat::ReadStatCompress::None));
+
+    // endianness
+    assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
+
+    // variables
+
+    // 0 - ID (String)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 0);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
+    assert!(matches!(vt, readstat::ReadStatVarType::String));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from("$"));
+    assert!(matches!(adt, DataType::Utf8));
+
+    // 1 - PRE (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 1);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+
+    // 2 - MONTH6 (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 2);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+
+    // 3 - MONTH12 (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 3);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+
+    // 4 - MONTH24 (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 4);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+
+    // 5 - TEMP1 (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 5);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+
+    // 6 - TEMP2 (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+
+    // 7 - TEMP3 (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+
+    // 8 - TEMP4 (Numeric)
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 8);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert!(vfc.is_none());
+    assert_eq!(vf, String::from(""));
+    assert!(matches!(adt, DataType::Float64));
+}
