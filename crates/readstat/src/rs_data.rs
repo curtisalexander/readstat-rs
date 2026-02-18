@@ -65,6 +65,13 @@ pub struct ReadStatData {
     pub no_progress: bool,
     /// Errors collected during value parsing callbacks.
     pub errors: Vec<String>,
+    /// Optional mapping: original var index -> filtered column index.
+    /// When present, only variables in this map are included in output.
+    pub column_filter: Option<BTreeMap<i32, i32>>,
+    /// Total variable count in the unfiltered dataset.
+    /// Used for row-boundary detection in handle_value when filtering is active.
+    /// Defaults to var_count when no filter is set.
+    pub total_var_count: i32,
 }
 
 impl Default for ReadStatData {
@@ -97,6 +104,9 @@ impl ReadStatData {
             no_progress: false,
             // errors
             errors: Vec::new(),
+            // column filtering
+            column_filter: None,
+            total_var_count: 0,
         }
     }
 
@@ -413,10 +423,17 @@ impl ReadStatData {
         let var_count = md.var_count;
         let vars = md.vars;
         let schema = md.schema;
+        // Only set total_var_count from metadata if not already set by set_column_filter
+        let total_var_count = if self.total_var_count != 0 {
+            self.total_var_count
+        } else {
+            var_count
+        };
         Self {
             var_count,
             vars,
             schema,
+            total_var_count,
             ..self
         }
     }
@@ -441,6 +458,18 @@ impl ReadStatData {
     pub fn set_total_rows_processed(self, total_rows_processed: Arc<AtomicUsize>) -> Self {
         Self {
             total_rows_processed: Some(total_rows_processed),
+            ..self
+        }
+    }
+
+    /// Sets the column filter and original (unfiltered) variable count.
+    ///
+    /// Must be called **before** [`init`](ReadStatData::init) so that
+    /// `total_var_count` is preserved when `set_metadata` runs.
+    pub fn set_column_filter(self, filter: Option<BTreeMap<i32, i32>>, total_var_count: i32) -> Self {
+        Self {
+            column_filter: filter,
+            total_var_count,
             ..self
         }
     }

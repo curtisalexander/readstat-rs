@@ -17,7 +17,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.15.0) — Main Crate
+### `readstat` (v0.17.0) — Main Crate
 **Path**: `crates/readstat/`
 
 Binary with library. CLI uses clap with three subcommands:
@@ -88,4 +88,5 @@ Test data lives in `tests/data/*.sas7bdat`. SAS scripts to regenerate test data 
 - **FFI callback pattern**: ReadStat C library calls Rust callbacks (`cb.rs`) during parsing; data accumulates in `ReadStatData` via raw pointer casts
 - **Streaming**: default reader streams rows in chunks (10k) to manage memory
 - **Parallel processing**: Rayon for parallel reading, Crossbeam channels for reader-writer coordination
+- **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → ReadStatVar vectors → Arrow RecordBatch → output format

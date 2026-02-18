@@ -227,8 +227,27 @@ pub extern "C" fn handle_value(
     debug!("value_type is {:#?}", &value_type);
     debug!("is_missing is {}", is_missing);
 
+    // Determine the column index for storage, applying column filter if active
+    let col_index = if let Some(ref filter) = d.column_filter {
+        match filter.get(&var_index) {
+            Some(&mapped) => mapped,
+            None => {
+                // This variable is not selected; skip it but still check row boundary
+                if var_index == (d.total_var_count - 1) {
+                    d.chunk_rows_processed += 1;
+                    if let Some(trp) = &d.total_rows_processed {
+                        trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                return ReadStatHandler::READSTAT_HANDLER_OK as c_int;
+            }
+        }
+    } else {
+        var_index
+    };
+
     // get value and push into arrays
-    let value = match ReadStatVar::get_readstat_value(value, value_type, is_missing, &d.vars, var_index) {
+    let value = match ReadStatVar::get_readstat_value(value, value_type, is_missing, &d.vars, col_index) {
         Ok(v) => v,
         Err(e) => {
             d.errors.push(format!("{}", e));
@@ -237,10 +256,10 @@ pub extern "C" fn handle_value(
     };
 
     // push into cols
-    d.cols[var_index as usize].push(value);
+    d.cols[col_index as usize].push(value);
 
-    // if row is complete
-    if var_index == (d.var_count - 1) {
+    // if row is complete (use total_var_count for boundary detection)
+    if var_index == (d.total_var_count - 1) {
         d.chunk_rows_processed += 1;
         if let Some(trp) = &d.total_rows_processed {
             trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

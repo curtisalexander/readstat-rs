@@ -162,6 +162,15 @@ pub enum ReadStatError {
     #[error("{0}")]
     NulError(#[from] std::ffi::NulError),
 
+    /// One or more specified column names were not found in the dataset.
+    #[error("Column(s) not found: {requested:?}\nAvailable columns: {available:?}")]
+    ColumnsNotFound {
+        /// The column names that were requested but not found.
+        requested: Vec<String>,
+        /// All available column names in the dataset.
+        available: Vec<String>,
+    },
+
     /// Catch-all error with a custom message.
     #[error("{0}")]
     Other(String),

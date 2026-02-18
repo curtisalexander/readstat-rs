@@ -150,6 +150,12 @@ pub enum ReadStatCliCommands {
         /// Do not display progress bar
         #[arg(action, long)]
         no_progress: bool,
+        /// Comma-separated list of column names to include in output
+        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        columns: Option<Vec<String>>,
+        /// Path to a file containing column names (one per line, # comments)
+        #[arg(long, value_hint = ValueHint::FilePath, conflicts_with = "columns")]
+        columns_file: Option<PathBuf>,
     },
     /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
     Data {
@@ -192,6 +198,12 @@ pub enum ReadStatCliCommands {
         /// Parquet compression level (if applicable)
         #[arg(long, value_parser = clap::value_parser!(u32).range(0..=22))]
         compression_level: Option<u32>,
+        /// Comma-separated list of column names to include in output
+        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        columns: Option<Vec<String>>,
+        /// Path to a file containing column names (one per line, # comments)
+        #[arg(long, value_hint = ValueHint::FilePath, conflicts_with = "columns")]
+        columns_file: Option<PathBuf>,
     },
 }
 
@@ -254,6 +266,23 @@ impl fmt::Display for ParquetCompression {
     }
 }
 
+/// Resolve column names from `--columns` or `--columns-file` CLI options.
+fn resolve_columns(
+    columns: Option<Vec<String>>,
+    columns_file: Option<PathBuf>,
+) -> Result<Option<Vec<String>>, ReadStatError> {
+    if let Some(path) = columns_file {
+        let names = ReadStatMetadata::parse_columns_file(&path)?;
+        if names.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(names))
+        }
+    } else {
+        Ok(columns)
+    }
+}
+
 /// Executes the CLI command specified by the parsed [`ReadStatCli`] arguments.
 ///
 /// This is the main entry point for the CLI binary, dispatching to the
@@ -296,6 +325,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             reader,
             stream_rows,
             no_progress,
+            columns,
+            columns_file,
         } => {
             // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
@@ -320,6 +351,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
 
             // Read metadata
             md.read_metadata(&rsp, false)?;
+
+            // Resolve column selection
+            let col_names = resolve_columns(columns, columns_file)?;
+            let column_filter = md.resolve_selected_columns(col_names)?;
+            let original_var_count = md.var_count;
+            if let Some(ref mapping) = column_filter {
+                md = md.filter_to_selected_columns(mapping);
+            }
 
             // Determine row count
             let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
@@ -366,6 +405,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
 
                 // Initialize ReadStatData struct
                 let mut d = ReadStatData::new()
+                    .set_column_filter(column_filter.clone(), original_var_count)
                     .set_no_progress(no_progress)
                     .set_total_rows_to_process(total_rows_to_process as usize)
                     .set_total_rows_processed(total_rows_processed.clone())
@@ -413,6 +453,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             parallel_write_buffer_mb,
             compression,
             compression_level,
+            columns,
+            columns_file,
         } => {
             // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
@@ -435,6 +477,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             // Instantiate ReadStatMetadata
             let mut md = ReadStatMetadata::new();
             md.read_metadata(&rsp, false)?;
+
+            // Resolve column selection
+            let col_names = resolve_columns(columns, columns_file)?;
+            let column_filter = md.resolve_selected_columns(col_names)?;
+            let original_var_count = md.var_count;
+            if let Some(ref mapping) = column_filter {
+                md = md.filter_to_selected_columns(mapping);
+            }
 
             // If no output path then only read metadata; otherwise read data
             match &rsp.out_path {
@@ -536,6 +586,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
 
                                 // Initialize ReadStatData struct
                                 let mut d = ReadStatData::new()
+                                    .set_column_filter(column_filter.clone(), original_var_count)
                                     .set_no_progress(no_progress)
                                     .set_total_rows_to_process(total_rows_to_process as usize)
                                     .set_total_rows_processed(total_rows_processed.clone())
