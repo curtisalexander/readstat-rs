@@ -1,11 +1,11 @@
 use colored::Colorize;
 use path_abs::{PathAbs, PathInfo};
 use std::{
-    error::Error,
     ffi::CString,
     path::{Path, PathBuf},
 };
 
+use crate::err::ReadStatError;
 use crate::OutFormat;
 use crate::ParquetCompression;
 
@@ -33,7 +33,7 @@ impl ReadStatPath {
         no_write: bool,
         compression: Option<ParquetCompression>,
         compression_level: Option<u32>,
-    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Self, ReadStatError> {
         let p = Self::validate_path(path)?;
         let ext = Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
@@ -72,33 +72,36 @@ impl ReadStatPath {
     }
 
     #[cfg(unix)]
-    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, Box<dyn Error + Send + Sync>> {
+    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, ReadStatError> {
         use std::os::unix::ffi::OsStrExt;
         let bytes = path.as_os_str().as_bytes();
-        CString::new(bytes).map_err(|_| From::from("Invalid path"))
+        Ok(CString::new(bytes)?)
     }
 
     #[cfg(not(unix))]
-    pub fn path_to_cstring(path: &Path) -> Result<CString, Box<dyn Error + Send + Sync>> {
-        let rust_str = path.as_os_str().to_str().ok_or("Invalid path")?;
-        CString::new(rust_str).map_err(|_| From::from("Invalid path"))
+    pub fn path_to_cstring(path: &Path) -> Result<CString, ReadStatError> {
+        let rust_str = path
+            .as_os_str()
+            .to_str()
+            .ok_or_else(|| ReadStatError::Other("Invalid path".to_string()))?;
+        Ok(CString::new(rust_str)?)
     }
 
     fn validate_format(
         format: Option<OutFormat>,
-    ) -> Result<OutFormat, Box<dyn Error + Send + Sync>> {
+    ) -> Result<OutFormat, ReadStatError> {
         match format {
             None => Ok(OutFormat::csv),
             Some(f) => Ok(f),
         }
     }
 
-    fn validate_in_extension(path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
+    fn validate_in_extension(path: &Path) -> Result<String, ReadStatError> {
         path.extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_owned())
             .map_or(
-                Err(From::from(format!(
+                Err(ReadStatError::Other(format!(
                     "File {} does not have an extension!",
                     path.to_string_lossy().bright_yellow()
                 ))),
@@ -106,7 +109,7 @@ impl ReadStatPath {
                     if IN_EXTENSIONS.iter().any(|&ext| ext == e) {
                         Ok(e)
                     } else {
-                        Err(From::from(format!("Expecting extension {} or {}.\nFile {} does not have expected extension!", String::from("sas7bdat").bright_green(), String::from("sas7bcat").bright_blue(), path.to_string_lossy().bright_yellow())))
+                        Err(ReadStatError::Other(format!("Expecting extension {} or {}.\nFile {} does not have expected extension!", String::from("sas7bdat").bright_green(), String::from("sas7bcat").bright_blue(), path.to_string_lossy().bright_yellow())))
                     }
             )
     }
@@ -114,12 +117,12 @@ impl ReadStatPath {
     fn validate_out_extension(
         path: &Path,
         format: OutFormat,
-    ) -> Result<Option<PathBuf>, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Option<PathBuf>, ReadStatError> {
         path.extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_owned())
             .map_or(
-                Err(From::from(format!(
+                Err(ReadStatError::Other(format!(
                     "File {} does not have an extension!  Expecting extension {}.",
                     path.to_string_lossy().bright_yellow(),
                     format.to_string().bright_green()
@@ -132,7 +135,7 @@ impl ReadStatPath {
                         if e == format.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
-                            Err(From::from(format!(
+                            Err(ReadStatError::Other(format!(
                                 "Expecting extension {}.  Instead, file {} has extension {}.",
                                 format.to_string().bright_green(),
                                 path.to_string_lossy().bright_yellow(),
@@ -147,14 +150,14 @@ impl ReadStatPath {
     fn validate_out_path(
         path: Option<PathBuf>,
         overwrite: bool,
-    ) -> Result<Option<PathBuf>, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Option<PathBuf>, ReadStatError> {
         match path {
             None => Ok(None),
             Some(p) => {
                 let abs_path = PathAbs::new(p)?;
 
                 match abs_path.parent() {
-                    Err(_) => Err(From::from(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &abs_path.to_string_lossy().bright_yellow()))),
+                    Err(_) => Err(ReadStatError::Other(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &abs_path.to_string_lossy().bright_yellow()))),
                     Ok(parent) => {
                         if parent.exists() {
                             // Check to see if file already exists
@@ -163,13 +166,13 @@ impl ReadStatPath {
                                     println!("The file {} will be {}!", abs_path.to_string_lossy().bright_yellow(), String::from("overwritten").truecolor(255, 105, 180));
                                     Ok(Some(abs_path.as_path().to_path_buf()))
                                 } else {
-                                    Err(From::from(format!("The output file - {} - already exists!  To overwrite the file, utilize the {} parameter", abs_path.to_string_lossy().bright_yellow(), String::from("--overwrite").bright_cyan())))
+                                    Err(ReadStatError::Other(format!("The output file - {} - already exists!  To overwrite the file, utilize the {} parameter", abs_path.to_string_lossy().bright_yellow(), String::from("--overwrite").bright_cyan())))
                                 }
                             } else {
                                 Ok(Some(abs_path.as_path().to_path_buf()))
                             }
                         } else {
-                            Err(From::from(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &parent.to_string_lossy().bright_yellow())))
+                            Err(ReadStatError::Other(format!("The parent directory of the value of the parameter  --output ({}) does not exist", &parent.to_string_lossy().bright_yellow())))
                         }
                     }
                 }
@@ -177,13 +180,13 @@ impl ReadStatPath {
         }
     }
 
-    fn validate_path(path: PathBuf) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+    fn validate_path(path: PathBuf) -> Result<PathBuf, ReadStatError> {
         let abs_path = PathAbs::new(path)?;
 
         if abs_path.exists() {
             Ok(abs_path.as_path().to_path_buf())
         } else {
-            Err(From::from(format!(
+            Err(ReadStatError::Other(format!(
                 "File {} does not exist!",
                 abs_path.to_string_lossy().bright_yellow()
             )))
@@ -193,7 +196,7 @@ impl ReadStatPath {
     fn validate_compression_level(
         compression: ParquetCompression,
         compression_level: Option<u32>,
-    ) -> Result<Option<u32>, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Option<u32>, ReadStatError> {
         match compression {
             ParquetCompression::Uncompressed => match compression_level {
                 None => Ok(compression_level),
@@ -222,7 +225,7 @@ impl ReadStatPath {
                     if c <= 9 {
                         Ok(Some(c))
                     } else {
-                        Err(From::from(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-9.", c.to_string().bright_yellow(), String::from("gzip").bright_cyan())))
+                        Err(ReadStatError::Other(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-9.", c.to_string().bright_yellow(), String::from("gzip").bright_cyan())))
                     }
                 }
             },
@@ -232,7 +235,7 @@ impl ReadStatPath {
                     if c <= 11 {
                         Ok(Some(c))
                     } else {
-                        Err(From::from(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-11.", c.to_string().bright_yellow(), String::from("brotli").bright_cyan())))
+                        Err(ReadStatError::Other(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-11.", c.to_string().bright_yellow(), String::from("brotli").bright_cyan())))
                     }
                 }
             },
@@ -242,7 +245,7 @@ impl ReadStatPath {
                     if c <= 22 {
                         Ok(Some(c))
                     } else {
-                        Err(From::from(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-22.", c.to_string().bright_yellow(), String::from("zstd").bright_cyan())))
+                        Err(ReadStatError::Other(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-22.", c.to_string().bright_yellow(), String::from("zstd").bright_cyan())))
                     }
                 }
             },

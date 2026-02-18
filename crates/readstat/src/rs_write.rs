@@ -12,9 +12,10 @@ use std::sync::Arc;
 use colored::Colorize;
 use num_format::Locale;
 use num_format::ToFormattedString;
-use std::{error::Error, fs::{self, OpenOptions, File}, io::{stdout, BufWriter, Seek, SeekFrom}, path::PathBuf};
+use std::{fs::{self, OpenOptions, File}, io::{stdout, BufWriter, Seek, SeekFrom}, path::PathBuf};
 use tempfile::SpooledTempFile;
 
+use crate::err::ReadStatError;
 use crate::rs_data::ReadStatData;
 use crate::rs_metadata::ReadStatMetadata;
 use crate::rs_path::ReadStatPath;
@@ -64,46 +65,11 @@ impl ReadStatWriter {
         compression: Option<crate::ParquetCompression>,
         compression_level: Option<u32>,
         buffer_size_bytes: usize,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         // Create a SpooledTempFile that keeps data in memory until buffer_size_bytes
         let mut spooled_file = SpooledTempFile::new(buffer_size_bytes);
 
-        let compression_codec = match compression {
-            Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
-            Some(crate::ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
-            Some(crate::ParquetCompression::Gzip) => {
-                if let Some(level) = compression_level {
-                    let gzip_level = GzipLevel::try_new(level.try_into()
-                        .map_err(|_| "Invalid Gzip compression level")?
-                    ).map_err(|e| format!("Invalid Gzip compression level: {}", e))?;
-                    ParquetCompressionCodec::GZIP(gzip_level)
-                } else {
-                    ParquetCompressionCodec::GZIP(GzipLevel::default())
-                }
-            },
-            Some(crate::ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
-            Some(crate::ParquetCompression::Brotli) => {
-                if let Some(level) = compression_level {
-                    let brotli_level = BrotliLevel::try_new(level.try_into()
-                        .map_err(|_| "Invalid Brotli compression level")?
-                    ).map_err(|e| format!("Invalid Brotli compression level: {}", e))?;
-                    ParquetCompressionCodec::BROTLI(brotli_level)
-                } else {
-                    ParquetCompressionCodec::BROTLI(BrotliLevel::default())
-                }
-            },
-            Some(crate::ParquetCompression::Zstd) => {
-                if let Some(level) = compression_level {
-                    let zstd_level = ZstdLevel::try_new(level.try_into()
-                        .map_err(|_| "Invalid Zstd compression level")?
-                    ).map_err(|e| format!("Invalid Zstd compression level: {}", e))?;
-                    ParquetCompressionCodec::ZSTD(zstd_level)
-                } else {
-                    ParquetCompressionCodec::ZSTD(ZstdLevel::default())
-                }
-            },
-            None => ParquetCompressionCodec::SNAPPY,
-        };
+        let compression_codec = Self::resolve_compression(compression, compression_level)?;
 
         let props = WriterProperties::builder()
             .set_compression(compression_codec)
@@ -140,49 +106,14 @@ impl ReadStatWriter {
         schema: &Schema,
         compression: Option<crate::ParquetCompression>,
         compression_level: Option<u32>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         let f = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .open(output_path)?;
 
-        let compression_codec = match compression {
-            Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
-            Some(crate::ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
-            Some(crate::ParquetCompression::Gzip) => {
-                if let Some(level) = compression_level {
-                    let gzip_level = GzipLevel::try_new(level.try_into()
-                        .map_err(|_| "Invalid Gzip compression level")?
-                    ).map_err(|e| format!("Invalid Gzip compression level: {}", e))?;
-                    ParquetCompressionCodec::GZIP(gzip_level)
-                } else {
-                    ParquetCompressionCodec::GZIP(GzipLevel::default())
-                }
-            },
-            Some(crate::ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
-            Some(crate::ParquetCompression::Brotli) => {
-                if let Some(level) = compression_level {
-                    let brotli_level = BrotliLevel::try_new(level.try_into()
-                        .map_err(|_| "Invalid Brotli compression level")?
-                    ).map_err(|e| format!("Invalid Brotli compression level: {}", e))?;
-                    ParquetCompressionCodec::BROTLI(brotli_level)
-                } else {
-                    ParquetCompressionCodec::BROTLI(BrotliLevel::default())
-                }
-            },
-            Some(crate::ParquetCompression::Zstd) => {
-                if let Some(level) = compression_level {
-                    let zstd_level = ZstdLevel::try_new(level.try_into()
-                        .map_err(|_| "Invalid Zstd compression level")?
-                    ).map_err(|e| format!("Invalid Zstd compression level: {}", e))?;
-                    ParquetCompressionCodec::ZSTD(zstd_level)
-                } else {
-                    ParquetCompressionCodec::ZSTD(ZstdLevel::default())
-                }
-            },
-            None => ParquetCompressionCodec::SNAPPY,
-        };
+        let compression_codec = Self::resolve_compression(compression, compression_level)?;
 
         let props = WriterProperties::builder()
             .set_compression(compression_codec)
@@ -202,9 +133,9 @@ impl ReadStatWriter {
         for temp_file in temp_files {
             let file = File::open(temp_file)?;
             let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-            let mut reader = builder.build()?;
+            let reader = builder.build()?;
 
-            while let Some(batch) = reader.next() {
+            for batch in reader {
                 writer.write(&batch?)?;
             }
 
@@ -216,11 +147,51 @@ impl ReadStatWriter {
         Ok(())
     }
 
+    fn resolve_compression(
+        compression: Option<crate::ParquetCompression>,
+        compression_level: Option<u32>,
+    ) -> Result<ParquetCompressionCodec, ReadStatError> {
+        let codec = match compression {
+            Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
+            Some(crate::ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
+            Some(crate::ParquetCompression::Gzip) => {
+                if let Some(level) = compression_level {
+                    let gzip_level = GzipLevel::try_new(level)
+                        .map_err(|e| ReadStatError::Other(format!("Invalid Gzip compression level: {}", e)))?;
+                    ParquetCompressionCodec::GZIP(gzip_level)
+                } else {
+                    ParquetCompressionCodec::GZIP(GzipLevel::default())
+                }
+            },
+            Some(crate::ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
+            Some(crate::ParquetCompression::Brotli) => {
+                if let Some(level) = compression_level {
+                    let brotli_level = BrotliLevel::try_new(level)
+                        .map_err(|e| ReadStatError::Other(format!("Invalid Brotli compression level: {}", e)))?;
+                    ParquetCompressionCodec::BROTLI(brotli_level)
+                } else {
+                    ParquetCompressionCodec::BROTLI(BrotliLevel::default())
+                }
+            },
+            Some(crate::ParquetCompression::Zstd) => {
+                if let Some(level) = compression_level {
+                    let zstd_level = ZstdLevel::try_new(level as i32)
+                        .map_err(|e| ReadStatError::Other(format!("Invalid Zstd compression level: {}", e)))?;
+                    ParquetCompressionCodec::ZSTD(zstd_level)
+                } else {
+                    ParquetCompressionCodec::ZSTD(ZstdLevel::default())
+                }
+            },
+            None => ParquetCompressionCodec::SNAPPY,
+        };
+        Ok(codec)
+    }
+
     pub fn finish(
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         match rsp {
             // Write csv data to file
             ReadStatPath {
@@ -275,7 +246,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         // Only print messages if there's no progress bar
         // If there's a progress bar, it will handle showing progress
         if d.pb.is_none() {
@@ -311,7 +282,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         //if let Some(pb) = &d.pb {
         let in_f = if let Some(f) = rsp.path.file_name() {
             f.to_string_lossy().bright_red()
@@ -353,7 +324,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         match rsp {
             // Write data to standard out
             ReadStatPath {
@@ -407,7 +378,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -445,13 +416,13 @@ impl ReadStatWriter {
                 self.wrote_start = true;
                 Ok(())
             } else {
-                Err(From::from(
-                    "Error writing csv as associated writer is not for the csv format",
+                Err(ReadStatError::Other(
+                    "Error writing csv as associated writer is not for the csv format".to_string(),
                 ))
             }
         } else {
-            Err(From::from(
-                "Error writing csv as output path is set to None",
+            Err(ReadStatError::Other(
+                "Error writing csv as output path is set to None".to_string(),
             ))
         }
     }
@@ -460,7 +431,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -496,13 +467,13 @@ impl ReadStatWriter {
 
                 Ok(())
             } else {
-                Err(From::from(
-                    "Error writing feather as associated writer is not for the feather format",
+                Err(ReadStatError::Other(
+                    "Error writing feather as associated writer is not for the feather format".to_string(),
                 ))
             }
         } else {
-            Err(From::from(
-                "Error writing feather file as output path is set to None",
+            Err(ReadStatError::Other(
+                "Error writing feather file as output path is set to None".to_string(),
             ))
         }
     }
@@ -511,7 +482,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(ReadStatWriterFormat::Feather(wtr)) = &mut self.wtr {
             wtr.finish()?;
 
@@ -520,8 +491,8 @@ impl ReadStatWriter {
 
             Ok(())
         } else {
-            Err(From::from(
-                "Error writing feather as associated writer is not for the feather format",
+            Err(ReadStatError::Other(
+                "Error writing feather as associated writer is not for the feather format".to_string(),
             ))
         }
     }
@@ -530,7 +501,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -568,13 +539,13 @@ impl ReadStatWriter {
 
                 Ok(())
             } else {
-                Err(From::from(
-                    "Error writing ndjson as associated writer is not for the ndjson format",
+                Err(ReadStatError::Other(
+                    "Error writing ndjson as associated writer is not for the ndjson format".to_string(),
                 ))
             }
         } else {
-            Err(From::from(
-                "Error writing ndjson file as output path is set to None",
+            Err(ReadStatError::Other(
+                "Error writing ndjson file as output path is set to None".to_string(),
             ))
         }
     }
@@ -583,7 +554,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
             // if already started writing, then need to append to file; otherwise create file
             let f = if self.wrote_start {
@@ -604,45 +575,10 @@ impl ReadStatWriter {
 
             // setup writer
             if !self.wrote_start {
-                let compression = match rsp.compression {
-                    Some(crate::ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
-                    Some(crate::ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
-                    Some(crate::ParquetCompression::Gzip) => {
-                        if let Some(level) = rsp.compression_level {
-                            let gzip_level = GzipLevel::try_new(level.try_into()
-                                .map_err(|_| "Invalid Gzip compression level")?
-                            ).map_err(|e| format!("Invalid Gzip compression level: {}", e))?;
-                            ParquetCompressionCodec::GZIP(gzip_level)
-                        } else {
-                            ParquetCompressionCodec::GZIP(GzipLevel::default())
-                        }
-                    },
-                    Some(crate::ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
-                    Some(crate::ParquetCompression::Brotli) => {
-                        if let Some(level) = rsp.compression_level {
-                            let brotli_level = BrotliLevel::try_new(level.try_into()
-                                .map_err(|_| "Invalid Brotli compression level")?
-                            ).map_err(|e| format!("Invalid Brotli compression level: {}", e))?;
-                            ParquetCompressionCodec::BROTLI(brotli_level)
-                        } else {
-                            ParquetCompressionCodec::BROTLI(BrotliLevel::default())
-                        }
-                    },
-                    Some(crate::ParquetCompression::Zstd) => {
-                        if let Some(level) = rsp.compression_level {
-                            let zstd_level = ZstdLevel::try_new(level.try_into()
-                                .map_err(|_| "Invalid Zstd compression level")?
-                            ).map_err(|e| format!("Invalid Zstd compression level: {}", e))?;
-                            ParquetCompressionCodec::ZSTD(zstd_level)
-                        } else {
-                            ParquetCompressionCodec::ZSTD(ZstdLevel::default())
-                        }
-                    },
-                    None => ParquetCompressionCodec::SNAPPY,
-                };
+                let compression_codec = Self::resolve_compression(rsp.compression, rsp.compression_level)?;
 
                 let props = WriterProperties::builder()
-                    .set_compression(compression)
+                    .set_compression(compression_codec)
                     .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
                     .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
                     .build();
@@ -655,10 +591,9 @@ impl ReadStatWriter {
 
             // write
             if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
-                if let Some(batch) = &d.batch {
-                    if let Some(ref mut wtr) = pwtr.wtr {
+                if let Some(batch) = &d.batch
+                    && let Some(ref mut wtr) = pwtr.wtr {
                         wtr.write(batch)?;
-                    }
                 }
 
                 // update
@@ -666,13 +601,13 @@ impl ReadStatWriter {
 
                 Ok(())
             } else {
-                Err(From::from(
-                    "Error writing parquet as associated writer is not for the parquet format",
+                Err(ReadStatError::Other(
+                    "Error writing parquet as associated writer is not for the parquet format".to_string(),
                 ))
             }
         } else {
-            Err(From::from(
-                "Error writing parquet file as output path is set to None",
+            Err(ReadStatError::Other(
+                "Error writing parquet file as output path is set to None".to_string(),
             ))
         }
     }
@@ -681,7 +616,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
             // Take ownership of the writer to close it
             if let Some(wtr) = pwtr.wtr.take() {
@@ -693,8 +628,8 @@ impl ReadStatWriter {
 
             Ok(())
         } else {
-            Err(From::from(
-                "Error writing parquet as associated writer is not for the parquet format",
+            Err(ReadStatError::Other(
+                "Error writing parquet as associated writer is not for the parquet format".to_string(),
             ))
         }
     }
@@ -702,7 +637,7 @@ impl ReadStatWriter {
     fn write_data_to_stdout(
         &mut self,
         d: &ReadStatData,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -727,8 +662,8 @@ impl ReadStatWriter {
 
             Ok(())
         } else {
-            Err(From::from(
-                "Error writing to csv as associated writer is not for the csv format",
+            Err(ReadStatError::Other(
+                "Error writing to csv as associated writer is not for the csv format".to_string(),
             ))
         }
     }
@@ -737,7 +672,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
             // create file
             let mut f = std::fs::File::create(p)?;
@@ -755,8 +690,8 @@ impl ReadStatWriter {
             // return
             Ok(())
         } else {
-            Err(From::from(
-                "Error writing csv as output path is set to None",
+            Err(ReadStatError::Other(
+                "Error writing csv as output path is set to None".to_string(),
             ))
         }
     }
@@ -764,7 +699,7 @@ impl ReadStatWriter {
     fn write_header_to_stdout(
         &mut self,
         d: &ReadStatData,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -787,7 +722,7 @@ impl ReadStatWriter {
         md: &ReadStatMetadata,
         rsp: &ReadStatPath,
         as_json: bool,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         if as_json {
             self.write_metadata_to_json(md)
         } else {
@@ -798,21 +733,17 @@ impl ReadStatWriter {
     pub fn write_metadata_to_json(
         &self,
         md: &ReadStatMetadata,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        match serde_json::to_string_pretty(md) {
-            Ok(s) => {
-                println!("{}", s);
-                Ok(())
-            }
-            Err(e) => Err(From::from(format!("Error converting to json: {}", e))),
-        }
+    ) -> Result<(), ReadStatError> {
+        let s = serde_json::to_string_pretty(md)?;
+        println!("{}", s);
+        Ok(())
     }
 
     pub fn write_metadata_to_stdout(
         &self,
         md: &ReadStatMetadata,
         rsp: &ReadStatPath,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         println!(
             "Metadata for the file {}\n",
             rsp.path.to_string_lossy().bright_yellow()
@@ -853,7 +784,7 @@ impl ReadStatWriter {
                     Some(f) => match f {
                         ReadStatVarFormatClass::Date => "Date",
                         ReadStatVarFormatClass::DateTime |
-                        ReadStatVarFormatClass::DateTimeWithMilliseconds | 
+                        ReadStatVarFormatClass::DateTimeWithMilliseconds |
                         ReadStatVarFormatClass::DateTimeWithMicroseconds |
                         ReadStatVarFormatClass::DateTimeWithNanoseconds => "DateTime",
                         ReadStatVarFormatClass::Time |

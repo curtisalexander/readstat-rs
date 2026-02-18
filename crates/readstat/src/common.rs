@@ -1,10 +1,11 @@
-use std::error::Error;
 use std::ffi::CStr;
+
+use crate::err::ReadStatError;
 
 pub fn build_offsets(
     row_count: u32,
     stream_rows: u32,
-) -> Result<Vec<u32>, Box<dyn Error + Send + Sync>> {
+) -> Result<Vec<u32>, ReadStatError> {
     // Get number of chunks
     let chunks = if stream_rows < row_count {
         if row_count % stream_rows == 0 {

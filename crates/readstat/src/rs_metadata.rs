@@ -2,12 +2,11 @@ use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 use serde::Serialize;
-use std::{collections::{BTreeMap, HashMap}, error::Error, ffi::c_void, os::raw::c_int};
+use std::{collections::{BTreeMap, HashMap}, ffi::c_void, os::raw::c_int};
 
 use crate::cb::{handle_metadata, handle_variable};
-use crate::err::ReadStatError;
+use crate::err::{check_c_error, ReadStatError};
 use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
@@ -118,7 +117,7 @@ impl ReadStatMetadata {
         &mut self,
         rsp: &ReadStatPath,
         skip_row_count: bool,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), ReadStatError> {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
@@ -164,21 +163,11 @@ impl ReadStatMetadata {
         }
         */
 
-        #[allow(clippy::useless_conversion)]
-        match FromPrimitive::from_i32(error.try_into().unwrap()) {
-            Some(ReadStatError::READSTAT_OK) => {
-                // if successful, initialize schema
-                self.schema = self.initialize_schema();
-                Ok(())
-            }
-            Some(e) => Err(From::from(format!(
-                "Error when attempting to parse sas7bdat: {:#?}",
-                e
-            ))),
-            None => Err(From::from(
-                "Error when attempting to parse sas7bdat: Unknown return value",
-            )),
-        }
+        check_c_error(error as i32)?;
+
+        // if successful, initialize schema
+        self.schema = self.initialize_schema();
+        Ok(())
     }
 }
 

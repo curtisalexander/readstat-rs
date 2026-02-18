@@ -48,33 +48,29 @@ pub extern "C" fn handle_metadata(
         unsafe { readstat_sys::readstat_get_creation_time(metadata) },
         0,
     )
-    .expect("Panics (returns None) on the out-of-range number of seconds (more than 262 000 years away from common era) and/or invalid nanosecond (2 seconds or more")
+    .unwrap_or_default()
     .format("%Y-%m-%d %H:%M:%S")
     .to_string();
     let mt = DateTime::from_timestamp(
         unsafe { readstat_sys::readstat_get_modified_time(metadata) },
         0,
     )
-    .expect("Panics (returns None) on the out-of-range number of seconds (more than 262 000 years away from common era) and/or invalid nanosecond (2 seconds or more")
+    .unwrap_or_default()
     .format("%Y-%m-%d %H:%M:%S")
     .to_string();
 
     #[allow(clippy::useless_conversion)]
-    let compression = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_get_compression(metadata)
-            .try_into()
-            .unwrap()
-    }) {
+    let compression = match FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_get_compression(metadata) } as i32,
+    ) {
         Some(t) => t,
         None => ReadStatCompress::None,
     };
 
     #[allow(clippy::useless_conversion)]
-    let endianness = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_get_endianness(metadata)
-            .try_into()
-            .unwrap()
-    }) {
+    let endianness = match FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_get_endianness(metadata) } as i32,
+    ) {
         Some(t) => t,
         None => ReadStatEndian::None,
     };
@@ -140,21 +136,17 @@ pub extern "C" fn handle_variable(
 
     // get variable metadata
     #[allow(clippy::useless_conversion)]
-    let var_type = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_variable_get_type(variable)
-            .try_into()
-            .unwrap()
-    }) {
+    let var_type = match FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_variable_get_type(variable) } as i32,
+    ) {
         Some(t) => t,
         None => ReadStatVarType::Unknown,
     };
 
     #[allow(clippy::useless_conversion)]
-    let var_type_class = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_variable_get_type_class(variable)
-            .try_into()
-            .unwrap()
-    }) {
+    let var_type_class = match FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_variable_get_type_class(variable) } as i32,
+    ) {
         Some(t) => t,
         None => ReadStatVarTypeClass::Numeric,
     };
@@ -213,7 +205,13 @@ pub extern "C" fn handle_value(
     debug!("is_missing is {}", is_missing);
 
     // get value and push into arrays
-    let value = ReadStatVar::get_readstat_value(value, value_type, is_missing, &d.vars, var_index);
+    let value = match ReadStatVar::get_readstat_value(value, value_type, is_missing, &d.vars, var_index) {
+        Ok(v) => v,
+        Err(e) => {
+            d.errors.push(format!("{}", e));
+            return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+        }
+    };
 
     // push into cols
     d.cols[var_index as usize].push(value);

@@ -8,18 +8,16 @@ use arrow_array::{
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use num_traits::FromPrimitive;
 use path_abs::PathInfo;
 use std::{
     collections::BTreeMap,
-    error::Error,
     os::raw::c_void,
     sync::{atomic::AtomicUsize, Arc},
 };
 
 use crate::{
     cb,
-    err::ReadStatError,
+    err::{check_c_error, ReadStatError},
     rs_metadata::{ReadStatMetadata, ReadStatVarMetadata},
     rs_parser::ReadStatParser,
     rs_path::ReadStatPath,
@@ -89,7 +87,7 @@ impl ReadStatData {
         Self { cols, ..self }
     }
 
-    fn cols_to_batch(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
         // for each column in cols
         let arrays: Vec<ArrayRef> = self
             .cols
@@ -298,14 +296,14 @@ impl ReadStatData {
         Ok(())
     }
 
-    pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // parse data and if successful then convert cols into a record batch
         self.parse_data(rsp)?;
         self.cols_to_batch()?;
         Ok(())
     }
 
-    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
@@ -341,21 +339,12 @@ impl ReadStatData {
         let error = ReadStatParser::new()
             // do not set metadata handler nor variable handler as already processed
             .set_value_handler(Some(cb::handle_value))?
-            .set_row_limit(Some(self.chunk_rows_to_process.try_into().unwrap()))?
-            .set_row_offset(Some(self.chunk_row_start.try_into().unwrap()))?
+            .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
+            .set_row_offset(Some(self.chunk_row_start.try_into()?))?
             .parse_sas7bdat(ppath, ctx);
 
-        #[allow(clippy::useless_conversion)]
-        match FromPrimitive::from_i32(error.try_into().unwrap()) {
-            Some(ReadStatError::READSTAT_OK) => Ok(()),
-            Some(e) => Err(From::from(format!(
-                "Error when attempting to parse sas7bdat: {:#?}",
-                e
-            ))),
-            None => Err(From::from(
-                "Error when attempting to parse sas7bdat: Unknown return value",
-            )),
-        }
+        check_c_error(error as i32)?;
+        Ok(())
     }
 
     /*
