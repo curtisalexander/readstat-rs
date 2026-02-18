@@ -72,9 +72,25 @@ Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-wi
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-16 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, Arrow migration, row offsets, scientific notation.
+20 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, Arrow migration, row offsets, scientific notation, column selection, and skip row count. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
 
-Test data lives in `tests/data/*.sas7bdat`. SAS scripts to regenerate test data are in `util/`.
+Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regenerate test data are in `util/`.
+
+| Dataset | Metadata Test | Data Test |
+|---------|:---:|:---:|
+| `all_dates.sas7bdat` | ✅ | ✅ |
+| `all_datetimes.sas7bdat` | ✅ | ✅ |
+| `all_times.sas7bdat` | ✅ | ✅ |
+| `all_types.sas7bdat` | ✅ | ✅ |
+| `cars.sas7bdat` | ✅ | ✅ |
+| `hasmissing.sas7bdat` | ✅ | ✅ |
+| `intel.sas7bdat` | ✅ | ✅ |
+| `messydata.sas7bdat` | ✅ | ✅ |
+| `rand_ds_largepage_err.sas7bdat` | ✅ | ✅ |
+| `rand_ds_largepage_ok.sas7bdat` | ✅ | ✅ |
+| `scientific_notation.sas7bdat` | ✅ | ✅ |
+| `somedata.sas7bdat` | ✅ | ✅ |
+| `somemiss.sas7bdat` | ✅ | ✅ |
 
 ## Build Prerequisites
 
