@@ -2,7 +2,7 @@
 Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) binary
 
 ## Sources
-- `ahs2019n.sas7bdat` &rarr; US Census data
+- `ahs2019n.sas7bdat` &rarr; US Census data (download via [download_ahs.sh](../../util/download_ahs.sh) or [download_ahs.ps1](../../util/download_ahs.ps1))
     - http://www2.census.gov/programs-surveys/ahs/2019/AHS%202019%20National%20PUF%20v1.1%20Flat%20SAS.zip
     - Must be downloaded manually as currently ignored by `git` (i.e. has been added to the repository `.gitignore` file)
     - Renamed to be `_ahs2019n.sas7bdat` in order to be picked up by the `_*.sas7bdat` pattern in the `.gitignore` file
@@ -33,7 +33,7 @@ Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) b
     - Previously parsed floats with [lexical](https://docs.rs/lexical/latest/lexical/) by first converting to a string `lexical::to_string(value)` and then converting back (after truncating) with `lexical::parse`
     - Had an issue where large floats were being read correctly via ReadStat and the string conversion via `lexical` resulted in a string with scientific notation; after trying to parse back from a string to a float with `lexical::parse` there would be an error thrown
     - Fixed by [d301a9f9ff8c5e3c34a604a16c095e99d205f624](https://github.com/curtisalexander/readstat-rs/commit/d301a9f9ff8c5e3c34a604a16c095e99d205f624)
-- `somedata.sas7bdat`
+- `somedata.sas7bdat` &rarr; Used to test Parquet label preservation
     - https://www.alanelliott.com/sas/ED2_FILES.html
 - `somemiss.sas7bdat`
     - https://www.alanelliott.com/sas/ED2_FILES.html

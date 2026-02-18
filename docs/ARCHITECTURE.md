@@ -72,7 +72,7 @@ Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-wi
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-19 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, Arrow migration, row offsets, scientific notation.
+16 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, Arrow migration, row offsets, scientific notation.
 
 Test data lives in `tests/data/*.sas7bdat`. SAS scripts to regenerate test data are in `util/`.
 
