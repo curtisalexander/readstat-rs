@@ -1,8 +1,9 @@
 use arrow::datatypes::Schema;
 use arrow_array::{
     ArrayRef, Date32Array, Float32Array, Float64Array, Int16Array, Int32Array,
-    Int8Array, RecordBatch, StringArray, Time32SecondArray, TimestampMicrosecondArray,
-    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
+    Int8Array, RecordBatch, StringArray, Time32SecondArray, Time64MicrosecondArray,
+    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+    TimestampSecondArray,
 };
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -269,6 +270,20 @@ impl ReadStatData {
                             .collect::<Vec<Option<i32>>>();
 
                         Arc::new(Time32SecondArray::from(vec))
+                    }
+                    ReadStatVar::ReadStat_TimeWithMicroseconds(_) => {
+                        let vec = col
+                            .iter()
+                            .map(|t| {
+                                if let ReadStatVar::ReadStat_TimeWithMicroseconds(v) = t {
+                                    *v
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .collect::<Vec<Option<i64>>>();
+
+                        Arc::new(Time64MicrosecondArray::from(vec))
                     }
                 };
 

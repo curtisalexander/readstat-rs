@@ -1,6 +1,6 @@
 use arrow::datatypes::{DataType, TimeUnit};
-use arrow_array::{Array, Float64Array, StringArray, TimestampMillisecondArray, TimestampSecondArray};
-use chrono::{NaiveDate, TimeZone, Utc};
+use arrow_array::{Array, Float64Array, StringArray, Time64MicrosecondArray, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampSecondArray};
+use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 
 mod common;
@@ -215,10 +215,10 @@ fn parse_all_types_metadata() {
     assert_eq!(md.row_count, 3);
 
     // variable count
-    assert_eq!(md.var_count, 8);
+    assert_eq!(md.var_count, 10);
 
     // table name
-    assert_eq!(md.table_name, String::from("ALL_TYPES"));
+    assert_eq!(md.table_name, String::from(""));
 
     // table label
     assert_eq!(md.file_label, String::from(""));
@@ -233,10 +233,10 @@ fn parse_all_types_metadata() {
     assert_eq!(md.is64bit, 1);
 
     // creation time
-    assert_eq!(md.creation_time, "2022-01-08 19:40:48");
+    assert_eq!(md.creation_time, "2026-02-18 02:32:45");
 
     // modified time
-    assert_eq!(md.modified_time, "2022-01-08 19:40:48");
+    assert_eq!(md.modified_time, "2026-02-18 02:32:45");
 
     // compression
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
@@ -314,8 +314,19 @@ fn parse_all_types_metadata() {
         DataType::Timestamp(TimeUnit::Millisecond, None)
     ));
 
-    // 7 - _time
+    // 7 - _datetime_with_us
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMicroseconds));
+    assert_eq!(vf, String::from("DATETIME26.6"));
+    assert!(matches!(
+        adt,
+        DataType::Timestamp(TimeUnit::Microsecond, None)
+    ));
+
+    // 8 - _time
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 8);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::Time));
@@ -323,6 +334,17 @@ fn parse_all_types_metadata() {
     assert!(matches!(
         adt,
         DataType::Time32(TimeUnit::Second)
+    ));
+
+    // 9 - _time_with_us
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 9);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds));
+    assert_eq!(vf, String::from("TIME15.6"));
+    assert!(matches!(
+        adt,
+        DataType::Time64(TimeUnit::Microsecond)
     ));
 }
 
@@ -396,6 +418,155 @@ fn parse_all_types_datetime_with_milliseconds() {
         .and_hms_milli_opt(13, 42, 25, 943)
         .unwrap();
     assert_eq!(dt, dt_literal, "Row 1: Expected 2021-06-01 13:42:25.943");
+
+    // Row 2: missing value
+    assert!(col.is_null(2));
+}
+
+#[test]
+fn parse_all_types_datetime_with_microseconds() {
+    let (rsp, _md, mut d) = init();
+
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
+
+    // variable index and name for _datetime_with_us
+    let var_index = 7;
+
+    // contains variable
+    let contains_var = common::contains_var(&d, var_index);
+    assert!(contains_var);
+
+    // metadata
+    let m = common::get_metadata(&d, var_index);
+
+    // variable type class
+    assert!(matches!(
+        m.var_type_class,
+        readstat::ReadStatVarTypeClass::Numeric
+    ));
+
+    // variable type
+    assert!(matches!(m.var_type, readstat::ReadStatVarType::Double));
+
+    // variable format class
+    assert!(matches!(
+        m.var_format_class,
+        Some(readstat::ReadStatVarFormatClass::DateTimeWithMicroseconds)
+    ));
+
+    // variable format
+    assert_eq!(m.var_format, String::from("DATETIME26.6"));
+
+    // arrow data type
+    assert!(matches!(
+        d.schema.fields[var_index as usize].data_type(),
+        DataType::Timestamp(TimeUnit::Microsecond, None)
+    ));
+
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
+
+    // datetime column - access as TimestampMicrosecondArray
+    let col = columns
+        .get(var_index as usize)
+        .unwrap()
+        .as_any()
+        .downcast_ref::<TimestampMicrosecondArray>()
+        .unwrap();
+
+    // Row 0: '01JAN2021:10:49:39.123456'dt - 123456 microseconds
+    let timestamp_micros = col.value(0);
+    let dt = Utc.timestamp_micros(timestamp_micros).unwrap().naive_utc();
+    let dt_literal = NaiveDate::from_ymd_opt(2021, 1, 1)
+        .unwrap()
+        .and_hms_micro_opt(10, 49, 39, 123456)
+        .unwrap();
+    assert_eq!(dt, dt_literal, "Row 0: Expected 2021-01-01 10:49:39.123456");
+
+    // Row 1: '01JUN2021:13:42:25.987654'dt - 987654 microseconds
+    let timestamp_micros = col.value(1);
+    let dt = Utc.timestamp_micros(timestamp_micros).unwrap().naive_utc();
+    let dt_literal = NaiveDate::from_ymd_opt(2021, 6, 1)
+        .unwrap()
+        .and_hms_micro_opt(13, 42, 25, 987654)
+        .unwrap();
+    assert_eq!(dt, dt_literal, "Row 1: Expected 2021-06-01 13:42:25.987654");
+
+    // Row 2: missing value
+    assert!(col.is_null(2));
+}
+
+#[test]
+fn parse_all_types_time_with_microseconds() {
+    let (rsp, _md, mut d) = init();
+
+    let error = d.read_data(&rsp);
+    assert!(error.is_ok());
+
+    // variable index and name for _time_with_us
+    let var_index = 9;
+
+    // contains variable
+    let contains_var = common::contains_var(&d, var_index);
+    assert!(contains_var);
+
+    // metadata
+    let m = common::get_metadata(&d, var_index);
+
+    // variable type class
+    assert!(matches!(
+        m.var_type_class,
+        readstat::ReadStatVarTypeClass::Numeric
+    ));
+
+    // variable type
+    assert!(matches!(m.var_type, readstat::ReadStatVarType::Double));
+
+    // variable format class
+    assert!(matches!(
+        m.var_format_class,
+        Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds)
+    ));
+
+    // variable format
+    assert_eq!(m.var_format, String::from("TIME15.6"));
+
+    // arrow data type
+    assert!(matches!(
+        d.schema.fields[var_index as usize].data_type(),
+        DataType::Time64(TimeUnit::Microsecond)
+    ));
+
+    // get batch and columns
+    let batch = d.batch.unwrap();
+    let columns = batch.columns();
+
+    // time column - access as Time64MicrosecondArray
+    let col = columns
+        .get(var_index as usize)
+        .unwrap()
+        .as_any()
+        .downcast_ref::<Time64MicrosecondArray>()
+        .unwrap();
+
+    // Row 0: '02:14:13.654321't - 654321 microseconds
+    let time_micros = col.value(0);
+    let t = NaiveTime::from_hms_micro_opt(2, 14, 13, 654321).unwrap();
+    // Time64MicrosecondArray stores microseconds since midnight
+    let expected_micros = t.signed_duration_since(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+        .num_microseconds()
+        .unwrap();
+    assert_eq!(time_micros, expected_micros, "Row 0: Expected 02:14:13.654321");
+
+    // Row 1: '19:54:42.123456't - 123456 microseconds
+    let time_micros = col.value(1);
+    let t = NaiveTime::from_hms_micro_opt(19, 54, 42, 123456).unwrap();
+    let expected_micros = t.signed_duration_since(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+        .num_microseconds()
+        .unwrap();
+    assert_eq!(time_micros, expected_micros, "Row 1: Expected 19:54:42.123456");
 
     // Row 2: missing value
     assert!(col.is_null(2));
