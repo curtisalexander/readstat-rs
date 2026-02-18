@@ -605,7 +605,6 @@ The long term goals of this repository are uncertain.  Possibilities include:
 - :heavy_check_mark: Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
 - Completing and publishing the `readstat-sys` crate that binds to [ReadStat](https://github.com/WizardMac/ReadStat)
 - Developing and publishing a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
-    - Implementing a custom [serde data format](https://serde.rs/data-format.html) for `sas7bdat` files (implement serialize first and deserialize later (if possible))
 
 ## Resources
 The following have been **_incredibly_** helpful while developing!
