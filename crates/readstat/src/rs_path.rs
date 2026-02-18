@@ -1,3 +1,9 @@
+//! Path validation and I/O configuration for SAS file processing.
+//!
+//! [`ReadStatPath`] validates the input `.sas7bdat` file path, output path, file format,
+//! and Parquet compression settings. It also converts the path to a C-compatible string
+//! for the FFI layer.
+
 use colored::Colorize;
 use path_abs::{PathAbs, PathInfo};
 use std::{
@@ -11,20 +17,36 @@ use crate::ParquetCompression;
 
 const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 
+/// Validated file path and I/O configuration for SAS file processing.
+///
+/// Encapsulates the input `.sas7bdat` path (validated to exist with correct extension),
+/// optional output path, output format, and Parquet compression settings. The input path
+/// is also converted to a [`CString`] for passing to the ReadStat C library.
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
+    /// Absolute path to the input `.sas7bdat` file.
     pub path: PathBuf,
+    /// File extension of the input file (e.g. `"sas7bdat"`).
     pub extension: String,
+    /// Input path as a C-compatible string for FFI.
     pub cstring_path: CString,
+    /// Optional output file path.
     pub out_path: Option<PathBuf>,
+    /// Output format (defaults to CSV).
     pub format: OutFormat,
+    /// Whether to overwrite an existing output file.
     pub overwrite: bool,
+    /// Whether writing is disabled (metadata-only mode).
     pub no_write: bool,
+    /// Optional Parquet compression algorithm.
     pub compression: Option<ParquetCompression>,
+    /// Optional Parquet compression level.
     pub compression_level: Option<u32>,
 }
 
 impl ReadStatPath {
+    /// Creates a new `ReadStatPath` after validating the input path, output path,
+    /// format, and compression settings.
     pub fn new(
         path: PathBuf,
         out_path: Option<PathBuf>,
@@ -71,6 +93,7 @@ impl ReadStatPath {
         })
     }
 
+    /// Converts a file path to a [`CString`] for FFI. Uses raw bytes on Unix.
     #[cfg(unix)]
     pub fn path_to_cstring(path: &PathBuf) -> Result<CString, ReadStatError> {
         use std::os::unix::ffi::OsStrExt;
@@ -78,6 +101,7 @@ impl ReadStatPath {
         Ok(CString::new(bytes)?)
     }
 
+    /// Converts a file path to a [`CString`] for FFI. Uses UTF-8 on non-Unix platforms.
     #[cfg(not(unix))]
     pub fn path_to_cstring(path: &Path) -> Result<CString, ReadStatError> {
         let rust_str = path

@@ -56,9 +56,9 @@ Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs), Rayon, 
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
-| **Windows** (`windows-msvc`) | Static — compiled from vendored `iconv-sys` submodule | Static — compiled via `libz-sys` crate | Both are `cfg(windows)` dependencies; needs `LIBCLANG_PATH` |
-| **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | Dynamic — system `libz` | Linked via `cargo:rustc-link-lib=iconv` / `cargo:rustc-link-lib=z` |
-| **Linux** (gnu/musl) | Dynamic — system library | Dynamic — system library | No explicit link directives; system linker resolves automatically |
+| **Windows** (`windows-msvc`) | Static — compiled from vendored `iconv-sys` submodule | Static — compiled via `libz-sys` crate | `iconv-sys` is a `cfg(windows)` dependency; needs `LIBCLANG_PATH` |
+| **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | `libz-sys` (uses system zlib) | iconv linked via `cargo:rustc-link-lib=iconv` |
+| **Linux** (gnu/musl) | Dynamic — system library | `libz-sys` (prefers system, falls back to source) | No explicit iconv link directives; system linker resolves automatically |
 
 Header include paths are propagated between crates using Cargo's `links` key:
 - `iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`

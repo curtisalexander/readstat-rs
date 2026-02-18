@@ -1,3 +1,10 @@
+//! Data reading and Arrow [`RecordBatch`](arrow_array::RecordBatch) conversion.
+//!
+//! [`ReadStatData`] coordinates the FFI parsing of row values from a `.sas7bdat` file,
+//! accumulating them column-by-column as `Vec<Vec<ReadStatVar>>`, then converting to
+//! an Arrow `RecordBatch` for downstream writing. Supports streaming chunks with
+//! configurable row offsets and progress tracking.
+
 use arrow::datatypes::Schema;
 use arrow_array::{
     ArrayRef, Date32Array, Float32Array, Float64Array, Int16Array, Int32Array,
@@ -24,26 +31,39 @@ use crate::{
     rs_var::ReadStatVar,
 };
 
+/// Holds parsed row data from a `.sas7bdat` file and converts it to Arrow format.
+///
+/// Each instance processes one streaming chunk of rows. Data accumulates column-by-column
+/// in [`cols`](ReadStatData::cols) via the `handle_value`
+/// callback, then is converted to an Arrow [`RecordBatch`] via `read_data`.
 pub struct ReadStatData {
-    // metadata
+    /// Number of variables (columns) in the dataset.
     pub var_count: i32,
+    /// Per-variable metadata, keyed by variable index.
     pub vars: BTreeMap<i32, ReadStatVarMetadata>,
-    // data
+    /// Column-major data storage: one `Vec<ReadStatVar>` per variable.
     pub cols: Vec<Vec<ReadStatVar>>,
+    /// Arrow schema for the dataset.
     pub schema: Schema,
-    // record batch (replaces chunk)
+    /// The Arrow RecordBatch produced after parsing, if available.
     pub batch: Option<RecordBatch>,
-    pub chunk_rows_to_process: usize, // min(stream_rows, row_limit, row_count)
+    /// Number of rows to process in this chunk.
+    pub chunk_rows_to_process: usize,
+    /// Starting row offset for this chunk.
     pub chunk_row_start: usize,
+    /// Ending row offset (exclusive) for this chunk.
     pub chunk_row_end: usize,
+    /// Number of rows actually processed so far in this chunk.
     pub chunk_rows_processed: usize,
-    // total rows
+    /// Total rows to process across all chunks.
     pub total_rows_to_process: usize,
+    /// Shared atomic counter of total rows processed across all chunks.
     pub total_rows_processed: Option<Arc<AtomicUsize>>,
-    // progress
+    /// Optional progress bar for visual feedback.
     pub pb: Option<ProgressBar>,
+    /// Whether progress display is disabled.
     pub no_progress: bool,
-    // errors
+    /// Errors collected during value parsing callbacks.
     pub errors: Vec<String>,
 }
 
@@ -54,6 +74,7 @@ impl Default for ReadStatData {
 }
 
 impl ReadStatData {
+    /// Creates a new `ReadStatData` with default (empty) values.
     pub fn new() -> Self {
         Self {
             // metadata
@@ -296,6 +317,7 @@ impl ReadStatData {
         Ok(())
     }
 
+    /// Parses row data from the file and converts it to an Arrow [`RecordBatch`].
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // parse data and if successful then convert cols into a record batch
         self.parse_data(rsp)?;
@@ -365,6 +387,7 @@ impl ReadStatData {
     }
     */
 
+    /// Initializes this instance with metadata and chunk boundaries, allocating column storage.
     pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
         self.set_metadata(md)
             .set_chunk_counts(row_start, row_end)
@@ -398,6 +421,7 @@ impl ReadStatData {
         }
     }
 
+    /// Disables or enables the progress bar display.
     pub fn set_no_progress(self, no_progress: bool) -> Self {
         Self {
             no_progress,
@@ -405,6 +429,7 @@ impl ReadStatData {
         }
     }
 
+    /// Sets the total number of rows to process across all chunks.
     pub fn set_total_rows_to_process(self, total_rows_to_process: usize) -> Self {
         Self {
             total_rows_to_process,
@@ -412,6 +437,7 @@ impl ReadStatData {
         }
     }
 
+    /// Sets the shared atomic counter for tracking rows processed across chunks.
     pub fn set_total_rows_processed(self, total_rows_processed: Arc<AtomicUsize>) -> Self {
         Self {
             total_rows_processed: Some(total_rows_processed),
@@ -419,6 +445,7 @@ impl ReadStatData {
         }
     }
 
+    /// Attaches a progress bar for visual feedback during parsing.
     pub fn set_progress_bar(self, pb: ProgressBar) -> Self {
         Self {
             pb: Some(pb),

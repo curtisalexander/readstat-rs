@@ -1,8 +1,24 @@
+//! SAS format string classification using regex-based detection.
+//!
+//! SAS variables carry format strings (e.g. `DATE9`, `DATETIME22.3`, `TIME8`) that
+//! determine how raw numeric values should be interpreted. This module classifies
+//! those format strings into [`ReadStatVarFormatClass`] variants (Date, DateTime,
+//! Time, and their sub-second precision variants), enabling correct Arrow type mapping.
+//!
+//! Supports all 118+ SAS date/time/datetime formats including ISO 8601 variants,
+//! national language (`NL*`) formats, and precision-based datetime/time formats.
+
 use lazy_static::lazy_static;
 use regex::Regex;
 
 use crate::rs_var::ReadStatVarFormatClass;
 
+/// Classifies a SAS format string into a [`ReadStatVarFormatClass`].
+///
+/// Returns `Some(class)` for recognized date/time/datetime formats, or `None`
+/// for numeric/character formats that don't represent temporal data.
+/// Matching is case-insensitive and handles both numeric widths (`DATE9`)
+/// and letter-width suffixes (`DATEW`).
 pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
     lazy_static! {
         // DATETIME with nanosecond precision (DATETIMEw.d where d=7-9)

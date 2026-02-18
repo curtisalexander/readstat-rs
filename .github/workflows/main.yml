@@ -46,6 +46,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.target }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test --workspace
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
@@ -86,8 +90,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.target }}
-      - name: Add target
-        run: rustup target add x86_64-unknown-linux-musl
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       - name: Add musl-tools
         run: sudo apt-get update -y && sudo apt-get upgrade -y && sudo apt-get install build-essential musl musl-dev musl-tools libclang-dev clang -y
       - name: Build
@@ -131,17 +135,19 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.target }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       - name: Cache LLVM and Clang
         id: cache-llvm
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}\llvm
-          key: llvm-17.0.2
+          key: llvm-21.1.8
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
         with:
-          # versions - https://github.com/KyleMayes/install-llvm-action/blob/master/index.ts
-          version: "17.0.2"
+          # versions - https://github.com/KyleMayes/install-llvm-action/blob/master/assets.json
+          version: "21.1.8"
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
       - name: Build
@@ -186,6 +192,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.target }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip
@@ -226,6 +234,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.target }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
       - name: Zip

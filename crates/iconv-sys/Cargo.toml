@@ -5,7 +5,10 @@ authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
 description = "Bindings for iconv"
 license = "MIT"
-repository = "https://github.com/curtisalexander/readstat-rs/iconv-sys"
+repository = "https://github.com/curtisalexander/readstat-rs"
+documentation = "https://docs.rs/iconv-sys"
+keywords = ["iconv", "ffi", "bindings", "windows"]
+categories = ["external-ffi-bindings"]
 links = "iconv"
 build = "build.rs"
 

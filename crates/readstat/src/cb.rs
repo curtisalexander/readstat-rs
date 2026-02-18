@@ -1,3 +1,11 @@
+//! FFI callback functions invoked by the ReadStat C library during parsing.
+//!
+//! The ReadStat C parser uses a callback-driven architecture: as it reads a `.sas7bdat`
+//! file, it invokes registered callbacks for metadata, variables, and values. Each
+//! callback receives a raw `*mut c_void` context pointer that is cast back to the
+//! appropriate Rust struct ([`ReadStatMetadata`](crate::ReadStatMetadata) or
+//! [`ReadStatData`](crate::ReadStatData)) to accumulate parsed results.
+
 use chrono::DateTime;
 use log::debug;
 use num_traits::FromPrimitive;
@@ -28,6 +36,11 @@ enum ReadStatHandler {
 //       in handle_value function
 //       As an example see the below from the readstat binary
 //         https://github.com/WizardMac/ReadStat/blob/master/src/bin/readstat.c#L98
+/// FFI callback that extracts file-level metadata from the ReadStat C parser.
+///
+/// Called once during parsing. Populates the [`ReadStatMetadata`] struct
+/// (accessed via the `ctx` pointer) with row/variable counts, encoding,
+/// timestamps, compression, and endianness.
 pub extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
@@ -125,6 +138,11 @@ pub extern "C" fn handle_metadata_row_count_only(
 }
 */
 
+/// FFI callback that extracts per-variable metadata from the ReadStat C parser.
+///
+/// Called once for each variable (column) in the dataset. Populates a
+/// [`ReadStatVarMetadata`] entry in the [`ReadStatMetadata::vars`] map
+/// with the variable's name, type, label, and SAS format classification.
 pub extern "C" fn handle_variable(
     index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
@@ -179,6 +197,11 @@ pub extern "C" fn handle_variable(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
+/// FFI callback that extracts a single cell value during row parsing.
+///
+/// Called for every cell in every row. Converts the raw C value to a typed
+/// [`ReadStatVar`] and pushes it into the appropriate column vector in
+/// [`ReadStatData::cols`]. Tracks row completion for progress reporting.
 pub extern "C" fn handle_value(
     obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,

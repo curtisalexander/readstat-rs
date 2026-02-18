@@ -1,3 +1,10 @@
+//! Output writers for converting Arrow [`RecordBatch`](arrow_array::RecordBatch) data
+//! to CSV, Feather (Arrow IPC), NDJSON, or Parquet format.
+//!
+//! [`ReadStatWriter`] manages the lifecycle of format-specific writers, handling
+//! streaming writes across multiple batches. It also supports metadata output
+//! (pretty-printed or JSON) and parallel Parquet writes via temporary files.
+
 use arrow_array::RecordBatch;
 use arrow_csv::WriterBuilder as CsvWriterBuilder;
 use arrow_ipc::writer::FileWriter as IpcFileWriter;
@@ -22,6 +29,7 @@ use crate::rs_path::ReadStatPath;
 use crate::rs_var::ReadStatVarFormatClass;
 use crate::OutFormat;
 
+/// Internal wrapper around the Parquet Arrow writer, allowing ownership transfer on close.
 pub struct ReadStatParquetWriter {
     wtr: Option<ParquetArrowWriter<BufWriter<std::fs::File>>>,
 }
@@ -32,22 +40,37 @@ impl ReadStatParquetWriter {
     }
 }
 
+/// Format-specific writer variant, created lazily on first write.
 pub enum ReadStatWriterFormat {
+    /// CSV writer to a file.
     Csv(BufWriter<std::fs::File>),
+    /// CSV writer to stdout (used for preview mode without an output file).
     CsvStdout(std::io::Stdout),
+    /// Feather (Arrow IPC) writer.
     Feather(IpcFileWriter<BufWriter<std::fs::File>>),
+    /// Newline-delimited JSON writer.
     Ndjson(BufWriter<std::fs::File>),
+    /// Parquet writer.
     Parquet(ReadStatParquetWriter),
 }
 
+/// Manages writing Arrow [`RecordBatch`] data to the configured output format.
+///
+/// Supports streaming writes across multiple batches. The writer is created lazily
+/// on the first call to [`write`](ReadStatWriter::write) and finalized via
+/// [`finish`](ReadStatWriter::finish).
 #[derive(Default)]
 pub struct ReadStatWriter {
+    /// The format-specific writer, created on first write.
     pub wtr: Option<ReadStatWriterFormat>,
+    /// Whether the CSV header row has been written.
     pub wrote_header: bool,
+    /// Whether any data has been written (controls file creation vs. append).
     pub wrote_start: bool,
 }
 
 impl ReadStatWriter {
+    /// Creates a new `ReadStatWriter` with no active writer.
     pub fn new() -> Self {
         Self {
             wtr: None,
@@ -187,6 +210,7 @@ impl ReadStatWriter {
         Ok(codec)
     }
 
+    /// Finalizes the writer, flushing any remaining data and printing summary messages.
     pub fn finish(
         &mut self,
         d: &ReadStatData,
@@ -320,6 +344,9 @@ impl ReadStatWriter {
         Ok(())
     }
 
+    /// Writes a single batch of data in the format determined by `rsp`.
+    ///
+    /// Handles writer initialization on first call and CSV header writing.
     pub fn write(
         &mut self,
         d: &ReadStatData,
@@ -717,6 +744,7 @@ impl ReadStatWriter {
         Ok(())
     }
 
+    /// Writes metadata to stdout (pretty-printed) or as JSON.
     pub fn write_metadata(
         &self,
         md: &ReadStatMetadata,
@@ -730,6 +758,7 @@ impl ReadStatWriter {
         }
     }
 
+    /// Serializes metadata as pretty-printed JSON and writes to stdout.
     pub fn write_metadata_to_json(
         &self,
         md: &ReadStatMetadata,
@@ -739,6 +768,7 @@ impl ReadStatWriter {
         Ok(())
     }
 
+    /// Writes metadata to stdout in a human-readable colorized format.
     pub fn write_metadata_to_stdout(
         &self,
         md: &ReadStatMetadata,
