@@ -3,7 +3,7 @@ use num_derive::FromPrimitive;
 use serde::Serialize;
 use std::{collections::BTreeMap, os::raw::c_int};
 
-use crate::{common::ptr_to_string, rs_metadata::ReadStatVarMetadata};
+use crate::{common::ptr_to_string, err::ReadStatError, rs_metadata::ReadStatVarMetadata};
 
 // Constants
 const DIGITS: usize = 14;
@@ -34,13 +34,13 @@ impl ReadStatVar {
         is_missing: c_int,
         vars: &BTreeMap<i32, ReadStatVarMetadata>,
         var_index: i32,
-    ) -> Self {
+    ) -> Result<Self, ReadStatError> {
         match value_type {
             readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
             | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
                 if is_missing == 1 {
                     // return
-                    Self::ReadStat_String(None)
+                    Ok(Self::ReadStat_String(None))
                 } else {
                     // get value
                     let value =
@@ -50,12 +50,12 @@ impl ReadStatVar {
                     debug!("value is {:#?}", &value);
 
                     // return
-                    Self::ReadStat_String(Some(value))
+                    Ok(Self::ReadStat_String(Some(value)))
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
                 if is_missing == 1 {
-                    Self::ReadStat_i8(None)
+                    Ok(Self::ReadStat_i8(None))
                 } else {
                     // get value
                     let value = unsafe { readstat_sys::readstat_int8_value(value) };
@@ -64,12 +64,12 @@ impl ReadStatVar {
                     debug!("value is {:#?}", value);
 
                     // return
-                    Self::ReadStat_i8(Some(value))
+                    Ok(Self::ReadStat_i8(Some(value)))
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
                 if is_missing == 1 {
-                    Self::ReadStat_i16(None)
+                    Ok(Self::ReadStat_i16(None))
                 } else {
                     // get value
                     let value = unsafe { readstat_sys::readstat_int16_value(value) };
@@ -78,12 +78,12 @@ impl ReadStatVar {
                     debug!("value is {:#?}", value);
 
                     // return
-                    Self::ReadStat_i16(Some(value))
+                    Ok(Self::ReadStat_i16(Some(value)))
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
                 if is_missing == 1 {
-                    Self::ReadStat_i32(None)
+                    Ok(Self::ReadStat_i32(None))
                 } else {
                     // get value
                     let value = unsafe { readstat_sys::readstat_int32_value(value) };
@@ -92,12 +92,12 @@ impl ReadStatVar {
                     debug!("value is {:#?}", value);
 
                     // return
-                    Self::ReadStat_i32(Some(value))
+                    Ok(Self::ReadStat_i32(Some(value)))
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
                 if is_missing == 1 {
-                    Self::ReadStat_f32(None)
+                    Ok(Self::ReadStat_f32(None))
                 } else {
                     // get value
                     let value = unsafe { readstat_sys::readstat_float_value(value) };
@@ -105,36 +105,41 @@ impl ReadStatVar {
                     // debug
                     debug!("value (before parsing) is {:#?}", value);
 
-                    let value: f32 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
+                    let formatted = format!("{1:.0$}", DIGITS, value);
+                    let value: f32 = lexical::parse(&formatted)
+                        .map_err(|_| ReadStatError::NumericParse(formatted))?;
 
                     // debug
                     debug!("value (after parsing) is {:#?}", value);
 
                     // return
-                    Self::ReadStat_f32(Some(value))
+                    Ok(Self::ReadStat_f32(Some(value)))
                 }
             }
             readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-                let var_format_class = vars.get(&var_index).unwrap().var_format_class;
+                let var_format_class = vars
+                    .get(&var_index)
+                    .ok_or(ReadStatError::VarIndexNotFound { index: var_index })?
+                    .var_format_class;
 
                 if is_missing == 1 {
                     match var_format_class {
-                        None => Self::ReadStat_f64(None),
+                        None => Ok(Self::ReadStat_f64(None)),
                         Some(fc) => match fc {
-                            ReadStatVarFormatClass::Date => Self::ReadStat_Date(None),
-                            ReadStatVarFormatClass::DateTime => Self::ReadStat_DateTime(None),
+                            ReadStatVarFormatClass::Date => Ok(Self::ReadStat_Date(None)),
+                            ReadStatVarFormatClass::DateTime => Ok(Self::ReadStat_DateTime(None)),
                             ReadStatVarFormatClass::DateTimeWithMilliseconds => {
-                                Self::ReadStat_DateTimeWithMilliseconds(None)
+                                Ok(Self::ReadStat_DateTimeWithMilliseconds(None))
                             }
                             ReadStatVarFormatClass::DateTimeWithMicroseconds => {
-                                Self::ReadStat_DateTimeWithMicroseconds(None)
+                                Ok(Self::ReadStat_DateTimeWithMicroseconds(None))
                             }
                             ReadStatVarFormatClass::DateTimeWithNanoseconds => {
-                                Self::ReadStat_DateTimeWithNanoseconds(None)
+                                Ok(Self::ReadStat_DateTimeWithNanoseconds(None))
                             }
-                            ReadStatVarFormatClass::Time => Self::ReadStat_Time(None),
+                            ReadStatVarFormatClass::Time => Ok(Self::ReadStat_Time(None)),
                             ReadStatVarFormatClass::TimeWithMicroseconds => {
-                                Self::ReadStat_TimeWithMicroseconds(None)
+                                Ok(Self::ReadStat_TimeWithMicroseconds(None))
                             }
                         },
                     }
@@ -145,41 +150,47 @@ impl ReadStatVar {
                     // debug
                     debug!("value (before parsing) is {:#?}", value);
 
-                    let value: f64 = lexical::parse(format!("{1:.0$}", DIGITS, value)).unwrap();
+                    let formatted = format!("{1:.0$}", DIGITS, value);
+                    let value: f64 = lexical::parse(&formatted)
+                        .map_err(|_| ReadStatError::NumericParse(formatted))?;
 
                     // debug
                     debug!("value (after parsing) is {:#?}", value);
 
                     // is double a value or is it really a date, time, or datetime?
                     match var_format_class {
-                        None => Self::ReadStat_f64(Some(value)),
+                        None => Ok(Self::ReadStat_f64(Some(value))),
                         Some(fc) => match fc {
-                            ReadStatVarFormatClass::Date => Self::ReadStat_Date(Some(
-                                (value as i32).checked_sub(DAY_SHIFT).unwrap(),
-                            )),
-                            ReadStatVarFormatClass::DateTime => Self::ReadStat_DateTime(Some(
-                                (value as i64).checked_sub(SEC_SHIFT).unwrap(),
-                            )),
+                            ReadStatVarFormatClass::Date => Ok(Self::ReadStat_Date(Some(
+                                (value as i32)
+                                    .checked_sub(DAY_SHIFT)
+                                    .ok_or(ReadStatError::DateOverflow)?,
+                            ))),
+                            ReadStatVarFormatClass::DateTime => Ok(Self::ReadStat_DateTime(Some(
+                                (value as i64)
+                                    .checked_sub(SEC_SHIFT)
+                                    .ok_or(ReadStatError::DateOverflow)?,
+                            ))),
                             ReadStatVarFormatClass::DateTimeWithMilliseconds => {
-                                Self::ReadStat_DateTimeWithMilliseconds(Some(
+                                Ok(Self::ReadStat_DateTimeWithMilliseconds(Some(
                                     ((value - SEC_SHIFT as f64) * 1000.0) as i64,
-                                ))
+                                )))
                             }
                             ReadStatVarFormatClass::DateTimeWithMicroseconds => {
-                                Self::ReadStat_DateTimeWithMicroseconds(Some(
+                                Ok(Self::ReadStat_DateTimeWithMicroseconds(Some(
                                     ((value - SEC_SHIFT as f64) * 1000000.0) as i64,
-                                ))
+                                )))
                             }
                             ReadStatVarFormatClass::DateTimeWithNanoseconds => {
-                                Self::ReadStat_DateTimeWithNanoseconds(Some(
+                                Ok(Self::ReadStat_DateTimeWithNanoseconds(Some(
                                     ((value - SEC_SHIFT as f64) * 1000000000.0) as i64,
-                                ))
+                                )))
                             }
-                            ReadStatVarFormatClass::Time => Self::ReadStat_Time(Some(value as i32)),
+                            ReadStatVarFormatClass::Time => Ok(Self::ReadStat_Time(Some(value as i32))),
                             ReadStatVarFormatClass::TimeWithMicroseconds => {
-                                Self::ReadStat_TimeWithMicroseconds(Some(
+                                Ok(Self::ReadStat_TimeWithMicroseconds(Some(
                                     (value * 1000000.0) as i64,
-                                ))
+                                )))
                             }
                         },
                     }

@@ -6,10 +6,10 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
-use std::{error::Error, fmt, path::PathBuf, sync::Arc, thread};
+use std::{fmt, path::PathBuf, sync::Arc, thread};
 
 pub use common::build_offsets;
-pub use err::ReadStatError;
+pub use err::{ReadStatCError, ReadStatError};
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
@@ -165,7 +165,7 @@ impl fmt::Display for ParquetCompression {
     }
 }
 
-pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
+pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
     env_logger::init();
 
     match rs.command {
@@ -419,7 +419,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                     let pb_thread = pb.clone();
 
                     // Process data in batches (i.e. stream chunks of rows)
-                    thread::spawn(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                    thread::spawn(move || -> Result<(), ReadStatError> {
                         // Create windows
                         let offsets_pairs = offsets.par_windows(2);
                         let pairs_cnt = offsets_pairs.len();
@@ -437,7 +437,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                         // 📝 For each iteration a new instance of ReadStatData is created
                         // for w in offsets_pairs {
                         let errors: Vec<_> = offsets_pairs
-                            .map(|w| -> Result<(), Box<dyn Error + Send + Sync>> {
+                            .map(|w| -> Result<(), ReadStatError> {
                                 let row_start = w[0];
                                 let row_end = w[1];
 
@@ -461,19 +461,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
 
                                 // Early return if an error
                                 if sent.is_err() {
-                                    Err(From::from(
-                                        "Error when attempting to send read data for writing",
+                                    Err(ReadStatError::Other(
+                                        "Error when attempting to send read data for writing".to_string(),
                                     ))
                                 } else {
                                     Ok(())
                                 }
                             })
-                            .filter_map(|r| -> Option<Box<dyn Error + Send + Sync>> {
-                                match r {
-                                    Ok(()) => None,
-                                    Err(e) => Some(e),
-                                }
-                            })
+                            .filter_map(|r| r.err())
                             .collect();
 
                         // Drop sender so that receive iterator will eventually exit
@@ -504,12 +499,12 @@ pub fn run(rs: ReadStatCli) -> Result<(), Box<dyn Error + Send + Sync>> {
                                     Err(_) => std::env::current_dir()?,
                                 }
                             } else {
-                                return Err(From::from("No output path specified for parallel write"));
+                                return Err(ReadStatError::Other("No output path specified for parallel write".to_string()));
                             };
 
                             // Write batches in parallel to temporary files using SpooledTempFile
                             let temp_files: Vec<PathBuf> = batches.par_iter().enumerate()
-                                .map(|(i, (d, _rsp, _))| -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+                                .map(|(i, (d, _rsp, _))| -> Result<PathBuf, ReadStatError> {
                                     let temp_file = temp_dir.join(format!(".readstat_temp_{}.parquet", i));
 
                                     if let Some(batch) = &d.batch {

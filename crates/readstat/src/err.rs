@@ -1,7 +1,7 @@
 use num_derive::FromPrimitive;
 
 #[derive(Debug, FromPrimitive)]
-pub enum ReadStatError {
+pub enum ReadStatCError {
     READSTAT_OK = 0,
     READSTAT_ERROR_OPEN = 1,
     READSTAT_ERROR_READ = 2,
@@ -42,4 +42,63 @@ pub enum ReadStatError {
     READSTAT_ERROR_TOO_MANY_COLUMNS = 37,
     READSTAT_ERROR_NAME_IS_ZERO_LENGTH = 38,
     READSTAT_ERROR_BAD_TIMESTAMP_VALUE = 39,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ReadStatError {
+    #[error("ReadStat C library error: {0:?}")]
+    CLibrary(ReadStatCError),
+
+    #[error("Unknown C error code: {0}")]
+    UnknownCError(i32),
+
+    #[error("Variable index {index} not found")]
+    VarIndexNotFound { index: i32 },
+
+    #[error("Failed to parse numeric value: {0}")]
+    NumericParse(String),
+
+    #[error("Date arithmetic overflow")]
+    DateOverflow,
+
+    #[error("Integer conversion failed: {0}")]
+    IntConversion(#[from] std::num::TryFromIntError),
+
+    #[error("{0}")]
+    Arrow(#[from] arrow::error::ArrowError),
+
+    #[error("{0}")]
+    Parquet(#[from] parquet::errors::ParquetError),
+
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("{0}")]
+    PathAbs(#[from] path_abs::Error),
+
+    #[error("{0}")]
+    SerdeJson(#[from] serde_json::Error),
+
+    #[error("{0}")]
+    Rayon(#[from] rayon::ThreadPoolBuildError),
+
+    #[error("{0}")]
+    IndicatifTemplate(#[from] indicatif::style::TemplateError),
+
+    #[error("{0}")]
+    NulError(#[from] std::ffi::NulError),
+
+    #[error("{0}")]
+    Other(String),
+}
+
+/// Check a readstat C error code, returning Ok(()) for READSTAT_OK
+/// or an appropriate error variant otherwise.
+pub fn check_c_error(code: i32) -> Result<(), ReadStatError> {
+    use num_traits::FromPrimitive;
+    match FromPrimitive::from_i32(code) {
+        Some(ReadStatCError::READSTAT_OK) => Ok(()),
+        Some(e) => Err(ReadStatError::CLibrary(e)),
+        None => Err(ReadStatError::UnknownCError(code)),
+    }
 }
