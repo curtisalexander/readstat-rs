@@ -1,0 +1,15 @@
+# Normalize all text files to LF in the repo, let Git handle checkout
+* text=auto
+
+# Force LF for these file types regardless of platform
+*.rs text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.sas text eol=lf
+*.sh text eol=lf
+*.txt text eol=lf
+
+# Binary files - do not normalize
+*.sas7bdat binary

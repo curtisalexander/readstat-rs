@@ -86,6 +86,9 @@ impl ReadStatMetadata {
                             DataType::Timestamp(TimeUnit::Nanosecond, None)
                         }
                         Some(ReadStatVarFormatClass::Time) => DataType::Time32(TimeUnit::Second),
+                        Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
+                            DataType::Time64(TimeUnit::Microsecond)
+                        }
                         None => DataType::Float64,
                     },
                 };

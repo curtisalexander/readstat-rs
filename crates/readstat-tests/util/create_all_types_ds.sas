@@ -14,7 +14,9 @@ data data.all_types;
          _date yymmdd10.
          _datetime datetime22.
          _datetime_with_ms datetime22.3
+         _datetime_with_us datetime26.6
          _time time.
+         _time_with_us time15.6
   ;
   
   /* obs 1 */
@@ -25,9 +27,11 @@ data data.all_types;
   _date = '01JAN2021'd;
   _datetime = '01JAN2021:10:49:39'dt;
   _datetime_with_ms = '01JAN2021:10:49:39.333'dt;
+  _datetime_with_us = '01JAN2021:10:49:39.123456'dt;
   _time = '02:14:13't;
+  _time_with_us = '02:14:13.654321't;
   output;
-  
+
   /* obs 2 */
   _int = 4567;
   _float = 4567.8;
@@ -36,9 +40,11 @@ data data.all_types;
   _date = '01JUN2021'd;
   _datetime = '01JUN2021:13:42:25'dt;
   _datetime_with_ms = '01JUN2021:13:42:25.943'dt;
+  _datetime_with_us = '01JUN2021:13:42:25.987654'dt;
   _time = '19:54:42't;
+  _time_with_us = '19:54:42.123456't;
   output;
-  
+
   /* obs 3 */
   _int = .;
   _float = 910.11;
@@ -47,7 +53,9 @@ data data.all_types;
   _date = '22MAY2014'd;
   _datetime = .;
   _datetime_with_ms = .;
+  _datetime_with_us = .;
   _time = '11:04:44't;
+  _time_with_us = .;
   output;
 
 run;

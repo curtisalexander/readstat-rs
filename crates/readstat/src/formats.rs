@@ -29,6 +29,14 @@ pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
         )
         .unwrap();
 
+        // TIME with microsecond precision (TIMEw.d where d=4-6)
+        static ref RE_TIME_WITH_MICRO: Regex = Regex::new(
+            r#"(?xi)
+            ^TIME[0-9]{1,2}\.[4-6]$
+            "#
+        )
+        .unwrap();
+
         // All time formats - checked before datetime to catch NLDATMTM and NLDATMTZ
         // Suffix allows letter width/decimal (W, WD) and/or numeric width/decimal (8, 8.2)
         static ref RE_TIME: Regex = Regex::new(
@@ -123,15 +131,18 @@ pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
 
     // Check order matters:
     // 1. DATETIME precision variants (most specific, numeric width only)
-    // 2. Time (catches NLDATMTM, NLDATMTZ before general NLDATM datetime match)
-    // 3. General datetime (catches DATEAMPM, DATETIME before DATE match)
-    // 4. Date (everything else)
+    // 2. TIME precision variants (most specific, numeric width only)
+    // 3. Time (catches NLDATMTM, NLDATMTZ before general NLDATM datetime match)
+    // 4. General datetime (catches DATEAMPM, DATETIME before DATE match)
+    // 5. Date (everything else)
     if RE_DATETIME_WITH_NANO.is_match(v) {
         Some(ReadStatVarFormatClass::DateTimeWithNanoseconds)
     } else if RE_DATETIME_WITH_MICRO.is_match(v) {
         Some(ReadStatVarFormatClass::DateTimeWithMicroseconds)
     } else if RE_DATETIME_WITH_MILLI.is_match(v) {
         Some(ReadStatVarFormatClass::DateTimeWithMilliseconds)
+    } else if RE_TIME_WITH_MICRO.is_match(v) {
+        Some(ReadStatVarFormatClass::TimeWithMicroseconds)
     } else if RE_TIME.is_match(v) {
         Some(ReadStatVarFormatClass::Time)
     } else if RE_DATETIME.is_match(v) {
@@ -217,6 +228,27 @@ mod tests {
     #[test]
     fn datetime_format_with_numeric_width() {
         assert_eq!(match_var_format("DATETIME22"), Some(ReadStatVarFormatClass::DateTime));
+    }
+
+    #[test]
+    fn time_precision_formats() {
+        assert_eq!(
+            match_var_format("TIME15.6"),
+            Some(ReadStatVarFormatClass::TimeWithMicroseconds)
+        );
+        assert_eq!(
+            match_var_format("TIME15.4"),
+            Some(ReadStatVarFormatClass::TimeWithMicroseconds)
+        );
+        assert_eq!(
+            match_var_format("TIME15.5"),
+            Some(ReadStatVarFormatClass::TimeWithMicroseconds)
+        );
+        // Without precision decimal, should be plain Time
+        assert_eq!(
+            match_var_format("TIME15"),
+            Some(ReadStatVarFormatClass::Time)
+        );
     }
 
     #[test]

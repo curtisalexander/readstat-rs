@@ -118,13 +118,31 @@ fn migration_schema_data_types() {
         "_datetime_with_ms should be Timestamp(Millisecond)"
     );
 
-    // Field 7: _time -> Time32(Second)
+    // Field 7: _datetime_with_us -> Timestamp(Microsecond, None)
     assert!(
         matches!(
             schema.fields[7].data_type(),
+            DataType::Timestamp(TimeUnit::Microsecond, None)
+        ),
+        "_datetime_with_us should be Timestamp(Microsecond)"
+    );
+
+    // Field 8: _time -> Time32(Second)
+    assert!(
+        matches!(
+            schema.fields[8].data_type(),
             DataType::Time32(TimeUnit::Second)
         ),
         "_time should be Time32(Second)"
+    );
+
+    // Field 9: _time_with_us -> Time64(Microsecond)
+    assert!(
+        matches!(
+            schema.fields[9].data_type(),
+            DataType::Time64(TimeUnit::Microsecond)
+        ),
+        "_time_with_us should be Time64(Microsecond)"
     );
 }
 
@@ -183,11 +201,11 @@ fn migration_array_downcasting() {
         "Column 5 should downcast to TimestampSecondArray"
     );
 
-    // Test Time32SecondArray downcast (column 7)
-    let col_time = columns[7].as_any().downcast_ref::<Time32SecondArray>();
+    // Test Time32SecondArray downcast (column 8)
+    let col_time = columns[8].as_any().downcast_ref::<Time32SecondArray>();
     assert!(
         col_time.is_some(),
-        "Column 7 should downcast to Time32SecondArray"
+        "Column 8 should downcast to Time32SecondArray"
     );
 }
 
@@ -348,8 +366,8 @@ fn migration_schema_arc_sharing() {
     // Verify it's a valid Arc reference
     assert_eq!(
         schema_from_batch.fields().len(),
-        8,
-        "Schema should have 8 fields"
+        10,
+        "Schema should have 10 fields"
     );
 
     // Verify we can clone the Arc
@@ -540,8 +558,8 @@ fn migration_time_values() {
     let batch = d.batch.unwrap();
     let columns = batch.columns();
 
-    // Test _time column (index 7)
-    let col_time = columns[7]
+    // Test _time column (index 8)
+    let col_time = columns[8]
         .as_any()
         .downcast_ref::<Time32SecondArray>()
         .unwrap();

@@ -233,10 +233,10 @@ fn parse_all_types_metadata() {
     assert_eq!(md.row_count, 1);
 
     // variable count
-    assert_eq!(md.var_count, 8);
+    assert_eq!(md.var_count, 10);
 
     // table name
-    assert_eq!(md.table_name, String::from("ALL_TYPES"));
+    assert_eq!(md.table_name, String::from(""));
 
     // table label
     assert_eq!(md.file_label, String::from(""));
@@ -251,10 +251,10 @@ fn parse_all_types_metadata() {
     assert_eq!(md.is64bit, 1);
 
     // creation time
-    assert_eq!(md.creation_time, "2022-01-08 19:40:48");
+    assert_eq!(md.creation_time, "2026-02-18 02:32:45");
 
     // modified time
-    assert_eq!(md.modified_time, "2022-01-08 19:40:48");
+    assert_eq!(md.modified_time, "2026-02-18 02:32:45");
 
     // compression
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
@@ -332,8 +332,19 @@ fn parse_all_types_metadata() {
         DataType::Timestamp(TimeUnit::Millisecond, None)
     ));
 
-    // 7 - _time
+    // 7 - _datetime_with_us
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMicroseconds));
+    assert_eq!(vf, String::from("DATETIME26.6"));
+    assert!(matches!(
+        adt,
+        DataType::Timestamp(TimeUnit::Microsecond, None)
+    ));
+
+    // 8 - _time
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 8);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::Time));
@@ -341,5 +352,16 @@ fn parse_all_types_metadata() {
     assert!(matches!(
         adt,
         DataType::Time32(TimeUnit::Second)
+    ));
+
+    // 9 - _time_with_us
+    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 9);
+    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
+    assert!(matches!(vt, readstat::ReadStatVarType::Double));
+    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds));
+    assert_eq!(vf, String::from("TIME15.6"));
+    assert!(matches!(
+        adt,
+        DataType::Time64(TimeUnit::Microsecond)
     ));
 }

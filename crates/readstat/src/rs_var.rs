@@ -24,10 +24,7 @@ pub enum ReadStatVar {
     ReadStat_DateTimeWithMicroseconds(Option<i64>),
     ReadStat_DateTimeWithNanoseconds(Option<i64>),
     ReadStat_Time(Option<i32>),
-    // TODO
-    // ReadStat_TimeWithMilliseconds(Option<i32>),
-    // ReadStat_TimeWithMicroseconds(Option<i32>),
-    // ReadStat_TimeWithNanoseconds(Option<i32>),
+    ReadStat_TimeWithMicroseconds(Option<i64>),
 }
 
 impl ReadStatVar {
@@ -136,6 +133,9 @@ impl ReadStatVar {
                                 Self::ReadStat_DateTimeWithNanoseconds(None)
                             }
                             ReadStatVarFormatClass::Time => Self::ReadStat_Time(None),
+                            ReadStatVarFormatClass::TimeWithMicroseconds => {
+                                Self::ReadStat_TimeWithMicroseconds(None)
+                            }
                         },
                     }
                 } else {
@@ -176,6 +176,11 @@ impl ReadStatVar {
                                 ))
                             }
                             ReadStatVarFormatClass::Time => Self::ReadStat_Time(Some(value as i32)),
+                            ReadStatVarFormatClass::TimeWithMicroseconds => {
+                                Self::ReadStat_TimeWithMicroseconds(Some(
+                                    (value * 1000000.0) as i64,
+                                ))
+                            }
                         },
                     }
                 }
@@ -194,6 +199,7 @@ pub enum ReadStatVarFormatClass {
     DateTimeWithMicroseconds,
     DateTimeWithNanoseconds,
     Time,
+    TimeWithMicroseconds,
 }
 
 #[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
