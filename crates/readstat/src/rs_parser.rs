@@ -1,13 +1,25 @@
+//! Safe wrapper around the ReadStat C parser.
+//!
+//! [`ReadStatParser`] provides a builder-pattern API for configuring and invoking the
+//! ReadStat C library's `readstat_parser_t`. It manages the parser lifecycle (init/free)
+//! via RAII and exposes methods for setting callback handlers, row limits/offsets,
+//! and triggering the actual `.sas7bdat` parse.
+
 use log::debug;
 use std::os::raw::{c_char, c_long, c_void};
 
 use crate::err::{check_c_error, ReadStatError};
 
+/// Safe RAII wrapper around the ReadStat C parser (`readstat_parser_t`).
+///
+/// Provides a builder-pattern API for configuring callbacks, row limits/offsets,
+/// and invoking the parse. The underlying C parser is freed on drop.
 pub struct ReadStatParser {
     parser: *mut readstat_sys::readstat_parser_t,
 }
 
 impl ReadStatParser {
+    /// Allocates and initializes a new ReadStat C parser.
     pub fn new() -> Self {
         let parser: *mut readstat_sys::readstat_parser_t =
             unsafe { readstat_sys::readstat_parser_init() };
@@ -15,6 +27,7 @@ impl ReadStatParser {
         Self { parser }
     }
 
+    /// Registers the callback invoked when file-level metadata is parsed.
     pub fn set_metadata_handler(
         self,
         metadata_handler: readstat_sys::readstat_metadata_handler,
@@ -31,6 +44,7 @@ impl ReadStatParser {
         Ok(self)
     }
 
+    /// Sets the maximum number of rows to read. `None` means no limit.
     pub fn set_row_limit(
         self,
         row_limit: Option<u32>,
@@ -52,6 +66,7 @@ impl ReadStatParser {
         }
     }
 
+    /// Sets the starting row offset for reading. `None` means start from row 0.
     pub fn set_row_offset(
         self,
         row_offset: Option<u32>,
@@ -73,6 +88,7 @@ impl ReadStatParser {
         }
     }
 
+    /// Registers the callback invoked for each variable (column) definition.
     pub fn set_variable_handler(
         self,
         variable_handler: readstat_sys::readstat_variable_handler,
@@ -89,6 +105,7 @@ impl ReadStatParser {
         Ok(self)
     }
 
+    /// Registers the callback invoked for each cell value during row parsing.
     pub fn set_value_handler(
         self,
         value_handler: readstat_sys::readstat_value_handler,
@@ -105,6 +122,10 @@ impl ReadStatParser {
         Ok(self)
     }
 
+    /// Parses a `.sas7bdat` file, invoking registered callbacks as data is read.
+    ///
+    /// Returns the raw ReadStat error code. Use [`check_c_error`](crate::err::check_c_error)
+    /// to convert to a `Result`.
     pub fn parse_sas7bdat(
         &mut self,
         path: *const c_char,

@@ -102,7 +102,8 @@ fn main() {
                     default.display()
                 );
             }
-            env::set_var("LIBCLANG_PATH", &default);
+            // SAFETY: This runs in a build script which is single-threaded.
+            unsafe { env::set_var("LIBCLANG_PATH", &default) };
         }
         println!("cargo:rustc-link-lib=static=iconv");
     } else if target.contains("apple-darwin") {

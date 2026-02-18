@@ -29,3 +29,12 @@ Utility programs to aid development
 ### [create_scientific_notation_ds.sas](create_scientific_notation.sas)
 - SAS program to create a dataset with a number that initially threw errors when parsed
 - Number in question contains scientific notation
+
+### [download_ahs.sh](download_ahs.sh) / [download_ahs.ps1](download_ahs.ps1)
+- Scripts to download, unzip, and rename the AHS 2019 National PUF `sas7bdat` file from the US Census Bureau
+- Downloads from http://www2.census.gov/programs-surveys/ahs/2019/AHS%202019%20National%20PUF%20v1.1%20Flat%20SAS.zip
+- Renames to `_ahs2019n.sas7bdat` and places in `tests/data/`
+- The `_` prefix matches the `_*.sas7bdat` pattern in `.gitignore`
+- Run from the `util/` directory:
+    - Linux/macOS: `./download_ahs.sh`
+    - Windows: `.\download_ahs.ps1`

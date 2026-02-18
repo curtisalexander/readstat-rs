@@ -1,3 +1,76 @@
+//! Read SAS binary files (`.sas7bdat`) and convert them to modern columnar formats.
+//!
+//! This crate provides both a CLI tool and a library for parsing SAS binary data files
+//! using FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library,
+//! then converting the parsed data into Apache Arrow [`RecordBatch`](arrow_array::RecordBatch)
+//! format for output as CSV, Feather (Arrow IPC), NDJSON, or Parquet.
+//!
+//! # Data Pipeline
+//!
+//! ```text
+//! .sas7bdat file
+//!     → ReadStat C library (FFI parsing via callbacks)
+//!         → Vec<Vec<ReadStatVar>> (column-major typed values)
+//!             → Arrow RecordBatch
+//!                 → Output format (CSV / Feather / NDJSON / Parquet)
+//! ```
+//!
+//! # Quick Start
+//!
+//! ```no_run
+//! use readstat::{ReadStatPath, ReadStatMetadata, ReadStatData, ReadStatWriter, OutFormat};
+//! use readstat::build_offsets;
+//!
+//! // Configure input/output paths
+//! # fn main() -> Result<(), readstat::ReadStatError> {
+//! let rsp = ReadStatPath::new(
+//!     "data.sas7bdat".into(),
+//!     Some("output.parquet".into()),
+//!     Some(OutFormat::parquet),
+//!     false,
+//!     false,
+//!     None,
+//!     None,
+//! )?;
+//!
+//! // Read metadata
+//! let mut md = ReadStatMetadata::new();
+//! md.read_metadata(&rsp, false)?;
+//!
+//! // Read and write data in streaming chunks
+//! let offsets = build_offsets(md.row_count as u32, 10_000)?;
+//! let mut wtr = ReadStatWriter::new();
+//! let pairs = offsets.windows(2);
+//! let pairs_cnt = pairs.len();
+//!
+//! for (i, w) in pairs.enumerate() {
+//!     let mut d = ReadStatData::new().init(md.clone(), w[0], w[1]);
+//!     d.read_data(&rsp)?;
+//!     wtr.write(&d, &rsp)?;
+//!     if i == pairs_cnt - 1 {
+//!         wtr.finish(&d, &rsp)?;
+//!     }
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Key Types
+//!
+//! - [`ReadStatPath`] — Validated file path with I/O configuration (format, compression)
+//! - [`ReadStatMetadata`] — File-level metadata (row/var counts, encoding, Arrow schema)
+//! - [`ReadStatData`] — Parsed row data, convertible to Arrow [`RecordBatch`](arrow_array::RecordBatch)
+//! - [`ReadStatVar`] — Typed value enum (strings, integers, floats, dates, times)
+//! - [`ReadStatWriter`] — Writes Arrow batches to the configured output format
+//!
+//! # Streaming and Parallel Processing
+//!
+//! By default, data is read in streaming chunks of 10,000 rows to limit memory usage.
+//! The [`Reader::mem`] variant reads all rows at once for smaller files. Parallel
+//! reading (via Rayon) and parallel writing (via Crossbeam channels) are supported
+//! for the CLI's `data` subcommand.
+
+#![warn(missing_docs)]
 #![allow(non_camel_case_types)]
 use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 use colored::Colorize;
@@ -27,8 +100,7 @@ mod rs_path;
 mod rs_var;
 mod rs_write;
 
-// GLOBALS
-// Default rows to stream
+/// Default number of rows to read per streaming chunk.
 const STREAM_ROWS: u32 = 10000;
 
 // CLI
@@ -43,10 +115,12 @@ pub struct ReadStatCli {
     command: ReadStatCliCommands,
 }
 
+/// CLI subcommands for readstat.
 #[derive(Debug, Subcommand)]
 pub enum ReadStatCliCommands {
     /// Display sas7bdat metadata
     Metadata {
+        /// Path to sas7bdat file
         #[arg(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
         /// Display sas7bdat metadata as json
@@ -121,12 +195,17 @@ pub enum ReadStatCliCommands {
     },
 }
 
+/// Output file format for data conversion.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[allow(non_camel_case_types)]
 pub enum OutFormat {
+    /// Comma-separated values.
     csv,
+    /// Feather (Arrow IPC) format.
     feather,
+    /// Newline-delimited JSON.
     ndjson,
+    /// Apache Parquet columnar format.
     parquet,
 }
 
@@ -136,10 +215,13 @@ impl fmt::Display for OutFormat {
     }
 }
 
+/// Strategy for reading SAS data into memory.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[allow(non_camel_case_types)]
 pub enum Reader {
+    /// Read all data into memory at once.
     mem,
+    /// Stream data in chunks (default, lower memory usage).
     stream,
 }
 
@@ -149,13 +231,20 @@ impl fmt::Display for Reader {
     }
 }
 
+/// Parquet compression algorithm.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum ParquetCompression {
+    /// No compression.
     Uncompressed,
+    /// Snappy compression (fast, moderate ratio).
     Snappy,
+    /// Gzip compression (levels 0-9).
     Gzip,
+    /// LZ4 raw compression.
     Lz4Raw,
+    /// Brotli compression (levels 0-11).
     Brotli,
+    /// Zstandard compression (levels 0-22).
     Zstd,
 }
 
@@ -165,6 +254,10 @@ impl fmt::Display for ParquetCompression {
     }
 }
 
+/// Executes the CLI command specified by the parsed [`ReadStatCli`] arguments.
+///
+/// This is the main entry point for the CLI binary, dispatching to the
+/// `metadata`, `preview`, or `data` subcommand.
 pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
     env_logger::init();
 

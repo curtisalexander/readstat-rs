@@ -6,6 +6,10 @@ edition = "2024"
 description = "Rust wrapper of the ReadStat C library"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
+documentation = "https://docs.rs/readstat"
+readme = "../../README.md"
+keywords = ["sas", "sas7bdat", "arrow", "parquet", "readstat"]
+categories = ["command-line-utilities", "parser-implementations", "science"]
 
 [[bench]]
 name = "readstat_benchmarks"

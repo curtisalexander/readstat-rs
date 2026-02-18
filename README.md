@@ -104,7 +104,7 @@ In addition, the path to `libclang` needs to be set in the environment variable 
 
 For details see the following.
 - [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/crates/readstat-sys/build.rs#L78-L82)
-- [Building in GitHub Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L111-L114)
+- [Building in GitHub Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L140-L156)
 
 Build
 ```sh
