@@ -137,6 +137,13 @@ fn main() {
         .allowlist_function("readstat_set_progress_handler")
         .allowlist_function("readstat_set_row_limit")
         .allowlist_function("readstat_set_row_offset")
+        // I/O handlers (for buffer-based / custom I/O)
+        .allowlist_function("readstat_set_open_handler")
+        .allowlist_function("readstat_set_close_handler")
+        .allowlist_function("readstat_set_seek_handler")
+        .allowlist_function("readstat_set_read_handler")
+        .allowlist_function("readstat_set_update_handler")
+        .allowlist_function("readstat_set_io_ctx")
         // Metadata
         .allowlist_function("readstat_get_row_count")
         .allowlist_function("readstat_get_var_count")
@@ -195,6 +202,10 @@ fn main() {
         .allowlist_type("readstat_value_t")
         // Parsing
         .allowlist_type("readstat_parser_t")
+        // I/O types (for buffer-based / custom I/O)
+        .allowlist_type("readstat_off_t")
+        .allowlist_type("readstat_io_flags_t")
+        .allowlist_type("readstat_io_flags_e")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))

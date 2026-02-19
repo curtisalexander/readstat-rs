@@ -93,6 +93,7 @@ mod cb;
 mod common;
 mod err;
 mod formats;
+mod rs_buffer_io;
 mod rs_data;
 mod rs_metadata;
 mod rs_parser;
