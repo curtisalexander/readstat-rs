@@ -18,6 +18,7 @@ use log::debug;
 use path_abs::PathInfo;
 use std::{
     collections::BTreeMap,
+    ffi::CString,
     os::raw::c_void,
     sync::{atomic::AtomicUsize, Arc},
 };
@@ -25,6 +26,7 @@ use std::{
 use crate::{
     cb,
     err::{check_c_error, ReadStatError},
+    rs_buffer_io::ReadStatBufferCtx,
     rs_metadata::{ReadStatMetadata, ReadStatVarMetadata},
     rs_parser::ReadStatParser,
     rs_path::ReadStatPath,
@@ -335,6 +337,16 @@ impl ReadStatData {
         Ok(())
     }
 
+    /// Parses row data from an in-memory byte slice and converts it to an Arrow [`RecordBatch`].
+    ///
+    /// Equivalent to [`read_data`](ReadStatData::read_data) but reads from a `&[u8]`
+    /// buffer instead of a file path.
+    pub fn read_data_from_bytes(&mut self, bytes: &[u8]) -> Result<(), ReadStatError> {
+        self.parse_data_from_bytes(bytes)?;
+        self.cols_to_batch()?;
+        Ok(())
+    }
+
     fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
         debug!("Path as C string is {:?}", &rsp.cstring_path);
@@ -374,6 +386,33 @@ impl ReadStatData {
             .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
             .set_row_offset(Some(self.chunk_row_start.try_into()?))?
             .parse_sas7bdat(ppath, ctx);
+
+        check_c_error(error as i32)?;
+        Ok(())
+    }
+
+    fn parse_data_from_bytes(&mut self, bytes: &[u8]) -> Result<(), ReadStatError> {
+        let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
+
+        // initialize context
+        let ctx = self as *mut ReadStatData as *mut c_void;
+
+        // initialize error
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {:#?}", &error);
+
+        // Dummy path — custom I/O handlers ignore it
+        let dummy_path = CString::new("").unwrap();
+
+        // setup parser with buffer I/O
+        let error = buffer_ctx
+            .configure_parser(
+                ReadStatParser::new()
+                    .set_value_handler(Some(cb::handle_value))?
+                    .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
+                    .set_row_offset(Some(self.chunk_row_start.try_into()?))?
+            )?
+            .parse_sas7bdat(dummy_path.as_ptr(), ctx);
 
         check_c_error(error as i32)?;
         Ok(())

@@ -122,6 +122,74 @@ impl ReadStatParser {
         Ok(self)
     }
 
+    /// Registers a custom handler for opening the data source.
+    pub fn set_open_handler(
+        self,
+        open_handler: readstat_sys::readstat_open_handler,
+    ) -> Result<Self, ReadStatError> {
+        let error =
+            unsafe { readstat_sys::readstat_set_open_handler(self.parser, open_handler) };
+        debug!("After setting open handler, error ==> {}", &error);
+        check_c_error(error as i32)?;
+        Ok(self)
+    }
+
+    /// Registers a custom handler for closing the data source.
+    pub fn set_close_handler(
+        self,
+        close_handler: readstat_sys::readstat_close_handler,
+    ) -> Result<Self, ReadStatError> {
+        let error =
+            unsafe { readstat_sys::readstat_set_close_handler(self.parser, close_handler) };
+        debug!("After setting close handler, error ==> {}", &error);
+        check_c_error(error as i32)?;
+        Ok(self)
+    }
+
+    /// Registers a custom handler for seeking within the data source.
+    pub fn set_seek_handler(
+        self,
+        seek_handler: readstat_sys::readstat_seek_handler,
+    ) -> Result<Self, ReadStatError> {
+        let error =
+            unsafe { readstat_sys::readstat_set_seek_handler(self.parser, seek_handler) };
+        debug!("After setting seek handler, error ==> {}", &error);
+        check_c_error(error as i32)?;
+        Ok(self)
+    }
+
+    /// Registers a custom handler for reading from the data source.
+    pub fn set_read_handler(
+        self,
+        read_handler: readstat_sys::readstat_read_handler,
+    ) -> Result<Self, ReadStatError> {
+        let error =
+            unsafe { readstat_sys::readstat_set_read_handler(self.parser, read_handler) };
+        debug!("After setting read handler, error ==> {}", &error);
+        check_c_error(error as i32)?;
+        Ok(self)
+    }
+
+    /// Registers a custom handler for progress updates.
+    pub fn set_update_handler(
+        self,
+        update_handler: readstat_sys::readstat_update_handler,
+    ) -> Result<Self, ReadStatError> {
+        let error =
+            unsafe { readstat_sys::readstat_set_update_handler(self.parser, update_handler) };
+        debug!("After setting update handler, error ==> {}", &error);
+        check_c_error(error as i32)?;
+        Ok(self)
+    }
+
+    /// Sets a custom I/O context pointer passed to all I/O handler callbacks.
+    pub fn set_io_ctx(self, io_ctx: *mut c_void) -> Result<Self, ReadStatError> {
+        let error = unsafe { readstat_sys::readstat_set_io_ctx(self.parser, io_ctx) };
+        debug!("After setting io ctx, error ==> {}", &error);
+        check_c_error(error as i32)?;
+        Ok(self)
+    }
+
     /// Parses a `.sas7bdat` file, invoking registered callbacks as data is read.
     ///
     /// Returns the raw ReadStat error code. Use [`check_c_error`](crate::err::check_c_error)

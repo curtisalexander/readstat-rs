@@ -9,10 +9,11 @@ use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
-use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::c_void, os::raw::c_int, path::Path};
+use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::{c_void, CString}, os::raw::c_int, path::Path};
 
 use crate::cb::{handle_metadata, handle_variable};
 use crate::err::{check_c_error, ReadStatError};
+use crate::rs_buffer_io::ReadStatBufferCtx;
 use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
 use crate::rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
@@ -161,6 +162,44 @@ impl ReadStatMetadata {
             .set_variable_handler(Some(handle_variable))?
             .set_row_limit(row_limit)?
             .parse_sas7bdat(ppath, ctx);
+
+        check_c_error(error as i32)?;
+
+        // if successful, initialize schema
+        self.schema = self.initialize_schema();
+        Ok(())
+    }
+
+    /// Parses metadata from an in-memory byte slice containing `.sas7bdat` data.
+    ///
+    /// Equivalent to [`read_metadata`](ReadStatMetadata::read_metadata) but reads from
+    /// a `&[u8]` buffer instead of a file path. Useful for WASM targets, cloud storage,
+    /// HTTP uploads, and testing without filesystem access.
+    pub fn read_metadata_from_bytes(
+        &mut self,
+        bytes: &[u8],
+        skip_row_count: bool,
+    ) -> Result<(), ReadStatError> {
+        let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
+
+        let ctx = self as *mut ReadStatMetadata as *mut c_void;
+
+        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
+        debug!("Initially, error ==> {}", &error);
+
+        let row_limit = if skip_row_count { Some(1) } else { None };
+
+        // Dummy path — custom I/O handlers ignore it
+        let dummy_path = CString::new("").unwrap();
+
+        let error = buffer_ctx
+            .configure_parser(
+                ReadStatParser::new()
+                    .set_metadata_handler(Some(handle_metadata))?
+                    .set_variable_handler(Some(handle_variable))?
+                    .set_row_limit(row_limit)?,
+            )?
+            .parse_sas7bdat(dummy_path.as_ptr(), ctx);
 
         check_c_error(error as i32)?;
 
