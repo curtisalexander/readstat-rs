@@ -31,11 +31,6 @@ enum ReadStatHandler {
 
 // C callback functions
 
-// TODO: May need a version of handle_metadata that only gets metadata
-//       and a version that does very little and instead metadata handling occurs
-//       in handle_value function
-//       As an example see the below from the readstat binary
-//         https://github.com/WizardMac/ReadStat/blob/master/src/bin/readstat.c#L98
 /// FFI callback that extracts file-level metadata from the ReadStat C parser.
 ///
 /// Called once during parsing. Populates the [`ReadStatMetadata`] struct
@@ -117,26 +112,6 @@ pub extern "C" fn handle_metadata(
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
-
-/*
-pub extern "C" fn handle_metadata_row_count_only(
-    metadata: *mut readstat_sys::readstat_metadata_t,
-    ctx: *mut c_void,
-) -> c_int {
-    // dereference ctx pointer
-    let mut d = unsafe { &mut *(ctx as *mut ReadStatData) };
-
-    // get metadata
-    let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
-    debug!("row_count is {}", rc);
-
-    // insert into ReadStatMetadata struct
-    d.metadata.row_count = rc;
-    debug!("d.metadata struct is {:#?}", &d.metadata);
-
-    ReadStatHandler::READSTAT_HANDLER_OK as c_int
-}
-*/
 
 /// FFI callback that extracts per-variable metadata from the ReadStat C parser.
 ///

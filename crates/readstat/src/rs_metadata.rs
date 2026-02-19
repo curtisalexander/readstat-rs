@@ -6,7 +6,6 @@
 //! [`Schema`](arrow::datatypes::Schema) that maps SAS types to Arrow data types.
 
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
-use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
@@ -99,15 +98,12 @@ impl ReadStatMetadata {
                             DataType::Timestamp(TimeUnit::Second, None)
                         }
                         Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Millisecond, None)
                         }
                         Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Microsecond, None)
                         }
                         Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Nanosecond, None)
                         }
                         Some(ReadStatVarFormatClass::Time) => DataType::Time32(TimeUnit::Second),
@@ -153,29 +149,6 @@ impl ReadStatMetadata {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        // spinner
-        /*
-        if !self.no_progress {
-            self.pb = Some(ProgressBar::new(!0));
-        }
-        if let Some(pb) = &self.pb {
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            );
-            let msg = format!(
-                "Parsing sas7bdat metadata from file {}",
-                &self.path.to_string_lossy().bright_red()
-            );
-            pb.set_message(msg);
-            pb.enable_steady_tick(120);
-        }
-        */
-        let _msg = format!(
-            "Parsing sas7bdat metadata from file {}",
-            &rsp.path.to_string_lossy().bright_red()
-        );
-
         let ctx = self as *mut ReadStatMetadata as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -188,12 +161,6 @@ impl ReadStatMetadata {
             .set_variable_handler(Some(handle_variable))?
             .set_row_limit(row_limit)?
             .parse_sas7bdat(ppath, ctx);
-
-        /*
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear();
-        }
-        */
 
         check_c_error(error as i32)?;
 

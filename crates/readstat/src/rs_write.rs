@@ -242,30 +242,6 @@ impl ReadStatWriter {
         }
     }
 
-    fn _write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath) {
-        if let Some(pb) = &d.pb {
-            let in_f = if let Some(f) = rsp.path.file_name() {
-                f.to_string_lossy().bright_red()
-            } else {
-                String::from("___").bright_red()
-            };
-
-            let out_f = if let Some(p) = &rsp.out_path {
-                if let Some(f) = p.file_name() {
-                    f.to_string_lossy().bright_green()
-                } else {
-                    String::from("___").bright_green()
-                }
-            } else {
-                String::from("___").bright_green()
-            };
-
-            let msg = format!("Writing file {} as {}", in_f, out_f);
-
-            pb.set_message(msg);
-        }
-    }
-
     fn write_message_for_rows(
         &mut self,
         d: &ReadStatData,
@@ -307,7 +283,6 @@ impl ReadStatWriter {
         d: &ReadStatData,
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
-        //if let Some(pb) = &d.pb {
         let in_f = if let Some(f) = rsp.path.file_name() {
             f.to_string_lossy().bright_red()
         } else {
@@ -339,8 +314,6 @@ impl ReadStatWriter {
 
         println!("{}", msg);
 
-        //pb.set_message(msg);
-        //}
         Ok(())
     }
 

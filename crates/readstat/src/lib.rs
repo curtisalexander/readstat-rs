@@ -423,13 +423,10 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                 wtr.write(&d, &rsp)?;
 
                 // Finish
-                if i == pairs_cnt {
+                if i == pairs_cnt - 1 {
                     wtr.finish(&d, &rsp)?;
                 }
             }
-
-            // Finish writer
-            //wtr.finish(&d, &rsp)?;
 
             // Finish progress bar
             if let Some(pb) = pb {
@@ -700,19 +697,6 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
 
                     // Return
                     Ok(())
-
-                    // get and optionally write data - single or multi-threaded
-                    /*
-                    if let Some(_p) = parallel {
-                        let cpu_logical_count: usize = num_cpus::get();
-                        let cpu_physical_count: usize = num_cpus::get_physical();
-                        println!("Logical count {:?}", cpu_logical_count);
-                        println!("Physical count {:?}", cpu_physical_count);
-
-                        d.get_row_count()?;
-                        println!("Row count {:?}", d.metadata.row_count);
-                        Ok(())
-                    */
                 }
             }
         }
