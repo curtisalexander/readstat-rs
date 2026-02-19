@@ -326,9 +326,7 @@ The `data` subcommand includes parameters for both _**parallel reading**_ and _*
 #### Parallel Reading (`--parallel`)
 If invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
 
-:heavy_exclamation_mark: Utilizing the `--parallel` parameter will increase memory usage &mdash; there will be multiple threads simultaneously reading chunks from the `sas7bdat`.  In addition, because all processors are utilized, CPU usage may be maxed out during reading.
-
-:warning: Also, note that utilizing the `--parallel` parameter may write rows out of order from the original `sas7bdat`.
+:heavy_exclamation_mark: Utilizing the `--parallel` parameter will increase memory usage &mdash; all chunks are read in parallel and collected in memory before being sent to the writer.  In addition, because all processors are utilized, CPU usage may be maxed out during reading.  Row ordering from the original `sas7bdat` is preserved.
 
 #### Parallel Writing (`--parallel-write`)
 When combined with `--parallel`, the `--parallel-write` flag enables _**parallel writing**_ for Parquet format files. This can significantly improve write performance for large datasets by:
@@ -357,6 +355,119 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ```
 
 :heavy_exclamation_mark: Parallel writing may write batches out of order. This is acceptable for Parquet files as the row order is preserved when merged.
+
+### Memory Considerations
+
+#### Default: Sequential Writes
+
+In the default sequential write mode, a bounded channel (capacity 10) connects the reader thread to the writer.  This means at most 10 chunks (each containing up to `stream-rows` rows) are held in memory at any time, providing natural backpressure when the writer is slower than the reader.  For most workloads this keeps memory usage reasonable, but for very wide datasets (hundreds of columns, string-heavy) each chunk can be large &mdash; consider lowering `--stream-rows` if memory is a concern.
+
+```
+Sequential Write (default)
+==========================
+
+ Reader Thread                 Bounded Channel (cap 10)            Main Thread
++---------------------+       +------------------------+       +---------------------+
+|                     |       |                        |       |                     |
+| +-----------+       | send  | +--+--+--+--+--+--+   | recv  | +-------+           |
+| | chunk  1  |-------|------>| |  |  |  |  |  |  |   |------>| | write |---> file   |
+| +-----------+       |       | +--+--+--+--+--+--+   |       | +-------+           |
+| +-----------+       | send  |    channel is full!    |       |                     |
+| | chunk  2  |-------|------>| +--+--+--+--+--+--+--+|       | +-------+           |
+| +-----------+       |       | |  |  |  |  |  |  |  ||       | | write |---> file   |
+| +-----------+       |       | +--+--+--+--+--+--+--+|       | +-------+           |
+| | chunk  3  |-------|-XXXXX |                        |       |                     |
+| +-----------+       | BLOCK | writer drains a slot   |       | +-------+           |
+|   ... waits ...     |       |    +--+--+--+--+--+--+ |       | | write |---> file   |
+| | chunk  3  |-------|------>|    |  |  |  |  |  |  | |       | +-------+           |
+| +-----------+       | ok!   |    +--+--+--+--+--+--+ |       |                     |
+|                     |       |                        |       |                     |
++---------------------+       +------------------------+       +---------------------+
+
+ Memory at any moment: <= 10 chunks in the channel + 1 being written
+ Backpressure: reader blocks when channel is full
+```
+
+#### Parallel Writes (`--parallel-write`)
+
+:memo: **`--parallel-write`**: Uses bounded-batch processing &mdash; batches are pulled from the channel in groups (up to 10 at a time), written in parallel to temporary Parquet files, then the next group is pulled.  This preserves the channel's backpressure so that memory usage stays bounded rather than loading the entire dataset at once.  All temporary files are merged into the final output at the end.
+
+```
+Parallel Write (--parallel --parallel-write)
+============================================
+
+ Reader Thread              Bounded Channel (cap 10)              Main Thread
++------------------+       +------------------------+       +-------------------------+
+|                  |       |                        |       |                         |
+| +----------+     | send  |                        | recv  |  Pull <= 10 batches     |
+| | chunk  1 |-----|------>|  +-+-+-+-+-+-+-+-+-+-+ |------>|  +----+----+----+----+  |
+| +----------+     |       |  | | | | | | | | | | | |       |  | b1 | b2 | .. | bN |  |
+| +----------+     | send  |  +-+-+-+-+-+-+-+-+-+-+ |       |  +----+----+----+----+  |
+| | chunk  2 |-----|------>|                        |       |    |    |         |      |
+| +----------+     |       +------------------------+       |    v    v         v      |
+| +----------+     |                                        |  Write in parallel      |
+| | chunk  3 |-----|----> ...                               |  to temp .parquet files |
+| +----------+     |                                        |    |    |         |      |
+|     ...          |                                        |    v    v         v      |
+|                  |                                        |  tmp_0 tmp_1 ... tmp_N   |
+|                  |       +------------------------+       |                         |
+| +----------+     | send  |                        | recv  |  Pull next <= 10        |
+| | chunk 11 |-----|------>|  +-+-+-+-+-+-+-+-+-+-+ |------>|  +----+----+----+----+  |
+| +----------+     |       |  | | | | | | | | | | | |       |  |b11 |b12 | .. | bM |  |
+| +----------+     | send  |  +-+-+-+-+-+-+-+-+-+-+ |       |  +----+----+----+----+  |
+| | chunk 12 |-----|------>|                        |       |    |    |         |      |
+| +----------+     |       +------------------------+       |    v    v         v      |
+|     ...          |                                        |  tmp_N+1  ...  tmp_M     |
++------------------+                                        |                         |
+                                                            |  ... repeat until done  |
+                                                            +-------------------------+
+                                                                       |
+                              +----------------------------------------+
+                              |
+                              v
+                    +-------------------+       +--------------------+
+                    |   Merge all temp  |       |                    |
+                    |   .parquet files  |------>|  final output.pqt  |
+                    |   in order        |       |                    |
+                    +-------------------+       +--------------------+
+
+ Memory at any moment: <= 10 chunks in channel + 10 being written
+ Backpressure: preserved -- reader blocks while a batch group is being written
+```
+
+#### SQL Queries (`--sql`)
+
+:warning: **`--sql`** (feature-gated): SQL queries require the full dataset to be materialized in memory via DataFusion's `MemTable` before query execution.  For large files this may result in significant memory usage.  Queries that filter rows (e.g. `SELECT ... WHERE ...`) will reduce the _output_ size but the _input_ must still be fully loaded.
+
+```
+SQL Query Mode (--sql "SELECT ...")
+===================================
+
+ Reader Thread              Bounded Channel              Main Thread
++------------------+       +---------------+       +---------------------------+
+|                  |       |               |       |                           |
+| +----------+     | send  |               | recv  |  Collect ALL batches      |
+| | chunk  1 |-----|------>|               |------>|  into memory (required    |
+| +----------+     |       |               |       |  by DataFusion MemTable)  |
+| +----------+     | send  |               |       |                           |
+| | chunk  2 |-----|------>|               |------>|  +-----+-----+-----+     |
+| +----------+     |       |               |       |  |  b1 |  b2 | ... |     |
+|     ...          |       |               |       |  +-----+-----+-----+     |
+| +----------+     | send  |               |       |         |                 |
+| | chunk  N |-----|------>|               |------>|         v                 |
+| +----------+     |       |               |       |  +-------------+         |
++------------------+       +---------------+       |  |  DataFusion |         |
+                                                   |  |  SQL Engine |         |
+                                                   |  +-------------+         |
+                                                   |         |                 |
+                                                   |         v                 |
+                                                   |  Write filtered results  |
+                                                   |  to output file          |
+                                                   +---------------------------+
+
+ Memory at peak: ALL chunks in memory (no backpressure)
+ This is inherent to SQL execution over in-memory tables.
+```
 
 ### Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
