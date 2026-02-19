@@ -1,260 +1,85 @@
 use arrow::datatypes::DataType;
-use arrow_array::{Float64Array, StringArray};
-use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
+use common::ExpectedMetadata;
 
 mod common;
 
-fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
-    // setup path
-    let rsp = common::setup_path("cars.sas7bdat").unwrap();
-
-    // setup metadata
-    let mut md = ReadStatMetadata::new();
-    md.read_metadata(&rsp, false).unwrap();
-
-    // parse sas7bdat
-    // read the entire dataset
-    let d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
-
-    (rsp, md, d)
-}
-
 #[test]
 fn parse_cars_metadata() {
-    let (rsp, md, mut d) = init();
+    let (_rsp, md, d) = common::setup_and_read("cars.sas7bdat");
 
-    let error = d.read_data(&rsp);
-    assert!(error.is_ok());
+    common::assert_metadata(&md, &ExpectedMetadata {
+        row_count: 1081,
+        var_count: 13,
+        table_name: "CARS",
+        file_label: "Written by SAS",
+        file_encoding: "WINDOWS-1252",
+        version: 9,
+        is64bit: 0,
+        creation_time: "2008-09-30 12:55:01",
+        modified_time: "2008-09-30 12:55:01",
+    });
 
-    // row count
-    assert_eq!(md.row_count, 1081);
-
-    // variable count
-    assert_eq!(md.var_count, 13);
-
-    // table name
-    assert_eq!(md.table_name, String::from("CARS"));
-
-    // table label
-    assert_eq!(md.file_label, String::from("Written by SAS"));
-
-    // file encoding
-    assert_eq!(md.file_encoding, String::from("WINDOWS-1252"));
-
-    // format version
-    assert_eq!(md.version, 9);
-
-    // bitness
-    assert_eq!(md.is64bit, 0);
-
-    // creation time
-    assert_eq!(md.creation_time, "2008-09-30 12:55:01");
-
-    // modified time
-    assert_eq!(md.modified_time, "2008-09-30 12:55:01");
-
-    // compression
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
-
-    // endianness
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
 
-    // variables - contains variable
+    // variables - bounds check
     assert!(common::contains_var(&d, 0));
-
-    // variables - does not contain variable
     assert!(!common::contains_var(&d, 100));
 
-    // variables
-
-    // 0 - Brand
+    // 0 - Brand (String)
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 0);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, "");
     assert!(matches!(adt, DataType::Utf8));
 
-    // 1 - Model
+    // 1 - Model (String)
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 1);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, "");
     assert!(matches!(adt, DataType::Utf8));
 
-    // 2 - Minivan
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 2);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 3 - Wagon
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 3);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 4 - Pickup
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 4);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 5 - Automatic
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 5);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 6 - EngineSize
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 7 - Cylinders
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 8 - CityMPG
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 8);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 9 - HwyMPG
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 9);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 10 - SUV
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 10);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 11 - AWD
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 11);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
-
-    // 12 - Hybrid
-    let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 12);
-    assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
-    assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
-    assert!(matches!(adt, DataType::Float64));
+    // 2..12 - All numeric Double -> Float64 with no format
+    for i in 2..=12 {
+        let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, i);
+        assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric), "var {i} type class");
+        assert!(matches!(vt, readstat::ReadStatVarType::Double), "var {i} type");
+        assert!(vfc.is_none(), "var {i} format class");
+        assert_eq!(vf, "", "var {i} format");
+        assert!(matches!(adt, DataType::Float64), "var {i} arrow type");
+    }
 }
 
 #[test]
 fn parse_cars_data() {
-    let (rsp, _md, mut d) = init();
+    let (_rsp, _md, d) = common::setup_and_read("cars.sas7bdat");
 
-    let error = d.read_data(&rsp);
-    assert!(error.is_ok());
+    let batch = d.batch.as_ref().unwrap();
+    assert_eq!(batch.num_rows(), 1081);
 
-    let batch = d.batch.unwrap();
-    let columns = batch.columns();
+    // Row 0
+    let brand = common::get_string_col(batch, 0);
+    let model = common::get_string_col(batch, 1);
+    let minivan = common::get_f64_col(batch, 2);
+    let engine_size = common::get_f64_col(batch, 6);
+    let cylinders = common::get_f64_col(batch, 7);
+    let city_mpg = common::get_f64_col(batch, 8);
+    let hwy_mpg = common::get_f64_col(batch, 9);
+    let hybrid = common::get_f64_col(batch, 12);
 
-    // Row 0: Brand="TOYOTA", Model="Prius", Minivan=0.0, EngineSize=1.5, Cylinders=4.0, CityMPG=60.0, HwyMPG=51.0, Hybrid=1.0
-    let brand = columns
-        .get(0)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .unwrap();
     assert_eq!(brand.value(0), "TOYOTA");
-
-    let model = columns
-        .get(1)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .unwrap();
     assert_eq!(model.value(0), "Prius");
-
-    let minivan = columns
-        .get(2)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
     assert_eq!(minivan.value(0), 0.0);
-
-    let engine_size = columns
-        .get(6)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
     assert_eq!(engine_size.value(0), 1.5);
-
-    let cylinders = columns
-        .get(7)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
     assert_eq!(cylinders.value(0), 4.0);
-
-    let city_mpg = columns
-        .get(8)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
     assert_eq!(city_mpg.value(0), 60.0);
-
-    let hwy_mpg = columns
-        .get(9)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
     assert_eq!(hwy_mpg.value(0), 51.0);
-
-    let hybrid = columns
-        .get(12)
-        .unwrap()
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .unwrap();
     assert_eq!(hybrid.value(0), 1.0);
 
-    // Row 1: Brand="HONDA", Model="Civic Hybrid"
+    // Row 1
     assert_eq!(brand.value(1), "HONDA");
     assert_eq!(model.value(1), "Civic Hybrid");
-
-    // Verify total row count in batch
-    assert_eq!(batch.num_rows(), 1081);
 }
