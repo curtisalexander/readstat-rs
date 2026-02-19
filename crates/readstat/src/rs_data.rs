@@ -112,7 +112,8 @@ impl ReadStatData {
         }
     }
 
-    fn allocate_cols(self) -> Self {
+    /// Allocates column storage vectors with capacity for `chunk_rows_to_process`.
+    pub fn allocate_cols(self) -> Self {
         let mut cols = Vec::with_capacity(self.var_count as usize);
         for _ in 0..self.var_count {
             cols.push(Vec::with_capacity(self.chunk_rows_to_process))
@@ -120,8 +121,12 @@ impl ReadStatData {
         Self { cols, ..self }
     }
 
-    fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
-        // for each column in cols
+    /// Converts accumulated column vectors into an Arrow [`RecordBatch`].
+    ///
+    /// For string columns, borrows `&str` slices and feeds them directly to
+    /// `StringArray::from_iter`, avoiding both cloning and an intermediate `Vec`.
+    /// Numeric columns use the standard `iter() + collect()` pattern (Copy types).
+    pub fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
         let arrays: Vec<ArrayRef> = self
             .cols
             .iter()
@@ -133,20 +138,14 @@ impl ReadStatData {
                 // convert from a Vec<ReadStatVar> into an ArrayRef
                 let array: ArrayRef = match col_type {
                     ReadStatVar::ReadStat_String(_) => {
-                        // get the inner value
-                        let vec = col
-                            .iter()
-                            .map(|s| {
-                                if let ReadStatVar::ReadStat_String(v) = s {
-                                    v.clone()
-                                } else {
-                                    // should NEVER fall into this branch
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<String>>>();
-
-                        Arc::new(StringArray::from(vec))
+                        // Borrow &str directly — no clone, no intermediate Vec
+                        Arc::new(StringArray::from_iter(col.iter().map(|s| {
+                            if let ReadStatVar::ReadStat_String(v) = s {
+                                v.as_deref()
+                            } else {
+                                unreachable!()
+                            }
+                        })))
                     }
                     ReadStatVar::ReadStat_i8(_) => {
                         let vec = col
@@ -363,7 +362,8 @@ impl ReadStatData {
         self.read_data_from_bytes(&mmap)
     }
 
-    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
+    /// Parses row data from the file via FFI callbacks (without Arrow conversion).
+    pub fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
