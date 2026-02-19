@@ -187,6 +187,34 @@ const DAY_SHIFT: i32 = 3653;
 /// SAS epoch to Unix epoch offset in seconds.
 const SEC_SHIFT: i64 = 315619200;
 
+/// Rounds an f64 to [`DIGITS`] significant digits using a stack-allocated buffer.
+///
+/// Equivalent to `format!("{1:.0$}", DIGITS, v)` followed by `lexical::parse`,
+/// but avoids the heap allocation of `format!` by writing to a fixed `[u8; 32]`
+/// on the stack.
+#[inline]
+fn format_parse_f64(v: f64) -> f64 {
+    let mut buf = [0u8; 32];
+    let n = {
+        let mut cursor = std::io::Cursor::new(&mut buf[..]);
+        std::io::Write::write_fmt(&mut cursor, format_args!("{1:.0$}", DIGITS, v)).unwrap();
+        cursor.position() as usize
+    };
+    lexical::parse(&buf[..n]).unwrap()
+}
+
+/// Rounds an f32 to [`DIGITS`] significant digits using a stack-allocated buffer.
+#[inline]
+fn format_parse_f32(v: f32) -> f32 {
+    let mut buf = [0u8; 32];
+    let n = {
+        let mut cursor = std::io::Cursor::new(&mut buf[..]);
+        std::io::Write::write_fmt(&mut cursor, format_args!("{1:.0$}", DIGITS, v)).unwrap();
+        cursor.position() as usize
+    };
+    lexical::parse(&buf[..n]).unwrap()
+}
+
 /// FFI callback that extracts a single cell value during row parsing.
 ///
 /// Called for every cell in every row. Appends the value directly into the
@@ -304,18 +332,10 @@ pub extern "C" fn handle_value(
             } else {
                 let raw = unsafe { readstat_sys::readstat_float_value(value) };
                 debug!("value (before parsing) is {:#?}", raw);
-                let formatted = format!("{1:.0$}", DIGITS, raw);
-                match lexical::parse::<f32, _>(&formatted) {
-                    Ok(v) => {
-                        debug!("value (after parsing) is {:#?}", v);
-                        if let ColumnBuilder::Float32(b) = builder {
-                            b.append_value(v);
-                        }
-                    }
-                    Err(_) => {
-                        d.errors.push(format!("Failed to parse float: {}", formatted));
-                        return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
-                    }
+                let val = format_parse_f32(raw);
+                debug!("value (after parsing) is {:#?}", val);
+                if let ColumnBuilder::Float32(b) = builder {
+                    b.append_value(val);
                 }
             }
         }
@@ -329,14 +349,7 @@ pub extern "C" fn handle_value(
             } else {
                 let raw = unsafe { readstat_sys::readstat_double_value(value) };
                 debug!("value (before parsing) is {:#?}", raw);
-                let formatted = format!("{1:.0$}", DIGITS, raw);
-                let val: f64 = match lexical::parse(&formatted) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        d.errors.push(format!("Failed to parse double: {}", formatted));
-                        return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
-                    }
-                };
+                let val = format_parse_f64(raw);
                 debug!("value (after parsing) is {:#?}", val);
 
                 match var_format_class {

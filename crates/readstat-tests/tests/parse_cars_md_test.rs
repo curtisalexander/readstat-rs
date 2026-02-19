@@ -1,4 +1,5 @@
 use arrow::datatypes::DataType;
+use arrow_array::Array;
 use common::ExpectedMetadata;
 
 mod common;
@@ -88,4 +89,26 @@ fn parse_cars_data() {
     // Row 1
     assert_eq!(brand.value(1), "HONDA");
     assert_eq!(model.value(1), "Civic Hybrid");
+
+    // Row 574 — CADILLAC DeVille, EngineSize should be exactly 4.6
+    // This catches IEEE 754 representation noise (4.6000000000000005)
+    assert_eq!(brand.value(574), "CADILLAC");
+    assert_eq!(model.value(574), "DeVille");
+    assert_eq!(engine_size.value(574), 4.6);
+
+    // Scan all EngineSize values for IEEE 754 noise in the trailing digits.
+    // Values like 1.9, 2.3, 2.8, 3.3, 3.8, 4.6, 5.6, 6.1 are not exactly
+    // representable in binary64 and would show as e.g. 4.6000000000000005
+    // without the precision-rounding step.
+    for i in 0..batch.num_rows() {
+        if engine_size.is_null(i) {
+            continue;
+        }
+        let v = engine_size.value(i);
+        let displayed = format!("{}", v);
+        assert!(
+            !displayed.contains("0000000"),
+            "row {i}: EngineSize {v} has IEEE 754 noise ({displayed})"
+        );
+    }
 }
