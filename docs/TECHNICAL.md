@@ -15,11 +15,32 @@ For comparison, the [ReadStat binary](https://github.com/WizardMac/ReadStat#comm
 
 Finally, SAS represents all numeric values in floating-point representation which creates a challenge for **all** parsed numerics!
 
+### Implementation: pure-arithmetic rounding
+
+Rounding is performed using pure f64 arithmetic in `cb.rs`, avoiding any string formatting or heap allocation:
+
+```rust
+const ROUND_SCALE: f64 = 1e14;
+
+fn round_decimal_f64(v: f64) -> f64 {
+    if !v.is_finite() { return v; }
+    let int_part = v.trunc();
+    let frac_part = v.fract();
+    let rounded_frac = (frac_part * ROUND_SCALE).round() / ROUND_SCALE;
+    int_part + rounded_frac
+}
+```
+
+The value is split into integer and fractional parts before scaling. This is necessary because large SAS datetime values (~1.9e9) multiplied directly by 1e14 would exceed f64's exact integer range (2^53), causing precision loss. Since `fract()` is always in (-1, 1), `fract() * 1e14 < 1e14 < 2^53`, keeping the scaled value within the exact-integer range.
+
+**Why this is equivalent to the previous string roundtrip** (`format!("{:.14}")` + `lexical::parse`): both approaches produce the nearest representable f64 to the value rounded to 14 decimal places. The tie-breaking rule (half-away-from-zero for `.round()` vs half-to-even for `format!`) is never exercised because every f64 is a dyadic rational (m / 2^k), and a true decimal midpoint would require an odd factor of 5 in the denominator — which is impossible for any f64 value.
+
 ### Sources
 - [How SAS Stores Numeric Values](https://documentation.sas.com/?cdcId=pgmsascdc&cdcVersion=9.4_3.5&docsetId=lrcon&docsetTarget=p0ji1unv6thm0dn1gp4t01a1u0g6.htm&locale=en#n00dmtao82eizen1e6yziw3s31da)
 - [Accuracy on x64 Windows Processors](https://documentation.sas.com/?cdcId=pgmsascdc&cdcVersion=9.4_3.5&docsetId=lrcon&docsetTarget=p0ji1unv6thm0dn1gp4t01a1u0g6.htm&locale=en#n0pd8l179ai8odn17nncb4izqq3d)
     - SAS on Windows with x64 processors can only represent 15 digits
 - [Floating-point arithmetic may give inaccurate results in Excel](https://docs.microsoft.com/en-us/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result)
+- [What Every Computer Scientist Should Know About Floating-Point Arithmetic (Goldberg, 1991)](https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html)
 
 ## Date, Time, and Datetimes
 All 118 SAS date, time, and datetime formats are recognized and parsed appropriately.  For the full list of supported formats, see [sas_date_time_formats.md](../crates/readstat-tests/util/sas_date_time_formats.md).

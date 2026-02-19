@@ -40,9 +40,9 @@ Key source modules in `crates/readstat/src/`:
 | `err.rs` | Error enum (39 variants mapping to C library errors) |
 
 Key public types:
-- `ReadStatData` — holds parsed rows (as `Vec<Vec<ReadStatVar>>`), metadata, Arrow RecordBatch
+- `ReadStatData` — coordinates FFI parsing, accumulates values directly into typed Arrow builders, produces Arrow RecordBatch
 - `ReadStatMetadata` — file-level metadata (row/var counts, encoding, compression, schema)
-- `ReadStatVar` — enum of typed values (String, i8/i16/i32, f32/f64, Date, DateTime variants, Time)
+- `ColumnBuilder` — enum wrapping 12 typed Arrow builders (StringBuilder, Float64Builder, Date32Builder, etc.); values are appended during FFI callbacks with zero intermediate allocation
 - `ReadStatWriter` — writes output in requested format
 - `ReadStatPath` — validated file path with I/O config
 - `Reader` — enum: `mem` (full in-memory) or `stream` (chunked, default 10k rows)
@@ -105,5 +105,5 @@ Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regener
 - **Streaming**: default reader streams rows in chunks (10k) to manage memory
 - **Parallel processing**: Rayon for parallel reading, Crossbeam channels for reader-writer coordination
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
-- **Arrow pipeline**: SAS data → ReadStatVar vectors → Arrow RecordBatch → output format
+- **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format
 - **Metadata preservation**: SAS variable labels, format strings, and storage widths are persisted as Arrow field metadata, surviving round-trips through Parquet and Feather. See [TECHNICAL.md](TECHNICAL.md#column-metadata-in-arrow-and-parquet) for details.
