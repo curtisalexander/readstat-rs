@@ -89,7 +89,7 @@ pub use rs_path::ReadStatPath;
 pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;
 #[cfg(feature = "sql")]
-pub use rs_query::{execute_sql, read_sql_file};
+pub use rs_query::{execute_sql, execute_sql_stream, execute_sql_and_write_stream, read_sql_file};
 
 mod cb;
 mod common;
@@ -686,131 +686,128 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
 
                     // Write
 
-                    // SQL query mode: collect all batches, run SQL, write results
+                    // Determine whether the SQL path will handle the receiver
                     #[cfg(feature = "sql")]
-                    let sql_handled = if let Some(ref query) = sql_query {
-                        let read_batches: Vec<arrow_array::RecordBatch> = r.iter()
-                            .filter_map(|(d, _, _)| d.batch)
-                            .collect();
+                    let has_sql = sql_query.is_some();
+                    #[cfg(not(feature = "sql"))]
+                    let has_sql = false;
 
-                        if !read_batches.is_empty() {
-                            let result_batches = rs_query::execute_sql(
-                                read_batches,
-                                sql_schema,
-                                &sql_table_name,
-                                query,
-                            )?;
-
+                    if has_sql {
+                        // SQL query mode: stream data through DataFusion and write results
+                        #[cfg(feature = "sql")]
+                        {
+                            let query = sql_query.as_ref().unwrap();
                             if let Some(out_path) = &out_path_clone {
-                                rs_query::write_sql_results(
-                                    &result_batches,
+                                rs_query::execute_sql_and_write_stream(
+                                    r,
+                                    sql_schema,
+                                    &sql_table_name,
+                                    query,
                                     out_path,
                                     sql_format,
                                     compression_clone,
                                     compression_level_clone,
                                 )?;
+                            } else {
+                                // No output path — just consume the stream
+                                let _results = rs_query::execute_sql_stream(
+                                    r,
+                                    sql_schema,
+                                    &sql_table_name,
+                                    query,
+                                )?;
                             }
                         }
-                        true
-                    } else {
-                        false
-                    };
-
-                    #[cfg(not(feature = "sql"))]
-                    let sql_handled = false;
-
-                    if !sql_handled {
-                        if use_parallel_writes {
-                            // Parallel write mode for Parquet using bounded-batch processing:
-                            // Pull up to CHANNEL_CAPACITY batches at a time from the channel,
-                            // write those in parallel to temp files, then repeat.
-                            // This preserves backpressure — at most CHANNEL_CAPACITY batches
-                            // are held in memory beyond what's in the channel.
-                            let temp_dir = if let Some(out_path) = &out_path_clone {
-                                match out_path.parent() {
-                                    Ok(parent) => parent.to_path_buf(),
-                                    Err(_) => std::env::current_dir()?,
-                                }
-                            } else {
-                                return Err(ReadStatError::Other("No output path specified for parallel write".to_string()));
-                            };
-
-                            let mut all_temp_files: Vec<PathBuf> = Vec::new();
-                            let mut schema: Option<arrow_schema::Schema> = None;
-                            let mut batch_idx: usize = 0;
-
-                            loop {
-                                // Collect up to CHANNEL_CAPACITY batches from the channel
-                                let mut batch_group: Vec<(ReadStatData, ReadStatPath, usize)> = Vec::with_capacity(CHANNEL_CAPACITY);
-                                for item in r.iter() {
-                                    batch_group.push(item);
-                                    if batch_group.len() >= CHANNEL_CAPACITY {
-                                        break;
-                                    }
-                                }
-
-                                if batch_group.is_empty() {
-                                    break;
-                                }
-
-                                // Capture schema from the first batch we see
-                                if schema.is_none() {
-                                    schema = Some(batch_group[0].0.schema.clone());
-                                }
-                                let schema_ref = schema.as_ref().unwrap();
-
-                                // Write this group of batches in parallel to temp files
-                                let temp_files: Vec<PathBuf> = batch_group.par_iter().enumerate()
-                                    .map(|(i, (d, _rsp, _))| -> Result<PathBuf, ReadStatError> {
-                                        let temp_file = temp_dir.join(format!(".readstat_temp_{}.parquet", batch_idx + i));
-
-                                        if let Some(batch) = &d.batch {
-                                            ReadStatWriter::write_batch_to_parquet(
-                                                batch,
-                                                schema_ref,
-                                                &temp_file,
-                                                compression_clone,
-                                                compression_level_clone,
-                                                buffer_size_bytes as usize,
-                                            )?;
-                                        }
-
-                                        Ok(temp_file)
-                                    })
-                                    .collect::<Result<Vec<_>, _>>()?;
-
-                                batch_idx += batch_group.len();
-                                // Explicitly drop the batch group to free memory before next iteration
-                                drop(batch_group);
-                                all_temp_files.extend(temp_files);
-                            }
-
-                            // Merge all temp files into final output
-                            if !all_temp_files.is_empty() {
-                                if let Some(out_path) = &out_path_clone {
-                                    ReadStatWriter::merge_parquet_files(
-                                        &all_temp_files,
-                                        out_path,
-                                        schema.as_ref().unwrap(),
-                                        compression_clone,
-                                        compression_level_clone,
-                                    )?;
-                                }
+                    } else if use_parallel_writes {
+                        // Parallel write mode for Parquet using bounded-batch processing:
+                        // Pull up to CHANNEL_CAPACITY batches at a time from the channel,
+                        // write those in parallel to temp files, then repeat.
+                        // This preserves backpressure — at most CHANNEL_CAPACITY batches
+                        // are held in memory beyond what's in the channel.
+                        let temp_dir = if let Some(out_path) = &out_path_clone {
+                            match out_path.parent() {
+                                Ok(parent) => parent.to_path_buf(),
+                                Err(_) => std::env::current_dir()?,
                             }
                         } else {
-                            // Sequential write mode (default) with BufWriter optimizations
-                            let mut wtr = ReadStatWriter::new();
+                            return Err(ReadStatError::Other("No output path specified for parallel write".to_string()));
+                        };
 
-                            for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
-                                wtr.write(&d, &rsp)?;
+                        let mut all_temp_files: Vec<PathBuf> = Vec::new();
+                        let mut schema: Option<arrow_schema::Schema> = None;
+                        let mut batch_idx: usize = 0;
 
-                                if i == (pairs_cnt - 1) {
-                                    wtr.finish(&d, &rsp)?;
+                        loop {
+                            // Collect up to CHANNEL_CAPACITY batches from the channel
+                            let mut batch_group: Vec<(ReadStatData, ReadStatPath, usize)> = Vec::with_capacity(CHANNEL_CAPACITY);
+                            for item in r.iter() {
+                                batch_group.push(item);
+                                if batch_group.len() >= CHANNEL_CAPACITY {
+                                    break;
                                 }
-
-                                // Explicitly drop to save on memory
-                                drop(d);
                             }
+
+                            if batch_group.is_empty() {
+                                break;
+                            }
+
+                            // Capture schema from the first batch we see
+                            if schema.is_none() {
+                                schema = Some(batch_group[0].0.schema.clone());
+                            }
+                            let schema_ref = schema.as_ref().unwrap();
+
+                            // Write this group of batches in parallel to temp files
+                            let temp_files: Vec<PathBuf> = batch_group.par_iter().enumerate()
+                                .map(|(i, (d, _rsp, _))| -> Result<PathBuf, ReadStatError> {
+                                    let temp_file = temp_dir.join(format!(".readstat_temp_{}.parquet", batch_idx + i));
+
+                                    if let Some(batch) = &d.batch {
+                                        ReadStatWriter::write_batch_to_parquet(
+                                            batch,
+                                            schema_ref,
+                                            &temp_file,
+                                            compression_clone,
+                                            compression_level_clone,
+                                            buffer_size_bytes as usize,
+                                        )?;
+                                    }
+
+                                    Ok(temp_file)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+
+                            batch_idx += batch_group.len();
+                            // Explicitly drop the batch group to free memory before next iteration
+                            drop(batch_group);
+                            all_temp_files.extend(temp_files);
+                        }
+
+                        // Merge all temp files into final output
+                        if !all_temp_files.is_empty() {
+                            if let Some(out_path) = &out_path_clone {
+                                ReadStatWriter::merge_parquet_files(
+                                    &all_temp_files,
+                                    out_path,
+                                    schema.as_ref().unwrap(),
+                                    compression_clone,
+                                    compression_level_clone,
+                                )?;
+                            }
+                        }
+                    } else {
+                        // Sequential write mode (default) with BufWriter optimizations
+                        let mut wtr = ReadStatWriter::new();
+
+                        for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
+                            wtr.write(&d, &rsp)?;
+
+                            if i == (pairs_cnt - 1) {
+                                wtr.finish(&d, &rsp)?;
+                            }
+
+                            // Explicitly drop to save on memory
+                            drop(d);
                         }
                     }
 

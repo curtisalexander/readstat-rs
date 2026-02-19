@@ -50,7 +50,7 @@ tempfile = "3"
 thiserror = "2"
 
 [features]
-sql = ["dep:datafusion", "dep:tokio"]
+sql = ["dep:datafusion", "dep:tokio", "dep:futures"]
 
 [dependencies.datafusion]
 version = "52"
@@ -59,6 +59,10 @@ optional = true
 [dependencies.tokio]
 version = "1"
 features = ["rt-multi-thread"]
+optional = true
+
+[dependencies.futures]
+version = "0.3"
 optional = true
 
 [dev-dependencies]

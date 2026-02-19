@@ -10,7 +10,12 @@ use arrow_ipc::writer::FileWriter as IpcFileWriter;
 use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
 use arrow_schema::SchemaRef;
 use datafusion::datasource::MemTable;
+use datafusion::catalog::streaming::StreamingTable;
+use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
+use datafusion::physical_plan::streaming::PartitionStream;
+use datafusion::physical_plan::SendableRecordBatchStream;
 use datafusion::prelude::*;
+use futures::StreamExt;
 use parquet::{
     arrow::ArrowWriter as ParquetArrowWriter,
     basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel},
@@ -18,9 +23,11 @@ use parquet::{
 };
 use std::io::BufWriter;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::err::ReadStatError;
+use crate::rs_data::ReadStatData;
+use crate::rs_path::ReadStatPath;
 use crate::{OutFormat, ParquetCompression};
 
 /// Executes a SQL query against in-memory Arrow data.
@@ -60,6 +67,152 @@ async fn execute_sql_async(
     let results = df.collect().await?;
 
     Ok(results)
+}
+
+/// A [`PartitionStream`] implementation that reads `RecordBatch`es from a
+/// crossbeam channel, allowing DataFusion to consume data as it arrives
+/// without collecting everything into memory first.
+#[derive(Debug)]
+struct ChannelPartitionStream {
+    schema: SchemaRef,
+    receiver: Arc<Mutex<Option<crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>>>>,
+}
+
+impl ChannelPartitionStream {
+    fn new(
+        schema: SchemaRef,
+        receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    ) -> Self {
+        Self {
+            schema,
+            receiver: Arc::new(Mutex::new(Some(receiver))),
+        }
+    }
+}
+
+impl PartitionStream for ChannelPartitionStream {
+    fn schema(&self) -> &SchemaRef {
+        &self.schema
+    }
+
+    fn execute(
+        &self,
+        _ctx: Arc<datafusion::execution::TaskContext>,
+    ) -> SendableRecordBatchStream {
+        let receiver = self
+            .receiver
+            .lock()
+            .unwrap()
+            .take()
+            .expect("ChannelPartitionStream::execute called more than once");
+
+        let stream = futures::stream::iter(
+            receiver
+                .into_iter()
+                .filter_map(|(d, _, _)| d.batch)
+                .map(Ok),
+        );
+
+        Box::pin(RecordBatchStreamAdapter::new(self.schema.clone(), stream))
+    }
+}
+
+/// Executes a SQL query by streaming data from a crossbeam channel through
+/// DataFusion, avoiding double-materialization of the full dataset.
+///
+/// The receiver is consumed directly by DataFusion's query engine via
+/// [`StreamingTable`], and results are collected via `execute_stream()`.
+pub fn execute_sql_stream(
+    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+) -> Result<Vec<RecordBatch>, ReadStatError> {
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(execute_sql_stream_async(receiver, schema, table_name, sql))
+}
+
+async fn execute_sql_stream_async(
+    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+) -> Result<Vec<RecordBatch>, ReadStatError> {
+    let ctx = SessionContext::new();
+
+    let partition = ChannelPartitionStream::new(schema.clone(), receiver);
+    let table = StreamingTable::try_new(schema, vec![Arc::new(partition)])?;
+    ctx.register_table(table_name, Arc::new(table))?;
+
+    let df = ctx.sql(sql).await?;
+    let mut stream = df.execute_stream().await?;
+
+    let mut results = Vec::new();
+    while let Some(batch) = stream.next().await {
+        results.push(batch?);
+    }
+
+    Ok(results)
+}
+
+/// Executes a SQL query by streaming data from a crossbeam channel and writes
+/// the results directly to an output file, avoiding intermediate collection.
+///
+/// This combines [`execute_sql_stream`] and [`write_sql_results`] into one
+/// streaming pass for the Data command path.
+pub fn execute_sql_and_write_stream(
+    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+    output_path: &Path,
+    format: OutFormat,
+    compression: Option<ParquetCompression>,
+    compression_level: Option<u32>,
+) -> Result<(), ReadStatError> {
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(execute_sql_and_write_stream_async(
+        receiver,
+        schema,
+        table_name,
+        sql,
+        output_path,
+        format,
+        compression,
+        compression_level,
+    ))
+}
+
+async fn execute_sql_and_write_stream_async(
+    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+    output_path: &Path,
+    format: OutFormat,
+    compression: Option<ParquetCompression>,
+    compression_level: Option<u32>,
+) -> Result<(), ReadStatError> {
+    let ctx = SessionContext::new();
+
+    let partition = ChannelPartitionStream::new(schema.clone(), receiver);
+    let table = StreamingTable::try_new(schema, vec![Arc::new(partition)])?;
+    ctx.register_table(table_name, Arc::new(table))?;
+
+    let df = ctx.sql(sql).await?;
+    let mut stream = df.execute_stream().await?;
+
+    // Collect all result batches — we need the output schema (which may differ
+    // from the input schema due to projections/aggregations) before we can open
+    // a writer, and some formats (Feather/IPC) need all data before finishing.
+    let mut result_batches: Vec<RecordBatch> = Vec::new();
+    while let Some(batch) = stream.next().await {
+        result_batches.push(batch?);
+    }
+
+    write_sql_results(&result_batches, output_path, format, compression, compression_level)?;
+
+    Ok(())
 }
 
 /// Writes SQL result batches to an output file in the specified format.

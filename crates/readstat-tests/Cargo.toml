@@ -11,6 +11,7 @@ arrow-array = "57"
 arrow-cast = "57"
 arrow-schema = "57"
 parquet = "57"
+crossbeam = "0.8"
 assert_cmd = "2.1"
 assert_fs = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
