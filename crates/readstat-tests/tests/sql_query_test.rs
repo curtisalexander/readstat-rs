@@ -1,4 +1,6 @@
-use arrow_array::{Float64Array, StringArray, Array};
+#![cfg(feature = "sql")]
+
+use arrow_array::{Float64Array, Array};
 use readstat::{ReadStatData, ReadStatMetadata};
 use std::sync::Arc;
 
@@ -68,22 +70,22 @@ fn sql_where_filter() {
         batches,
         schema,
         "cars",
-        "SELECT \"Brand\", \"Model\", \"Horsepower\" FROM cars WHERE \"Horsepower\" > 300",
+        "SELECT \"Brand\", \"Model\", \"EngineSize\" FROM cars WHERE \"EngineSize\" > 5.0",
     )
     .unwrap();
 
     assert_eq!(results.len(), 1);
     let batch = &results[0];
     assert_eq!(batch.num_columns(), 3);
-    // All rows should have Horsepower > 300
-    let hp_col = batch
+    // All rows should have EngineSize > 5.0
+    let engine_col = batch
         .column(2)
         .as_any()
         .downcast_ref::<Float64Array>()
         .unwrap();
     for i in 0..batch.num_rows() {
-        if !hp_col.is_null(i) {
-            assert!(hp_col.value(i) > 300.0, "Row {i} has Horsepower <= 300");
+        if !engine_col.is_null(i) {
+            assert!(engine_col.value(i) > 5.0, "Row {i} has EngineSize <= 5.0");
         }
     }
     // Should be fewer rows than the full dataset
@@ -142,7 +144,7 @@ fn sql_order_by_limit() {
         batches,
         schema,
         "cars",
-        "SELECT \"Brand\", \"Model\", \"Horsepower\" FROM cars ORDER BY \"Horsepower\" DESC LIMIT 5",
+        "SELECT \"Brand\", \"Model\", \"EngineSize\" FROM cars ORDER BY \"EngineSize\" DESC LIMIT 5",
     )
     .unwrap();
 
@@ -151,14 +153,14 @@ fn sql_order_by_limit() {
     assert_eq!(batch.num_rows(), 5);
 
     // Verify descending order
-    let hp_col = batch
+    let engine_col = batch
         .column(2)
         .as_any()
         .downcast_ref::<Float64Array>()
         .unwrap();
     for i in 1..batch.num_rows() {
-        if !hp_col.is_null(i) && !hp_col.is_null(i - 1) {
-            assert!(hp_col.value(i - 1) >= hp_col.value(i));
+        if !engine_col.is_null(i) && !engine_col.is_null(i - 1) {
+            assert!(engine_col.value(i - 1) >= engine_col.value(i));
         }
     }
 }
