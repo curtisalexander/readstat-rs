@@ -79,6 +79,23 @@ impl ReadStatWriter {
         }
     }
 
+    /// Opens an output file: creates or truncates on first write, appends on subsequent writes.
+    fn open_output(&self, path: &PathBuf) -> Result<File, ReadStatError> {
+        let f = if self.wrote_start {
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)?
+        } else {
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path)?
+        };
+        Ok(f)
+    }
+
     /// Write a single batch to a Parquet file (for parallel writes)
     /// Uses SpooledTempFile to keep data in memory until buffer_size_bytes threshold
     pub fn write_batch_to_parquet(
@@ -380,19 +397,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -433,19 +438,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -503,19 +496,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -556,19 +537,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;

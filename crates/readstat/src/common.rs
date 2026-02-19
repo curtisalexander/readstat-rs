@@ -25,29 +25,13 @@ pub fn build_offsets(
     row_count: u32,
     stream_rows: u32,
 ) -> Result<Vec<u32>, ReadStatError> {
-    // Get number of chunks
-    let chunks = if stream_rows < row_count {
-        if row_count % stream_rows == 0 {
-            row_count / stream_rows
-        } else {
-            (row_count / stream_rows) + 1
-        }
-    } else {
-        1
-    };
+    let chunks = row_count.div_ceil(stream_rows.max(1));
+    let mut offsets = Vec::with_capacity(chunks as usize + 1);
 
-    // Allocate and populate a vector for the offsets
-    let mut offsets: Vec<u32> = Vec::with_capacity(chunks as usize);
-
-    for c in 0..=chunks {
-        if c == 0 {
-            offsets.push(0);
-        } else if c == chunks {
-            offsets.push(row_count);
-        } else {
-            offsets.push(c * stream_rows);
-        }
+    for c in 0..chunks {
+        offsets.push(c * stream_rows);
     }
+    offsets.push(row_count);
 
     Ok(offsets)
 }
@@ -107,7 +91,9 @@ mod tests {
     #[test]
     fn build_offsets_zero_rows() {
         let offsets = build_offsets(0, 10).unwrap();
-        assert_eq!(offsets, vec![0, 0]);
+        assert_eq!(offsets, vec![0]);
+        // No windows produced for zero rows
+        assert_eq!(offsets.windows(2).count(), 0);
     }
 
     #[test]
