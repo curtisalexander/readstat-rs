@@ -88,6 +88,8 @@ pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadSt
 pub use rs_path::ReadStatPath;
 pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;
+#[cfg(feature = "sql")]
+pub use rs_query::{execute_sql, read_sql_file};
 
 mod cb;
 mod common;
@@ -98,6 +100,8 @@ mod rs_data;
 mod rs_metadata;
 mod rs_parser;
 mod rs_path;
+#[cfg(feature = "sql")]
+mod rs_query;
 mod rs_var;
 mod rs_write;
 
@@ -179,6 +183,14 @@ pub enum ReadStatCliCommands {
         /// Path to a file containing column names (one per line, # comments)
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with = "columns")]
         columns_file: Option<PathBuf>,
+        /// SQL query to run against the data (requires sql feature){n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file
+        #[cfg(feature = "sql")]
+        #[arg(long, conflicts_with_all = ["columns", "columns_file"])]
+        sql: Option<String>,
+        /// Path to a file containing a SQL query (requires sql feature){n}Mutually exclusive with --sql and --columns/--columns-file
+        #[cfg(feature = "sql")]
+        #[arg(long, value_hint = ValueHint::FilePath, conflicts_with_all = ["sql", "columns", "columns_file"])]
+        sql_file: Option<PathBuf>,
     },
     /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
     Data {
@@ -227,6 +239,14 @@ pub enum ReadStatCliCommands {
         /// Path to a file containing column names (one per line, # comments)
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with = "columns")]
         columns_file: Option<PathBuf>,
+        /// SQL query to run against the data (requires sql feature){n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file
+        #[cfg(feature = "sql")]
+        #[arg(long, conflicts_with_all = ["columns", "columns_file"])]
+        sql: Option<String>,
+        /// Path to a file containing a SQL query (requires sql feature){n}Mutually exclusive with --sql and --columns/--columns-file
+        #[cfg(feature = "sql")]
+        #[arg(long, value_hint = ValueHint::FilePath, conflicts_with_all = ["sql", "columns", "columns_file"])]
+        sql_file: Option<PathBuf>,
     },
 }
 
@@ -287,6 +307,28 @@ impl fmt::Display for ParquetCompression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", &self)
     }
+}
+
+/// Resolve the SQL query from `--sql` or `--sql-file` CLI options.
+#[cfg(feature = "sql")]
+fn resolve_sql(
+    sql: Option<String>,
+    sql_file: Option<PathBuf>,
+) -> Result<Option<String>, ReadStatError> {
+    if let Some(path) = sql_file {
+        Ok(Some(rs_query::read_sql_file(&path)?))
+    } else {
+        Ok(sql)
+    }
+}
+
+/// Extract a table name from the input file stem (e.g. "cars" from "cars.sas7bdat").
+#[cfg(feature = "sql")]
+fn table_name_from_path(path: &std::path::Path) -> String {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("data")
+        .to_string()
 }
 
 /// Resolve column names from `--columns` or `--columns-file` CLI options.
@@ -350,7 +392,13 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             no_progress,
             columns,
             columns_file,
+            #[cfg(feature = "sql")]
+            sql,
+            #[cfg(feature = "sql")]
+            sql_file,
         } => {
+            #[cfg(feature = "sql")]
+            let sql_query = resolve_sql(sql, sql_file)?;
             // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -393,18 +441,13 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
             let offsets_pairs = offsets.windows(2);
-            let pairs_cnt = offsets_pairs.len();
 
-            // Initialize writing
-            let mut wtr = ReadStatWriter::new();
-
-            // Process data in batches (i.e. stream chunks of rows)
-            // Read data - for each iteration create a new instance of ReadStatData
-            for (i, w) in offsets_pairs.enumerate() {
+            // Read all chunks into batches
+            let mut all_batches: Vec<arrow_array::RecordBatch> = Vec::new();
+            for w in offsets_pairs {
                 let row_start = w[0];
                 let row_end = w[1];
 
-                // Initialize ReadStatData struct
                 let mut d = ReadStatData::new()
                     .set_column_filter(column_filter.clone(), original_var_count)
                     .set_no_progress(no_progress)
@@ -412,20 +455,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     .set_total_rows_processed(total_rows_processed.clone())
                     .init(md.clone(), row_start, row_end);
 
-                // Set progress bar if available
                 if let Some(ref pb) = pb {
                     d = d.set_progress_bar(pb.clone());
                 }
 
-                // Read
                 d.read_data(&rsp)?;
 
-                // Write
-                wtr.write(&d, &rsp)?;
-
-                // Finish
-                if i == pairs_cnt - 1 {
-                    wtr.finish(&d, &rsp)?;
+                if let Some(batch) = d.batch {
+                    all_batches.push(batch);
                 }
             }
 
@@ -434,7 +471,25 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                 pb.finish_with_message("Done");
             }
 
-            // Return
+            // Apply SQL query if provided, otherwise write directly
+            #[cfg(feature = "sql")]
+            let all_batches = if let Some(ref query) = sql_query {
+                let schema = Arc::new(md.schema.clone());
+                let table_name = table_name_from_path(&rsp.path);
+                rs_query::execute_sql(all_batches, schema, &table_name, query)?
+            } else {
+                all_batches
+            };
+
+            // Write all batches to stdout as CSV
+            let stdout = std::io::stdout();
+            let mut csv_writer = arrow_csv::WriterBuilder::new()
+                .with_header(true)
+                .build(stdout);
+            for batch in &all_batches {
+                csv_writer.write(batch)?;
+            }
+
             Ok(())
         }
         ReadStatCliCommands::Data {
@@ -453,7 +508,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             compression_level,
             columns,
             columns_file,
+            #[cfg(feature = "sql")]
+            sql,
+            #[cfg(feature = "sql")]
+            sql_file,
         } => {
+            #[cfg(feature = "sql")]
+            let sql_query = resolve_sql(sql, sql_file)?;
+
             // Validate and create path to sas7bdat/sas7bcat
             let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
             debug!(
@@ -528,6 +590,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     let compression_clone = rsp.compression;
                     let compression_level_clone = rsp.compression_level;
                     let buffer_size_bytes = parallel_write_buffer_mb * 1024 * 1024; // Convert MB to bytes
+
+                    // Save values needed for SQL query execution before thread spawn
+                    #[cfg(feature = "sql")]
+                    let sql_schema = Arc::new(md.schema.clone());
+                    #[cfg(feature = "sql")]
+                    let sql_table_name = table_name_from_path(&rsp.path);
+                    #[cfg(feature = "sql")]
+                    let sql_format = rsp.format;
 
                     // Create channels with a capacity of 10
                     // Unbounded channels can result in extreme memory usage if files are large and
@@ -607,65 +677,100 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
 
                     // Write
 
-                    if use_parallel_writes {
-                        // Parallel write mode for Parquet: write batches to temp files in parallel, then merge
-                        let batches: Vec<_> = r.iter().collect();
+                    // SQL query mode: collect all batches, run SQL, write results
+                    #[cfg(feature = "sql")]
+                    let sql_handled = if let Some(ref query) = sql_query {
+                        let read_batches: Vec<arrow_array::RecordBatch> = r.iter()
+                            .filter_map(|(d, _, _)| d.batch)
+                            .collect();
 
-                        if !batches.is_empty() {
-                            let schema = batches[0].0.schema.clone();
-                            let temp_dir = if let Some(out_path) = &out_path_clone {
-                                match out_path.parent() {
-                                    Ok(parent) => parent.to_path_buf(),
-                                    Err(_) => std::env::current_dir()?,
-                                }
-                            } else {
-                                return Err(ReadStatError::Other("No output path specified for parallel write".to_string()));
-                            };
+                        if !read_batches.is_empty() {
+                            let result_batches = rs_query::execute_sql(
+                                read_batches,
+                                sql_schema,
+                                &sql_table_name,
+                                query,
+                            )?;
 
-                            // Write batches in parallel to temporary files using SpooledTempFile
-                            let temp_files: Vec<PathBuf> = batches.par_iter().enumerate()
-                                .map(|(i, (d, _rsp, _))| -> Result<PathBuf, ReadStatError> {
-                                    let temp_file = temp_dir.join(format!(".readstat_temp_{}.parquet", i));
-
-                                    if let Some(batch) = &d.batch {
-                                        ReadStatWriter::write_batch_to_parquet(
-                                            batch,
-                                            &schema,
-                                            &temp_file,
-                                            compression_clone,
-                                            compression_level_clone,
-                                            buffer_size_bytes as usize,
-                                        )?;
-                                    }
-
-                                    Ok(temp_file)
-                                })
-                                .collect::<Result<Vec<_>, _>>()?;
-
-                            // Merge temp files into final output
                             if let Some(out_path) = &out_path_clone {
-                                ReadStatWriter::merge_parquet_files(
-                                    &temp_files,
+                                rs_query::write_sql_results(
+                                    &result_batches,
                                     out_path,
-                                    &schema,
+                                    sql_format,
                                     compression_clone,
                                     compression_level_clone,
                                 )?;
                             }
                         }
+                        true
                     } else {
-                        // Sequential write mode (default) with BufWriter optimizations
-                        let mut wtr = ReadStatWriter::new();
+                        false
+                    };
 
-                        for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
-                            wtr.write(&d, &rsp)?;
+                    #[cfg(not(feature = "sql"))]
+                    let sql_handled = false;
 
-                            if i == (pairs_cnt - 1) {
-                                wtr.finish(&d, &rsp)?;
+                    if !sql_handled {
+                        if use_parallel_writes {
+                            // Parallel write mode for Parquet: write batches to temp files in parallel, then merge
+                            let batches: Vec<_> = r.iter().collect();
+
+                            if !batches.is_empty() {
+                                let schema = batches[0].0.schema.clone();
+                                let temp_dir = if let Some(out_path) = &out_path_clone {
+                                    match out_path.parent() {
+                                        Ok(parent) => parent.to_path_buf(),
+                                        Err(_) => std::env::current_dir()?,
+                                    }
+                                } else {
+                                    return Err(ReadStatError::Other("No output path specified for parallel write".to_string()));
+                                };
+
+                                // Write batches in parallel to temporary files using SpooledTempFile
+                                let temp_files: Vec<PathBuf> = batches.par_iter().enumerate()
+                                    .map(|(i, (d, _rsp, _))| -> Result<PathBuf, ReadStatError> {
+                                        let temp_file = temp_dir.join(format!(".readstat_temp_{}.parquet", i));
+
+                                        if let Some(batch) = &d.batch {
+                                            ReadStatWriter::write_batch_to_parquet(
+                                                batch,
+                                                &schema,
+                                                &temp_file,
+                                                compression_clone,
+                                                compression_level_clone,
+                                                buffer_size_bytes as usize,
+                                            )?;
+                                        }
+
+                                        Ok(temp_file)
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?;
+
+                                // Merge temp files into final output
+                                if let Some(out_path) = &out_path_clone {
+                                    ReadStatWriter::merge_parquet_files(
+                                        &temp_files,
+                                        out_path,
+                                        &schema,
+                                        compression_clone,
+                                        compression_level_clone,
+                                    )?;
+                                }
                             }
+                        } else {
+                            // Sequential write mode (default) with BufWriter optimizations
+                            let mut wtr = ReadStatWriter::new();
 
-                            // Explicitly drop to save on memory
-                            drop(d);
+                            for (i, (d, rsp, pairs_cnt)) in r.iter().enumerate() {
+                                wtr.write(&d, &rsp)?;
+
+                                if i == (pairs_cnt - 1) {
+                                    wtr.finish(&d, &rsp)?;
+                                }
+
+                                // Explicitly drop to save on memory
+                                drop(d);
+                            }
                         }
                     }
 

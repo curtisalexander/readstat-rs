@@ -20,6 +20,9 @@ polars = { version = "0.52", features = ["parquet"] }
 predicates = "3"
 readstat = { path = "../readstat" }
 
+[features]
+sql = ["readstat/sql"]
+
 [[test]]
 name = "integration_tests"
 path = "tests/lib.rs"
