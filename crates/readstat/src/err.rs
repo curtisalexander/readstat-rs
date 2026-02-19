@@ -171,6 +171,11 @@ pub enum ReadStatError {
         available: Vec<String>,
     },
 
+    /// Error from the DataFusion SQL engine.
+    #[cfg(feature = "sql")]
+    #[error("{0}")]
+    DataFusion(#[from] datafusion::error::DataFusionError),
+
     /// Catch-all error with a custom message.
     #[error("{0}")]
     Other(String),
