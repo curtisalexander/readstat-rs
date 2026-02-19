@@ -23,6 +23,69 @@ on:
     types: [build, test, release]
 
 jobs:
+  release-notes:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate changelog
+        run: |
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -1 || echo "")
+          if [ -n "$PREVIOUS_TAG" ]; then
+            RANGE="${PREVIOUS_TAG}..${CURRENT_TAG}"
+          else
+            RANGE="${CURRENT_TAG}"
+          fi
+          {
+            echo "## What's Changed in ${CURRENT_TAG}"
+            echo ""
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo "**Full Changelog**: \`${PREVIOUS_TAG}...${CURRENT_TAG}\`"
+              echo ""
+            fi
+            # Collect commits
+            FEATURES=""
+            FIXES=""
+            OTHER=""
+            while IFS= read -r line; do
+              subject=$(echo "$line" | sed 's/^[a-f0-9]* //')
+              hash=$(echo "$line" | awk '{print $1}')
+              entry="- ${subject} (${hash})"
+              lower=$(echo "$subject" | tr '[:upper:]' '[:lower:]')
+              if echo "$lower" | grep -qE "^(add|implement|support|introduce|create|enable)"; then
+                FEATURES="${FEATURES}${entry}\n"
+              elif echo "$lower" | grep -qE "^(fix|correct|resolve|patch|address|repair)"; then
+                FIXES="${FIXES}${entry}\n"
+              else
+                OTHER="${OTHER}${entry}\n"
+              fi
+            done < <(git log --oneline --no-merges "$RANGE" 2>/dev/null)
+            if [ -n "$FEATURES" ]; then
+              echo "### Added"
+              echo -e "$FEATURES"
+            fi
+            if [ -n "$FIXES" ]; then
+              echo "### Fixed"
+              echo -e "$FIXES"
+            fi
+            if [ -n "$OTHER" ]; then
+              echo "### Changed"
+              echo -e "$OTHER"
+            fi
+          } > release-notes.md
+      - name: Create release with notes
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-linux-gnu:
     runs-on: ubuntu-latest
     env:
