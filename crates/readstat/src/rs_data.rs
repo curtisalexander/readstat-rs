@@ -347,6 +347,22 @@ impl ReadStatData {
         Ok(())
     }
 
+    /// Parses row data from a memory-mapped `.sas7bdat` file and converts it to an Arrow [`RecordBatch`].
+    ///
+    /// Opens the file at `path` and memory-maps it, avoiding explicit read syscalls.
+    /// Especially beneficial for large files and repeated chunk reads against the
+    /// same file, as the OS manages page caching automatically.
+    ///
+    /// # Safety
+    ///
+    /// Memory mapping is safe as long as the file is not modified or truncated by
+    /// another process while the map is active.
+    pub fn read_data_from_mmap(&mut self, path: &std::path::Path) -> Result<(), ReadStatError> {
+        let file = std::fs::File::open(path)?;
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+        self.read_data_from_bytes(&mmap)
+    }
+
     fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
         debug!("Path as C string is {:?}", &rsp.cstring_path);

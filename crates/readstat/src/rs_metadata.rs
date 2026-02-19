@@ -9,7 +9,7 @@ use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
-use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::{c_void, CString}, os::raw::c_int, path::Path};
+use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::{c_void, CString}, fs::File, os::raw::c_int, path::Path};
 
 use crate::cb::{handle_metadata, handle_variable};
 use crate::err::{check_c_error, ReadStatError};
@@ -206,6 +206,28 @@ impl ReadStatMetadata {
         // if successful, initialize schema
         self.schema = self.initialize_schema();
         Ok(())
+    }
+
+    /// Parses metadata from a memory-mapped `.sas7bdat` file.
+    ///
+    /// Opens the file at `path` and memory-maps it, avoiding explicit read syscalls.
+    /// The OS loads pages on demand and manages caching automatically. This is
+    /// especially beneficial for large files where it avoids copying file data
+    /// through kernel buffers.
+    ///
+    /// # Safety
+    ///
+    /// Memory mapping is safe as long as the file is not modified or truncated by
+    /// another process while the map is active. This is the standard expectation
+    /// for `.sas7bdat` files, which are read-only artifacts.
+    pub fn read_metadata_from_mmap(
+        &mut self,
+        path: &Path,
+        skip_row_count: bool,
+    ) -> Result<(), ReadStatError> {
+        let file = File::open(path)?;
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+        self.read_metadata_from_bytes(&mmap, skip_row_count)
     }
 
     /// Parses a columns file, returning column names.
