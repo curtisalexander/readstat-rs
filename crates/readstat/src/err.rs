@@ -186,3 +186,84 @@ pub fn check_c_error(code: i32) -> Result<(), ReadStatError> {
         None => Err(ReadStatError::UnknownCError(code)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_c_error_ok() {
+        assert!(check_c_error(0).is_ok());
+    }
+
+    #[test]
+    fn check_c_error_known_errors() {
+        for code in 1..=40 {
+            let err = check_c_error(code).unwrap_err();
+            match err {
+                ReadStatError::CLibrary(_) => {}
+                other => panic!("Expected CLibrary error for code {code}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn check_c_error_open() {
+        let err = check_c_error(1).unwrap_err();
+        assert!(matches!(
+            err,
+            ReadStatError::CLibrary(ReadStatCError::READSTAT_ERROR_OPEN)
+        ));
+    }
+
+    #[test]
+    fn check_c_error_parse() {
+        let err = check_c_error(5).unwrap_err();
+        assert!(matches!(
+            err,
+            ReadStatError::CLibrary(ReadStatCError::READSTAT_ERROR_PARSE)
+        ));
+    }
+
+    #[test]
+    fn check_c_error_unknown_positive() {
+        let err = check_c_error(999).unwrap_err();
+        assert!(matches!(err, ReadStatError::UnknownCError(999)));
+    }
+
+    #[test]
+    fn check_c_error_unknown_negative() {
+        let err = check_c_error(-1).unwrap_err();
+        assert!(matches!(err, ReadStatError::UnknownCError(-1)));
+    }
+
+    #[test]
+    fn error_display_messages() {
+        let err = ReadStatError::Other("test error".to_string());
+        assert_eq!(format!("{err}"), "test error");
+
+        let err = ReadStatError::VarIndexNotFound { index: 42 };
+        assert_eq!(format!("{err}"), "Variable index 42 not found");
+
+        let err = ReadStatError::DateOverflow;
+        assert_eq!(format!("{err}"), "Date arithmetic overflow");
+
+        let err = ReadStatError::NumericParse("bad_num".to_string());
+        assert_eq!(format!("{err}"), "Failed to parse numeric value: bad_num");
+
+        let err = ReadStatError::UnknownCError(99);
+        assert_eq!(format!("{err}"), "Unknown C error code: 99");
+    }
+
+    #[test]
+    fn error_columns_not_found_display() {
+        let err = ReadStatError::ColumnsNotFound {
+            requested: vec!["foo".into(), "bar".into()],
+            available: vec!["a".into(), "b".into(), "c".into()],
+        };
+        let msg = format!("{err}");
+        assert!(msg.contains("foo"));
+        assert!(msg.contains("bar"));
+        assert!(msg.contains("Available columns"));
+    }
+}

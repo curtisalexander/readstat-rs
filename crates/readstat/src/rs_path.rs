@@ -111,13 +111,8 @@ impl ReadStatPath {
         Ok(CString::new(rust_str)?)
     }
 
-    fn validate_format(
-        format: Option<OutFormat>,
-    ) -> Result<OutFormat, ReadStatError> {
-        match format {
-            None => Ok(OutFormat::csv),
-            Some(f) => Ok(f),
-        }
+    fn validate_format(format: Option<OutFormat>) -> Result<OutFormat, ReadStatError> {
+        Ok(format.unwrap_or(OutFormat::csv))
     }
 
     fn validate_in_extension(path: &Path) -> Result<String, ReadStatError> {
@@ -221,58 +216,242 @@ impl ReadStatPath {
         compression: ParquetCompression,
         compression_level: Option<u32>,
     ) -> Result<Option<u32>, ReadStatError> {
-        match compression {
-            ParquetCompression::Uncompressed => match compression_level {
-                None => Ok(compression_level),
-                Some(_) => {
-                    println!("Compression level is not required for compression={}, ignoring value of {}", String::from("uncompressed").bright_magenta(), String::from("--compression-level").bright_cyan());
-                    Ok(None)
+        // (CLI display name, max valid level) - None means level is ignored
+        let (name, max_level): (&str, Option<u32>) = match compression {
+            ParquetCompression::Uncompressed => ("uncompressed", None),
+            ParquetCompression::Snappy => ("snappy", None),
+            ParquetCompression::Lz4Raw => ("lz4-raw", None),
+            ParquetCompression::Gzip => ("gzip", Some(9)),
+            ParquetCompression::Brotli => ("brotli", Some(11)),
+            ParquetCompression::Zstd => ("zstd", Some(22)),
+        };
+
+        match (max_level, compression_level) {
+            // Codec ignores levels
+            (None, None) => Ok(None),
+            (None, Some(_)) => {
+                println!(
+                    "Compression level is not required for compression={}, ignoring value of {}",
+                    name.bright_magenta(),
+                    String::from("--compression-level").bright_cyan()
+                );
+                Ok(None)
+            }
+            // Codec supports levels
+            (Some(_), None) => Ok(None),
+            (Some(max), Some(c)) => {
+                if c <= max {
+                    Ok(Some(c))
+                } else {
+                    Err(ReadStatError::Other(format!(
+                        "The compression level of {} is not a valid level for {} compression. \
+                         Instead, please use values between 0-{max}.",
+                        c.to_string().bright_yellow(),
+                        name.bright_cyan()
+                    )))
                 }
-            },
-            ParquetCompression::Snappy => match compression_level {
-                None => Ok(compression_level),
-                Some(_) => {
-                    println!("Compression level is not required for compression={}, ignoring value of {}", String::from("snappy").bright_magenta(), String::from("--compression-level").bright_cyan());
-                    Ok(None)
-                }
-            },
-            ParquetCompression::Lz4Raw => match compression_level {
-                None => Ok(compression_level),
-                Some(_) => {
-                    println!("Compression level is not required for compression={}, ignoring value of {}", String::from("lz4-raw").bright_magenta(), String::from("--compression-level").bright_cyan());
-                    Ok(None)
-                }
-            },
-            ParquetCompression::Gzip => match compression_level {
-                None => Ok(compression_level),
-                Some(c) => {
-                    if c <= 9 {
-                        Ok(Some(c))
-                    } else {
-                        Err(ReadStatError::Other(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-9.", c.to_string().bright_yellow(), String::from("gzip").bright_cyan())))
-                    }
-                }
-            },
-            ParquetCompression::Brotli => match compression_level {
-                None => Ok(compression_level),
-                Some(c) => {
-                    if c <= 11 {
-                        Ok(Some(c))
-                    } else {
-                        Err(ReadStatError::Other(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-11.", c.to_string().bright_yellow(), String::from("brotli").bright_cyan())))
-                    }
-                }
-            },
-            ParquetCompression::Zstd => match compression_level {
-                None => Ok(compression_level),
-                Some(c) => {
-                    if c <= 22 {
-                        Ok(Some(c))
-                    } else {
-                        Err(ReadStatError::Other(format!("The compression level of {} is not a valid level for {} compression. Instead, please use values between 0-22.", c.to_string().bright_yellow(), String::from("zstd").bright_cyan())))
-                    }
-                }
-            },
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- validate_in_extension ---
+
+    #[test]
+    fn valid_sas7bdat_extension() {
+        let path = Path::new("/some/file.sas7bdat");
+        assert_eq!(ReadStatPath::validate_in_extension(path).unwrap(), "sas7bdat");
+    }
+
+    #[test]
+    fn valid_sas7bcat_extension() {
+        let path = Path::new("/some/file.sas7bcat");
+        assert_eq!(ReadStatPath::validate_in_extension(path).unwrap(), "sas7bcat");
+    }
+
+    #[test]
+    fn invalid_extension() {
+        let path = Path::new("/some/file.csv");
+        assert!(ReadStatPath::validate_in_extension(path).is_err());
+    }
+
+    #[test]
+    fn no_extension() {
+        let path = Path::new("/some/file");
+        assert!(ReadStatPath::validate_in_extension(path).is_err());
+    }
+
+    // --- validate_format ---
+
+    #[test]
+    fn format_none_defaults_to_csv() {
+        let f = ReadStatPath::validate_format(None).unwrap();
+        assert!(matches!(f, OutFormat::csv));
+    }
+
+    #[test]
+    fn format_some_passes_through() {
+        let f = ReadStatPath::validate_format(Some(OutFormat::parquet)).unwrap();
+        assert!(matches!(f, OutFormat::parquet));
+    }
+
+    // --- validate_out_extension ---
+
+    #[test]
+    fn valid_csv_out_extension() {
+        let path = Path::new("/some/output.csv");
+        let result = ReadStatPath::validate_out_extension(path, OutFormat::csv).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn valid_parquet_out_extension() {
+        let path = Path::new("/some/output.parquet");
+        let result = ReadStatPath::validate_out_extension(path, OutFormat::parquet).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn valid_feather_out_extension() {
+        let path = Path::new("/some/output.feather");
+        let result = ReadStatPath::validate_out_extension(path, OutFormat::feather).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn valid_ndjson_out_extension() {
+        let path = Path::new("/some/output.ndjson");
+        let result = ReadStatPath::validate_out_extension(path, OutFormat::ndjson).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn mismatched_out_extension() {
+        let path = Path::new("/some/output.csv");
+        assert!(ReadStatPath::validate_out_extension(path, OutFormat::parquet).is_err());
+    }
+
+    #[test]
+    fn no_out_extension() {
+        let path = Path::new("/some/output");
+        assert!(ReadStatPath::validate_out_extension(path, OutFormat::csv).is_err());
+    }
+
+    // --- validate_compression_level ---
+
+    #[test]
+    fn uncompressed_ignores_level() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Uncompressed,
+            Some(5),
+        ).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn snappy_ignores_level() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Snappy,
+            Some(5),
+        ).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn lz4raw_ignores_level() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Lz4Raw,
+            Some(5),
+        ).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn gzip_valid_level() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Gzip,
+            Some(5),
+        ).unwrap();
+        assert_eq!(result, Some(5));
+    }
+
+    #[test]
+    fn gzip_max_valid_level() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Gzip,
+            Some(9),
+        ).unwrap();
+        assert_eq!(result, Some(9));
+    }
+
+    #[test]
+    fn gzip_invalid_level() {
+        assert!(ReadStatPath::validate_compression_level(
+            ParquetCompression::Gzip,
+            Some(10),
+        ).is_err());
+    }
+
+    #[test]
+    fn brotli_valid_level() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Brotli,
+            Some(11),
+        ).unwrap();
+        assert_eq!(result, Some(11));
+    }
+
+    #[test]
+    fn brotli_invalid_level() {
+        assert!(ReadStatPath::validate_compression_level(
+            ParquetCompression::Brotli,
+            Some(12),
+        ).is_err());
+    }
+
+    #[test]
+    fn zstd_valid_level() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Zstd,
+            Some(22),
+        ).unwrap();
+        assert_eq!(result, Some(22));
+    }
+
+    #[test]
+    fn zstd_invalid_level() {
+        assert!(ReadStatPath::validate_compression_level(
+            ParquetCompression::Zstd,
+            Some(23),
+        ).is_err());
+    }
+
+    #[test]
+    fn no_level_passes_through() {
+        let result = ReadStatPath::validate_compression_level(
+            ParquetCompression::Gzip,
+            None,
+        ).unwrap();
+        assert_eq!(result, None);
+    }
+
+    // --- path_to_cstring ---
+
+    #[test]
+    fn path_to_cstring_normal() {
+        let path = PathBuf::from("/tmp/test.sas7bdat");
+        let cs = ReadStatPath::path_to_cstring(&path).unwrap();
+        assert_eq!(cs.to_str().unwrap(), "/tmp/test.sas7bdat");
+    }
+
+    // --- validate_out_path ---
+
+    #[test]
+    fn validate_out_path_none() {
+        assert!(ReadStatPath::validate_out_path(None, false).unwrap().is_none());
     }
 }

@@ -79,6 +79,23 @@ impl ReadStatWriter {
         }
     }
 
+    /// Opens an output file: creates or truncates on first write, appends on subsequent writes.
+    fn open_output(&self, path: &PathBuf) -> Result<File, ReadStatError> {
+        let f = if self.wrote_start {
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)?
+        } else {
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path)?
+        };
+        Ok(f)
+    }
+
     /// Write a single batch to a Parquet file (for parallel writes)
     /// Uses SpooledTempFile to keep data in memory until buffer_size_bytes threshold
     pub fn write_batch_to_parquet(
@@ -242,30 +259,6 @@ impl ReadStatWriter {
         }
     }
 
-    fn _write_message_for_file(&mut self, d: &ReadStatData, rsp: &ReadStatPath) {
-        if let Some(pb) = &d.pb {
-            let in_f = if let Some(f) = rsp.path.file_name() {
-                f.to_string_lossy().bright_red()
-            } else {
-                String::from("___").bright_red()
-            };
-
-            let out_f = if let Some(p) = &rsp.out_path {
-                if let Some(f) = p.file_name() {
-                    f.to_string_lossy().bright_green()
-                } else {
-                    String::from("___").bright_green()
-                }
-            } else {
-                String::from("___").bright_green()
-            };
-
-            let msg = format!("Writing file {} as {}", in_f, out_f);
-
-            pb.set_message(msg);
-        }
-    }
-
     fn write_message_for_rows(
         &mut self,
         d: &ReadStatData,
@@ -307,7 +300,6 @@ impl ReadStatWriter {
         d: &ReadStatData,
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
-        //if let Some(pb) = &d.pb {
         let in_f = if let Some(f) = rsp.path.file_name() {
             f.to_string_lossy().bright_red()
         } else {
@@ -339,8 +331,6 @@ impl ReadStatWriter {
 
         println!("{}", msg);
 
-        //pb.set_message(msg);
-        //}
         Ok(())
     }
 
@@ -407,19 +397,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -460,19 +438,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -530,19 +496,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -583,19 +537,7 @@ impl ReadStatWriter {
         rsp: &ReadStatPath,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &rsp.out_path {
-            // if already started writing, then need to append to file; otherwise create file
-            let f = if self.wrote_start {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(p)?
-            } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(p)?
-            };
+            let f = self.open_output(p)?;
 
             // set message for what is being read/written
             self.write_message_for_rows(d, rsp)?;
@@ -830,5 +772,109 @@ impl ReadStatWriter {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- resolve_compression ---
+
+    #[test]
+    fn resolve_compression_none_defaults_to_snappy() {
+        let codec = ReadStatWriter::resolve_compression(None, None).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::SNAPPY));
+    }
+
+    #[test]
+    fn resolve_compression_uncompressed() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Uncompressed),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::UNCOMPRESSED));
+    }
+
+    #[test]
+    fn resolve_compression_snappy() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Snappy),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::SNAPPY));
+    }
+
+    #[test]
+    fn resolve_compression_lz4raw() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Lz4Raw),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::LZ4_RAW));
+    }
+
+    #[test]
+    fn resolve_compression_gzip_default() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Gzip),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::GZIP(_)));
+    }
+
+    #[test]
+    fn resolve_compression_gzip_with_level() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Gzip),
+            Some(5),
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::GZIP(_)));
+    }
+
+    #[test]
+    fn resolve_compression_brotli_default() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Brotli),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::BROTLI(_)));
+    }
+
+    #[test]
+    fn resolve_compression_brotli_with_level() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Brotli),
+            Some(8),
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::BROTLI(_)));
+    }
+
+    #[test]
+    fn resolve_compression_zstd_default() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Zstd),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::ZSTD(_)));
+    }
+
+    #[test]
+    fn resolve_compression_zstd_with_level() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Zstd),
+            Some(15),
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::ZSTD(_)));
+    }
+
+    // --- ReadStatWriter::new ---
+
+    #[test]
+    fn new_writer_defaults() {
+        let wtr = ReadStatWriter::new();
+        assert!(wtr.wtr.is_none());
+        assert!(!wtr.wrote_header);
+        assert!(!wtr.wrote_start);
     }
 }

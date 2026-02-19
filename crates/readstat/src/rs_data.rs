@@ -379,24 +379,6 @@ impl ReadStatData {
         Ok(())
     }
 
-    /*
-    pub fn get_row_count(&mut self) -> Result<u32, Box<dyn Error>> {
-        debug!("Path as C string is {:?}", &self.cstring_path);
-        let ppath = self.cstring_path.as_ptr();
-
-        let ctx = self as *mut ReadStatData as *mut c_void;
-
-        let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
-
-        let error = ReadStatParser::new()
-            .set_metadata_handler(Some(cb::handle_metadata_row_count_only))?
-            .parse_sas7bdat(ppath, ctx);
-
-        Ok(error as u32)
-    }
-    */
-
     /// Initializes this instance with metadata and chunk boundaries, allocating column storage.
     pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
         self.set_metadata(md)

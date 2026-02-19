@@ -6,7 +6,6 @@
 //! [`Schema`](arrow::datatypes::Schema) that maps SAS types to Arrow data types.
 
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
-use colored::Colorize;
 use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
@@ -99,15 +98,12 @@ impl ReadStatMetadata {
                             DataType::Timestamp(TimeUnit::Second, None)
                         }
                         Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Millisecond, None)
                         }
                         Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Microsecond, None)
                         }
                         Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
-                            // DataType::Timestamp(arrow::datatypes::TimeUnit::Second, None)
                             DataType::Timestamp(TimeUnit::Nanosecond, None)
                         }
                         Some(ReadStatVarFormatClass::Time) => DataType::Time32(TimeUnit::Second),
@@ -153,29 +149,6 @@ impl ReadStatMetadata {
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        // spinner
-        /*
-        if !self.no_progress {
-            self.pb = Some(ProgressBar::new(!0));
-        }
-        if let Some(pb) = &self.pb {
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("[{spinner:.green} {elapsed_precise}] {msg}"),
-            );
-            let msg = format!(
-                "Parsing sas7bdat metadata from file {}",
-                &self.path.to_string_lossy().bright_red()
-            );
-            pb.set_message(msg);
-            pb.enable_steady_tick(120);
-        }
-        */
-        let _msg = format!(
-            "Parsing sas7bdat metadata from file {}",
-            &rsp.path.to_string_lossy().bright_red()
-        );
-
         let ctx = self as *mut ReadStatMetadata as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -188,12 +161,6 @@ impl ReadStatMetadata {
             .set_variable_handler(Some(handle_variable))?
             .set_row_limit(row_limit)?
             .parse_sas7bdat(ppath, ctx);
-
-        /*
-        if let Some(pb) = &self.pb {
-            pb.finish_and_clear();
-        }
-        */
 
         check_c_error(error as i32)?;
 
@@ -351,5 +318,315 @@ impl ReadStatVarMetadata {
             var_format,
             var_format_class,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// Create a test metadata instance with the given variable names.
+    fn test_metadata(var_names: &[&str]) -> ReadStatMetadata {
+        let mut md = ReadStatMetadata::new();
+        for (i, name) in var_names.iter().enumerate() {
+            md.vars.insert(
+                i as i32,
+                ReadStatVarMetadata::new(
+                    name.to_string(),
+                    ReadStatVarType::Double,
+                    ReadStatVarTypeClass::Numeric,
+                    String::new(),
+                    "BEST12".to_string(),
+                    None,
+                ),
+            );
+        }
+        md.var_count = var_names.len() as c_int;
+        md.schema = md.initialize_schema();
+        md
+    }
+
+    // --- resolve_selected_columns ---
+
+    #[test]
+    fn resolve_columns_none_returns_none() {
+        let md = test_metadata(&["a", "b", "c"]);
+        assert!(md.resolve_selected_columns(None).unwrap().is_none());
+    }
+
+    #[test]
+    fn resolve_columns_valid_subset() {
+        let md = test_metadata(&["a", "b", "c"]);
+        let mapping = md
+            .resolve_selected_columns(Some(vec!["a".into(), "c".into()]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(mapping.len(), 2);
+        // "a" is at original index 0, mapped to new index 0
+        assert_eq!(mapping[&0], 0);
+        // "c" is at original index 2, mapped to new index 1
+        assert_eq!(mapping[&2], 1);
+    }
+
+    #[test]
+    fn resolve_columns_invalid_name_errors() {
+        let md = test_metadata(&["a", "b", "c"]);
+        let err = md
+            .resolve_selected_columns(Some(vec!["a".into(), "nonexistent".into()]))
+            .unwrap_err();
+        match err {
+            ReadStatError::ColumnsNotFound { requested, available } => {
+                assert_eq!(requested, vec!["nonexistent"]);
+                assert_eq!(available, vec!["a", "b", "c"]);
+            }
+            other => panic!("Expected ColumnsNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_columns_all_columns() {
+        let md = test_metadata(&["x", "y", "z"]);
+        let mapping = md
+            .resolve_selected_columns(Some(vec!["x".into(), "y".into(), "z".into()]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(mapping.len(), 3);
+        assert_eq!(mapping[&0], 0);
+        assert_eq!(mapping[&1], 1);
+        assert_eq!(mapping[&2], 2);
+    }
+
+    // --- filter_to_selected_columns ---
+
+    #[test]
+    fn filter_produces_contiguous_indices() {
+        let md = test_metadata(&["a", "b", "c", "d"]);
+        let mapping = md
+            .resolve_selected_columns(Some(vec!["b".into(), "d".into()]))
+            .unwrap()
+            .unwrap();
+        let filtered = md.filter_to_selected_columns(&mapping);
+
+        assert_eq!(filtered.var_count, 2);
+        assert_eq!(filtered.vars[&0].var_name, "b");
+        assert_eq!(filtered.vars[&1].var_name, "d");
+    }
+
+    #[test]
+    fn filter_preserves_schema() {
+        let md = test_metadata(&["a", "b", "c"]);
+        let mapping = md
+            .resolve_selected_columns(Some(vec!["b".into()]))
+            .unwrap()
+            .unwrap();
+        let filtered = md.filter_to_selected_columns(&mapping);
+
+        assert_eq!(filtered.schema.fields().len(), 1);
+        assert_eq!(filtered.schema.fields()[0].name(), "b");
+    }
+
+    // --- initialize_schema ---
+
+    #[test]
+    fn schema_string_type() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "name".into(),
+            ReadStatVarType::String,
+            ReadStatVarTypeClass::String,
+            String::new(),
+            "$30".into(),
+            None,
+        ));
+        md.var_count = 1;
+        let schema = md.initialize_schema();
+        assert_eq!(*schema.fields()[0].data_type(), DataType::Utf8);
+    }
+
+    #[test]
+    fn schema_float64_type() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "value".into(),
+            ReadStatVarType::Double,
+            ReadStatVarTypeClass::Numeric,
+            String::new(),
+            "BEST12".into(),
+            None,
+        ));
+        md.var_count = 1;
+        let schema = md.initialize_schema();
+        assert_eq!(*schema.fields()[0].data_type(), DataType::Float64);
+    }
+
+    #[test]
+    fn schema_date_type() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "dt".into(),
+            ReadStatVarType::Double,
+            ReadStatVarTypeClass::Numeric,
+            String::new(),
+            "DATE9".into(),
+            Some(ReadStatVarFormatClass::Date),
+        ));
+        md.var_count = 1;
+        let schema = md.initialize_schema();
+        assert_eq!(*schema.fields()[0].data_type(), DataType::Date32);
+    }
+
+    #[test]
+    fn schema_datetime_type() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "ts".into(),
+            ReadStatVarType::Double,
+            ReadStatVarTypeClass::Numeric,
+            String::new(),
+            "DATETIME22".into(),
+            Some(ReadStatVarFormatClass::DateTime),
+        ));
+        md.var_count = 1;
+        let schema = md.initialize_schema();
+        assert_eq!(
+            *schema.fields()[0].data_type(),
+            DataType::Timestamp(TimeUnit::Second, None)
+        );
+    }
+
+    #[test]
+    fn schema_time_type() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "tm".into(),
+            ReadStatVarType::Double,
+            ReadStatVarTypeClass::Numeric,
+            String::new(),
+            "TIME8".into(),
+            Some(ReadStatVarFormatClass::Time),
+        ));
+        md.var_count = 1;
+        let schema = md.initialize_schema();
+        assert_eq!(
+            *schema.fields()[0].data_type(),
+            DataType::Time32(TimeUnit::Second)
+        );
+    }
+
+    #[test]
+    fn schema_int32_type() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "count".into(),
+            ReadStatVarType::Int32,
+            ReadStatVarTypeClass::Numeric,
+            String::new(),
+            String::new(),
+            None,
+        ));
+        md.var_count = 1;
+        let schema = md.initialize_schema();
+        assert_eq!(*schema.fields()[0].data_type(), DataType::Int32);
+    }
+
+    #[test]
+    fn schema_with_labels_metadata() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "col".into(),
+            ReadStatVarType::Double,
+            ReadStatVarTypeClass::Numeric,
+            "My Label".into(),
+            "BEST12".into(),
+            None,
+        ));
+        md.var_count = 1;
+        md.file_label = "My Table".into();
+        let schema = md.initialize_schema();
+
+        // Field metadata
+        let field_meta = schema.fields()[0].metadata();
+        assert_eq!(field_meta.get("label").unwrap(), "My Label");
+
+        // Schema metadata
+        let schema_meta = schema.metadata();
+        assert_eq!(schema_meta.get("table_label").unwrap(), "My Table");
+    }
+
+    #[test]
+    fn schema_no_labels_no_metadata() {
+        let mut md = ReadStatMetadata::new();
+        md.vars.insert(0, ReadStatVarMetadata::new(
+            "col".into(),
+            ReadStatVarType::Double,
+            ReadStatVarTypeClass::Numeric,
+            String::new(),
+            "BEST12".into(),
+            None,
+        ));
+        md.var_count = 1;
+        let schema = md.initialize_schema();
+
+        assert!(schema.fields()[0].metadata().is_empty());
+        assert!(schema.metadata().is_empty());
+    }
+
+    // --- parse_columns_file ---
+
+    #[test]
+    fn parse_columns_file_normal() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cols.txt");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "col_a").unwrap();
+        writeln!(f, "col_b").unwrap();
+        writeln!(f, "col_c").unwrap();
+
+        let names = ReadStatMetadata::parse_columns_file(&path).unwrap();
+        assert_eq!(names, vec!["col_a", "col_b", "col_c"]);
+    }
+
+    #[test]
+    fn parse_columns_file_with_comments_and_blanks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cols.txt");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "# This is a comment").unwrap();
+        writeln!(f, "col_a").unwrap();
+        writeln!(f).unwrap();
+        writeln!(f, "  col_b  ").unwrap();
+        writeln!(f, "# Another comment").unwrap();
+
+        let names = ReadStatMetadata::parse_columns_file(&path).unwrap();
+        assert_eq!(names, vec!["col_a", "col_b"]);
+    }
+
+    #[test]
+    fn parse_columns_file_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cols.txt");
+        std::fs::File::create(&path).unwrap();
+
+        let names = ReadStatMetadata::parse_columns_file(&path).unwrap();
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn parse_columns_file_nonexistent() {
+        let path = Path::new("/nonexistent/path/cols.txt");
+        assert!(ReadStatMetadata::parse_columns_file(path).is_err());
+    }
+
+    // --- ReadStatMetadata defaults ---
+
+    #[test]
+    fn default_metadata() {
+        let md = ReadStatMetadata::new();
+        assert_eq!(md.row_count, 0);
+        assert_eq!(md.var_count, 0);
+        assert!(md.table_name.is_empty());
+        assert!(md.vars.is_empty());
+        assert!(md.schema.fields().is_empty());
     }
 }
