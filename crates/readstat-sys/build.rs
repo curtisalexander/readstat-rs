@@ -125,87 +125,11 @@ fn main() {
     let bindings = bindgen::Builder::default()
         // The input header we would like to generate bindings for
         .header("wrapper.h")
-        // Select which functions and types to build bindings for
-        // Register callbacks
-        .allowlist_function("readstat_set_metadata_handler")
-        .allowlist_function("readstat_set_note_handler")
-        .allowlist_function("readstat_set_variable_handler")
-        .allowlist_function("readstat_set_fweight_handler")
-        .allowlist_function("readstat_set_value_handler")
-        .allowlist_function("readstat_set_value_label_handler")
-        .allowlist_function("readstat_set_error_handler")
-        .allowlist_function("readstat_set_progress_handler")
-        .allowlist_function("readstat_set_row_limit")
-        .allowlist_function("readstat_set_row_offset")
-        // I/O handlers (for buffer-based / custom I/O)
-        .allowlist_function("readstat_set_open_handler")
-        .allowlist_function("readstat_set_close_handler")
-        .allowlist_function("readstat_set_seek_handler")
-        .allowlist_function("readstat_set_read_handler")
-        .allowlist_function("readstat_set_update_handler")
-        .allowlist_function("readstat_set_io_ctx")
-        // Metadata
-        .allowlist_function("readstat_get_row_count")
-        .allowlist_function("readstat_get_var_count")
-        .allowlist_function("readstat_get_creation_time")
-        .allowlist_function("readstat_get_modified_time")
-        .allowlist_function("readstat_get_file_format_version")
-        .allowlist_function("readstat_get_file_format_is_64bit")
-        .allowlist_function("readstat_get_compression")
-        .allowlist_function("readstat_get_endianness")
-        .allowlist_function("readstat_get_table_name")
-        .allowlist_function("readstat_get_file_label")
-        .allowlist_function("readstat_get_file_encoding")
-        // Variables
-        .allowlist_function("readstat_variable_get_index")
-        .allowlist_function("readstat_variable_get_index_after_skipping")
-        .allowlist_function("readstat_variable_get_name")
-        .allowlist_function("readstat_variable_get_label")
-        .allowlist_function("readstat_variable_get_format")
-        .allowlist_function("readstat_variable_get_type")
-        .allowlist_function("readstat_variable_get_type_class")
-        // Values
-        .allowlist_function("readstat_value_type")
-        .allowlist_function("readstat_value_type_class")
-        .allowlist_function("readstat_value_is_missing")
-        .allowlist_function("readstat_value_is_system_missing")
-        .allowlist_function("readstat_value_is_tagged_missing")
-        .allowlist_function("readstat_value_is_defined_missing")
-        .allowlist_function("readstat_value_tag")
-        .allowlist_function("readstat_int8_value")
-        .allowlist_function("readstat_int16_value")
-        .allowlist_function("readstat_int32_value")
-        .allowlist_function("readstat_float_value")
-        .allowlist_function("readstat_double_value")
-        .allowlist_function("readstat_string_value")
-        .allowlist_function("readstat_type_class")
-        // Parsing
-        .allowlist_function("readstat_parser_init")
-        .allowlist_function("readstat_parse_sas7bdat")
-        .allowlist_function("readstat_parse_sas7bcat")
-        .allowlist_function("readstat_parse_xport")
-        .allowlist_function("readstat_parser_free")
-        // Parsing - Format
-        .allowlist_function("xport_parse_format")
-        // Types
-        // Error
-        .allowlist_type("readstat_error_t")
-        // Metadata
-        .allowlist_type("readstat_metadata_t")
-        .allowlist_type("readstat_compress_t")
-        .allowlist_type("readstat_endian_t")
-        // Variables
-        .allowlist_type("readstat_variable_t")
-        // Values
-        .allowlist_type("readstat_type_t")
-        .allowlist_type("readstat_type_class_t")
-        .allowlist_type("readstat_value_t")
-        // Parsing
-        .allowlist_type("readstat_parser_t")
-        // I/O types (for buffer-based / custom I/O)
-        .allowlist_type("readstat_off_t")
-        .allowlist_type("readstat_io_flags_t")
-        .allowlist_type("readstat_io_flags_e")
+        // Expose all ReadStat public API functions and types
+        .allowlist_function("readstat_.*")
+        .allowlist_function("xport_.*")
+        .allowlist_type("readstat_.*")
+        .allowlist_type("xport_.*")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
