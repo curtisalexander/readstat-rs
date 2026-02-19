@@ -60,7 +60,7 @@
 //! - [`ReadStatPath`] — Validated file path with I/O configuration (format, compression)
 //! - [`ReadStatMetadata`] — File-level metadata (row/var counts, encoding, Arrow schema)
 //! - [`ReadStatData`] — Parsed row data, convertible to Arrow [`RecordBatch`](arrow_array::RecordBatch)
-//! - [`ReadStatVar`] — Typed value enum (strings, integers, floats, dates, times)
+//! - [`ReadStatVarFormatClass`] — SAS format classification (Date, DateTime, Time variants)
 //! - [`ReadStatWriter`] — Writes Arrow batches to the configured output format
 //!
 //! # Streaming and Parallel Processing
@@ -86,7 +86,7 @@ pub use err::{ReadStatCError, ReadStatError};
 pub use rs_data::{ColumnBuilder, ReadStatData};
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
-pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
+pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;
 #[cfg(feature = "sql")]
 pub use rs_query::{execute_sql, execute_sql_stream, execute_sql_and_write_stream, read_sql_file};

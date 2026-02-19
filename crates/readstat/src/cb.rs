@@ -180,12 +180,6 @@ pub extern "C" fn handle_variable(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
-/// Decimal places preserved during float rounding.
-///
-/// Matches the original `format!("{:.14}", v)` behavior, which formats with
-/// 14 digits after the decimal point. This is enough to preserve microsecond
-/// precision in SAS datetime values (10-digit integers + 6 fractional digits).
-const DECIMAL_PLACES: i32 = 14;
 /// SAS epoch (1960-01-01) to Unix epoch (1970-01-01) offset in days.
 const DAY_SHIFT: i32 = 3653;
 /// SAS epoch to Unix epoch offset in seconds.

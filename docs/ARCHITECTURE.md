@@ -37,7 +37,7 @@ Key source modules in `crates/readstat/src/`:
 | `rs_var.rs` | Variable types and value handling |
 | `rs_write.rs` | Output writers (CSV, Feather, NDJSON, Parquet) |
 | `formats.rs` | SAS format detection (118 date/time/datetime formats, regex-based) |
-| `err.rs` | Error enum (39 variants mapping to C library errors) |
+| `err.rs` | Error enum (41 variants mapping to C library errors) |
 
 Key public types:
 - `ReadStatData` — coordinates FFI parsing, accumulates values directly into typed Arrow builders, produces Arrow RecordBatch

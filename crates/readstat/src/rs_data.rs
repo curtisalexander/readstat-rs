@@ -353,7 +353,7 @@ impl ReadStatData {
                 &rsp.path.to_string_lossy().bright_red()
             );
             pb.set_message(msg);
-            pb.enable_steady_tick(std::time::Duration::new(120, 0));
+            pb.enable_steady_tick(std::time::Duration::from_millis(120));
         }
 
         // initialize context

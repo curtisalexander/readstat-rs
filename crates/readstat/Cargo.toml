@@ -19,7 +19,6 @@ harness = false
 # Arrow ecosystem crates
 arrow = { version = "57", features = ["chrono-tz"] }
 arrow-array = "57"
-arrow-cast = "57"
 arrow-csv = "57"
 arrow-ipc = { version = "57", features = ["zstd"] }
 arrow-json = "57"
@@ -27,16 +26,13 @@ arrow-schema = "57"
 parquet = { version = "57", features = ["snap", "zstd", "brotli", "flate2", "lz4"] }
 clap = { version = "4", features = ["derive", "unicode", "wrap_help"] }
 crossbeam = "0.8"
-csv = "1.4"
 chrono = { version = "0.4", features = ["serde"] }
 colored = "3.1"
 env_logger = "0.11"
 indicatif = "0.18"
 lazy_static = "1.5"
-lexical = "7.0"
 log = "0.4"
 memmap2 = "0.9"
-num_cpus = "1.17"
 num-derive = "0.4"
 num-format = "0.4"
 num-traits = "0.2"

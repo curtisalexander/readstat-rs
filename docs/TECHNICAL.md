@@ -55,6 +55,7 @@ SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pg
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
 - [TimestampMillisecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMillisecondType.html) &mdash; for datetime formats with millisecond precision (e.g. `DATETIME22.3`, decimal places 1&ndash;3)
 - [TimestampMicrosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMicrosecondType.html) &mdash; for datetime formats with microsecond precision (e.g. `DATETIME22.6`, decimal places 4&ndash;6)
+- [TimestampNanosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampNanosecondType.html) &mdash; for datetime formats with nanosecond precision (e.g. `DATETIME22.9`, decimal places 7&ndash;9)
 
 If values are read into memory as Arrow date, time, or datetime types, then when they are written &mdash; from an Arrow [`RecordBatch`](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `ndjson`, or `parquet` &mdash; they are treated as dates, times, or datetimes and not as numeric values.
 
