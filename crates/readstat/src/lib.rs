@@ -83,7 +83,7 @@ use std::{fmt, path::PathBuf, sync::Arc, thread};
 
 pub use common::build_offsets;
 pub use err::{ReadStatCError, ReadStatError};
-pub use rs_data::{ColumnBuilder, ReadStatData};
+pub use rs_data::ReadStatData;
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
 pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
@@ -435,6 +435,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                 md = md.filter_to_selected_columns(mapping);
             }
 
+            // Wrap column filter in Arc for cheap sharing across chunks
+            let column_filter = column_filter.map(Arc::new);
+
             // Determine row count
             let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
 
@@ -445,6 +448,11 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
             let offsets_pairs = offsets.windows(2);
+
+            // Pre-wrap metadata in Arc for cheap sharing across chunks
+            let var_count = md.var_count;
+            let vars_shared = Arc::new(md.vars);
+            let schema_shared = Arc::new(md.schema);
 
             // Read all chunks into batches
             let mut all_batches: Vec<arrow_array::RecordBatch> = Vec::new();
@@ -457,7 +465,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     .set_no_progress(no_progress)
                     .set_total_rows_to_process(total_rows_to_process as usize)
                     .set_total_rows_processed(total_rows_processed.clone())
-                    .init(md.clone(), row_start, row_end);
+                    .init_shared(var_count, vars_shared.clone(), schema_shared.clone(), row_start, row_end);
 
                 if let Some(ref pb) = pb {
                     d = d.set_progress_bar(pb.clone());
@@ -478,9 +486,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             // Apply SQL query if provided, otherwise write directly
             #[cfg(feature = "sql")]
             let all_batches = if let Some(ref query) = sql_query {
-                let schema = Arc::new(md.schema.clone());
                 let table_name = table_name_from_path(&rsp.path);
-                rs_query::execute_sql(all_batches, schema, &table_name, query)?
+                rs_query::execute_sql(all_batches, schema_shared.clone(), &table_name, query)?
             } else {
                 all_batches
             };
@@ -550,6 +557,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                 md = md.filter_to_selected_columns(mapping);
             }
 
+            // Wrap column filter in Arc for cheap sharing across chunks
+            let column_filter = column_filter.map(Arc::new);
+
             // If no output path then only read metadata; otherwise read data
             match &rsp.out_path {
                 None => {
@@ -595,9 +605,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     let compression_level_clone = rsp.compression_level;
                     let buffer_size_bytes = parallel_write_buffer_mb * 1024 * 1024; // Convert MB to bytes
 
+                    // Pre-wrap metadata in Arc for cheap sharing across parallel chunks
+                    let var_count = md.var_count;
+                    let vars_shared = Arc::new(md.vars);
+                    let schema_shared = Arc::new(md.schema);
+
                     // Save values needed for SQL query execution before thread spawn
                     #[cfg(feature = "sql")]
-                    let sql_schema = Arc::new(md.schema.clone());
+                    let sql_schema = schema_shared.clone();
                     #[cfg(feature = "sql")]
                     let sql_table_name = table_name_from_path(&rsp.path);
                     #[cfg(feature = "sql")]
@@ -634,13 +649,13 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                                     let row_start = w[0];
                                     let row_end = w[1];
 
-                                    // Initialize ReadStatData struct
+                                    // Initialize ReadStatData struct — Arc clones are O(1) atomic increments
                                     let mut d = ReadStatData::new()
                                         .set_column_filter(column_filter.clone(), original_var_count)
                                         .set_no_progress(no_progress)
                                         .set_total_rows_to_process(total_rows_to_process as usize)
                                         .set_total_rows_processed(total_rows_processed.clone())
-                                        .init(md.clone(), row_start, row_end);
+                                        .init_shared(var_count, vars_shared.clone(), schema_shared.clone(), row_start, row_end);
 
                                     // Set progress bar if available
                                     if let Some(ref pb) = pb_thread {
@@ -734,7 +749,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                         };
 
                         let mut all_temp_files: Vec<PathBuf> = Vec::new();
-                        let mut schema: Option<arrow_schema::Schema> = None;
+                        let mut schema: Option<Arc<arrow_schema::Schema>> = None;
                         let mut batch_idx: usize = 0;
 
                         loop {

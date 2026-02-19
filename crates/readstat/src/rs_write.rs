@@ -553,7 +553,7 @@ impl ReadStatWriter {
                     .build();
 
                 // Use BufWriter for better performance
-                let wtr = ParquetArrowWriter::try_new(BufWriter::new(f), Arc::new(d.schema.clone()), Some(props))?;
+                let wtr = ParquetArrowWriter::try_new(BufWriter::new(f), d.schema.clone(), Some(props))?;
 
                 self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(wtr)));
             }

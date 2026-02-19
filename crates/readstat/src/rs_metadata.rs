@@ -313,17 +313,32 @@ impl ReadStatMetadata {
 
     /// Returns a new `ReadStatMetadata` with only the selected variables,
     /// re-keyed with contiguous indices starting from 0.
+    ///
+    /// Constructs the result directly instead of cloning the full struct,
+    /// avoiding a deep clone of unselected variables and the original schema.
     pub fn filter_to_selected_columns(&self, mapping: &BTreeMap<i32, i32>) -> Self {
-        let mut new_vars = BTreeMap::new();
-        for (&orig_index, &new_index) in mapping {
-            if let Some(vm) = self.vars.get(&orig_index) {
-                new_vars.insert(new_index, vm.clone());
-            }
-        }
+        let new_vars: BTreeMap<i32, ReadStatVarMetadata> = mapping
+            .iter()
+            .filter_map(|(&orig_idx, &new_idx)| {
+                self.vars.get(&orig_idx).map(|vm| (new_idx, vm.clone()))
+            })
+            .collect();
 
-        let mut filtered = self.clone();
-        filtered.vars = new_vars;
-        filtered.var_count = mapping.len() as c_int;
+        let mut filtered = Self {
+            row_count: self.row_count,
+            var_count: mapping.len() as c_int,
+            table_name: self.table_name.clone(),
+            file_label: self.file_label.clone(),
+            file_encoding: self.file_encoding.clone(),
+            version: self.version,
+            is64bit: self.is64bit,
+            creation_time: self.creation_time.clone(),
+            modified_time: self.modified_time.clone(),
+            compression: self.compression.clone(),
+            endianness: self.endianness.clone(),
+            vars: new_vars,
+            schema: Schema::empty(),
+        };
         filtered.schema = filtered.initialize_schema();
         filtered
     }

@@ -1,9 +1,4 @@
-//! Benchmark string allocation in the data reading pipeline.
-//!
-//! Measures time spent in:
-//! 1. Metadata parsing
-//! 2. FFI data parsing (handle_value callbacks — string allocation in ptr_to_string)
-//! 3. cols_to_batch conversion (clone + StringArray::from)
+//! Benchmark the full data reading pipeline (FFI parse + Arrow conversion).
 //!
 //! Run with:
 //!   cargo test -p readstat-tests --release string_alloc_bench -- --nocapture --ignored
@@ -12,8 +7,7 @@ mod common;
 
 use std::time::Instant;
 
-/// Benchmark the full read pipeline on the large AHS 2019 dataset,
-/// timing each phase separately.
+/// Benchmark the full read pipeline on the large AHS 2019 dataset.
 ///
 /// Requires the AHS dataset to be downloaded first:
 ///   ./crates/readstat-tests/util/download_ahs.sh
@@ -43,13 +37,12 @@ fn bench_ahs_string_allocation() {
     println!();
     println!("Phase 1 — Metadata:       {:>8.2?}", t_metadata);
 
-    // Phase 2+3: Parse then convert, timed separately per chunk
+    // Phase 2: Read data in streaming chunks
     let stream_rows: u32 = 10_000;
     let offsets = readstat::build_offsets(md.row_count as u32, stream_rows).unwrap();
     let chunks = offsets.windows(2).count();
 
-    let mut total_parse = std::time::Duration::ZERO;
-    let mut total_convert = std::time::Duration::ZERO;
+    let mut total_read = std::time::Duration::ZERO;
     let mut total_rows: usize = 0;
 
     for (i, window) in offsets.windows(2).enumerate() {
@@ -60,21 +53,13 @@ fn bench_ahs_string_allocation() {
             .set_no_progress(true)
             .init(md.clone(), row_start, row_end);
 
-        // Phase 2: FFI parsing (ptr_to_string allocations happen here)
         let t1 = Instant::now();
-        d.parse_data(&rsp).unwrap();
-        let t_parse = t1.elapsed();
+        d.read_data(&rsp).unwrap();
+        let t_read = t1.elapsed();
 
-        // Phase 3: cols_to_batch (clone + StringArray::from)
-        let t2 = Instant::now();
-        d.cols_to_batch().unwrap();
-        let t_convert = t2.elapsed();
+        println!("  Chunk {}: {} rows — {:>7.2?}", i, chunk_rows, t_read);
 
-        println!("  Chunk {}: {} rows — parse {:>7.2?}, convert {:>7.2?}",
-            i, chunk_rows, t_parse, t_convert);
-
-        total_parse += t_parse;
-        total_convert += t_convert;
+        total_read += t_read;
         total_rows += chunk_rows;
 
         let batch = d.batch.as_ref().unwrap();
@@ -82,15 +67,12 @@ fn bench_ahs_string_allocation() {
     }
 
     println!();
-    println!("Phase 2 — Parse (FFI):    {:>8.2?}  ({} chunks)", total_parse, chunks);
-    println!("Phase 3 — Convert (Arrow):{:>8.2?}  ({} chunks)", total_convert, chunks);
-    println!("Total rows processed:     {}", total_rows);
+    println!("Phase 2 — Read (FFI+Arrow): {:>8.2?}  ({} chunks)", total_read, chunks);
+    println!("Total rows processed:       {}", total_rows);
 
-    let total = t_metadata + total_parse + total_convert;
+    let total = t_metadata + total_read;
     println!();
     println!("Total wall time:          {:>8.2?}", total);
-    println!("  Parse % of total:       {:.1}%", total_parse.as_secs_f64() / total.as_secs_f64() * 100.0);
-    println!("  Convert % of total:     {:.1}%", total_convert.as_secs_f64() / total.as_secs_f64() * 100.0);
 
     // Memory estimates
     let avg_width: f64 = md.vars.values()
@@ -117,12 +99,8 @@ fn bench_cars_string_allocation() {
         .init(md.clone(), 0, md.row_count as u32);
 
     let t1 = Instant::now();
-    d.parse_data(&rsp).unwrap();
-    let t_parse = t1.elapsed();
-
-    let t2 = Instant::now();
-    d.cols_to_batch().unwrap();
-    let t_convert = t2.elapsed();
+    d.read_data(&rsp).unwrap();
+    let t_read = t1.elapsed();
 
     let string_cols: usize = md.vars.values()
         .filter(|v| matches!(v.var_type_class, readstat::ReadStatVarTypeClass::String))
@@ -131,9 +109,7 @@ fn bench_cars_string_allocation() {
     println!("\n=== Cars String Allocation Benchmark ===");
     println!("Rows: {}, Columns: {} ({} string)",
         md.row_count, md.var_count, string_cols);
-    println!("Parse:   {:>8.2?}", t_parse);
-    println!("Convert: {:>8.2?}", t_convert);
-    println!("Total:   {:>8.2?}", t_parse + t_convert);
+    println!("Read:    {:>8.2?}", t_read);
 
     let batch = d.batch.as_ref().unwrap();
     assert_eq!(batch.num_rows(), 1081);

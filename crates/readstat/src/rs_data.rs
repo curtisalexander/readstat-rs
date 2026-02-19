@@ -73,7 +73,7 @@ impl ColumnBuilder {
     ///
     /// # Panics
     /// Panics if `self` is not `ColumnBuilder::Str`.
-    pub fn as_string_mut(&mut self) -> &mut StringBuilder {
+    pub(crate) fn as_string_mut(&mut self) -> &mut StringBuilder {
         match self {
             ColumnBuilder::Str(b) => b,
             _ => panic!("ColumnBuilder::as_string_mut called on non-string builder"),
@@ -81,7 +81,7 @@ impl ColumnBuilder {
     }
 
     /// Appends a null value, regardless of the underlying builder type.
-    pub fn append_null(&mut self) {
+    pub(crate) fn append_null(&mut self) {
         match self {
             ColumnBuilder::Str(b) => b.append_null(),
             ColumnBuilder::Int16(b) => b.append_null(),
@@ -99,7 +99,7 @@ impl ColumnBuilder {
     }
 
     /// Finishes the builder and returns the completed Arrow array.
-    pub fn finish(&mut self) -> ArrayRef {
+    pub(crate) fn finish(&mut self) -> ArrayRef {
         match self {
             ColumnBuilder::Str(b) => Arc::new(b.finish()),
             ColumnBuilder::Int16(b) => Arc::new(b.finish()),
@@ -196,11 +196,13 @@ pub struct ReadStatData {
     /// Number of variables (columns) in the dataset.
     pub var_count: i32,
     /// Per-variable metadata, keyed by variable index.
-    pub vars: BTreeMap<i32, ReadStatVarMetadata>,
+    /// Wrapped in `Arc` so parallel chunks share the same metadata without deep cloning.
+    pub vars: Arc<BTreeMap<i32, ReadStatVarMetadata>>,
     /// Typed Arrow builders — one per variable, pre-sized with capacity hints.
     pub builders: Vec<ColumnBuilder>,
     /// Arrow schema for the dataset.
-    pub schema: Schema,
+    /// Wrapped in `Arc` for cheap sharing across parallel chunks.
+    pub schema: Arc<Schema>,
     /// The Arrow RecordBatch produced after parsing, if available.
     pub batch: Option<RecordBatch>,
     /// Number of rows to process in this chunk.
@@ -222,8 +224,8 @@ pub struct ReadStatData {
     /// Errors collected during value parsing callbacks.
     pub errors: Vec<String>,
     /// Optional mapping: original var index -> filtered column index.
-    /// When present, only variables in this map are included in output.
-    pub column_filter: Option<BTreeMap<i32, i32>>,
+    /// Wrapped in `Arc` so parallel chunks share the same filter without deep cloning.
+    pub column_filter: Option<Arc<BTreeMap<i32, i32>>>,
     /// Total variable count in the unfiltered dataset.
     /// Used for row-boundary detection in handle_value when filtering is active.
     /// Defaults to var_count when no filter is set.
@@ -242,10 +244,10 @@ impl ReadStatData {
         Self {
             // metadata
             var_count: 0,
-            vars: BTreeMap::new(),
+            vars: Arc::new(BTreeMap::new()),
             // data
             builders: Vec::new(),
-            schema: Schema::empty(),
+            schema: Arc::new(Schema::empty()),
             // record batch
             batch: None,
             chunk_rows_to_process: 0,
@@ -285,14 +287,14 @@ impl ReadStatData {
     /// Each builder produces its final array via `finish()`, which is an O(1)
     /// operation (no data copying). The heavy work was already done during
     /// `handle_value` when values were appended directly into the builders.
-    pub fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
+    pub(crate) fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
         let arrays: Vec<ArrayRef> = self
             .builders
             .iter_mut()
             .map(|b| b.finish())
             .collect();
 
-        self.batch = Some(RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?);
+        self.batch = Some(RecordBatch::try_new(self.schema.clone(), arrays)?);
 
         Ok(())
     }
@@ -332,7 +334,7 @@ impl ReadStatData {
     }
 
     /// Parses row data from the file via FFI callbacks (without Arrow conversion).
-    pub fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
+    pub(crate) fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
@@ -404,10 +406,43 @@ impl ReadStatData {
     }
 
     /// Initializes this instance with metadata and chunk boundaries, allocating builders.
+    ///
+    /// Wraps `vars` and `schema` in `Arc` internally. For the parallel read path,
+    /// prefer [`init_shared`](ReadStatData::init_shared) which accepts pre-wrapped
+    /// `Arc`s to avoid repeated deep clones.
     pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
         self.set_metadata(md)
             .set_chunk_counts(row_start, row_end)
             .allocate_builders()
+    }
+
+    /// Initializes this instance with pre-shared metadata and chunk boundaries.
+    ///
+    /// Accepts `Arc`-wrapped `vars` and `schema` for cheap cloning in parallel loops.
+    /// Each call only increments reference counts (atomic +1) instead of deep-cloning
+    /// the entire metadata tree.
+    pub fn init_shared(
+        self,
+        var_count: i32,
+        vars: Arc<BTreeMap<i32, ReadStatVarMetadata>>,
+        schema: Arc<Schema>,
+        row_start: u32,
+        row_end: u32,
+    ) -> Self {
+        let total_var_count = if self.total_var_count != 0 {
+            self.total_var_count
+        } else {
+            var_count
+        };
+        Self {
+            var_count,
+            vars,
+            schema,
+            total_var_count,
+            ..self
+        }
+        .set_chunk_counts(row_start, row_end)
+        .allocate_builders()
     }
 
     fn set_chunk_counts(self, row_start: u32, row_end: u32) -> Self {
@@ -427,8 +462,8 @@ impl ReadStatData {
 
     fn set_metadata(self, md: ReadStatMetadata) -> Self {
         let var_count = md.var_count;
-        let vars = md.vars;
-        let schema = md.schema;
+        let vars = Arc::new(md.vars);
+        let schema = Arc::new(md.schema);
         // Only set total_var_count from metadata if not already set by set_column_filter
         let total_var_count = if self.total_var_count != 0 {
             self.total_var_count
@@ -470,9 +505,10 @@ impl ReadStatData {
 
     /// Sets the column filter and original (unfiltered) variable count.
     ///
+    /// Accepts an `Arc`-wrapped filter for cheap sharing across parallel chunks.
     /// Must be called **before** [`init`](ReadStatData::init) so that
     /// `total_var_count` is preserved when `set_metadata` runs.
-    pub fn set_column_filter(self, filter: Option<BTreeMap<i32, i32>>, total_var_count: i32) -> Self {
+    pub fn set_column_filter(self, filter: Option<Arc<BTreeMap<i32, i32>>>, total_var_count: i32) -> Self {
         Self {
             column_filter: filter,
             total_var_count,
