@@ -14,9 +14,9 @@ use std::os::raw::{c_char, c_int, c_void};
 use crate::{
     common::ptr_to_string,
     formats,
-    rs_data::ReadStatData,
+    rs_data::{ColumnBuilder, ReadStatData},
     rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata},
-    rs_var::{ReadStatVar, ReadStatVarType, ReadStatVarTypeClass},
+    rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
 
 // C types
@@ -180,11 +180,19 @@ pub extern "C" fn handle_variable(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
+/// Significant digits preserved during float formatting.
+const DIGITS: usize = 14;
+/// SAS epoch (1960-01-01) to Unix epoch (1970-01-01) offset in days.
+const DAY_SHIFT: i32 = 3653;
+/// SAS epoch to Unix epoch offset in seconds.
+const SEC_SHIFT: i64 = 315619200;
+
 /// FFI callback that extracts a single cell value during row parsing.
 ///
-/// Called for every cell in every row. Converts the raw C value to a typed
-/// [`ReadStatVar`] and pushes it into the appropriate column vector in
-/// [`ReadStatData::cols`]. Tracks row completion for progress reporting.
+/// Called for every cell in every row. Appends the value directly into the
+/// appropriate typed Arrow [`ColumnBuilder`] in [`ReadStatData::builders`],
+/// eliminating intermediate `String` allocations for string columns.
+/// Tracks row completion for progress reporting.
 pub extern "C" fn handle_value(
     obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
@@ -229,17 +237,166 @@ pub extern "C" fn handle_value(
         var_index
     };
 
-    // get value and push into arrays
-    let value = match ReadStatVar::get_readstat_value(value, value_type, is_missing, &d.vars, col_index) {
-        Ok(v) => v,
-        Err(e) => {
-            d.errors.push(format!("{}", e));
-            return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
-        }
-    };
+    // Append value directly into the typed Arrow builder
+    let builder = &mut d.builders[col_index as usize];
 
-    // push into cols
-    d.cols[col_index as usize].push(value);
+    match value_type {
+        readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
+        | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
+            let sb = builder.as_string_mut();
+            if is_missing == 1 {
+                sb.append_null();
+            } else {
+                let ptr = unsafe { readstat_sys::readstat_string_value(value) };
+                if ptr.is_null() {
+                    sb.append_null();
+                } else {
+                    let cstr = unsafe { std::ffi::CStr::from_ptr(ptr) };
+                    // Fast path: valid UTF-8 (the common case for SAS data)
+                    match cstr.to_str() {
+                        Ok(s) => sb.append_value(s),
+                        Err(_) => {
+                            // Lossy fallback for rare non-UTF-8 data
+                            let s = String::from_utf8_lossy(cstr.to_bytes());
+                            sb.append_value(s.as_ref());
+                        }
+                    }
+                }
+            }
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT8 => {
+            if is_missing == 1 {
+                builder.append_null();
+            } else {
+                let v = unsafe { readstat_sys::readstat_int8_value(value) };
+                debug!("value is {:#?}", v);
+                // Schema maps Int8 → Int16, so widen
+                if let ColumnBuilder::Int16(b) = builder {
+                    b.append_value(v as i16);
+                }
+            }
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT16 => {
+            if is_missing == 1 {
+                builder.append_null();
+            } else {
+                let v = unsafe { readstat_sys::readstat_int16_value(value) };
+                debug!("value is {:#?}", v);
+                if let ColumnBuilder::Int16(b) = builder {
+                    b.append_value(v);
+                }
+            }
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_INT32 => {
+            if is_missing == 1 {
+                builder.append_null();
+            } else {
+                let v = unsafe { readstat_sys::readstat_int32_value(value) };
+                debug!("value is {:#?}", v);
+                if let ColumnBuilder::Int32(b) = builder {
+                    b.append_value(v);
+                }
+            }
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_FLOAT => {
+            if is_missing == 1 {
+                builder.append_null();
+            } else {
+                let raw = unsafe { readstat_sys::readstat_float_value(value) };
+                debug!("value (before parsing) is {:#?}", raw);
+                let formatted = format!("{1:.0$}", DIGITS, raw);
+                match lexical::parse::<f32, _>(&formatted) {
+                    Ok(v) => {
+                        debug!("value (after parsing) is {:#?}", v);
+                        if let ColumnBuilder::Float32(b) = builder {
+                            b.append_value(v);
+                        }
+                    }
+                    Err(_) => {
+                        d.errors.push(format!("Failed to parse float: {}", formatted));
+                        return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+                    }
+                }
+            }
+        }
+        readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
+            let var_format_class = d.vars
+                .get(&col_index)
+                .and_then(|vm| vm.var_format_class);
+
+            if is_missing == 1 {
+                builder.append_null();
+            } else {
+                let raw = unsafe { readstat_sys::readstat_double_value(value) };
+                debug!("value (before parsing) is {:#?}", raw);
+                let formatted = format!("{1:.0$}", DIGITS, raw);
+                let val: f64 = match lexical::parse(&formatted) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        d.errors.push(format!("Failed to parse double: {}", formatted));
+                        return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+                    }
+                };
+                debug!("value (after parsing) is {:#?}", val);
+
+                match var_format_class {
+                    None => {
+                        if let ColumnBuilder::Float64(b) = builder {
+                            b.append_value(val);
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::Date) => {
+                        if let ColumnBuilder::Date32(b) = builder {
+                            match (val as i32).checked_sub(DAY_SHIFT) {
+                                Some(shifted) => b.append_value(shifted),
+                                None => {
+                                    d.errors.push("Date overflow".to_string());
+                                    return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+                                }
+                            }
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::DateTime) => {
+                        if let ColumnBuilder::TimestampSecond(b) = builder {
+                            match (val as i64).checked_sub(SEC_SHIFT) {
+                                Some(shifted) => b.append_value(shifted),
+                                None => {
+                                    d.errors.push("DateTime overflow".to_string());
+                                    return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+                                }
+                            }
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
+                        if let ColumnBuilder::TimestampMillisecond(b) = builder {
+                            b.append_value(((val - SEC_SHIFT as f64) * 1000.0) as i64);
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
+                        if let ColumnBuilder::TimestampMicrosecond(b) = builder {
+                            b.append_value(((val - SEC_SHIFT as f64) * 1000000.0) as i64);
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
+                        if let ColumnBuilder::TimestampNanosecond(b) = builder {
+                            b.append_value(((val - SEC_SHIFT as f64) * 1000000000.0) as i64);
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::Time) => {
+                        if let ColumnBuilder::Time32Second(b) = builder {
+                            b.append_value(val as i32);
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
+                        if let ColumnBuilder::Time64Microsecond(b) = builder {
+                            b.append_value((val * 1000000.0) as i64);
+                        }
+                    }
+                }
+            }
+        }
+        _ => unreachable!(),
+    }
 
     // if row is complete (use total_var_count for boundary detection)
     if var_index == (d.total_var_count - 1) {

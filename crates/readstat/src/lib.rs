@@ -10,7 +10,7 @@
 //! ```text
 //! .sas7bdat file
 //!     → ReadStat C library (FFI parsing via callbacks)
-//!         → Vec<Vec<ReadStatVar>> (column-major typed values)
+//!         → Typed Arrow builders (StringBuilder, Float64Builder, etc.)
 //!             → Arrow RecordBatch
 //!                 → Output format (CSV / Feather / NDJSON / Parquet)
 //! ```
@@ -83,7 +83,7 @@ use std::{fmt, path::PathBuf, sync::Arc, thread};
 
 pub use common::build_offsets;
 pub use err::{ReadStatCError, ReadStatError};
-pub use rs_data::ReadStatData;
+pub use rs_data::{ColumnBuilder, ReadStatData};
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
 pub use rs_var::{ReadStatVar, ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
