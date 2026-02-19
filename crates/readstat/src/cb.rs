@@ -180,39 +180,52 @@ pub extern "C" fn handle_variable(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
-/// Significant digits preserved during float formatting.
-const DIGITS: usize = 14;
+/// Decimal places preserved during float rounding.
+///
+/// Matches the original `format!("{:.14}", v)` behavior, which formats with
+/// 14 digits after the decimal point. This is enough to preserve microsecond
+/// precision in SAS datetime values (10-digit integers + 6 fractional digits).
+const DECIMAL_PLACES: i32 = 14;
 /// SAS epoch (1960-01-01) to Unix epoch (1970-01-01) offset in days.
 const DAY_SHIFT: i32 = 3653;
 /// SAS epoch to Unix epoch offset in seconds.
 const SEC_SHIFT: i64 = 315619200;
 
-/// Rounds an f64 to [`DIGITS`] significant digits using a stack-allocated buffer.
+/// Scale factor for rounding: 10^DECIMAL_PLACES, computed once.
+const ROUND_SCALE: f64 = 1e14;
+
+/// Rounds an f64 to [`DECIMAL_PLACES`] decimal places using pure arithmetic.
 ///
-/// Equivalent to `format!("{1:.0$}", DIGITS, v)` followed by `lexical::parse`,
-/// but avoids the heap allocation of `format!` by writing to a fixed `[u8; 32]`
-/// on the stack.
+/// Eliminates the string formatting roundtrip entirely. For values like 4.6
+/// that can't be exactly represented in IEEE 754, this cleans up trailing
+/// noise (e.g. `4.6000000000000005` → `4.6`).
+///
+/// Splits into integer and fractional parts before scaling to avoid overflow:
+/// large SAS datetime values (~1.9e9) multiplied by 1e14 would exceed f64's
+/// exact integer range (2^53), causing rounding errors.
 #[inline]
-fn format_parse_f64(v: f64) -> f64 {
-    let mut buf = [0u8; 32];
-    let n = {
-        let mut cursor = std::io::Cursor::new(&mut buf[..]);
-        std::io::Write::write_fmt(&mut cursor, format_args!("{1:.0$}", DIGITS, v)).unwrap();
-        cursor.position() as usize
-    };
-    lexical::parse(&buf[..n]).unwrap()
+fn round_decimal_f64(v: f64) -> f64 {
+    if !v.is_finite() {
+        return v;
+    }
+    let int_part = v.trunc();
+    let frac_part = v.fract(); // always in (-1, 1), so frac * 1e14 < 1e14 < 2^53
+    let rounded_frac = (frac_part * ROUND_SCALE).round() / ROUND_SCALE;
+    int_part + rounded_frac
 }
 
-/// Rounds an f32 to [`DIGITS`] significant digits using a stack-allocated buffer.
+/// Rounds an f32 to [`DECIMAL_PLACES`] decimal places using pure arithmetic.
 #[inline]
-fn format_parse_f32(v: f32) -> f32 {
-    let mut buf = [0u8; 32];
-    let n = {
-        let mut cursor = std::io::Cursor::new(&mut buf[..]);
-        std::io::Write::write_fmt(&mut cursor, format_args!("{1:.0$}", DIGITS, v)).unwrap();
-        cursor.position() as usize
-    };
-    lexical::parse(&buf[..n]).unwrap()
+fn round_decimal_f32(v: f32) -> f32 {
+    if !v.is_finite() {
+        return v;
+    }
+    // Promote to f64 for the rounding to avoid f32 precision loss
+    let v64 = v as f64;
+    let int_part = v64.trunc();
+    let frac_part = v64.fract();
+    let rounded_frac = (frac_part * ROUND_SCALE).round() / ROUND_SCALE;
+    (int_part + rounded_frac) as f32
 }
 
 /// FFI callback that extracts a single cell value during row parsing.
@@ -332,7 +345,7 @@ pub extern "C" fn handle_value(
             } else {
                 let raw = unsafe { readstat_sys::readstat_float_value(value) };
                 debug!("value (before parsing) is {:#?}", raw);
-                let val = format_parse_f32(raw);
+                let val = round_decimal_f32(raw);
                 debug!("value (after parsing) is {:#?}", val);
                 if let ColumnBuilder::Float32(b) = builder {
                     b.append_value(val);
@@ -349,7 +362,7 @@ pub extern "C" fn handle_value(
             } else {
                 let raw = unsafe { readstat_sys::readstat_double_value(value) };
                 debug!("value (before parsing) is {:#?}", raw);
-                let val = format_parse_f64(raw);
+                let val = round_decimal_f64(raw);
                 debug!("value (after parsing) is {:#?}", val);
 
                 match var_format_class {
