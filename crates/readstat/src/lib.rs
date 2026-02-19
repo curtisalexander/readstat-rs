@@ -103,6 +103,28 @@ mod rs_write;
 /// Default number of rows to read per streaming chunk.
 const STREAM_ROWS: u32 = 10000;
 
+/// Determine stream row count based on reader type.
+fn resolve_stream_rows(reader: Option<Reader>, stream_rows: Option<u32>, total_rows: u32) -> u32 {
+    match reader {
+        Some(Reader::stream) | None => stream_rows.unwrap_or(STREAM_ROWS),
+        Some(Reader::mem) => total_rows,
+    }
+}
+
+/// Create a progress bar if progress is enabled.
+fn create_progress_bar(no_progress: bool, total_rows: u32) -> Result<Option<ProgressBar>, ReadStatError> {
+    if no_progress {
+        return Ok(None);
+    }
+    let pb = ProgressBar::new(total_rows as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")?
+            .progress_chars("##-")
+    );
+    Ok(Some(pb))
+}
+
 // CLI
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -363,31 +385,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             // Determine row count
             let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
 
-            // Determine stream row count
-            // 📝 Default stream rows set to 10,000
-            let total_rows_to_stream = match reader {
-                Some(Reader::stream) | None => match stream_rows {
-                    Some(s) => s,
-                    None => STREAM_ROWS,
-                },
-                Some(Reader::mem) => total_rows_to_process,
-            };
-
-            // Initialize AtomicUsize to contain total rows processed
+            let total_rows_to_stream = resolve_stream_rows(reader, stream_rows, total_rows_to_process);
             let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-            // Create progress bar if not disabled
-            let pb = if !no_progress {
-                let pb = ProgressBar::new(total_rows_to_process as u64);
-                pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")?
-                        .progress_chars("##-")
-                );
-                Some(pb)
-            } else {
-                None
-            };
+            let pb = create_progress_bar(no_progress, total_rows_to_process)?;
 
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
@@ -511,31 +511,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                         md.row_count as u32
                     };
 
-                    // Determine stream row count
-                    // 📝 Default stream rows set to 10,000
-                    let total_rows_to_stream = match reader {
-                        Some(Reader::stream) | None => match stream_rows {
-                            Some(s) => s,
-                            None => STREAM_ROWS,
-                        },
-                        Some(Reader::mem) => total_rows_to_process,
-                    };
-
-                    // Initialize AtomicUsize to contain total rows processed
+                    let total_rows_to_stream = resolve_stream_rows(reader, stream_rows, total_rows_to_process);
                     let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-                    // Create progress bar if not disabled
-                    let pb = if !no_progress {
-                        let pb = ProgressBar::new(total_rows_to_process as u64);
-                        pb.set_style(
-                            ProgressStyle::default_bar()
-                                .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")?
-                                .progress_chars("##-")
-                        );
-                        Some(pb)
-                    } else {
-                        None
-                    };
+                    let pb = create_progress_bar(no_progress, total_rows_to_process)?;
 
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
