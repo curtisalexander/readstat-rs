@@ -36,3 +36,47 @@ SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pg
 - [TimestampMicrosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMicrosecondType.html) &mdash; for datetime formats with microsecond precision (e.g. `DATETIME22.6`, decimal places 4&ndash;6)
 
 If values are read into memory as Arrow date, time, or datetime types, then when they are written &mdash; from an Arrow [`RecordBatch`](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `ndjson`, or `parquet` &mdash; they are treated as dates, times, or datetimes and not as numeric values.
+
+## Column Metadata in Arrow and Parquet
+
+When converting to Parquet or Feather, readstat-rs persists column-level and table-level metadata into the Arrow schema. This metadata survives round-trips through Parquet and Feather files, allowing downstream consumers to recover SAS-specific information.
+
+### Metadata keys
+
+#### Field (column) metadata
+
+| Key | Type | Description | Source formats |
+|-----|------|-------------|----------------|
+| `label` | string | User-assigned variable label | SAS, SPSS, Stata |
+| `sas_format` | string | SAS format string (e.g. `DATE9`, `BEST12`, `$30`) | SAS |
+| `storage_width` | integer (as string) | Number of bytes used to store the variable value | All |
+| `display_width` | integer (as string) | Display width hint from the file | XPORT, SPSS |
+
+#### Schema (table) metadata
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `table_label` | string | User-assigned file label |
+
+### Storage width semantics
+
+- **SAS numeric variables**: always 8 bytes (IEEE 754 double-precision)
+- **SAS string variables**: equal to the declared character length (e.g. `$30` → 30 bytes)
+- The `storage_width` field is always present in metadata
+
+### Display width semantics
+
+- **sas7bdat files**: typically 0 (not stored in the format)
+- **XPORT files**: populated from the format width
+- **SPSS files**: populated from the variable's print/write format
+- The `display_width` field is only present in metadata when non-zero
+
+### SAS format strings and Arrow types
+
+The SAS format string (e.g. `DATE9`, `DATETIME22.3`, `TIME8`) determines how a numeric variable is mapped to an Arrow type. The original format string is preserved in the `sas_format` metadata key, allowing downstream tools to reconstruct the original SAS formatting even after conversion.
+
+For the full list of recognized SAS date, time, and datetime formats, see [sas_date_time_formats.md](../crates/readstat-tests/util/sas_date_time_formats.md).
+
+### Reading metadata from output files
+
+See the [Reading Metadata from Output Files](USAGE.md#reading-metadata-from-output-files) section in the Usage guide for Python and R examples.

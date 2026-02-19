@@ -347,6 +347,62 @@ SQL Query Mode (--sql "SELECT ...")
  This is inherent to SQL execution over in-memory tables.
 ```
 
+## Reading Metadata from Output Files
+
+When converting to Parquet or Feather, readstat-rs preserves column metadata (labels, SAS format strings, and storage widths) as Arrow field metadata. Schema-level metadata includes the table label when present.
+
+The following metadata keys may appear on each field:
+
+| Key | Description | Condition |
+|-----|-------------|-----------|
+| `label` | User-assigned variable label | Non-empty |
+| `sas_format` | SAS format string (e.g. `DATE9`, `BEST12`, `$30`) | Non-empty |
+| `storage_width` | Number of bytes used to store the variable | Always |
+| `display_width` | Display width hint from the file | Non-zero |
+
+Schema-level metadata:
+
+| Key | Description | Condition |
+|-----|-------------|-----------|
+| `table_label` | User-assigned file label | Non-empty |
+
+### Reading metadata with Python (pyarrow)
+
+```python
+import pyarrow.parquet as pq
+
+schema = pq.read_schema("example.parquet")
+
+# Table-level metadata
+print(schema.metadata.get(b"table_label", b"").decode())
+
+# Per-column metadata
+for field in schema:
+    meta = field.metadata or {}
+    print(f"{field.name}:")
+    print(f"  label:         {meta.get(b'label', b'').decode()}")
+    print(f"  sas_format:    {meta.get(b'sas_format', b'').decode()}")
+    print(f"  storage_width: {meta.get(b'storage_width', b'').decode()}")
+    print(f"  display_width: {meta.get(b'display_width', b'').decode()}")
+```
+
+### Reading metadata with R (arrow)
+
+```r
+library(arrow)
+
+schema <- read_parquet("example.parquet", as_data_frame = FALSE)$schema
+
+# Per-column metadata
+for (field in schema) {
+  cat(field$name, "\n")
+  cat("  label:        ", field$metadata$label, "\n")
+  cat("  sas_format:   ", field$metadata$sas_format, "\n")
+  cat("  storage_width:", field$metadata$storage_width, "\n")
+  cat("  display_width:", field$metadata$display_width, "\n")
+}
+```
+
 ## Reader
 The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
 - `mem` &rarr; Parse and read the entire `sas7bdat` into memory before writing to either standard out or a file

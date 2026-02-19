@@ -60,6 +60,8 @@ The binary is invoked using subcommands:
 - `preview` &rarr; writes the first N rows of parsed data as `csv` to standard out
 - `data` &rarr; writes parsed data in `csv`, `feather`, `ndjson`, or `parquet` format to a file
 
+Column metadata &mdash; labels, SAS format strings, and storage widths &mdash; is preserved in Parquet and Feather output as Arrow field metadata. See **[docs/TECHNICAL.md](docs/TECHNICAL.md#column-metadata-in-arrow-and-parquet)** for details.
+
 For the full CLI reference &mdash; including column selection, parallelism, memory considerations, SQL queries, reader modes, and debug options &mdash; see **[docs/USAGE.md](docs/USAGE.md)**.
 
 ## Build from Source

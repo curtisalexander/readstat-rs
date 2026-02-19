@@ -148,6 +148,10 @@ pub extern "C" fn handle_variable(
     let var_label = unsafe { ptr_to_string(readstat_sys::readstat_variable_get_label(variable)) };
     let var_format = unsafe { ptr_to_string(readstat_sys::readstat_variable_get_format(variable)) };
     let var_format_class = formats::match_var_format(&var_format);
+    let storage_width =
+        unsafe { readstat_sys::readstat_variable_get_storage_width(variable) } as usize;
+    let display_width =
+        unsafe { readstat_sys::readstat_variable_get_display_width(variable) } as i32;
 
     debug!("var_type is {:#?}", &var_type);
     debug!("var_type_class is {:#?}", &var_type_class);
@@ -155,6 +159,8 @@ pub extern "C" fn handle_variable(
     debug!("var_label is {}", &var_label);
     debug!("var_format is {}", &var_format);
     debug!("var_format_class is {:#?}", &var_format_class);
+    debug!("storage_width is {}", storage_width);
+    debug!("display_width is {}", display_width);
 
     // insert into BTreeMap within ReadStatMetadata struct
     m.vars.insert(
@@ -166,6 +172,8 @@ pub extern "C" fn handle_variable(
             var_label,
             var_format,
             var_format_class,
+            storage_width,
+            display_width,
         ),
     );
 

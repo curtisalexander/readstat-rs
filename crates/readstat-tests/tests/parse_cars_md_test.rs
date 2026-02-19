@@ -33,6 +33,8 @@ fn parse_cars_metadata() {
     assert!(vfc.is_none());
     assert_eq!(vf, "");
     assert!(matches!(adt, DataType::Utf8));
+    let brand_meta = common::get_metadata(&d, 0);
+    assert!(brand_meta.storage_width > 0, "Brand storage_width should be > 0");
 
     // 1 - Model (String)
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 1);
@@ -41,6 +43,8 @@ fn parse_cars_metadata() {
     assert!(vfc.is_none());
     assert_eq!(vf, "");
     assert!(matches!(adt, DataType::Utf8));
+    let model_meta = common::get_metadata(&d, 1);
+    assert!(model_meta.storage_width > 0, "Model storage_width should be > 0");
 
     // 2..12 - All numeric Double -> Float64 with no format
     for i in 2..=12 {
@@ -50,6 +54,8 @@ fn parse_cars_metadata() {
         assert!(vfc.is_none(), "var {i} format class");
         assert_eq!(vf, "", "var {i} format");
         assert!(matches!(adt, DataType::Float64), "var {i} arrow type");
+        let num_meta = common::get_metadata(&d, i);
+        assert_eq!(num_meta.storage_width, 8, "var {i} storage_width should be 8 for numeric");
     }
 }
 

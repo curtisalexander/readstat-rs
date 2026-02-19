@@ -95,6 +95,15 @@ fn somedata_parquet_has_column_labels() {
     let gender_field = schema.field_with_name("GENDER").expect("GENDER field not found");
     assert!(!gender_field.metadata().contains_key("label"), "GENDER field should not have label metadata");
 
+    // All fields should have storage_width metadata
+    for field in schema.fields() {
+        assert!(
+            field.metadata().contains_key("storage_width"),
+            "{} field should have storage_width metadata",
+            field.name()
+        );
+    }
+
     tempfile.close().unwrap();
 }
 
@@ -124,6 +133,83 @@ fn cars_parquet_has_table_label() {
     // Check that table label is present in schema metadata
     assert!(schema.metadata().contains_key("table_label"), "Schema should have table_label metadata");
     assert_eq!(schema.metadata().get("table_label").unwrap(), "Written by SAS");
+
+    tempfile.close().unwrap();
+}
+
+#[test]
+fn cars_parquet_has_storage_width_metadata() {
+    let tempfile = NamedTempFile::new("cars_widths.parquet")
+        .expect("Failed to create temp file");
+
+    let mut cmd = readstat_cmd();
+    cmd.arg("data")
+        .arg("tests/data/cars.sas7bdat")
+        .args(["--format", "parquet"])
+        .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+        .arg("--no-progress");
+
+    cmd.assert().success();
+
+    let file = File::open(tempfile.path()).expect("Failed to open parquet file");
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+        .expect("Failed to create parquet reader");
+
+    let schema = builder.schema();
+
+    // Brand and Model are string columns with storage_width > 0
+    let brand_field = schema.field_with_name("Brand").expect("Brand field not found");
+    let brand_width: usize = brand_field.metadata().get("storage_width")
+        .expect("Brand should have storage_width")
+        .parse()
+        .unwrap();
+    assert!(brand_width > 0, "Brand storage_width should be > 0");
+
+    let model_field = schema.field_with_name("Model").expect("Model field not found");
+    let model_width: usize = model_field.metadata().get("storage_width")
+        .expect("Model should have storage_width")
+        .parse()
+        .unwrap();
+    assert!(model_width > 0, "Model storage_width should be > 0");
+
+    // Numeric columns should have storage_width = 8
+    let engine_field = schema.field_with_name("EngineSize").expect("EngineSize field not found");
+    assert_eq!(
+        engine_field.metadata().get("storage_width").unwrap(), "8",
+        "Numeric storage_width should be 8"
+    );
+
+    tempfile.close().unwrap();
+}
+
+#[test]
+fn hasmissing_parquet_has_sas_format_metadata() {
+    let tempfile = NamedTempFile::new("hasmissing_formats.parquet")
+        .expect("Failed to create temp file");
+
+    let mut cmd = readstat_cmd();
+    cmd.arg("data")
+        .arg("tests/data/hasmissing.sas7bdat")
+        .args(["--format", "parquet"])
+        .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+        .arg("--no-progress");
+
+    cmd.assert().success();
+
+    let file = File::open(tempfile.path()).expect("Failed to open parquet file");
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+        .expect("Failed to create parquet reader");
+
+    let schema = builder.schema();
+
+    // All fields should have storage_width
+    for field in schema.fields() {
+        assert!(
+            field.metadata().contains_key("storage_width"),
+            "{} field should have storage_width metadata",
+            field.name()
+        );
+    }
 
     tempfile.close().unwrap();
 }

@@ -106,3 +106,4 @@ Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regener
 - **Parallel processing**: Rayon for parallel reading, Crossbeam channels for reader-writer coordination
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → ReadStatVar vectors → Arrow RecordBatch → output format
+- **Metadata preservation**: SAS variable labels, format strings, and storage widths are persisted as Arrow field metadata, surviving round-trips through Parquet and Feather. See [TECHNICAL.md](TECHNICAL.md#column-metadata-in-arrow-and-parquet) for details.
