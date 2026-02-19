@@ -370,7 +370,7 @@ For comprehensive benchmarking, consider adding:
 ### Tools
 - [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph)
 - [cargo-benchcmp](https://github.com/BurntSushi/cargo-benchcmp)
-- [hyperfine](https://github.com/sharkdp/hyperfine) - CLI benchmarking
+- [hyperfine](https://github.com/sharkdp/hyperfine) - CLI benchmarking (see [below](#benchmarking-with-hyperfine))
 
 ### Blog Posts
 - [How to Write Fast Rust Code](https://deterministic.space/high-performance-rust.html)
@@ -392,3 +392,36 @@ For comprehensive benchmarking, consider adding:
 - See detailed README: `crates/readstat/benches/README.md`
 - Check Criterion docs: https://bheisler.github.io/criterion.rs/book/
 - Review performance evaluation: Memory-mapped files analysis (separate doc)
+
+## Benchmarking with hyperfine
+Benchmarking performed with [hyperfine](https://github.com/sharkdp/hyperfine).
+
+This example compares the performance of the Rust binary with the performance of the C binary built from the `ReadStat` repository.  In general, hope that performance is fairly close to that of the C binary.
+
+To run, execute the following from within the `readstat` directory.
+
+```powershell
+# Windows
+hyperfine --warmup 5 "ReadStat_App.exe -f crates\readstat-tests\tests\data\cars.sas7bdat tests\data\cars_c.csv" ".\target\release\readstat.exe data crates\readstat-tests\tests\data\cars.sas7bdat --output crates\readstat-tests\tests\data\cars_rust.csv"
+```
+
+:memo: First experiments on Windows are challenging to interpret due to file caching.  Need further research into utilizing the `--prepare` option provided by `hyperfine` on Windows.
+
+```sh
+# Linux and macOS
+hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f crates/readstat-tests/tests/data/cars.sas7bdat crates/readstat-tests/tests/data/cars_c.csv" "./target/release/readstat data tests/data/cars.sas7bdat --output crates/readstat-tests/tests/data/cars_rust.csv"
+```
+
+Other, future, benchmarking may be performed now that [channels and threads](https://github.com/curtisalexander/readstat-rs/issues/28) have been developed.
+
+## Profiling with Flamegraphs
+Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/flamegraph).
+
+To run, execute the following from within the `readstat` directory.
+```sh
+cargo flamegraph --bin readstat -- data tests/data/_ahs2019n.sas7bdat --output tests/data/_ahs2019n.csv
+```
+
+Flamegraph is written to `readstat/flamegraph.svg`.
+
+:memo: Have yet to utilize flamegraphs in order to improve performance.
