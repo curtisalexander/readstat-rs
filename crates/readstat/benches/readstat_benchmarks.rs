@@ -357,6 +357,192 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark: Compare metadata reading across I/O strategies (file vs mmap vs bytes)
+fn bench_io_metadata(c: &mut Criterion) {
+    let mut group = c.benchmark_group("io_metadata");
+
+    for filename in &["cars.sas7bdat", "rand_ds_largepage_ok.sas7bdat"] {
+        let path = get_test_data_path(filename);
+        let rsp = setup_path(filename);
+
+        group.bench_with_input(
+            BenchmarkId::new("file", filename),
+            filename,
+            |b, _| {
+                b.iter(|| {
+                    let mut md = ReadStatMetadata::new();
+                    md.read_metadata(black_box(&rsp), false).unwrap();
+                    black_box(md)
+                });
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("mmap", filename),
+            filename,
+            |b, _| {
+                b.iter(|| {
+                    let mut md = ReadStatMetadata::new();
+                    md.read_metadata_from_mmap(black_box(&path), false).unwrap();
+                    black_box(md)
+                });
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("bytes", filename),
+            filename,
+            |b, _| {
+                // Pre-load file into memory (included in measurement for fairness)
+                b.iter(|| {
+                    let bytes = std::fs::read(&path).unwrap();
+                    let mut md = ReadStatMetadata::new();
+                    md.read_metadata_from_bytes(black_box(&bytes), false).unwrap();
+                    black_box(md)
+                });
+            },
+        );
+
+        // bytes_preloaded: measure only the parsing, not the file read
+        let bytes = std::fs::read(&path).unwrap();
+        group.bench_with_input(
+            BenchmarkId::new("bytes_preloaded", filename),
+            filename,
+            |b, _| {
+                b.iter(|| {
+                    let mut md = ReadStatMetadata::new();
+                    md.read_metadata_from_bytes(black_box(&bytes), false).unwrap();
+                    black_box(md)
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+/// Benchmark: Compare single-chunk data reading across I/O strategies
+fn bench_io_read_data(c: &mut Criterion) {
+    let mut group = c.benchmark_group("io_read_data");
+
+    for filename in &["cars.sas7bdat", "rand_ds_largepage_ok.sas7bdat"] {
+        let path = get_test_data_path(filename);
+        let rsp = setup_path(filename);
+        let mut md = ReadStatMetadata::new();
+        md.read_metadata(&rsp, false).unwrap();
+        let rows = md.row_count as u32;
+        let file_size = std::fs::metadata(&path).unwrap().len();
+
+        group.throughput(Throughput::Bytes(file_size));
+
+        group.bench_with_input(
+            BenchmarkId::new("file", filename),
+            filename,
+            |b, _| {
+                b.iter(|| {
+                    let mut d = ReadStatData::new()
+                        .set_no_progress(true)
+                        .init(md.clone(), 0, rows);
+                    d.read_data(black_box(&rsp)).unwrap();
+                    black_box(d)
+                });
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("mmap", filename),
+            filename,
+            |b, _| {
+                b.iter(|| {
+                    let mut d = ReadStatData::new()
+                        .set_no_progress(true)
+                        .init(md.clone(), 0, rows);
+                    d.read_data_from_mmap(black_box(&path)).unwrap();
+                    black_box(d)
+                });
+            },
+        );
+
+        let bytes = std::fs::read(&path).unwrap();
+        group.bench_with_input(
+            BenchmarkId::new("bytes_preloaded", filename),
+            filename,
+            |b, _| {
+                b.iter(|| {
+                    let mut d = ReadStatData::new()
+                        .set_no_progress(true)
+                        .init(md.clone(), 0, rows);
+                    d.read_data_from_bytes(black_box(&bytes)).unwrap();
+                    black_box(d)
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+/// Benchmark: Compare chunked/streaming reading across I/O strategies
+fn bench_io_chunked(c: &mut Criterion) {
+    let mut group = c.benchmark_group("io_chunked");
+
+    let filename = "cars.sas7bdat";
+    let path = get_test_data_path(filename);
+    let rsp = setup_path(filename);
+    let mut md = ReadStatMetadata::new();
+    md.read_metadata(&rsp, false).unwrap();
+    let total_rows = md.row_count as u32;
+    let chunk_size = 500u32;
+
+    group.throughput(Throughput::Elements(total_rows as u64));
+
+    group.bench_function("file", |b| {
+        b.iter(|| {
+            let mut total_read = 0;
+            while total_read < total_rows {
+                let end = std::cmp::min(total_read + chunk_size, total_rows);
+                let mut d = ReadStatData::new()
+                    .set_no_progress(true)
+                    .init(md.clone(), total_read, end);
+                d.read_data(black_box(&rsp)).unwrap();
+                black_box(&d);
+                total_read = end;
+            }
+        });
+    });
+
+    group.bench_function("mmap", |b| {
+        b.iter(|| {
+            let mut total_read = 0;
+            while total_read < total_rows {
+                let end = std::cmp::min(total_read + chunk_size, total_rows);
+                let mut d = ReadStatData::new()
+                    .set_no_progress(true)
+                    .init(md.clone(), total_read, end);
+                d.read_data_from_mmap(black_box(&path)).unwrap();
+                black_box(&d);
+                total_read = end;
+            }
+        });
+    });
+
+    let bytes = std::fs::read(&path).unwrap();
+    group.bench_function("bytes_preloaded", |b| {
+        b.iter(|| {
+            let mut total_read = 0;
+            while total_read < total_rows {
+                let end = std::cmp::min(total_read + chunk_size, total_rows);
+                let mut d = ReadStatData::new()
+                    .set_no_progress(true)
+                    .init(md.clone(), total_read, end);
+                d.read_data_from_bytes(black_box(&bytes)).unwrap();
+                black_box(&d);
+                total_read = end;
+            }
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_read_metadata,
@@ -368,6 +554,9 @@ criterion_group!(
     bench_parallel_write_buffer_sizes,
     bench_write_formats,
     bench_end_to_end_conversion,
+    bench_io_metadata,
+    bench_io_read_data,
+    bench_io_chunked,
 );
 
 criterion_main!(benches);
