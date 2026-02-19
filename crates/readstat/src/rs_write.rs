@@ -805,3 +805,107 @@ impl ReadStatWriter {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- resolve_compression ---
+
+    #[test]
+    fn resolve_compression_none_defaults_to_snappy() {
+        let codec = ReadStatWriter::resolve_compression(None, None).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::SNAPPY));
+    }
+
+    #[test]
+    fn resolve_compression_uncompressed() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Uncompressed),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::UNCOMPRESSED));
+    }
+
+    #[test]
+    fn resolve_compression_snappy() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Snappy),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::SNAPPY));
+    }
+
+    #[test]
+    fn resolve_compression_lz4raw() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Lz4Raw),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::LZ4_RAW));
+    }
+
+    #[test]
+    fn resolve_compression_gzip_default() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Gzip),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::GZIP(_)));
+    }
+
+    #[test]
+    fn resolve_compression_gzip_with_level() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Gzip),
+            Some(5),
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::GZIP(_)));
+    }
+
+    #[test]
+    fn resolve_compression_brotli_default() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Brotli),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::BROTLI(_)));
+    }
+
+    #[test]
+    fn resolve_compression_brotli_with_level() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Brotli),
+            Some(8),
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::BROTLI(_)));
+    }
+
+    #[test]
+    fn resolve_compression_zstd_default() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Zstd),
+            None,
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::ZSTD(_)));
+    }
+
+    #[test]
+    fn resolve_compression_zstd_with_level() {
+        let codec = ReadStatWriter::resolve_compression(
+            Some(crate::ParquetCompression::Zstd),
+            Some(15),
+        ).unwrap();
+        assert!(matches!(codec, ParquetCompressionCodec::ZSTD(_)));
+    }
+
+    // --- ReadStatWriter::new ---
+
+    #[test]
+    fn new_writer_defaults() {
+        let wtr = ReadStatWriter::new();
+        assert!(wtr.wtr.is_none());
+        assert!(!wtr.wrote_header);
+        assert!(!wtr.wrote_start);
+    }
+}
