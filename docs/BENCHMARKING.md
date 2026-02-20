@@ -339,8 +339,8 @@ jobs:
 ## Data Files for Benchmarking
 
 ### Current Test Data
-- **all_types.sas7bdat** - 3 rows, 8 vars (tiny)
-- **cars.sas7bdat** - 428 rows, 15 vars (small)
+- **all_types.sas7bdat** - 3 rows, 10 vars (tiny)
+- **cars.sas7bdat** - 1081 rows, 13 vars (small)
 
 ### Recommended Additional Data
 For comprehensive benchmarking, consider adding:

@@ -288,8 +288,8 @@ cargo flamegraph --bench readstat_benchmarks -- --bench
 ## Benchmark Data Files
 
 Tests use files from `crates/readstat-tests/tests/data/`:
-- **all_types.sas7bdat** - 3 rows, 8 variables, diverse types
-- **cars.sas7bdat** - 428 rows, 15 variables, typical dataset
+- **all_types.sas7bdat** - 3 rows, 10 variables, diverse types
+- **cars.sas7bdat** - 1081 rows, 13 variables, typical dataset
 
 For production benchmarking, consider adding:
 - **Small file** (< 1 MB, < 1K rows)

@@ -70,7 +70,7 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 ### `readstat-sys` (v0.3.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
-`build.rs` compiles ~20 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib:
+`build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib:
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
@@ -90,7 +90,7 @@ Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-wi
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-20 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, Arrow migration, row offsets, scientific notation, column selection, and skip row count. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
+27 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, Arrow migration, row offsets, scientific notation, column selection, and skip row count. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
 
 Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regenerate test data are in `util/`.
 

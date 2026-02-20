@@ -49,7 +49,7 @@ Building on Windows requires [LLVM](https://releases.llvm.org/download.html) and
 In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set, the [readstat-sys build script](../crates/readstat-sys/build.rs) will check the default path `C:\Program Files\LLVM\lib` and fail with instructions if it does not exist.
 
 For details see the following.
-- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/crates/readstat-sys/build.rs#L78-L82)
+- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/crates/readstat-sys/build.rs#L102-L124)
 - [Building in GitHub Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L140-L156)
 
 Build

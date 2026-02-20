@@ -97,7 +97,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [`readstat-cli`](crates/readstat-cli/) | `crates/readstat-cli/` | Binary crate producing the `readstat` CLI tool (arg parsing, progress bars, orchestration). |
 | [`readstat-sys`](crates/readstat-sys/) | `crates/readstat-sys/` | Raw FFI bindings to the ReadStat C library via bindgen. |
 | [`iconv-sys`](crates/iconv-sys/) | `crates/iconv-sys/` | Windows-only FFI bindings to libiconv for character encoding conversion. |
-| [`readstat-tests`](crates/readstat-tests/) | `crates/readstat-tests/` | Integration test suite (20 modules, 13 datasets). |
+| [`readstat-tests`](crates/readstat-tests/) | `crates/readstat-tests/` | Integration test suite (27 modules, 13 datasets). |
 
 For full architectural details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
