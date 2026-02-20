@@ -12,14 +12,16 @@ The command-line tool is developed in Rust and is only possible due to the follo
 
 The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arrow` crate is used to convert the read `sas7bdat` data into the [Arrow](https://arrow.apache.org/) memory format. Once in the `Arrow` memory format, the data can be written to other file formats.
 
-## Quickstart
+> :bulb: **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](crates/readstat-sys/) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, the higher-level crates (`readstat`, `readstat-cli`, `readstat-wasm`, `readstat-tests`) currently only implement support for **SAS `.sas7bdat` files**.
+
+## :rocket: Quickstart
 
 Convert the first 50,000 rows of `example.sas7bdat` (by performing the read in parallel) to the file `example.parquet`, overwriting the file if it already exists.
 ```sh
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 50000 --overwrite --parallel
 ```
 
-## Install
+## :package: Install
 
 ### Download a Release
 \[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
@@ -53,7 +55,7 @@ Run the binary.
 readstat --help
 ```
 
-## Usage
+## :gear: Usage
 
 The binary is invoked using subcommands:
 - `metadata` &rarr; writes file and variable metadata to standard out or JSON
@@ -64,11 +66,11 @@ Column metadata &mdash; labels, SAS format strings, and storage widths &mdash; i
 
 For the full CLI reference &mdash; including column selection, parallelism, memory considerations, SQL queries, reader modes, and debug options &mdash; see **[docs/USAGE.md](docs/USAGE.md)**.
 
-## Build from Source
+## :hammer_and_wrench: Build from Source
 
 Clone the repository (with submodules), install platform-specific developer tools, and run `cargo build`. Platform-specific instructions for Linux, macOS, and Windows are in **[docs/BUILDING.md](docs/BUILDING.md)**.
 
-## [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
+## :computer: [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 - :heavy_check_mark: Linux   &rarr; successfully builds and runs
     - [glibc](https://www.gnu.org/software/libc/)
     - [musl](https://www.musl-libc.org/)
@@ -77,7 +79,7 @@ Clone the repository (with submodules), install platform-specific developer tool
     - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
     - [Requires `libclang`](docs/BUILDING.md#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
 
-## Documentation
+## :books: Documentation
 
 | Document | Description |
 |----------|-------------|
@@ -89,7 +91,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/BENCHMARKING.md](docs/BENCHMARKING.md) | Criterion benchmarks, hyperfine, and profiling |
 | [docs/CI-CD.md](docs/CI-CD.md) | GitHub Actions triggers and artifacts |
 
-## Workspace Crates
+## :jigsaw: Workspace Crates
 
 | Crate | Path | Description |
 |-------|------|-------------|
@@ -102,7 +104,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 
 For full architectural details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Resources
+## :link: Resources
 The following have been **_incredibly_** helpful while developing!
 - [How to not RiiR](http://adventures.michaelfbryan.com/posts/how-not-to-riir/#building-chmlib-sys)
 - [Making a *-sys crate](https://kornel.ski/rust-sys-crate)
