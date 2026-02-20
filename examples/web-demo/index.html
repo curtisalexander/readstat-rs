@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAS7BDAT Viewer &amp; Converter</title>
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@6/dist/css/tabulator_simple.min.css" id="tabulator-css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1a1a1a;
+  background: #f5f5f5;
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+header p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 1.5rem;
+}
+
+.upload-zone.drag-over {
+  border-color: #4a90d9;
+  background: #eef4fc;
+}
+
+.upload-zone p {
+  margin: 0 0 0.75rem;
+  color: #888;
+}
+
+.upload-zone input[type="file"] {
+  display: none;
+}
+
+.upload-zone label {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  background: #4a90d9;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.upload-zone label:hover {
+  background: #3a7bc8;
+}
+
+/* Status / loading */
+#status {
+  text-align: center;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  min-height: 1.4em;
+}
+
+#status.error { color: #c0392b; }
+#status.info  { color: #666; }
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ccc;
+  border-top-color: #4a90d9;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Panels */
+.panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.hidden { display: none !important; }
+
+/* Metadata grid */
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.meta-grid dt {
+  font-size: 0.8rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.meta-grid dd {
+  margin: 0 0 0.5rem;
+  font-weight: 500;
+}
+
+/* Variable table */
+.var-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.var-table th,
+.var-table td {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.var-table th {
+  background: #fafafa;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.var-table-wrap {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Export bar */
+.export-bar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.export-bar button {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.export-bar button:hover {
+  background: #f0f0f0;
+  border-color: #aaa;
+}
+
+.export-bar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Data preview fallback table */
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.preview-table th,
+.preview-table td {
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #e0e0e0;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-table th {
+  background: #fafafa;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+}
+
+.preview-table th:hover {
+  background: #eee;
+}
+
+.preview-table th .sort-arrow {
+  margin-left: 4px;
+  font-size: 0.7rem;
+  color: #aaa;
+}
+
+.preview-wrap {
+  max-height: 500px;
+  overflow: auto;
+}
+
+/* File name display */
+.file-name {
+  font-weight: 600;
+  color: #333;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>SAS7BDAT Viewer &amp; Converter</h1>
+  <p>Upload a .sas7bdat file to view metadata, preview data, and export to CSV, NDJSON, Parquet, or Feather — all client-side via WebAssembly.</p>
+</header>
+
+<!-- Upload -->
+<div class="upload-zone" id="upload-zone">
+  <p>Drag &amp; drop a <strong>.sas7bdat</strong> file here, or</p>
+  <label for="file-input">Choose File</label>
+  <input type="file" id="file-input" accept=".sas7bdat">
+</div>
+
+<!-- Status -->
+<div id="status" class="info"></div>
+
+<!-- Metadata -->
+<div class="panel hidden" id="metadata-panel">
+  <h2>Metadata <span class="file-name" id="file-name"></span></h2>
+  <dl class="meta-grid" id="meta-grid"></dl>
+  <h2>Variables</h2>
+  <div class="var-table-wrap">
+    <table class="var-table">
+      <thead><tr><th>#</th><th>Name</th><th>Type</th><th>Label</th><th>Format</th></tr></thead>
+      <tbody id="var-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Data preview -->
+<div class="panel hidden" id="preview-panel">
+  <h2>Data Preview <span id="preview-info" style="font-weight:normal;color:#888;font-size:0.85rem"></span></h2>
+  <div id="preview-container" class="preview-wrap"></div>
+</div>
+
+<!-- Export -->
+<div class="panel hidden" id="export-panel">
+  <h2>Export</h2>
+  <div class="export-bar">
+    <button id="btn-csv" disabled>CSV</button>
+    <button id="btn-ndjson" disabled>NDJSON</button>
+    <button id="btn-parquet" disabled>Parquet</button>
+    <button id="btn-feather" disabled>Feather</button>
+  </div>
+</div>
+
+</div>
+
+<script src="https://unpkg.com/tabulator-tables@6/dist/js/tabulator.min.js" id="tabulator-js"></script>
+
+<script type="module">
+import { init, read_metadata, read_data, read_data_ndjson, read_data_parquet, read_data_feather } from "./readstat_wasm.js";
+
+// ── State ──────────────────────────────────────────────────────────────
+let fileBytes = null;   // Uint8Array of uploaded file
+let fileName = "";
+let tabulatorAvailable = typeof Tabulator !== "undefined";
+
+// Re-check after script may have loaded
+window.addEventListener("load", () => {
+  tabulatorAvailable = typeof Tabulator !== "undefined";
+});
+
+// ── DOM refs ───────────────────────────────────────────────────────────
+const statusEl        = document.getElementById("status");
+const uploadZone      = document.getElementById("upload-zone");
+const fileInput       = document.getElementById("file-input");
+const metadataPanel   = document.getElementById("metadata-panel");
+const fileNameEl      = document.getElementById("file-name");
+const metaGrid        = document.getElementById("meta-grid");
+const varTbody        = document.getElementById("var-tbody");
+const previewPanel    = document.getElementById("preview-panel");
+const previewInfo     = document.getElementById("preview-info");
+const previewContainer = document.getElementById("preview-container");
+const exportPanel     = document.getElementById("export-panel");
+const btnCsv          = document.getElementById("btn-csv");
+const btnNdjson       = document.getElementById("btn-ndjson");
+const btnParquet      = document.getElementById("btn-parquet");
+const btnFeather      = document.getElementById("btn-feather");
+
+// ── WASM init ──────────────────────────────────────────────────────────
+setStatus("Loading WASM module...", "info", true);
+
+init().then(() => {
+  setStatus("Ready — upload a .sas7bdat file to begin.", "info");
+}).catch(err => {
+  setStatus(`Failed to load WASM module: ${err.message}`, "error");
+});
+
+// ── Upload handling ────────────────────────────────────────────────────
+uploadZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  uploadZone.classList.add("drag-over");
+});
+
+uploadZone.addEventListener("dragleave", () => {
+  uploadZone.classList.remove("drag-over");
+});
+
+uploadZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+uploadZone.addEventListener("click", (e) => {
+  if (e.target.tagName !== "LABEL" && e.target.tagName !== "INPUT") {
+    fileInput.click();
+  }
+});
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+async function handleFile(file) {
+  fileName = file.name;
+
+  setStatus(`Reading ${fileName}...`, "info", true);
+
+  try {
+    const buffer = await file.arrayBuffer();
+    fileBytes = new Uint8Array(buffer);
+  } catch (err) {
+    setStatus(`Failed to read file: ${err.message}`, "error");
+    return;
+  }
+
+  // Show metadata
+  setStatus(`Parsing metadata...`, "info", true);
+  try {
+    const metaJson = read_metadata(fileBytes);
+    const meta = JSON.parse(metaJson);
+    renderMetadata(meta);
+    metadataPanel.classList.remove("hidden");
+  } catch (err) {
+    setStatus(`Metadata error: ${err.message}`, "error");
+    return;
+  }
+
+  // Show data preview
+  setStatus(`Loading data preview...`, "info", true);
+  try {
+    const csv = read_data(fileBytes);
+    renderPreview(csv);
+    previewPanel.classList.remove("hidden");
+  } catch (err) {
+    setStatus(`Data preview error: ${err.message}`, "error");
+    // Continue to show export buttons even if preview fails
+  }
+
+  // Enable export buttons
+  exportPanel.classList.remove("hidden");
+  btnCsv.disabled = false;
+  btnNdjson.disabled = false;
+  btnParquet.disabled = false;
+  btnFeather.disabled = false;
+
+  setStatus(`Loaded ${fileName}`, "info");
+}
+
+// ── Metadata rendering ─────────────────────────────────────────────────
+function renderMetadata(meta) {
+  fileNameEl.textContent = `— ${fileName}`;
+
+  const fields = [
+    ["Table Name",    meta.table_name || "—"],
+    ["Encoding",      meta.file_encoding || "—"],
+    ["Row Count",     meta.row_count?.toLocaleString() ?? "—"],
+    ["Variable Count", meta.var_count?.toLocaleString() ?? "—"],
+    ["Compression",   meta.compression || "None"],
+    ["Endianness",    meta.endianness || "—"],
+    ["Created",       meta.creation_time || "—"],
+    ["Modified",      meta.modified_time || "—"],
+  ];
+
+  metaGrid.innerHTML = fields.map(([label, value]) =>
+    `<div><dt>${label}</dt><dd>${escapeHtml(String(value))}</dd></div>`
+  ).join("");
+
+  varTbody.innerHTML = "";
+  const vars = meta.variables || meta.vars || [];
+  for (let i = 0; i < vars.length; i++) {
+    const v = vars[i];
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i}</td><td>${escapeHtml(v.name || "")}</td><td>${escapeHtml(v.type || v.var_type || "")}</td><td>${escapeHtml(v.label || "")}</td><td>${escapeHtml(v.format || "")}</td>`;
+    varTbody.appendChild(tr);
+  }
+}
+
+// ── Data preview rendering ─────────────────────────────────────────────
+const PREVIEW_ROWS = 100;
+
+function parseCSV(csv) {
+  const rows = [];
+  let current = "";
+  let inQuotes = false;
+  const fields = [];
+  const lines = [];
+
+  for (let i = 0; i < csv.length; i++) {
+    const ch = csv[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < csv.length && csv[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        fields.push(current);
+        current = "";
+      } else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && i + 1 < csv.length && csv[i + 1] === '\n') i++;
+        fields.push(current);
+        current = "";
+        if (fields.length > 0 && !(fields.length === 1 && fields[0] === "")) {
+          lines.push([...fields]);
+        }
+        fields.length = 0;
+      } else {
+        current += ch;
+      }
+    }
+  }
+  // Last line (no trailing newline)
+  if (current || fields.length > 0) {
+    fields.push(current);
+    if (fields.length > 0 && !(fields.length === 1 && fields[0] === "")) {
+      lines.push([...fields]);
+    }
+  }
+
+  if (lines.length === 0) return { headers: [], rows: [] };
+  return { headers: lines[0], rows: lines.slice(1) };
+}
+
+function renderPreview(csv) {
+  const parsed = parseCSV(csv);
+  const totalRows = parsed.rows.length;
+  const limited = parsed.rows.slice(0, PREVIEW_ROWS);
+  previewInfo.textContent = totalRows > PREVIEW_ROWS
+    ? `(showing ${PREVIEW_ROWS} of ${totalRows.toLocaleString()} rows)`
+    : `(${totalRows.toLocaleString()} rows)`;
+
+  previewContainer.innerHTML = "";
+
+  // Try Tabulator first
+  if (typeof Tabulator !== "undefined") {
+    try {
+      const columns = parsed.headers.map(h => ({
+        title: h,
+        field: h,
+        headerSort: true,
+        tooltip: true,
+      }));
+
+      const data = limited.map(row => {
+        const obj = {};
+        parsed.headers.forEach((h, i) => { obj[h] = row[i] ?? ""; });
+        return obj;
+      });
+
+      new Tabulator(previewContainer, {
+        data,
+        columns,
+        layout: "fitDataFill",
+        height: "450px",
+        placeholder: "No data",
+      });
+      return;
+    } catch (_) {
+      // Fall through to plain table
+    }
+  }
+
+  renderPlainTable(parsed.headers, limited);
+}
+
+function renderPlainTable(headers, rows) {
+  const table = document.createElement("table");
+  table.className = "preview-table";
+
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  const sortState = {}; // column index -> "asc" | "desc"
+
+  headers.forEach((h, idx) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    const arrow = document.createElement("span");
+    arrow.className = "sort-arrow";
+    th.appendChild(arrow);
+    th.addEventListener("click", () => sortColumn(table, idx, sortState, headers));
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  tbody.id = "preview-tbody";
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    headers.forEach((_, i) => {
+      const td = document.createElement("td");
+      td.textContent = row[i] ?? "";
+      td.title = row[i] ?? "";
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  previewContainer.appendChild(table);
+}
+
+function sortColumn(table, colIdx, sortState, headers) {
+  const dir = sortState[colIdx] === "asc" ? "desc" : "asc";
+  // Reset all
+  for (const k in sortState) delete sortState[k];
+  sortState[colIdx] = dir;
+
+  // Update arrows
+  const ths = table.querySelectorAll("thead th");
+  ths.forEach((th, i) => {
+    const arrow = th.querySelector(".sort-arrow");
+    if (i === colIdx) {
+      arrow.textContent = dir === "asc" ? " \u25B2" : " \u25BC";
+    } else {
+      arrow.textContent = "";
+    }
+  });
+
+  const tbody = table.querySelector("tbody");
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  rows.sort((a, b) => {
+    const aVal = a.children[colIdx]?.textContent ?? "";
+    const bVal = b.children[colIdx]?.textContent ?? "";
+    const aNum = Number(aVal);
+    const bNum = Number(bVal);
+    if (!isNaN(aNum) && !isNaN(bNum) && aVal !== "" && bVal !== "") {
+      return dir === "asc" ? aNum - bNum : bNum - aNum;
+    }
+    return dir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+// ── Export buttons ─────────────────────────────────────────────────────
+btnCsv.addEventListener("click", () => exportFile("csv"));
+btnNdjson.addEventListener("click", () => exportFile("ndjson"));
+btnParquet.addEventListener("click", () => exportFile("parquet"));
+btnFeather.addEventListener("click", () => exportFile("feather"));
+
+async function exportFile(format) {
+  if (!fileBytes) return;
+
+  const baseName = fileName.replace(/\.sas7bdat$/i, "");
+  const extensions = { csv: ".csv", ndjson: ".ndjson", parquet: ".parquet", feather: ".feather" };
+  const mimeTypes = {
+    csv: "text/csv",
+    ndjson: "application/x-ndjson",
+    parquet: "application/octet-stream",
+    feather: "application/octet-stream",
+  };
+
+  setStatus(`Exporting ${format.toUpperCase()}...`, "info", true);
+
+  try {
+    let data;
+    switch (format) {
+      case "csv":
+        data = new TextEncoder().encode(read_data(fileBytes));
+        break;
+      case "ndjson":
+        data = new TextEncoder().encode(read_data_ndjson(fileBytes));
+        break;
+      case "parquet":
+        data = read_data_parquet(fileBytes);
+        break;
+      case "feather":
+        data = read_data_feather(fileBytes);
+        break;
+    }
+
+    const blob = new Blob([data], { type: mimeTypes[format] });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = baseName + extensions[format];
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    setStatus(`Exported ${baseName}${extensions[format]}`, "info");
+  } catch (err) {
+    setStatus(`Export error: ${err.message}`, "error");
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function setStatus(msg, type, loading) {
+  statusEl.className = type || "info";
+  statusEl.innerHTML = (loading ? '<span class="spinner"></span>' : "") + escapeHtml(msg);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
