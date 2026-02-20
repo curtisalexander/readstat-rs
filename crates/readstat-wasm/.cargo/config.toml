@@ -3,6 +3,6 @@ rustflags = [
     "-Clink-arg=-sALLOW_MEMORY_GROWTH=1",
     "-Clink-arg=-sERROR_ON_UNDEFINED_SYMBOLS=0",
     "-Clink-arg=--no-entry",
-    "-Clink-arg=-sEXPORTED_FUNCTIONS=_read_metadata,_read_metadata_fast,_read_data,_read_data_ndjson,_free_string,_malloc,_free",
+    "-Clink-arg=-sEXPORTED_FUNCTIONS=_read_metadata,_read_metadata_fast,_read_data,_read_data_ndjson,_read_data_parquet,_read_data_feather,_free_string,_free_binary,_malloc,_free",
     "-Clink-arg=-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,stringToUTF8,lengthBytesUTF8",
 ]
