@@ -100,9 +100,9 @@ Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_nd
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-29 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
+30 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, malformed UTF-8, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
 
-Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regenerate test data are in `util/`.
+Test data lives in `tests/data/*.sas7bdat` (14 datasets). SAS scripts to regenerate test data are in `util/`.
 
 | Dataset | Metadata Test | Data Test |
 |---------|:---:|:---:|
@@ -113,6 +113,7 @@ Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regener
 | `cars.sas7bdat` | ✅ | ✅ |
 | `hasmissing.sas7bdat` | ✅ | ✅ |
 | `intel.sas7bdat` | ✅ | ✅ |
+| `malformed_utf8.sas7bdat` | ✅ | ✅ |
 | `messydata.sas7bdat` | ✅ | ✅ |
 | `rand_ds_largepage_err.sas7bdat` | ✅ | ✅ |
 | `rand_ds_largepage_ok.sas7bdat` | ✅ | ✅ |

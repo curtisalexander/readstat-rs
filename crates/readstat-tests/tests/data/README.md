@@ -20,6 +20,9 @@ Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) b
     - https://www.alanelliott.com/sas/ED2_FILES.html
 - `intel.sas7bdat`
     - https://www.alanelliott.com/sas/ED2_FILES.html
+- `malformed_utf8.sas7bdat` &rarr; SAS dataset with truncated multi-byte UTF-8 characters
+    - Created using [create_malformed_utf8_ds.sas](../../util/create_malformed_utf8_ds.sas)
+    - Tests lossy UTF-8 fallback for [issue #78](https://github.com/curtisalexander/readstat-rs/issues/78)
 - `messydata.sas7bdat`
     - https://www.alanelliott.com/sas/ED2_FILES.html
 - `rand_ds.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas)

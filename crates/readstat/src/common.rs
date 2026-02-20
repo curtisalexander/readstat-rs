@@ -146,4 +146,31 @@ mod tests {
         let result = ptr_to_string(cs.as_ptr());
         assert_eq!(result, "UTF-8 encoded: café");
     }
+
+    #[test]
+    fn ptr_to_string_with_truncated_utf8() {
+        // Simulates SAS truncating "café" at a byte boundary mid-character.
+        // "café" in UTF-8 is [63, 61, 66, C3, A9]. Truncating after 4 bytes
+        // leaves [63, 61, 66, C3] — an incomplete 2-byte sequence.
+        // ptr_to_string should replace the dangling 0xC3 with U+FFFD.
+        // Safety: we need a null-terminated buffer for CStr::from_ptr.
+        // Build one explicitly so the test is self-contained.
+        let mut buf = b"caf\xC3".to_vec();
+        buf.push(0); // null terminator
+        let ptr = buf.as_ptr() as *const i8;
+
+        let result = ptr_to_string(ptr);
+        assert_eq!(result, "caf\u{FFFD}");
+    }
+
+    #[test]
+    fn ptr_to_string_with_invalid_continuation_byte() {
+        // 0xFF is never valid in UTF-8
+        let mut buf = b"hello\xFFworld".to_vec();
+        buf.push(0);
+        let ptr = buf.as_ptr() as *const i8;
+
+        let result = ptr_to_string(ptr);
+        assert_eq!(result, "hello\u{FFFD}world");
+    }
 }

@@ -24,6 +24,7 @@ Formally tested (via integration tests) against the following datasets.  See the
 - [X] `cars.sas7bdat` &rarr; SAS cars dataset
 - [X] `hasmissing.sas7bdat` &rarr; SAS dataset containing missing values
 - [X] `intel.sas7bdat`
+- [X] `malformed_utf8.sas7bdat` &rarr; SAS dataset with truncated multi-byte UTF-8 characters ([issue #78](https://github.com/curtisalexander/readstat-rs/issues/78))
 - [X] `messydata.sas7bdat`
 - [X] `rand_ds_largepage_err.sas7bdat` &rarr; Created using [create_rand_ds.sas](../crates/readstat-tests/util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `2M`
 - [X] `rand_ds_largepage_ok.sas7bdat` &rarr; Created using [create_rand_ds.sas](../crates/readstat-tests/util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `1M`
