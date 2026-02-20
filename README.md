@@ -89,23 +89,17 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/BENCHMARKING.md](docs/BENCHMARKING.md) | Criterion benchmarks, hyperfine, and profiling |
 | [docs/CI-CD.md](docs/CI-CD.md) | GitHub Actions triggers and artifacts |
 
-## Goals
+## Workspace Crates
 
-### Short Term
-Short term, developing the command-line tool was a helpful exercise in binding to a C library using [bindgen](https://rust-lang.github.io/rust-bindgen/) and the [Rust FFI](https://doc.rust-lang.org/nomicon/ffi.html).  It definitely required a review of C pointers (and for which I claim no expertise)!
+| Crate | Path | Description |
+|-------|------|-------------|
+| [`readstat`](crates/readstat/) | `crates/readstat/` | Pure library for parsing SAS files into Arrow RecordBatch format. Output writers are feature-gated. |
+| [`readstat-cli`](crates/readstat-cli/) | `crates/readstat-cli/` | Binary crate producing the `readstat` CLI tool (arg parsing, progress bars, orchestration). |
+| [`readstat-sys`](crates/readstat-sys/) | `crates/readstat-sys/` | Raw FFI bindings to the ReadStat C library via bindgen. |
+| [`iconv-sys`](crates/iconv-sys/) | `crates/iconv-sys/` | Windows-only FFI bindings to libiconv for character encoding conversion. |
+| [`readstat-tests`](crates/readstat-tests/) | `crates/readstat-tests/` | Integration test suite (20 modules, 13 datasets). |
 
-### Long Term
-The long term goals of this repository are uncertain.  Possibilities include:
-- :heavy_check_mark: Developing a command line tool that performs transformations from `sas7bdat` to other file types
-    - [X] text
-        - [X] `csv`
-        - [X] `ndjson`
-    - [X] binary
-        - [X] `feather`
-        - [X] `parquet`
-- :heavy_check_mark: Developing a command line tool that expands the functionality made available by the [readstat](https://github.com/WizardMac/ReadStat#command-line-usage) command line tool
-- Completing and publishing the `readstat-sys` crate that binds to [ReadStat](https://github.com/WizardMac/ReadStat)
-- Developing and publishing a Rust library &mdash; `readstat` &mdash; that allows Rust programmers to work with `sas7bdat` files
+For full architectural details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Resources
 The following have been **_incredibly_** helpful while developing!

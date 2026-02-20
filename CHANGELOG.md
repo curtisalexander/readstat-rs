@@ -11,12 +11,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Memory-mapped file reading via `memmap2`
 - Support for reading SAS files from in-memory byte slices
 - Benchmarks comparing file, mmap, and bytes I/O strategies
+
+### Changed
+- Improved parallelism: local thread pool, ordered reads, bounded-batch writes
+
+## [0.18.0] - 2026-02-19
+
+### Added
 - DataFusion SQL query support behind `sql` feature flag
 - Exposed all ReadStat functionality in readstat-sys 0.3.0
 - Focused documentation files broken out from README
 
 ### Changed
-- Improved parallelism: local thread pool, ordered reads, bounded-batch writes
+- Restructured workspace: extracted `readstat-cli` binary crate from `readstat` library crate
+- Feature-gated output format writers (csv, parquet, feather, ndjson) in the library crate
+- Arc-wrapped metadata for zero-cost parallel chunk sharing
+- Replaced `Vec<ReadStatVar>` intermediate representation with direct Arrow builder pipeline for zero-copy parsing
+- Pure-arithmetic f64 rounding (no string formatting or heap allocation)
+- Column widths and SAS format strings persisted as Arrow field metadata
+
+### Removed
+- Dead code: `ReadStatVar` type, `lexical` dependency, unused dependencies
 
 ## [0.17.0] - 2026-02-17
 

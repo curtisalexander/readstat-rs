@@ -9,14 +9,13 @@ Ensure submodules are also cloned.
 git clone --recurse-submodules https://github.com/curtisalexander/readstat-rs.git
 ```
 
-The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/readstat) binary utilizes `readstat-sys` as a dependency.
+The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) within this repository.  In order to build and link, first a [readstat-sys](https://github.com/curtisalexander/readstat-rs/tree/main/crates/readstat-sys) crate is created.  Then the [readstat](https://github.com/curtisalexander/readstat-rs/tree/main/crates/readstat) library and [readstat-cli](https://github.com/curtisalexander/readstat-rs/tree/main/crates/readstat-cli) binary crate utilize `readstat-sys` as a dependency.
 
 ## Linux
 Install developer tools
 
 ```sh
-# unixodbc-dev needed for full compilation of arrow2
-sudo apt install build-essential clang unixodbc-dev
+sudo apt install build-essential clang
 ```
 
 Build

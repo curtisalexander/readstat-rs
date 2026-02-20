@@ -18,7 +18,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.17.0) — Library Crate
+### `readstat` (v0.18.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -38,8 +38,11 @@ Key source modules in `crates/readstat/src/`:
 | `rs_write_config.rs` | Output configuration (path, format, compression) |
 | `rs_var.rs` | Variable types and value handling |
 | `rs_write.rs` | Output writers (CSV, Feather, NDJSON, Parquet) |
+| `rs_query.rs` | SQL query execution via DataFusion (feature-gated) |
 | `formats.rs` | SAS format detection (118 date/time/datetime formats, regex-based) |
 | `err.rs` | Error enum (41 variants mapping to C library errors) |
+| `common.rs` | Utility functions |
+| `rs_buffer_io.rs` | Buffer I/O operations |
 
 Key public types:
 - `ReadStatData` — coordinates FFI parsing, accumulates values directly into typed Arrow builders, produces Arrow RecordBatch
@@ -52,7 +55,7 @@ Key public types:
 
 Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono.
 
-### `readstat-cli` (v0.17.0) — CLI Binary
+### `readstat-cli` (v0.18.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -64,7 +67,7 @@ Owns CLI arg parsing, progress bars, colored output, and reader-writer thread or
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
-### `readstat-sys` (v0.2.0) — FFI Bindings
+### `readstat-sys` (v0.3.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~20 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib:
