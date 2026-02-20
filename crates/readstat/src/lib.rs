@@ -73,6 +73,10 @@ pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadSt
 pub use rs_path::ReadStatPath;
 pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;
+#[cfg(feature = "csv")]
+pub use rs_write::write_batch_to_csv_bytes;
+#[cfg(feature = "ndjson")]
+pub use rs_write::write_batch_to_ndjson_bytes;
 pub use rs_write_config::{OutFormat, ParquetCompression, WriteConfig};
 #[cfg(feature = "sql")]
 pub use rs_query::{execute_sql, execute_sql_stream, execute_sql_and_write_stream, read_sql_file, write_sql_results};

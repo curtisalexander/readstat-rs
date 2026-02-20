@@ -546,6 +546,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
     ) -> Result<(), ReadStatError> {
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -603,6 +604,7 @@ impl ReadStatWriter {
         &mut self,
         d: &ReadStatData,
     ) -> Result<(), ReadStatError> {
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(pb) = &d.pb {
             pb.finish_and_clear()
         }
@@ -695,6 +697,26 @@ impl ReadStatWriter {
 
         Ok(())
     }
+}
+
+/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to CSV bytes (with header).
+#[cfg(feature = "csv")]
+pub fn write_batch_to_csv_bytes(batch: &arrow_array::RecordBatch) -> Result<Vec<u8>, ReadStatError> {
+    let mut buf = Vec::new();
+    let mut writer = CsvWriterBuilder::new().with_header(true).build(&mut buf);
+    writer.write(batch)?;
+    drop(writer);
+    Ok(buf)
+}
+
+/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to NDJSON bytes.
+#[cfg(feature = "ndjson")]
+pub fn write_batch_to_ndjson_bytes(batch: &arrow_array::RecordBatch) -> Result<Vec<u8>, ReadStatError> {
+    let mut buf = Vec::new();
+    let mut writer = JsonLineDelimitedWriter::new(&mut buf);
+    writer.write(batch)?;
+    writer.finish()?;
+    Ok(buf)
 }
 
 /// Formats a number with comma thousands separators (e.g. 1081 -> "1,081").
