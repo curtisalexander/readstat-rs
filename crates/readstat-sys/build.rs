@@ -79,6 +79,14 @@ fn main() {
     cc.include(&src)
         .warnings(false);
 
+    // AddressSanitizer: instrument ReadStat C code when requested.
+    // Uses a targeted env var so third-party sys crates (e.g. zstd-sys)
+    // are not affected — global CFLAGS would break their linking.
+    if env::var("READSTAT_SANITIZE_ADDRESS").is_ok() {
+        cc.flag("-fsanitize=address");
+        cc.flag("-fno-omit-frame-pointer");
+    }
+
     // Include iconv.h — Emscripten provides its own
     if !is_emscripten {
         if let Some(include) = env::var_os("DEP_ICONV_INCLUDE") {

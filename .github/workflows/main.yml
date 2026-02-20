@@ -322,6 +322,8 @@ jobs:
 
   miri:
     runs-on: ubuntu-latest
+    env:
+      MIRIFLAGS: "-Zmiri-disable-isolation"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -340,7 +342,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: "-Zsanitizer=address"
-      CFLAGS: "-fsanitize=address -fno-omit-frame-pointer"
+      READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -359,7 +361,7 @@ jobs:
     runs-on: macos-latest
     env:
       RUSTFLAGS: "-Zsanitizer=address"
-      CFLAGS: "-fsanitize=address -fno-omit-frame-pointer"
+      READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
