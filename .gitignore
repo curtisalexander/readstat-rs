@@ -11,8 +11,6 @@
 # target
 /target/
 /crates/readstat-wasm/target/
-# wasm build artifacts
-/crates/readstat-wasm/pkg/*.wasm
 # cargo
 Cargo.lock
 # node
