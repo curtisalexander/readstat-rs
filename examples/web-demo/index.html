@@ -195,6 +195,30 @@ header p {
   cursor: not-allowed;
 }
 
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: #2ecc71;
+  color: #fff;
+  padding: 0.6rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* Data preview fallback table */
 .preview-table {
   width: 100%;
@@ -294,7 +318,23 @@ header p {
 
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script src="https://unpkg.com/tabulator-tables@6/dist/js/tabulator.min.js" id="tabulator-js"></script>
+
+<!-- Global error handler — catches module load failures that are otherwise silent -->
+<script>
+window.addEventListener("error", function(e) {
+  var el = document.getElementById("status");
+  if (el) { el.className = "error"; el.textContent = "Error: " + (e.message || e); }
+  console.error("Global error:", e);
+});
+window.addEventListener("unhandledrejection", function(e) {
+  var el = document.getElementById("status");
+  if (el) { el.className = "error"; el.textContent = "Error: " + (e.reason?.message || e.reason || "unknown"); }
+  console.error("Unhandled rejection:", e.reason);
+});
+</script>
 
 <script type="module">
 import { init, read_metadata, read_data, read_data_ndjson, read_data_parquet, read_data_feather } from "./readstat_wasm.js";
@@ -349,7 +389,7 @@ uploadZone.addEventListener("drop", (e) => {
   e.preventDefault();
   uploadZone.classList.remove("drag-over");
   const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
+  if (file) handleFile(file).catch(err => setStatus(`Unexpected error: ${err.message}`, "error"));
 });
 
 uploadZone.addEventListener("click", (e) => {
@@ -359,13 +399,21 @@ uploadZone.addEventListener("click", (e) => {
 });
 
 fileInput.addEventListener("change", () => {
-  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  if (fileInput.files[0]) handleFile(fileInput.files[0]).catch(err => setStatus(`Unexpected error: ${err.message}`, "error"));
 });
+
+/** Yield to the browser so it can repaint before a blocking WASM call. */
+function yieldToUI() {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
 
 async function handleFile(file) {
   fileName = file.name;
 
   setStatus(`Reading ${fileName}...`, "info", true);
+  await yieldToUI();
 
   try {
     const buffer = await file.arrayBuffer();
@@ -377,6 +425,7 @@ async function handleFile(file) {
 
   // Show metadata
   setStatus(`Parsing metadata...`, "info", true);
+  await yieldToUI();
   try {
     const metaJson = read_metadata(fileBytes);
     const meta = JSON.parse(metaJson);
@@ -389,6 +438,7 @@ async function handleFile(file) {
 
   // Show data preview
   setStatus(`Loading data preview...`, "info", true);
+  await yieldToUI();
   try {
     const csv = read_data(fileBytes);
     renderPreview(csv);
@@ -621,6 +671,7 @@ async function exportFile(format) {
   };
 
   setStatus(`Exporting ${format.toUpperCase()}...`, "info", true);
+  await yieldToUI();
 
   try {
     let data;
@@ -649,7 +700,9 @@ async function exportFile(format) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    setStatus(`Exported ${baseName}${extensions[format]}`, "info");
+    const outName = baseName + extensions[format];
+    setStatus(`Exported ${outName}`, "info");
+    showToast(`Downloaded ${outName}`);
   } catch (err) {
     setStatus(`Export error: ${err.message}`, "error");
   }
@@ -665,6 +718,16 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
 }
 </script>
 </body>

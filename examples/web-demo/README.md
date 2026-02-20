@@ -14,20 +14,24 @@ No build tools, no `npm install`, no framework — just static files served over
 
    If you need to rebuild it first, see the [bun-demo README](../bun-demo/README.md) for build instructions.
 
-2. **Serve the directory** with any static HTTP server:
+2. **Serve the directory** with any static HTTP server. You must point the server at the **directory**, not at `index.html` directly:
 
    ```bash
-   # Python (built-in)
+   # From the repo root:
    python -m http.server 8000 -d examples/web-demo
-
-   # Node.js
    npx serve examples/web-demo
-
-   # Bun
    bunx serve examples/web-demo
+
+   # Or from the web-demo directory:
+   cd examples/web-demo
+   python -m http.server 8000
+   npx serve
+   bunx serve
    ```
 
-3. **Open** `http://localhost:8000` in your browser.
+   > **Note:** Do not pass `index.html` as the argument (e.g., `bunx serve index.html`). That tells `serve` to look for a directory named `index.html`, which will cause the WASM and JS files to 404.
+
+3. **Open** `http://localhost:3000` (for `serve`) or `http://localhost:8000` (for Python) in your browser.
 
 4. **Upload** a `.sas7bdat` file (e.g., `crates/readstat-tests/tests/data/cars.sas7bdat`).
 
