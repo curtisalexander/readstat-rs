@@ -9,9 +9,8 @@ If you already have Rust, Emscripten SDK, libclang, and Bun installed:
 **macOS / Linux:**
 
 ```bash
-# Activate Emscripten & build zlib port (first time only)
+# Activate Emscripten (first time per terminal session)
 source /path/to/emsdk/emsdk_env.sh
-embuilder build zlib
 
 # Add the wasm target (first time only)
 rustup target add wasm32-unknown-emscripten
@@ -33,10 +32,9 @@ bun run index.ts
 **Windows (Git Bash):**
 
 ```bash
-# Activate Emscripten & build zlib port (first time only)
+# Activate Emscripten (first time per terminal session)
 /c/path/to/emsdk/emsdk.bat activate latest
 export EMSDK=C:/path/to/emsdk
-embuilder build zlib
 
 # Add the wasm target (first time only)
 rustup target add wasm32-unknown-emscripten
@@ -58,10 +56,9 @@ bun run index.ts
 **Windows (PowerShell):**
 
 ```powershell
-# Activate Emscripten & build zlib port (first time only)
+# Activate Emscripten (first time per terminal session)
 C:\path\to\emsdk\emsdk.bat activate latest
 $env:EMSDK = "C:\path\to\emsdk"
-embuilder build zlib
 
 # Add the wasm target (first time only)
 rustup target add wasm32-unknown-emscripten
@@ -153,9 +150,6 @@ git submodule update --init --recursive
 ```bash
 # Make sure Emscripten is activated in your shell (see table above)
 
-# Build the Emscripten zlib port (first time only — takes ~2 seconds)
-embuilder build zlib
-
 # From the readstat-wasm crate directory
 cd crates/readstat-wasm
 
@@ -208,7 +202,7 @@ Modified:      2008-09-30 12:55:01
 
 ## How it works
 
-The `readstat-wasm` crate compiles the ReadStat C library and the Rust `readstat` parsing library to WebAssembly using the `wasm32-unknown-emscripten` target. Emscripten is required because the underlying ReadStat C code needs a C standard library (libc, zlib, iconv) — which Emscripten provides for wasm.
+The `readstat-wasm` crate compiles the ReadStat C library and the Rust `readstat` parsing library to WebAssembly using the `wasm32-unknown-emscripten` target. Emscripten is required because the underlying ReadStat C code needs a C standard library (libc, iconv) — which Emscripten provides for wasm. (Note: zlib is only needed for SPSS zsav support, which is not included in the current wasm build.)
 
 The crate exports three C-compatible functions:
 
@@ -225,9 +219,6 @@ The JS wrapper in `pkg/readstat_wasm.js` handles:
 - Converting between JS types and wasm pointers
 
 ## Troubleshooting
-
-**`zlib.h: file not found` during build**
-Run `embuilder build zlib` to install the Emscripten zlib port.
 
 **`EMSDK must be set for Emscripten builds`**
 Set the `EMSDK` environment variable to point to your emsdk installation directory. On macOS/Linux: `export EMSDK=/path/to/emsdk`. On Windows (PowerShell): `$env:EMSDK = "C:\path\to\emsdk"`. On Windows (Git Bash): `export EMSDK=C:/path/to/emsdk`. The build script also attempts to auto-detect the emsdk root from your PATH, so simply having Emscripten activated may be sufficient.
