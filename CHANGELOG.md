@@ -11,9 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Memory-mapped file reading via `memmap2`
 - Support for reading SAS files from in-memory byte slices
 - Benchmarks comparing file, mmap, and bytes I/O strategies
+- CSV integration tests for header and row count verification
 
 ### Changed
 - Improved parallelism: local thread pool, ordered reads, bounded-batch writes
+
+### Fixed
+- CSV file output missing header row due to file truncation during two-step write
+- CLI demo convert scripts failing to find `readstat` binary on Windows (missing `.exe` extension)
 
 ## [0.18.0] - 2026-02-19
 

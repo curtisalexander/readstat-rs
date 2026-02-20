@@ -5,6 +5,10 @@
 //! then converting the parsed data into Apache Arrow [`RecordBatch`](arrow_array::RecordBatch)
 //! format for output as CSV, Feather (Arrow IPC), NDJSON, or Parquet.
 //!
+//! **Note:** While the underlying [`readstat-sys`](https://docs.rs/readstat-sys) crate
+//! exposes bindings for all formats supported by ReadStat (SAS, SPSS, Stata),
+//! this crate currently only implements parsing and conversion for **SAS `.sas7bdat` files**.
+//!
 //! # Data Pipeline
 //!
 //! ```text

@@ -3,7 +3,7 @@ name = "readstat-sys"
 version = "0.3.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
-description = "Raw bindings to the ReadStat C library"
+description = "Raw FFI bindings to the ReadStat C library (SAS, SPSS, Stata file formats)"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 documentation = "https://docs.rs/readstat-sys"
@@ -20,4 +20,4 @@ cc = "1.2"
 libz-sys = "1.1"
 
 [target.'cfg(windows)'.dependencies]
-iconv-sys = { path = "../iconv-sys", version = "0.2.0" }
+iconv-sys = { path = "../iconv-sys", version = "0.3.0" }
