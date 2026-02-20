@@ -4,6 +4,11 @@
 //! It compiles the ReadStat C source files from a vendored git submodule and links
 //! against platform-specific iconv and zlib libraries.
 //!
+//! These bindings expose the **full** ReadStat API, including support for SAS (`.sas7bdat`,
+//! `.xpt`), SPSS (`.sav`, `.zsav`, `.por`), and Stata (`.dta`) file formats. However,
+//! the higher-level [`readstat`](https://docs.rs/readstat) crate currently only implements
+//! parsing and conversion for **SAS `.sas7bdat` files**.
+//!
 //! Most users should depend on the higher-level [`readstat`](https://docs.rs/readstat)
 //! crate instead of using these bindings directly.
 

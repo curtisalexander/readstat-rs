@@ -1,9 +1,9 @@
 [package]
 name = "iconv-sys"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
-description = "Bindings for iconv"
+description = "Windows-only FFI bindings to libiconv for character encoding conversion"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 documentation = "https://docs.rs/iconv-sys"

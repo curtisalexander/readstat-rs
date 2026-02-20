@@ -2,6 +2,8 @@
 
 Rust CLI tool and library that reads SAS binary files (`.sas7bdat`) and converts them to modern columnar formats (Parquet, Feather, CSV, NDJSON). Uses FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library for parsing, and Apache Arrow for in-memory representation and output.
 
+**Scope:** The `readstat-sys` crate exposes the full ReadStat C API, which supports SAS (`.sas7bdat`, `.xpt`), SPSS (`.sav`, `.zsav`, `.por`), and Stata (`.dta`). However, the `readstat`, `readstat-cli`, and `readstat-wasm` crates currently only implement parsing and conversion for **SAS `.sas7bdat` files**.
+
 ## Workspace Layout
 
 ```
@@ -12,7 +14,8 @@ readstat-rs/
 │   ├── readstat-cli/        # Binary crate (CLI arg parsing, orchestration)
 │   ├── readstat-sys/        # FFI bindings to ReadStat C library (bindgen)
 │   ├── iconv-sys/           # FFI bindings to iconv (Windows only)
-│   └── readstat-tests/      # Integration test suite
+│   ├── readstat-tests/      # Integration test suite
+│   └── readstat-wasm/       # WebAssembly build (excluded from workspace)
 └── docs/
 ```
 
@@ -53,7 +56,7 @@ Key public types:
 - `WriteConfig` — output configuration (path, format, compression)
 - `OutFormat` — output format enum (csv, feather, ndjson, parquet)
 
-Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono.
+Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
 ### `readstat-cli` (v0.18.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
@@ -70,7 +73,7 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 ### `readstat-sys` (v0.3.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
-`build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib:
+`build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
@@ -82,15 +85,22 @@ Header include paths are propagated between crates using Cargo's `links` key:
 - `iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`
 - `libz-sys` sets `cargo:include=...` which becomes `DEP_Z_INCLUDE` in `readstat-sys`
 
-### `iconv-sys` (v0.2.0) — iconv FFI (Windows)
+### `iconv-sys` (v0.3.0) — iconv FFI (Windows)
 **Path**: `crates/iconv-sys/`
 
 Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-win-build/` git submodule using the `cc` crate, producing a static library. On non-Windows platforms the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
 
+### `readstat-wasm` (v0.1.0) — WebAssembly Build
+**Path**: `crates/readstat-wasm/`
+
+WebAssembly build of the `readstat` library for parsing SAS `.sas7bdat` files in JavaScript. Compiles the ReadStat C library and the Rust `readstat` library to WebAssembly via the `wasm32-unknown-emscripten` target. Excluded from the Cargo workspace (built separately with Emscripten).
+
+Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_ndjson`, `free_string`.
+
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-27 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, Arrow migration, row offsets, scientific notation, column selection, and skip row count. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
+29 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
 
 Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regenerate test data are in `util/`.
 
@@ -124,4 +134,5 @@ Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regener
 - **Parallel processing**: Rayon for parallel reading, Crossbeam channels for reader-writer coordination
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format
+- **Multiple I/O strategies**: file path (default), memory-mapped files (`memmap2`), and in-memory byte slices — all feed into the same FFI parsing pipeline
 - **Metadata preservation**: SAS variable labels, format strings, and storage widths are persisted as Arrow field metadata, surviving round-trips through Parquet and Feather. See [TECHNICAL.md](TECHNICAL.md#column-metadata-in-arrow-and-parquet) for details.
