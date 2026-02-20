@@ -16,7 +16,7 @@ build = "build.rs"
 bindgen = "0.72"
 cc = "1.2"
 
-[dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libz-sys = "1.1"
 
 [target.'cfg(windows)'.dependencies]

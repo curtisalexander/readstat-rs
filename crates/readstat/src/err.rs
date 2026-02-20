@@ -133,6 +133,7 @@ pub enum ReadStatError {
     Io(#[from] std::io::Error),
 
     /// Path resolution error.
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("{0}")]
     PathAbs(#[from] path_abs::Error),
 
@@ -141,10 +142,12 @@ pub enum ReadStatError {
     SerdeJson(#[from] serde_json::Error),
 
     /// Rayon thread pool build error.
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("{0}")]
     Rayon(#[from] rayon::ThreadPoolBuildError),
 
     /// Progress bar template error.
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("{0}")]
     IndicatifTemplate(#[from] indicatif::style::TemplateError),
 

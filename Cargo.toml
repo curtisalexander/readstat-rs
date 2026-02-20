@@ -8,4 +8,5 @@ members = [
     # internal
     "crates/readstat-tests",
 ]
+exclude = ["crates/readstat-wasm"]
 resolver = "2"

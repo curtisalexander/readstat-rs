@@ -229,6 +229,7 @@ impl ReadStatMetadata {
     /// Memory mapping is safe as long as the file is not modified or truncated by
     /// another process while the map is active. This is the standard expectation
     /// for `.sas7bdat` files, which are read-only artifacts.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn read_metadata_from_mmap(
         &mut self,
         path: &Path,

@@ -30,14 +30,10 @@ tempfile = { version = "3", optional = true }
 
 chrono = { version = "0.4", features = ["serde"] }
 crossbeam = "0.8"
-indicatif = "0.18"
 lazy_static = "1.5"
 log = "0.4"
-memmap2 = "0.9"
 num-derive = "0.4"
 num-traits = "0.2"
-path_abs = "0.5"
-rayon = "1.11"
 regex = "1.12"
 readstat-sys = { path = "../readstat-sys", version = "0.3.0" }
 serde = { version = "1", features = ["derive"] }
@@ -64,6 +60,12 @@ optional = true
 [dependencies.futures]
 version = "0.3"
 optional = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+indicatif = "0.18"
+memmap2 = "0.9"
+path_abs = "0.5"
+rayon = "1.11"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

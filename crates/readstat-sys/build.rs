@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 fn main() {
     let target = env::var("TARGET").unwrap();
+    let is_emscripten = target.contains("emscripten");
 
     let project_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
@@ -68,19 +69,26 @@ fn main() {
         .include(&src)
         .warnings(false);
 
-    // Include iconv.h
-    if let Some(include) = env::var_os("DEP_ICONV_INCLUDE") {
-        cc.include(include);
+    // Include iconv.h — Emscripten provides its own
+    if !is_emscripten {
+        if let Some(include) = env::var_os("DEP_ICONV_INCLUDE") {
+            cc.include(include);
+        }
     }
 
-    // Include zlib.h
-    if let Some(include) = env::var_os("DEP_Z_INCLUDE") {
-        cc.include(include);
+    // Include zlib.h — Emscripten provides its own
+    if !is_emscripten {
+        if let Some(include) = env::var_os("DEP_Z_INCLUDE") {
+            cc.include(include);
+        }
     }
 
     // Linking
     // Note: zlib linking is handled by the libz-sys crate dependency
-    if target.contains("windows-msvc") {
+    if is_emscripten {
+        // Emscripten provides iconv and zlib — no extra link directives needed.
+        // emcc links them automatically.
+    } else if target.contains("windows-msvc") {
         // Ensure LIBCLANG_PATH is set so bindgen can find libclang.dll
         if env::var_os("LIBCLANG_PATH").is_none() {
             let default = PathBuf::from(r"C:\Program Files\LLVM\lib");
@@ -122,7 +130,7 @@ fn main() {
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
     // the resulting bindings.
-    let bindings = bindgen::Builder::default()
+    let mut builder = bindgen::Builder::default()
         // The input header we would like to generate bindings for
         .header("wrapper.h")
         // Expose all ReadStat public API functions and types
@@ -132,7 +140,19 @@ fn main() {
         .allowlist_type("xport_.*")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
+
+    if is_emscripten {
+        let emsdk = env::var("EMSDK").expect("EMSDK must be set for Emscripten builds");
+        builder = builder
+            .clang_arg(format!(
+                "--sysroot={emsdk}/upstream/emscripten/cache/sysroot"
+            ))
+            .clang_arg("-target")
+            .clang_arg("wasm32-unknown-emscripten");
+    }
+
+    let bindings = builder
         // Finish the builder and generate the bindings
         .generate()
         // Unwrap the Result and panic on failure

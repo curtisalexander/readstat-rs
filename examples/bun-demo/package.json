@@ -1,0 +1,8 @@
+{
+  "name": "readstat-wasm-bun-demo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "readstat-wasm": "file:../../crates/readstat-wasm/pkg"
+  }
+}

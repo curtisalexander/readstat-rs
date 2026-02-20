@@ -15,6 +15,7 @@ use arrow_array::{
     },
     ArrayRef, RecordBatch,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::{
@@ -216,6 +217,7 @@ pub struct ReadStatData {
     /// Shared atomic counter of total rows processed across all chunks.
     pub total_rows_processed: Option<Arc<AtomicUsize>>,
     /// Optional progress bar for visual feedback.
+    #[cfg(not(target_arch = "wasm32"))]
     pub pb: Option<ProgressBar>,
     /// Whether progress display is disabled.
     pub no_progress: bool,
@@ -256,6 +258,7 @@ impl ReadStatData {
             total_rows_to_process: 0,
             total_rows_processed: None,
             // progress
+            #[cfg(not(target_arch = "wasm32"))]
             pb: None,
             no_progress: false,
             // errors
@@ -325,6 +328,7 @@ impl ReadStatData {
     ///
     /// Memory mapping is safe as long as the file is not modified or truncated by
     /// another process while the map is active.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn read_data_from_mmap(&mut self, path: &std::path::Path) -> Result<(), ReadStatError> {
         let file = std::fs::File::open(path)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
@@ -338,11 +342,13 @@ impl ReadStatData {
         let ppath = rsp.cstring_path.as_ptr();
 
         // Update progress bar with rows processed for this chunk
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(pb) = &self.pb {
             // Increment by the number of rows we're about to process in this chunk
             pb.inc(self.chunk_rows_to_process as u64);
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -515,6 +521,7 @@ impl ReadStatData {
     }
 
     /// Attaches a progress bar for visual feedback during parsing.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn set_progress_bar(self, pb: ProgressBar) -> Self {
         Self {
             pb: Some(pb),
