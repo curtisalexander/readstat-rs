@@ -101,6 +101,56 @@ function _callWasmStringFn(wasmFn, bytes) {
 }
 
 /**
+ * Call a WASM function that accepts (ptr, len, out_len_ptr) and returns a
+ * binary byte buffer. Handles memory allocation, copying input bytes, reading
+ * the (ptr, len) result pair, and freeing via free_binary.
+ */
+function _callWasmBinaryFn(wasmFn, bytes) {
+  if (!instance) {
+    throw new Error("WASM module not initialised — call init() first");
+  }
+
+  const { malloc, free_binary } = instance.exports;
+
+  // Allocate wasm memory and copy the input bytes.
+  const inputPtr = malloc(bytes.length);
+  if (inputPtr === 0) throw new Error("malloc failed");
+
+  new Uint8Array(memory.buffer).set(bytes, inputPtr);
+
+  // Allocate space for the out_len parameter (4 bytes for a u32-sized usize on wasm32).
+  const outLenPtr = malloc(4);
+  if (outLenPtr === 0) {
+    instance.exports.free(inputPtr);
+    throw new Error("malloc failed for out_len");
+  }
+
+  // Call the wasm function.
+  const resultPtr = wasmFn(inputPtr, bytes.length, outLenPtr);
+
+  // Free the input buffer.
+  instance.exports.free(inputPtr);
+
+  if (resultPtr === 0) {
+    instance.exports.free(outLenPtr);
+    throw new Error("WASM function returned null — parsing failed");
+  }
+
+  // Read the output length.
+  const view = new DataView(memory.buffer);
+  const resultLen = view.getUint32(outLenPtr, true);
+  instance.exports.free(outLenPtr);
+
+  // Copy the result bytes to a new Uint8Array (so we own the data after freeing).
+  const result = new Uint8Array(memory.buffer, resultPtr, resultLen).slice();
+
+  // Free the wasm-side buffer.
+  free_binary(resultPtr, resultLen);
+
+  return result;
+}
+
+/**
  * Initialise the WASM module. Must be called (and awaited) before
  * calling any other exported functions.
  */
@@ -159,6 +209,26 @@ export function read_data(bytes) {
  */
 export function read_data_ndjson(bytes) {
   return _callWasmStringFn(instance.exports.read_data_ndjson, bytes);
+}
+
+/**
+ * Read data from a `.sas7bdat` file and return it as Parquet bytes.
+ *
+ * @param {Uint8Array} bytes - The raw file contents.
+ * @returns {Uint8Array} Parquet file bytes (Snappy-compressed).
+ */
+export function read_data_parquet(bytes) {
+  return _callWasmBinaryFn(instance.exports.read_data_parquet, bytes);
+}
+
+/**
+ * Read data from a `.sas7bdat` file and return it as Feather (Arrow IPC) bytes.
+ *
+ * @param {Uint8Array} bytes - The raw file contents.
+ * @returns {Uint8Array} Feather file bytes.
+ */
+export function read_data_feather(bytes) {
+  return _callWasmBinaryFn(instance.exports.read_data_feather, bytes);
 }
 
 export default init;

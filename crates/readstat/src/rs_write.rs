@@ -719,6 +719,29 @@ pub fn write_batch_to_ndjson_bytes(batch: &arrow_array::RecordBatch) -> Result<V
     Ok(buf)
 }
 
+/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to Parquet bytes with Snappy compression.
+#[cfg(feature = "parquet")]
+pub fn write_batch_to_parquet_bytes(batch: &RecordBatch) -> Result<Vec<u8>, ReadStatError> {
+    let mut buf = Vec::new();
+    let props = WriterProperties::builder()
+        .set_compression(ParquetCompressionCodec::SNAPPY)
+        .build();
+    let mut writer = ParquetArrowWriter::try_new(&mut buf, batch.schema(), Some(props))?;
+    writer.write(batch)?;
+    writer.close()?;
+    Ok(buf)
+}
+
+/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to Feather (Arrow IPC) bytes.
+#[cfg(feature = "feather")]
+pub fn write_batch_to_feather_bytes(batch: &arrow_array::RecordBatch) -> Result<Vec<u8>, ReadStatError> {
+    let mut buf = Vec::new();
+    let mut writer = IpcFileWriter::try_new(&mut buf, &batch.schema())?;
+    writer.write(batch)?;
+    writer.finish()?;
+    Ok(buf)
+}
+
 /// Formats a number with comma thousands separators (e.g. 1081 -> "1,081").
 #[cfg(any(feature = "csv", feature = "feather", feature = "ndjson", feature = "parquet"))]
 fn format_with_commas(n: usize) -> String {

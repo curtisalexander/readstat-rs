@@ -6,6 +6,12 @@ fn main() {
     use std::fs;
     use std::path::PathBuf;
 
+    // Emscripten provides its own iconv — skip the Windows vendor build
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "emscripten" {
+        return;
+    }
+
     let project_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
     let root = project_dir.join("vendor").join("libiconv-win-build");

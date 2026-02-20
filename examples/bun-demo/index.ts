@@ -1,5 +1,11 @@
 import { readFileSync, writeFileSync } from "fs";
-import { init, read_metadata, read_data } from "readstat-wasm";
+import {
+  init,
+  read_metadata,
+  read_data,
+  read_data_parquet,
+  read_data_feather,
+} from "readstat-wasm";
 
 // Initialize the WASM module
 await init();
@@ -56,3 +62,19 @@ const outPath = new URL("cars.csv", import.meta.url);
 writeFileSync(outPath, csv);
 console.log();
 console.log(`Wrote ${metadata.row_count} rows to cars.csv`);
+
+// Write Parquet file
+const parquetBytes = read_data_parquet(input);
+const parquetPath = new URL("cars.parquet", import.meta.url);
+writeFileSync(parquetPath, parquetBytes);
+console.log(
+  `Wrote ${metadata.row_count} rows to cars.parquet (${parquetBytes.length} bytes)`,
+);
+
+// Write Feather file
+const featherBytes = read_data_feather(input);
+const featherPath = new URL("cars.feather", import.meta.url);
+writeFileSync(featherPath, featherBytes);
+console.log(
+  `Wrote ${metadata.row_count} rows to cars.feather (${featherBytes.length} bytes)`,
+);

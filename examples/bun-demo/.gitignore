@@ -1,2 +1,4 @@
 *.csv
 *.ndjson
+*.parquet
+*.feather
