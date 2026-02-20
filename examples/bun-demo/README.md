@@ -6,28 +6,25 @@ Demonstrates reading SAS `.sas7bdat` file metadata from JavaScript using the `re
 
 - [Bun](https://bun.sh/) runtime
 - [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html) (for building the WASM package)
-- [wasm-bindgen-cli](https://rustwasm.github.io/wasm-bindgen/reference/cli.html) (`cargo install wasm-bindgen-cli`)
+- Rust with the `wasm32-unknown-emscripten` target (`rustup target add wasm32-unknown-emscripten`)
 
 ## Build the WASM package
 
 ```bash
-# From the repository root
+# Ensure the Emscripten SDK is activated
+source /path/to/emsdk/emsdk_env.sh
+
+# Build the zlib port (first time only)
+embuilder build zlib
+
+# From the readstat-wasm crate directory
 cd crates/readstat-wasm
 
 # Build with Emscripten target
 cargo build --target wasm32-unknown-emscripten --release
 
-# Generate JS/TS bindings
-wasm-bindgen \
-  ../../target/wasm32-unknown-emscripten/release/readstat_wasm.wasm \
-  --out-dir pkg \
-  --target web
-```
-
-Alternatively, if `wasm-pack` works with C FFI:
-
-```bash
-wasm-pack build --target web
+# Copy the wasm binary into the pkg directory
+cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
 ```
 
 ## Run the demo
@@ -43,13 +40,17 @@ bun run index.ts
 ```
 === SAS7BDAT Metadata ===
 Table name:    CARS
-File encoding: UTF-8
-Row count:     428
-Variable count:15
-...
+File encoding: WINDOWS-1252
+Row count:     1081
+Variable count:13
+Compression:   None
+Endianness:    Little
+Created:       2008-09-30 12:55:01
+Modified:      2008-09-30 12:55:01
 
 === Variables ===
-  [0] Make (String, $40)
-  [1] Model (String, $40)
+  [0] Brand (String, )
+  [1] Model (String, )
+  [2] Minivan (Double, )
   ...
 ```

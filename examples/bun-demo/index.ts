@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import init, { read_metadata } from "readstat-wasm";
+import { init, read_metadata } from "readstat-wasm";
 
 // Initialize the WASM module
 await init();

@@ -1,25 +1,61 @@
 use readstat::ReadStatMetadata;
-use wasm_bindgen::prelude::*;
+use std::ffi::CString;
+use std::os::raw::c_char;
+use std::slice;
 
-/// Read metadata from a `.sas7bdat` file provided as a byte slice.
+/// Read metadata from a `.sas7bdat` file provided as a byte buffer.
 ///
-/// Returns a JSON string containing file-level and variable-level metadata.
-#[wasm_bindgen]
-pub fn read_metadata(bytes: &[u8]) -> Result<String, JsValue> {
-    let mut md = ReadStatMetadata::new();
-    md.read_metadata_from_bytes(bytes, false)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    serde_json::to_string(&md).map_err(|e| JsValue::from_str(&e.to_string()))
+/// # Safety
+///
+/// `ptr` must point to a valid byte buffer of at least `len` bytes.
+/// Returns a pointer to a null-terminated JSON string allocated on the heap.
+/// The caller must free it by passing the pointer to [`free_string`].
+/// Returns null on error.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_metadata(ptr: *const u8, len: usize) -> *mut c_char {
+    unsafe { read_metadata_inner(ptr, len, false) }
 }
 
-/// Read metadata from a `.sas7bdat` file, skipping row count for speed.
+/// Read metadata, skipping the full row count for speed.
 ///
-/// Returns a JSON string containing file-level and variable-level metadata.
-/// The `row_count` field will not reflect the true row count.
-#[wasm_bindgen]
-pub fn read_metadata_fast(bytes: &[u8]) -> Result<String, JsValue> {
+/// # Safety
+///
+/// Same contract as [`read_metadata`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_metadata_fast(ptr: *const u8, len: usize) -> *mut c_char {
+    unsafe { read_metadata_inner(ptr, len, true) }
+}
+
+/// Free a string previously returned by [`read_metadata`] or [`read_metadata_fast`].
+///
+/// # Safety
+///
+/// `ptr` must be a pointer returned by one of the `read_metadata*` functions,
+/// or null (which is a no-op).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
+    if !ptr.is_null() {
+        drop(unsafe { CString::from_raw(ptr) });
+    }
+}
+
+unsafe fn read_metadata_inner(ptr: *const u8, len: usize, skip_row_count: bool) -> *mut c_char {
+    if ptr.is_null() || len == 0 {
+        return std::ptr::null_mut();
+    }
+
+    let bytes = unsafe { slice::from_raw_parts(ptr, len) };
+
     let mut md = ReadStatMetadata::new();
-    md.read_metadata_from_bytes(bytes, true)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    serde_json::to_string(&md).map_err(|e| JsValue::from_str(&e.to_string()))
+    if md.read_metadata_from_bytes(bytes, skip_row_count).is_err() {
+        return std::ptr::null_mut();
+    }
+
+    match serde_json::to_string(&md) {
+        Ok(json) => match CString::new(json) {
+            Ok(c) => c.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
 }

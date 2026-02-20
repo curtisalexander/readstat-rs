@@ -149,7 +149,11 @@ fn main() {
                 "--sysroot={emsdk}/upstream/emscripten/cache/sysroot"
             ))
             .clang_arg("-target")
-            .clang_arg("wasm32-unknown-emscripten");
+            .clang_arg("wasm32-unknown-emscripten")
+            // The wasm32 backend defaults to hidden visibility, which causes
+            // bindgen/libclang to silently omit all function declarations.
+            // See: https://github.com/rust-lang/rust-bindgen/issues/1941
+            .clang_arg("-fvisibility=default");
     }
 
     let bindings = builder

@@ -10,7 +10,13 @@
 .vscode/
 # target
 /target/
+/crates/readstat-wasm/target/
+# wasm build artifacts
+/crates/readstat-wasm/pkg/*.wasm
 # cargo
 Cargo.lock
+# node
+node_modules/
+bun.lockb
 # claude
 .claude/
