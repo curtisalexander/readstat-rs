@@ -15,10 +15,15 @@ INPUT="$REPO_ROOT/crates/readstat-tests/tests/data/cars.sas7bdat"
 READSTAT="${1:-readstat}"
 
 if ! command -v "$READSTAT" &>/dev/null; then
+  # On Windows the binary has a .exe extension
+  EXT=""
+  if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
+    EXT=".exe"
+  fi
   # Try the default cargo build location
-  READSTAT="$REPO_ROOT/target/debug/readstat"
+  READSTAT="$REPO_ROOT/target/debug/readstat${EXT}"
   if [[ ! -x "$READSTAT" ]]; then
-    READSTAT="$REPO_ROOT/target/release/readstat"
+    READSTAT="$REPO_ROOT/target/release/readstat${EXT}"
   fi
   if [[ ! -x "$READSTAT" ]]; then
     echo "Error: readstat binary not found."

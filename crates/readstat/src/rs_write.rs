@@ -364,10 +364,7 @@ impl ReadStatWriter {
                         self.write_header_to_stdout(d)?;
                         self.write_data_to_stdout(d)
                     }
-                } else if self.wrote_header {
-                    self.write_data_to_csv(d, wc)
                 } else {
-                    self.write_header_to_csv(d, wc)?;
                     self.write_data_to_csv(d, wc)
                 }
             }
@@ -402,10 +399,12 @@ impl ReadStatWriter {
             // write
             if let Some(ReadStatWriterFormat::Csv(f)) = &mut self.wtr {
                 if let Some(batch) = &d.batch {
+                    let include_header = !self.wrote_header;
                     let mut writer = CsvWriterBuilder::new()
-                        .with_header(false)
+                        .with_header(include_header)
                         .build(f);
                     writer.write(batch)?;
+                    self.wrote_header = true;
                 };
 
                 self.wrote_start = true;
@@ -575,29 +574,6 @@ impl ReadStatWriter {
         }
     }
 
-    #[cfg(feature = "csv")]
-    fn write_header_to_csv(
-        &mut self,
-        d: &ReadStatData,
-        wc: &WriteConfig,
-    ) -> Result<(), ReadStatError> {
-        if let Some(p) = &wc.out_path {
-            let mut f = std::fs::File::create(p)?;
-
-            let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
-
-            use std::io::Write;
-            writeln!(f, "{}", vars.join(","))?;
-
-            self.wrote_header = true;
-
-            Ok(())
-        } else {
-            Err(ReadStatError::Other(
-                "Error writing csv as output path is set to None".to_string(),
-            ))
-        }
-    }
 
     #[cfg(feature = "csv")]
     fn write_header_to_stdout(

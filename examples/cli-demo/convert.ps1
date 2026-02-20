@@ -17,9 +17,9 @@ $Input_ = Join-Path $RepoRoot "crates/readstat-tests/tests/data/cars.sas7bdat"
 # Allow the user to pass a custom path to the readstat binary
 if (-not (Get-Command $ReadStat -ErrorAction SilentlyContinue)) {
     # Try the default cargo build locations
-    $ReadStat = Join-Path $RepoRoot "target/debug/readstat"
+    $ReadStat = Join-Path $RepoRoot "target/debug/readstat.exe"
     if (-not (Test-Path $ReadStat)) {
-        $ReadStat = Join-Path $RepoRoot "target/release/readstat"
+        $ReadStat = Join-Path $RepoRoot "target/release/readstat.exe"
     }
     if (-not (Test-Path $ReadStat)) {
         Write-Error "Error: readstat binary not found.`nBuild it first:  cargo build -p readstat-cli"
