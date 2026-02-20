@@ -1,6 +1,6 @@
 # readstat-wasm Bun Demo
 
-Demonstrates reading SAS `.sas7bdat` file metadata from JavaScript using the `readstat-wasm` package compiled to WebAssembly via Emscripten.
+Demonstrates reading SAS `.sas7bdat` file metadata and data from JavaScript using the `readstat-wasm` package compiled to WebAssembly via Emscripten. The demo parses a `.sas7bdat` file entirely in-memory via WASM and converts it to CSV.
 
 ## Quick start
 
@@ -198,19 +198,34 @@ Modified:      2008-09-30 12:55:01
   [10] SUV (Double, )
   [11] AWD (Double, )
   [12] Hybrid (Double, )
+
+=== CSV Data (preview) ===
+Brand,Model,Minivan,Wagon,Pickup,Automatic,EngineSize,Cylinders,CityMPG,HwyMPG,SUV,AWD,Hybrid
+TOYOTA,Prius,0.0,0.0,0.0,1.0,1.5,4.0,60.0,51.0,0.0,0.0,1.0
+HONDA,Civic Hybrid,0.0,0.0,0.0,1.0,1.3,4.0,48.0,47.0,0.0,0.0,1.0
+HONDA,Civic Hybrid,0.0,0.0,0.0,1.0,1.3,4.0,47.0,48.0,0.0,0.0,1.0
+HONDA,Civic Hybrid,0.0,0.0,0.0,0.0,1.3,4.0,46.0,51.0,0.0,0.0,1.0
+HONDA,Civic Hybrid,0.0,0.0,0.0,0.0,1.3,4.0,45.0,51.0,0.0,0.0,1.0
+... (1081 total data rows)
+
+Wrote 1081 rows to cars.csv
 ```
 
 ## How it works
 
 The `readstat-wasm` crate compiles the ReadStat C library and the Rust `readstat` parsing library to WebAssembly using the `wasm32-unknown-emscripten` target. Emscripten is required because the underlying ReadStat C code needs a C standard library (libc, iconv) — which Emscripten provides for wasm. (Note: zlib is only needed for SPSS zsav support, which is not included in the current wasm build.)
 
-The crate exports three C-compatible functions:
+The crate exports five C-compatible functions:
 
 | Export | Signature | Purpose |
 |--------|-----------|---------|
-| `read_metadata` | `(ptr, len) -> *char` | Parse metadata from a byte buffer |
+| `read_metadata` | `(ptr, len) -> *char` | Parse metadata as JSON from a byte buffer |
 | `read_metadata_fast` | `(ptr, len) -> *char` | Same, but skips full row count |
+| `read_data` | `(ptr, len) -> *char` | Parse data and return as CSV string |
+| `read_data_ndjson` | `(ptr, len) -> *char` | Parse data and return as NDJSON string |
 | `free_string` | `(ptr)` | Free a string returned by the above |
+
+The data functions perform a two-pass parse over the same byte buffer: first to extract metadata (schema, row count), then to read row values into an Arrow `RecordBatch`, which is serialized to CSV or NDJSON in memory.
 
 The JS wrapper in `pkg/readstat_wasm.js` handles:
 - Loading the `.wasm` module
