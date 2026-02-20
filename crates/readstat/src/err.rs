@@ -1,6 +1,6 @@
 //! Error types for the readstat crate.
 //!
-//! [`ReadStatCError`] maps the 39 error codes from the ReadStat C library to Rust
+//! [`ReadStatCError`] maps the 41 error codes from the ReadStat C library to Rust
 //! enum variants. [`ReadStatError`] is the main error type, wrapping C library errors
 //! alongside Arrow, Parquet, I/O, and other failure modes.
 
@@ -111,17 +111,6 @@ pub enum ReadStatError {
     #[error("Unknown C error code: {0}")]
     UnknownCError(i32),
 
-    /// Variable index not found in the metadata map.
-    #[error("Variable index {index} not found")]
-    VarIndexNotFound {
-        /// The variable index that was not found.
-        index: i32,
-    },
-
-    /// Failed to parse a floating-point value from its string representation.
-    #[error("Failed to parse numeric value: {0}")]
-    NumericParse(String),
-
     /// Arithmetic overflow during SAS-to-Unix epoch date/time conversion.
     #[error("Date arithmetic overflow")]
     DateOverflow,
@@ -135,6 +124,7 @@ pub enum ReadStatError {
     Arrow(#[from] arrow::error::ArrowError),
 
     /// Error from the Parquet library.
+    #[cfg(feature = "parquet")]
     #[error("{0}")]
     Parquet(#[from] parquet::errors::ParquetError),
 
@@ -143,6 +133,7 @@ pub enum ReadStatError {
     Io(#[from] std::io::Error),
 
     /// Path resolution error.
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("{0}")]
     PathAbs(#[from] path_abs::Error),
 
@@ -151,10 +142,12 @@ pub enum ReadStatError {
     SerdeJson(#[from] serde_json::Error),
 
     /// Rayon thread pool build error.
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("{0}")]
     Rayon(#[from] rayon::ThreadPoolBuildError),
 
     /// Progress bar template error.
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("{0}")]
     IndicatifTemplate(#[from] indicatif::style::TemplateError),
 
@@ -247,14 +240,8 @@ mod tests {
         let err = ReadStatError::Other("test error".to_string());
         assert_eq!(format!("{err}"), "test error");
 
-        let err = ReadStatError::VarIndexNotFound { index: 42 };
-        assert_eq!(format!("{err}"), "Variable index 42 not found");
-
         let err = ReadStatError::DateOverflow;
         assert_eq!(format!("{err}"), "Date arithmetic overflow");
-
-        let err = ReadStatError::NumericParse("bad_num".to_string());
-        assert_eq!(format!("{err}"), "Failed to parse numeric value: bad_num");
 
         let err = ReadStatError::UnknownCError(99);
         assert_eq!(format!("{err}"), "Unknown C error code: 99");

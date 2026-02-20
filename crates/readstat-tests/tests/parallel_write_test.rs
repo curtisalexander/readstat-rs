@@ -2,15 +2,12 @@ use std::fs;
 use std::path::PathBuf;
 use arrow_array::{Float64Array, Array, RecordBatch};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use path_abs::PathAbs;
-use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter};
+use readstat::{ReadStatData, ReadStatMetadata, ReadStatWriter};
 
 mod common;
 
 fn setup_test_output(filename: &str) -> PathBuf {
-    let test_dir = PathAbs::new(env!("CARGO_MANIFEST_DIR"))
-        .unwrap()
-        .as_path()
+    let test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("output");
 
@@ -38,16 +35,6 @@ fn test_parallel_write_parquet_basic() {
     // Setup output path
     let output_path = setup_test_output("parallel_write_test.parquet");
     cleanup_test_output(&output_path);
-
-    let _rsp_out = ReadStatPath::new(
-        rsp_in.path.clone(),
-        Some(output_path.clone()),
-        Some(readstat::OutFormat::parquet),
-        true,
-        false,
-        None,
-        None,
-    ).unwrap();
 
     // Write data using parallel writes by simulating the batch write
     // We'll read data in chunks and write them
@@ -213,16 +200,6 @@ fn test_parallel_write_parquet_with_compression() {
     // Setup output path
     let output_path = setup_test_output("parallel_write_compressed.parquet");
     cleanup_test_output(&output_path);
-
-    let _rsp_out = ReadStatPath::new(
-        rsp_in.path.clone(),
-        Some(output_path.clone()),
-        Some(readstat::OutFormat::parquet),
-        true,
-        false,
-        Some(readstat::ParquetCompression::Snappy),
-        None,
-    ).unwrap();
 
     // Read data
     let mut d = ReadStatData::new()

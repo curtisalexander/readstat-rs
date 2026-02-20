@@ -2,9 +2,11 @@
 members = [
     "crates/iconv-sys",
     "crates/readstat",
+    "crates/readstat-cli",
     "crates/readstat-sys",
 
     # internal
     "crates/readstat-tests",
 ]
+exclude = ["crates/readstat-wasm"]
 resolver = "2"

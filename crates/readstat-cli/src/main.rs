@@ -1,11 +1,13 @@
 extern crate readstat_sys;
 
 use clap::Parser;
-use readstat::ReadStatCli;
+
+mod cli;
+mod run;
 
 fn main() {
-    let args = ReadStatCli::parse();
-    if let Err(e) = readstat::run(args) {
+    let args = cli::ReadStatCli::parse();
+    if let Err(e) = run::run(args) {
         eprintln!("Stopping with error: {}", e);
         std::process::exit(2);
     }

@@ -115,11 +115,20 @@ impl ReadStatMetadata {
                     },
                 };
 
-                // Add column label as field metadata if not empty
+                // Build field metadata
                 let mut field = Field::new(&vm.var_name, var_dt, true);
+                let mut metadata = HashMap::new();
                 if !vm.var_label.is_empty() {
-                    let mut metadata = HashMap::new();
                     metadata.insert("label".to_string(), vm.var_label.clone());
+                }
+                if !vm.var_format.is_empty() {
+                    metadata.insert("sas_format".to_string(), vm.var_format.clone());
+                }
+                metadata.insert("storage_width".to_string(), vm.storage_width.to_string());
+                if vm.display_width != 0 {
+                    metadata.insert("display_width".to_string(), vm.display_width.to_string());
+                }
+                if !metadata.is_empty() {
                     field = field.with_metadata(metadata);
                 }
                 field
@@ -220,6 +229,7 @@ impl ReadStatMetadata {
     /// Memory mapping is safe as long as the file is not modified or truncated by
     /// another process while the map is active. This is the standard expectation
     /// for `.sas7bdat` files, which are read-only artifacts.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn read_metadata_from_mmap(
         &mut self,
         path: &Path,
@@ -304,17 +314,32 @@ impl ReadStatMetadata {
 
     /// Returns a new `ReadStatMetadata` with only the selected variables,
     /// re-keyed with contiguous indices starting from 0.
+    ///
+    /// Constructs the result directly instead of cloning the full struct,
+    /// avoiding a deep clone of unselected variables and the original schema.
     pub fn filter_to_selected_columns(&self, mapping: &BTreeMap<i32, i32>) -> Self {
-        let mut new_vars = BTreeMap::new();
-        for (&orig_index, &new_index) in mapping {
-            if let Some(vm) = self.vars.get(&orig_index) {
-                new_vars.insert(new_index, vm.clone());
-            }
-        }
+        let new_vars: BTreeMap<i32, ReadStatVarMetadata> = mapping
+            .iter()
+            .filter_map(|(&orig_idx, &new_idx)| {
+                self.vars.get(&orig_idx).map(|vm| (new_idx, vm.clone()))
+            })
+            .collect();
 
-        let mut filtered = self.clone();
-        filtered.vars = new_vars;
-        filtered.var_count = mapping.len() as c_int;
+        let mut filtered = Self {
+            row_count: self.row_count,
+            var_count: mapping.len() as c_int,
+            table_name: self.table_name.clone(),
+            file_label: self.file_label.clone(),
+            file_encoding: self.file_encoding.clone(),
+            version: self.version,
+            is64bit: self.is64bit,
+            creation_time: self.creation_time.clone(),
+            modified_time: self.modified_time.clone(),
+            compression: self.compression.clone(),
+            endianness: self.endianness.clone(),
+            vars: new_vars,
+            schema: Schema::empty(),
+        };
         filtered.schema = filtered.initialize_schema();
         filtered
     }
@@ -359,6 +384,11 @@ pub struct ReadStatVarMetadata {
     pub var_format: String,
     /// Semantic format class derived from the format string, if date/time-related.
     pub var_format_class: Option<ReadStatVarFormatClass>,
+    /// Number of bytes used to store the variable value.
+    /// Always 8 for SAS numeric variables; variable for strings.
+    pub storage_width: usize,
+    /// Display width hint from the file. 0 for sas7bdat; populated for XPORT/SPSS.
+    pub display_width: i32,
 }
 
 impl ReadStatVarMetadata {
@@ -370,6 +400,8 @@ impl ReadStatVarMetadata {
         var_label: String,
         var_format: String,
         var_format_class: Option<ReadStatVarFormatClass>,
+        storage_width: usize,
+        display_width: i32,
     ) -> Self {
         Self {
             var_name,
@@ -378,6 +410,8 @@ impl ReadStatVarMetadata {
             var_label,
             var_format,
             var_format_class,
+            storage_width,
+            display_width,
         }
     }
 }
@@ -400,6 +434,8 @@ mod tests {
                     String::new(),
                     "BEST12".to_string(),
                     None,
+                    8,
+                    0,
                 ),
             );
         }
@@ -499,6 +535,8 @@ mod tests {
             String::new(),
             "$30".into(),
             None,
+            30,
+            0,
         ));
         md.var_count = 1;
         let schema = md.initialize_schema();
@@ -515,6 +553,8 @@ mod tests {
             String::new(),
             "BEST12".into(),
             None,
+            8,
+            0,
         ));
         md.var_count = 1;
         let schema = md.initialize_schema();
@@ -531,6 +571,8 @@ mod tests {
             String::new(),
             "DATE9".into(),
             Some(ReadStatVarFormatClass::Date),
+            8,
+            0,
         ));
         md.var_count = 1;
         let schema = md.initialize_schema();
@@ -547,6 +589,8 @@ mod tests {
             String::new(),
             "DATETIME22".into(),
             Some(ReadStatVarFormatClass::DateTime),
+            8,
+            0,
         ));
         md.var_count = 1;
         let schema = md.initialize_schema();
@@ -566,6 +610,8 @@ mod tests {
             String::new(),
             "TIME8".into(),
             Some(ReadStatVarFormatClass::Time),
+            8,
+            0,
         ));
         md.var_count = 1;
         let schema = md.initialize_schema();
@@ -585,6 +631,8 @@ mod tests {
             String::new(),
             String::new(),
             None,
+            4,
+            0,
         ));
         md.var_count = 1;
         let schema = md.initialize_schema();
@@ -601,6 +649,8 @@ mod tests {
             "My Label".into(),
             "BEST12".into(),
             None,
+            8,
+            0,
         ));
         md.var_count = 1;
         md.file_label = "My Table".into();
@@ -616,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_no_labels_no_metadata() {
+    fn schema_no_labels_has_format_and_width_metadata() {
         let mut md = ReadStatMetadata::new();
         md.vars.insert(0, ReadStatVarMetadata::new(
             "col".into(),
@@ -625,11 +675,17 @@ mod tests {
             String::new(),
             "BEST12".into(),
             None,
+            8,
+            0,
         ));
         md.var_count = 1;
         let schema = md.initialize_schema();
 
-        assert!(schema.fields()[0].metadata().is_empty());
+        let field_meta = schema.fields()[0].metadata();
+        assert!(!field_meta.contains_key("label"));
+        assert_eq!(field_meta.get("sas_format").unwrap(), "BEST12");
+        assert_eq!(field_meta.get("storage_width").unwrap(), "8");
+        assert!(!field_meta.contains_key("display_width"));
         assert!(schema.metadata().is_empty());
     }
 

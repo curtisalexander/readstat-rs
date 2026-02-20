@@ -1,21 +1,23 @@
 //! Data reading and Arrow [`RecordBatch`](arrow_array::RecordBatch) conversion.
 //!
 //! [`ReadStatData`] coordinates the FFI parsing of row values from a `.sas7bdat` file,
-//! accumulating them column-by-column as `Vec<Vec<ReadStatVar>>`, then converting to
-//! an Arrow `RecordBatch` for downstream writing. Supports streaming chunks with
-//! configurable row offsets and progress tracking.
+//! accumulating them directly into typed Arrow builders via the `handle_value`
+//! callback, then finishing them into an Arrow `RecordBatch` for downstream writing.
+//! Supports streaming chunks with configurable row offsets and progress tracking.
 
 use arrow::datatypes::Schema;
 use arrow_array::{
-    ArrayRef, Date32Array, Float32Array, Float64Array, Int16Array, Int32Array,
-    Int8Array, RecordBatch, StringArray, Time32SecondArray, Time64MicrosecondArray,
-    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
-    TimestampSecondArray,
+    builder::{
+        Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
+        StringBuilder, Time32SecondBuilder, Time64MicrosecondBuilder,
+        TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
+        TimestampNanosecondBuilder, TimestampSecondBuilder,
+    },
+    ArrayRef, RecordBatch,
 };
-use colored::Colorize;
+#[cfg(not(target_arch = "wasm32"))]
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use path_abs::PathInfo;
 use std::{
     collections::BTreeMap,
     ffi::CString,
@@ -30,23 +32,176 @@ use crate::{
     rs_metadata::{ReadStatMetadata, ReadStatVarMetadata},
     rs_parser::ReadStatParser,
     rs_path::ReadStatPath,
-    rs_var::ReadStatVar,
+    rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
+
+/// A typed Arrow array builder for a single column.
+///
+/// Each variant wraps the corresponding Arrow builder, pre-sized with capacity
+/// hints from the metadata (row count, string `storage_width`). Values are
+/// appended directly during FFI callbacks, eliminating intermediate allocations.
+pub enum ColumnBuilder {
+    /// UTF-8 string column.
+    Str(StringBuilder),
+    /// 16-bit signed integer column (covers both SAS Int8 and Int16).
+    Int16(Int16Builder),
+    /// 32-bit signed integer column.
+    Int32(Int32Builder),
+    /// 32-bit floating point column.
+    Float32(Float32Builder),
+    /// 64-bit floating point column.
+    Float64(Float64Builder),
+    /// Date column (days since Unix epoch).
+    Date32(Date32Builder),
+    /// Timestamp with second precision.
+    TimestampSecond(TimestampSecondBuilder),
+    /// Timestamp with millisecond precision.
+    TimestampMillisecond(TimestampMillisecondBuilder),
+    /// Timestamp with microsecond precision.
+    TimestampMicrosecond(TimestampMicrosecondBuilder),
+    /// Timestamp with nanosecond precision.
+    TimestampNanosecond(TimestampNanosecondBuilder),
+    /// Time of day with second precision.
+    Time32Second(Time32SecondBuilder),
+    /// Time of day with microsecond precision.
+    Time64Microsecond(Time64MicrosecondBuilder),
+}
+
+impl ColumnBuilder {
+    /// Returns a mutable reference to the inner [`StringBuilder`].
+    ///
+    /// # Panics
+    /// Panics if `self` is not `ColumnBuilder::Str`.
+    pub(crate) fn as_string_mut(&mut self) -> &mut StringBuilder {
+        match self {
+            ColumnBuilder::Str(b) => b,
+            _ => panic!("ColumnBuilder::as_string_mut called on non-string builder"),
+        }
+    }
+
+    /// Appends a null value, regardless of the underlying builder type.
+    pub(crate) fn append_null(&mut self) {
+        match self {
+            ColumnBuilder::Str(b) => b.append_null(),
+            ColumnBuilder::Int16(b) => b.append_null(),
+            ColumnBuilder::Int32(b) => b.append_null(),
+            ColumnBuilder::Float32(b) => b.append_null(),
+            ColumnBuilder::Float64(b) => b.append_null(),
+            ColumnBuilder::Date32(b) => b.append_null(),
+            ColumnBuilder::TimestampSecond(b) => b.append_null(),
+            ColumnBuilder::TimestampMillisecond(b) => b.append_null(),
+            ColumnBuilder::TimestampMicrosecond(b) => b.append_null(),
+            ColumnBuilder::TimestampNanosecond(b) => b.append_null(),
+            ColumnBuilder::Time32Second(b) => b.append_null(),
+            ColumnBuilder::Time64Microsecond(b) => b.append_null(),
+        }
+    }
+
+    /// Finishes the builder and returns the completed Arrow array.
+    pub(crate) fn finish(&mut self) -> ArrayRef {
+        match self {
+            ColumnBuilder::Str(b) => Arc::new(b.finish()),
+            ColumnBuilder::Int16(b) => Arc::new(b.finish()),
+            ColumnBuilder::Int32(b) => Arc::new(b.finish()),
+            ColumnBuilder::Float32(b) => Arc::new(b.finish()),
+            ColumnBuilder::Float64(b) => Arc::new(b.finish()),
+            ColumnBuilder::Date32(b) => Arc::new(b.finish()),
+            ColumnBuilder::TimestampSecond(b) => Arc::new(b.finish()),
+            ColumnBuilder::TimestampMillisecond(b) => Arc::new(b.finish()),
+            ColumnBuilder::TimestampMicrosecond(b) => Arc::new(b.finish()),
+            ColumnBuilder::TimestampNanosecond(b) => Arc::new(b.finish()),
+            ColumnBuilder::Time32Second(b) => Arc::new(b.finish()),
+            ColumnBuilder::Time64Microsecond(b) => Arc::new(b.finish()),
+        }
+    }
+
+    /// Creates a typed builder matching the variable's metadata.
+    ///
+    /// Uses `var_type`, `var_type_class`, and `var_format_class` to select the
+    /// correct builder variant, and pre-sizes it with `capacity` rows.
+    /// For string columns, `storage_width` provides a byte-level capacity hint.
+    fn from_metadata(vm: &ReadStatVarMetadata, capacity: usize) -> Self {
+        match vm.var_type_class {
+            ReadStatVarTypeClass::String => {
+                ColumnBuilder::Str(StringBuilder::with_capacity(
+                    capacity,
+                    capacity * vm.storage_width,
+                ))
+            }
+            ReadStatVarTypeClass::Numeric => {
+                match vm.var_format_class {
+                    Some(ReadStatVarFormatClass::Date) => {
+                        ColumnBuilder::Date32(Date32Builder::with_capacity(capacity))
+                    }
+                    Some(ReadStatVarFormatClass::DateTime) => {
+                        ColumnBuilder::TimestampSecond(
+                            TimestampSecondBuilder::with_capacity(capacity),
+                        )
+                    }
+                    Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
+                        ColumnBuilder::TimestampMillisecond(
+                            TimestampMillisecondBuilder::with_capacity(capacity),
+                        )
+                    }
+                    Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
+                        ColumnBuilder::TimestampMicrosecond(
+                            TimestampMicrosecondBuilder::with_capacity(capacity),
+                        )
+                    }
+                    Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
+                        ColumnBuilder::TimestampNanosecond(
+                            TimestampNanosecondBuilder::with_capacity(capacity),
+                        )
+                    }
+                    Some(ReadStatVarFormatClass::Time) => {
+                        ColumnBuilder::Time32Second(
+                            Time32SecondBuilder::with_capacity(capacity),
+                        )
+                    }
+                    Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
+                        ColumnBuilder::Time64Microsecond(
+                            Time64MicrosecondBuilder::with_capacity(capacity),
+                        )
+                    }
+                    None => {
+                        // Plain numeric — dispatch by storage type
+                        match vm.var_type {
+                            ReadStatVarType::Int8 | ReadStatVarType::Int16 => {
+                                ColumnBuilder::Int16(Int16Builder::with_capacity(capacity))
+                            }
+                            ReadStatVarType::Int32 => {
+                                ColumnBuilder::Int32(Int32Builder::with_capacity(capacity))
+                            }
+                            ReadStatVarType::Float => {
+                                ColumnBuilder::Float32(Float32Builder::with_capacity(capacity))
+                            }
+                            _ => {
+                                ColumnBuilder::Float64(Float64Builder::with_capacity(capacity))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// Holds parsed row data from a `.sas7bdat` file and converts it to Arrow format.
 ///
-/// Each instance processes one streaming chunk of rows. Data accumulates column-by-column
-/// in [`cols`](ReadStatData::cols) via the `handle_value`
-/// callback, then is converted to an Arrow [`RecordBatch`] via `read_data`.
+/// Each instance processes one streaming chunk of rows. Values are appended
+/// directly into typed Arrow `ColumnBuilder`s during the `handle_value`
+/// callback, then finished into an Arrow [`RecordBatch`] via `cols_to_batch`.
 pub struct ReadStatData {
     /// Number of variables (columns) in the dataset.
     pub var_count: i32,
     /// Per-variable metadata, keyed by variable index.
-    pub vars: BTreeMap<i32, ReadStatVarMetadata>,
-    /// Column-major data storage: one `Vec<ReadStatVar>` per variable.
-    pub cols: Vec<Vec<ReadStatVar>>,
+    /// Wrapped in `Arc` so parallel chunks share the same metadata without deep cloning.
+    pub vars: Arc<BTreeMap<i32, ReadStatVarMetadata>>,
+    /// Typed Arrow builders — one per variable, pre-sized with capacity hints.
+    pub builders: Vec<ColumnBuilder>,
     /// Arrow schema for the dataset.
-    pub schema: Schema,
+    /// Wrapped in `Arc` for cheap sharing across parallel chunks.
+    pub schema: Arc<Schema>,
     /// The Arrow RecordBatch produced after parsing, if available.
     pub batch: Option<RecordBatch>,
     /// Number of rows to process in this chunk.
@@ -62,14 +217,15 @@ pub struct ReadStatData {
     /// Shared atomic counter of total rows processed across all chunks.
     pub total_rows_processed: Option<Arc<AtomicUsize>>,
     /// Optional progress bar for visual feedback.
+    #[cfg(not(target_arch = "wasm32"))]
     pub pb: Option<ProgressBar>,
     /// Whether progress display is disabled.
     pub no_progress: bool,
     /// Errors collected during value parsing callbacks.
     pub errors: Vec<String>,
     /// Optional mapping: original var index -> filtered column index.
-    /// When present, only variables in this map are included in output.
-    pub column_filter: Option<BTreeMap<i32, i32>>,
+    /// Wrapped in `Arc` so parallel chunks share the same filter without deep cloning.
+    pub column_filter: Option<Arc<BTreeMap<i32, i32>>>,
     /// Total variable count in the unfiltered dataset.
     /// Used for row-boundary detection in handle_value when filtering is active.
     /// Defaults to var_count when no filter is set.
@@ -88,10 +244,10 @@ impl ReadStatData {
         Self {
             // metadata
             var_count: 0,
-            vars: BTreeMap::new(),
+            vars: Arc::new(BTreeMap::new()),
             // data
-            cols: Vec::new(),
-            schema: Schema::empty(),
+            builders: Vec::new(),
+            schema: Arc::new(Schema::empty()),
             // record batch
             batch: None,
             chunk_rows_to_process: 0,
@@ -102,6 +258,7 @@ impl ReadStatData {
             total_rows_to_process: 0,
             total_rows_processed: None,
             // progress
+            #[cfg(not(target_arch = "wasm32"))]
             pb: None,
             no_progress: false,
             // errors
@@ -112,219 +269,33 @@ impl ReadStatData {
         }
     }
 
-    fn allocate_cols(self) -> Self {
-        let mut cols = Vec::with_capacity(self.var_count as usize);
-        for _ in 0..self.var_count {
-            cols.push(Vec::with_capacity(self.chunk_rows_to_process))
-        }
-        Self { cols, ..self }
+    /// Allocates typed Arrow builders with capacity for `chunk_rows_to_process`.
+    ///
+    /// Each builder's type is determined by the variable metadata. String builders
+    /// are additionally pre-sized with `storage_width * chunk_rows` bytes.
+    pub fn allocate_builders(self) -> Self {
+        let capacity = self.chunk_rows_to_process;
+        let builders: Vec<ColumnBuilder> = self
+            .vars
+            .values()
+            .map(|vm| ColumnBuilder::from_metadata(vm, capacity))
+            .collect();
+        Self { builders, ..self }
     }
 
-    fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
-        // for each column in cols
+    /// Finishes all builders and assembles the Arrow [`RecordBatch`].
+    ///
+    /// Each builder produces its final array via `finish()`, which is an O(1)
+    /// operation (no data copying). The heavy work was already done during
+    /// `handle_value` when values were appended directly into the builders.
+    pub(crate) fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
         let arrays: Vec<ArrayRef> = self
-            .cols
-            .iter()
-            .map(|col| {
-                // what kind of column is this?
-                // grab the first element to determine the column type
-                let col_type = &col[0];
-
-                // convert from a Vec<ReadStatVar> into an ArrayRef
-                let array: ArrayRef = match col_type {
-                    ReadStatVar::ReadStat_String(_) => {
-                        // get the inner value
-                        let vec = col
-                            .iter()
-                            .map(|s| {
-                                if let ReadStatVar::ReadStat_String(v) = s {
-                                    v.clone()
-                                } else {
-                                    // should NEVER fall into this branch
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<String>>>();
-
-                        Arc::new(StringArray::from(vec))
-                    }
-                    ReadStatVar::ReadStat_i8(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|i| {
-                                if let ReadStatVar::ReadStat_i8(v) = i {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i8>>>();
-
-                        Arc::new(Int8Array::from(vec))
-                    }
-                    ReadStatVar::ReadStat_i16(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|i| {
-                                if let ReadStatVar::ReadStat_i16(v) = i {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i16>>>();
-
-                        Arc::new(Int16Array::from(vec))
-                    }
-                    ReadStatVar::ReadStat_i32(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|i| {
-                                if let ReadStatVar::ReadStat_i32(v) = i {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i32>>>();
-
-                        Arc::new(Int32Array::from(vec))
-                    }
-                    ReadStatVar::ReadStat_f32(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|f| {
-                                if let ReadStatVar::ReadStat_f32(v) = f {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<f32>>>();
-
-                        Arc::new(Float32Array::from(vec))
-                    }
-                    ReadStatVar::ReadStat_f64(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|f| {
-                                if let ReadStatVar::ReadStat_f64(v) = f {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<f64>>>();
-
-                        Arc::new(Float64Array::from(vec))
-                    }
-                    ReadStatVar::ReadStat_Date(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|d| {
-                                if let ReadStatVar::ReadStat_Date(v) = d {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i32>>>();
-
-                        Arc::new(Date32Array::from(vec))
-                    }
-                    ReadStatVar::ReadStat_DateTime(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|dt| {
-                                if let ReadStatVar::ReadStat_DateTime(v) = dt {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i64>>>();
-
-                        Arc::new(TimestampSecondArray::from(vec))
-                    }
-                    ReadStatVar::ReadStat_DateTimeWithMilliseconds(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|dt| {
-                                if let ReadStatVar::ReadStat_DateTimeWithMilliseconds(v) = dt {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i64>>>();
-
-                        Arc::new(TimestampMillisecondArray::from(vec))
-                    }
-                    ReadStatVar::ReadStat_DateTimeWithMicroseconds(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|dt| {
-                                if let ReadStatVar::ReadStat_DateTimeWithMicroseconds(v) = dt {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i64>>>();
-
-                        Arc::new(TimestampMicrosecondArray::from(vec))
-                    }
-                    ReadStatVar::ReadStat_DateTimeWithNanoseconds(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|dt| {
-                                if let ReadStatVar::ReadStat_DateTimeWithNanoseconds(v) = dt {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i64>>>();
-
-                        Arc::new(TimestampNanosecondArray::from(vec))
-                    }
-                    ReadStatVar::ReadStat_Time(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|t| {
-                                if let ReadStatVar::ReadStat_Time(v) = t {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i32>>>();
-
-                        Arc::new(Time32SecondArray::from(vec))
-                    }
-                    ReadStatVar::ReadStat_TimeWithMicroseconds(_) => {
-                        let vec = col
-                            .iter()
-                            .map(|t| {
-                                if let ReadStatVar::ReadStat_TimeWithMicroseconds(v) = t {
-                                    *v
-                                } else {
-                                    unreachable!()
-                                }
-                            })
-                            .collect::<Vec<Option<i64>>>();
-
-                        Arc::new(Time64MicrosecondArray::from(vec))
-                    }
-                };
-
-                // return
-                array
-            })
+            .builders
+            .iter_mut()
+            .map(|b| b.finish())
             .collect();
 
-        // convert into a RecordBatch
-        self.batch = Some(RecordBatch::try_new(Arc::new(self.schema.clone()), arrays)?);
+        self.batch = Some(RecordBatch::try_new(self.schema.clone(), arrays)?);
 
         Ok(())
     }
@@ -357,23 +328,27 @@ impl ReadStatData {
     ///
     /// Memory mapping is safe as long as the file is not modified or truncated by
     /// another process while the map is active.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn read_data_from_mmap(&mut self, path: &std::path::Path) -> Result<(), ReadStatError> {
         let file = std::fs::File::open(path)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         self.read_data_from_bytes(&mmap)
     }
 
-    fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
+    /// Parses row data from the file via FFI callbacks (without Arrow conversion).
+    pub(crate) fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
         debug!("Path as C string is {:?}", &rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
         // Update progress bar with rows processed for this chunk
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(pb) = &self.pb {
             // Increment by the number of rows we're about to process in this chunk
             pb.inc(self.chunk_rows_to_process as u64);
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(pb) = &self.pb {
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -381,10 +356,10 @@ impl ReadStatData {
             );
             let msg = format!(
                 "Parsing sas7bdat data from file {}",
-                &rsp.path.to_string_lossy().bright_red()
+                &rsp.path.to_string_lossy()
             );
             pb.set_message(msg);
-            pb.enable_steady_tick(std::time::Duration::new(120, 0));
+            pb.enable_steady_tick(std::time::Duration::from_millis(120));
         }
 
         // initialize context
@@ -434,11 +409,44 @@ impl ReadStatData {
         Ok(())
     }
 
-    /// Initializes this instance with metadata and chunk boundaries, allocating column storage.
+    /// Initializes this instance with metadata and chunk boundaries, allocating builders.
+    ///
+    /// Wraps `vars` and `schema` in `Arc` internally. For the parallel read path,
+    /// prefer [`init_shared`](ReadStatData::init_shared) which accepts pre-wrapped
+    /// `Arc`s to avoid repeated deep clones.
     pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
         self.set_metadata(md)
             .set_chunk_counts(row_start, row_end)
-            .allocate_cols()
+            .allocate_builders()
+    }
+
+    /// Initializes this instance with pre-shared metadata and chunk boundaries.
+    ///
+    /// Accepts `Arc`-wrapped `vars` and `schema` for cheap cloning in parallel loops.
+    /// Each call only increments reference counts (atomic +1) instead of deep-cloning
+    /// the entire metadata tree.
+    pub fn init_shared(
+        self,
+        var_count: i32,
+        vars: Arc<BTreeMap<i32, ReadStatVarMetadata>>,
+        schema: Arc<Schema>,
+        row_start: u32,
+        row_end: u32,
+    ) -> Self {
+        let total_var_count = if self.total_var_count != 0 {
+            self.total_var_count
+        } else {
+            var_count
+        };
+        Self {
+            var_count,
+            vars,
+            schema,
+            total_var_count,
+            ..self
+        }
+        .set_chunk_counts(row_start, row_end)
+        .allocate_builders()
     }
 
     fn set_chunk_counts(self, row_start: u32, row_end: u32) -> Self {
@@ -458,8 +466,8 @@ impl ReadStatData {
 
     fn set_metadata(self, md: ReadStatMetadata) -> Self {
         let var_count = md.var_count;
-        let vars = md.vars;
-        let schema = md.schema;
+        let vars = Arc::new(md.vars);
+        let schema = Arc::new(md.schema);
         // Only set total_var_count from metadata if not already set by set_column_filter
         let total_var_count = if self.total_var_count != 0 {
             self.total_var_count
@@ -501,9 +509,10 @@ impl ReadStatData {
 
     /// Sets the column filter and original (unfiltered) variable count.
     ///
+    /// Accepts an `Arc`-wrapped filter for cheap sharing across parallel chunks.
     /// Must be called **before** [`init`](ReadStatData::init) so that
     /// `total_var_count` is preserved when `set_metadata` runs.
-    pub fn set_column_filter(self, filter: Option<BTreeMap<i32, i32>>, total_var_count: i32) -> Self {
+    pub fn set_column_filter(self, filter: Option<Arc<BTreeMap<i32, i32>>>, total_var_count: i32) -> Self {
         Self {
             column_filter: filter,
             total_var_count,
@@ -512,6 +521,7 @@ impl ReadStatData {
     }
 
     /// Attaches a progress bar for visual feedback during parsing.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn set_progress_bar(self, pb: ProgressBar) -> Self {
         Self {
             pb: Some(pb),

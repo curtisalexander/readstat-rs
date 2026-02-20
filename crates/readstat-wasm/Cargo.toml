@@ -1,0 +1,11 @@
+[package]
+name = "readstat-wasm"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+readstat = { path = "../readstat", default-features = false }
+serde_json = "1"

@@ -8,7 +8,8 @@ Rust CLI tool and library that reads SAS binary files (`.sas7bdat`) and converts
 readstat-rs/
 ├── Cargo.toml              # Workspace root (edition 2024, resolver 2)
 ├── crates/
-│   ├── readstat/            # Main binary + library crate
+│   ├── readstat/            # Library crate (parse SAS → Arrow, optional format writers)
+│   ├── readstat-cli/        # Binary crate (CLI arg parsing, orchestration)
 │   ├── readstat-sys/        # FFI bindings to ReadStat C library (bindgen)
 │   ├── iconv-sys/           # FFI bindings to iconv (Windows only)
 │   └── readstat-tests/      # Integration test suite
@@ -17,13 +18,13 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.17.0) — Main Crate
+### `readstat` (v0.18.0) — Library Crate
 **Path**: `crates/readstat/`
 
-Binary with library. CLI uses clap with three subcommands:
-- `metadata` — print file metadata (row/var counts, labels, encoding, etc.)
-- `preview` — preview first N rows
-- `data` — convert to output format (csv, feather, ndjson, parquet)
+Pure library for parsing SAS binary files into Arrow RecordBatch format.
+Output format writers (CSV, Feather, NDJSON, Parquet) are feature-gated.
+
+Features: `csv`, `feather`, `ndjson`, `parquet` (all enabled by default), `sql`.
 
 Key source modules in `crates/readstat/src/`:
 | Module | Purpose |
@@ -33,23 +34,40 @@ Key source modules in `crates/readstat/src/`:
 | `rs_data.rs` | Data reading, Arrow RecordBatch conversion |
 | `rs_metadata.rs` | Metadata extraction, Arrow schema building |
 | `rs_parser.rs` | ReadStatParser wrapper around C parser |
-| `rs_path.rs` | Path validation, I/O config |
+| `rs_path.rs` | Input path validation |
+| `rs_write_config.rs` | Output configuration (path, format, compression) |
 | `rs_var.rs` | Variable types and value handling |
 | `rs_write.rs` | Output writers (CSV, Feather, NDJSON, Parquet) |
+| `rs_query.rs` | SQL query execution via DataFusion (feature-gated) |
 | `formats.rs` | SAS format detection (118 date/time/datetime formats, regex-based) |
-| `err.rs` | Error enum (39 variants mapping to C library errors) |
+| `err.rs` | Error enum (41 variants mapping to C library errors) |
+| `common.rs` | Utility functions |
+| `rs_buffer_io.rs` | Buffer I/O operations |
 
 Key public types:
-- `ReadStatData` — holds parsed rows (as `Vec<Vec<ReadStatVar>>`), metadata, Arrow RecordBatch
+- `ReadStatData` — coordinates FFI parsing, accumulates values directly into typed Arrow builders, produces Arrow RecordBatch
 - `ReadStatMetadata` — file-level metadata (row/var counts, encoding, compression, schema)
-- `ReadStatVar` — enum of typed values (String, i8/i16/i32, f32/f64, Date, DateTime variants, Time)
+- `ColumnBuilder` — enum wrapping 12 typed Arrow builders (StringBuilder, Float64Builder, Date32Builder, etc.); values are appended during FFI callbacks with zero intermediate allocation
 - `ReadStatWriter` — writes output in requested format
-- `ReadStatPath` — validated file path with I/O config
-- `Reader` — enum: `mem` (full in-memory) or `stream` (chunked, default 10k rows)
+- `ReadStatPath` — validated input file path
+- `WriteConfig` — output configuration (path, format, compression)
+- `OutFormat` — output format enum (csv, feather, ndjson, parquet)
 
-Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs), Rayon, Crossbeam, clap v4, chrono.
+Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono.
 
-### `readstat-sys` (v0.2.0) — FFI Bindings
+### `readstat-cli` (v0.18.0) — CLI Binary
+**Path**: `crates/readstat-cli/`
+
+Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
+- `metadata` — print file metadata (row/var counts, labels, encoding, etc.)
+- `preview` — preview first N rows
+- `data` — convert to output format (csv, feather, ndjson, parquet)
+
+Owns CLI arg parsing, progress bars, colored output, and reader-writer thread orchestration.
+
+Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
+
+### `readstat-sys` (v0.3.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~20 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib:
@@ -105,4 +123,5 @@ Test data lives in `tests/data/*.sas7bdat` (13 datasets). SAS scripts to regener
 - **Streaming**: default reader streams rows in chunks (10k) to manage memory
 - **Parallel processing**: Rayon for parallel reading, Crossbeam channels for reader-writer coordination
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
-- **Arrow pipeline**: SAS data → ReadStatVar vectors → Arrow RecordBatch → output format
+- **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format
+- **Metadata preservation**: SAS variable labels, format strings, and storage widths are persisted as Arrow field metadata, surviving round-trips through Parquet and Feather. See [TECHNICAL.md](TECHNICAL.md#column-metadata-in-arrow-and-parquet) for details.

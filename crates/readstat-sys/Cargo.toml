@@ -1,6 +1,6 @@
 [package]
 name = "readstat-sys"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
 description = "Raw bindings to the ReadStat C library"
@@ -16,7 +16,7 @@ build = "build.rs"
 bindgen = "0.72"
 cc = "1.2"
 
-[dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libz-sys = "1.1"
 
 [target.'cfg(windows)'.dependencies]

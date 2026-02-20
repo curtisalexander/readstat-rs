@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use arrow::datatypes::DataType;
 use arrow_array::{Array, Float64Array, StringArray};
 use readstat::{ReadStatData, ReadStatMetadata};
@@ -19,7 +20,7 @@ fn read_cars_with_columns(
     }
 
     let mut d = ReadStatData::new()
-        .set_column_filter(column_filter, original_var_count)
+        .set_column_filter(column_filter.map(Arc::new), original_var_count)
         .set_no_progress(true)
         .init(md.clone(), 0, md.row_count as u32);
 
@@ -160,6 +161,9 @@ fn column_select_with_streaming() {
     let column_filter = md.resolve_selected_columns(col_names).unwrap();
     let original_var_count = md.var_count;
     let filtered_md = md.filter_to_selected_columns(column_filter.as_ref().unwrap());
+
+    // Wrap in Arc for cheap sharing across chunks
+    let column_filter = column_filter.map(Arc::new);
 
     // Read first 10 rows
     let mut d1 = ReadStatData::new()
