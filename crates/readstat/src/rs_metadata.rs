@@ -9,7 +9,9 @@ use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
-use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::{c_void, CString}, fs::File, os::raw::c_int, path::Path};
+use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::{c_void, CString}, os::raw::c_int, path::Path};
+#[cfg(any(not(target_arch = "wasm32"), test))]
+use std::fs::File;
 
 use crate::cb::{handle_metadata, handle_variable};
 use crate::err::{check_c_error, ReadStatError};
@@ -695,7 +697,7 @@ mod tests {
     fn parse_columns_file_normal() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("cols.txt");
-        let mut f = std::fs::File::create(&path).unwrap();
+        let mut f = File::create(&path).unwrap();
         writeln!(f, "col_a").unwrap();
         writeln!(f, "col_b").unwrap();
         writeln!(f, "col_c").unwrap();
@@ -708,7 +710,7 @@ mod tests {
     fn parse_columns_file_with_comments_and_blanks() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("cols.txt");
-        let mut f = std::fs::File::create(&path).unwrap();
+        let mut f = File::create(&path).unwrap();
         writeln!(f, "# This is a comment").unwrap();
         writeln!(f, "col_a").unwrap();
         writeln!(f).unwrap();
@@ -723,7 +725,7 @@ mod tests {
     fn parse_columns_file_empty() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("cols.txt");
-        std::fs::File::create(&path).unwrap();
+        File::create(&path).unwrap();
 
         let names = ReadStatMetadata::parse_columns_file(&path).unwrap();
         assert!(names.is_empty());
