@@ -1,0 +1,40 @@
+[package]
+name = "readstat-cli"
+version = "0.17.0"
+authors = ["Curtis Alexander <calex@calex.org>"]
+edition = "2024"
+description = "CLI for converting SAS binary files to modern columnar formats"
+license = "MIT"
+repository = "https://github.com/curtisalexander/readstat-rs"
+readme = "../../README.md"
+keywords = ["sas", "sas7bdat", "arrow", "parquet", "readstat"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "readstat"
+path = "src/main.rs"
+
+[dependencies]
+readstat = { path = "../readstat" }
+readstat-sys = { path = "../readstat-sys", version = "0.3.0" }
+
+arrow-array = "57"
+arrow-csv = { version = "57", optional = true }
+arrow-schema = "57"
+
+clap = { version = "4", features = ["derive", "unicode", "wrap_help"] }
+colored = "3.1"
+crossbeam = "0.8"
+env_logger = "0.11"
+indicatif = "0.18"
+log = "0.4"
+path_abs = "0.5"
+rayon = "1.11"
+
+[features]
+default = ["csv", "parquet", "feather", "ndjson"]
+csv = ["readstat/csv", "dep:arrow-csv"]
+parquet = ["readstat/parquet"]
+feather = ["readstat/feather"]
+ndjson = ["readstat/ndjson"]
+sql = ["readstat/sql"]

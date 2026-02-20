@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 use crate::err::ReadStatError;
 use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
-use crate::{OutFormat, ParquetCompression};
+use crate::rs_write_config::{OutFormat, ParquetCompression};
 
 /// Executes a SQL query against in-memory Arrow data.
 ///

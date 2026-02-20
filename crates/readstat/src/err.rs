@@ -124,6 +124,7 @@ pub enum ReadStatError {
     Arrow(#[from] arrow::error::ArrowError),
 
     /// Error from the Parquet library.
+    #[cfg(feature = "parquet")]
     #[error("{0}")]
     Parquet(#[from] parquet::errors::ParquetError),
 

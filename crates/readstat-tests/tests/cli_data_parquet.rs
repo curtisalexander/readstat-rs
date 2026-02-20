@@ -16,7 +16,7 @@ fn readstat_cmd() -> Command {
             .bin("readstat")
             .current_release()
             .current_target()
-            .manifest_path("../readstat/Cargo.toml")
+            .manifest_path("../readstat-cli/Cargo.toml")
             .run()
             .expect("Failed to build readstat binary");
 

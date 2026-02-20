@@ -7,8 +7,8 @@ use arrow_array::{
     TimestampMicrosecondArray, TimestampMillisecondArray, TimestampSecondArray,
     RecordBatch,
 };
-use path_abs::PathAbs;
 use std::os::raw::c_int;
+use std::path::PathBuf;
 
 // ── Setup helpers ──────────────────────────────────────────────────
 
@@ -17,13 +17,11 @@ pub fn setup_path<P>(ds: P) -> Result<readstat::ReadStatPath, readstat::ReadStat
 where
     P: AsRef<std::path::Path>,
 {
-    let sas_path = PathAbs::new(env!("CARGO_MANIFEST_DIR"))
-        .unwrap()
-        .as_path()
+    let sas_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("data")
         .join(ds);
-    readstat::ReadStatPath::new(sas_path, None, None, false, false, None, None)
+    readstat::ReadStatPath::new(sas_path)
 }
 
 /// Reads a dataset fully: path -> metadata -> data -> RecordBatch.

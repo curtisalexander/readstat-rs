@@ -25,7 +25,8 @@ cargo test -p readstat-tests <test_name>
 
 - Rust edition 2024
 - Main branch: `main`, development branch: `dev`
-- Workspace with 4 crates under `crates/`
+- Workspace with 5 crates under `crates/`
+- `readstat` is a pure library; `readstat-cli` owns the binary
 - FFI crates follow the `*-sys` naming convention with `build.rs` + bindgen
 - Integration tests are in the separate `readstat-tests` crate, not inline
 - Arrow v57 ecosystem — keep Arrow crate versions in sync

@@ -15,10 +15,8 @@ use arrow_array::{
     },
     ArrayRef, RecordBatch,
 };
-use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use path_abs::PathInfo;
 use std::{
     collections::BTreeMap,
     ffi::CString,
@@ -190,7 +188,7 @@ impl ColumnBuilder {
 /// Holds parsed row data from a `.sas7bdat` file and converts it to Arrow format.
 ///
 /// Each instance processes one streaming chunk of rows. Values are appended
-/// directly into typed Arrow [`ColumnBuilder`]s during the `handle_value`
+/// directly into typed Arrow `ColumnBuilder`s during the `handle_value`
 /// callback, then finished into an Arrow [`RecordBatch`] via `cols_to_batch`.
 pub struct ReadStatData {
     /// Number of variables (columns) in the dataset.
@@ -352,7 +350,7 @@ impl ReadStatData {
             );
             let msg = format!(
                 "Parsing sas7bdat data from file {}",
-                &rsp.path.to_string_lossy().bright_red()
+                &rsp.path.to_string_lossy()
             );
             pb.set_message(msg);
             pb.enable_steady_tick(std::time::Duration::from_millis(120));

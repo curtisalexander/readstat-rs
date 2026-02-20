@@ -8,7 +8,8 @@ Rust CLI tool and library that reads SAS binary files (`.sas7bdat`) and converts
 readstat-rs/
 ├── Cargo.toml              # Workspace root (edition 2024, resolver 2)
 ├── crates/
-│   ├── readstat/            # Main binary + library crate
+│   ├── readstat/            # Library crate (parse SAS → Arrow, optional format writers)
+│   ├── readstat-cli/        # Binary crate (CLI arg parsing, orchestration)
 │   ├── readstat-sys/        # FFI bindings to ReadStat C library (bindgen)
 │   ├── iconv-sys/           # FFI bindings to iconv (Windows only)
 │   └── readstat-tests/      # Integration test suite
@@ -17,13 +18,13 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.17.0) — Main Crate
+### `readstat` (v0.17.0) — Library Crate
 **Path**: `crates/readstat/`
 
-Binary with library. CLI uses clap with three subcommands:
-- `metadata` — print file metadata (row/var counts, labels, encoding, etc.)
-- `preview` — preview first N rows
-- `data` — convert to output format (csv, feather, ndjson, parquet)
+Pure library for parsing SAS binary files into Arrow RecordBatch format.
+Output format writers (CSV, Feather, NDJSON, Parquet) are feature-gated.
+
+Features: `csv`, `feather`, `ndjson`, `parquet` (all enabled by default), `sql`.
 
 Key source modules in `crates/readstat/src/`:
 | Module | Purpose |
@@ -33,7 +34,8 @@ Key source modules in `crates/readstat/src/`:
 | `rs_data.rs` | Data reading, Arrow RecordBatch conversion |
 | `rs_metadata.rs` | Metadata extraction, Arrow schema building |
 | `rs_parser.rs` | ReadStatParser wrapper around C parser |
-| `rs_path.rs` | Path validation, I/O config |
+| `rs_path.rs` | Input path validation |
+| `rs_write_config.rs` | Output configuration (path, format, compression) |
 | `rs_var.rs` | Variable types and value handling |
 | `rs_write.rs` | Output writers (CSV, Feather, NDJSON, Parquet) |
 | `formats.rs` | SAS format detection (118 date/time/datetime formats, regex-based) |
@@ -44,10 +46,23 @@ Key public types:
 - `ReadStatMetadata` — file-level metadata (row/var counts, encoding, compression, schema)
 - `ColumnBuilder` — enum wrapping 12 typed Arrow builders (StringBuilder, Float64Builder, Date32Builder, etc.); values are appended during FFI callbacks with zero intermediate allocation
 - `ReadStatWriter` — writes output in requested format
-- `ReadStatPath` — validated file path with I/O config
-- `Reader` — enum: `mem` (full in-memory) or `stream` (chunked, default 10k rows)
+- `ReadStatPath` — validated input file path
+- `WriteConfig` — output configuration (path, format, compression)
+- `OutFormat` — output format enum (csv, feather, ndjson, parquet)
 
-Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs), Rayon, Crossbeam, clap v4, chrono.
+Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono.
+
+### `readstat-cli` (v0.17.0) — CLI Binary
+**Path**: `crates/readstat-cli/`
+
+Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
+- `metadata` — print file metadata (row/var counts, labels, encoding, etc.)
+- `preview` — preview first N rows
+- `data` — convert to output format (csv, feather, ndjson, parquet)
+
+Owns CLI arg parsing, progress bars, colored output, and reader-writer thread orchestration.
+
+Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
 ### `readstat-sys` (v0.2.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
