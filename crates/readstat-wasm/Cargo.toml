@@ -7,5 +7,5 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-readstat = { path = "../readstat", default-features = false }
+readstat = { path = "../readstat", default-features = false, features = ["csv", "ndjson"] }
 serde_json = "1"
