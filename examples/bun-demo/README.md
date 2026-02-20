@@ -2,6 +2,32 @@
 
 Demonstrates reading SAS `.sas7bdat` file metadata from JavaScript using the `readstat-wasm` package compiled to WebAssembly via Emscripten.
 
+## Quick start
+
+If you already have Rust, Emscripten SDK, libclang, and Bun installed:
+
+```bash
+# Activate Emscripten & build zlib port (first time only)
+source /path/to/emsdk/emsdk_env.sh
+embuilder build zlib
+
+# Add the wasm target (first time only)
+rustup target add wasm32-unknown-emscripten
+
+# Initialize submodules (first time only)
+git submodule update --init --recursive
+
+# Build the wasm package
+cd crates/readstat-wasm
+cargo build --target wasm32-unknown-emscripten --release
+cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
+
+# Run the demo
+cd ../../examples/bun-demo
+bun install
+bun run index.ts
+```
+
 ## 1. Install dependencies
 
 ### Rust + wasm target
