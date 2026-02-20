@@ -90,12 +90,25 @@ print(f"\nFirst 5 rows:\n{pl.from_arrow(table.slice(0, 5))}")
 print()
 
 # --- Cross-format consistency ---
+# CSV treats empty strings as null while Arrow-based formats preserve them as "".
+# Normalise by replacing empty strings with null before comparing.
 print("=== Cross-format consistency ===")
 df_parquet = pl.from_arrow(pq.read_table(parquet_path))
 df_feather = pl.from_arrow(feather.read_table(feather_path))
-check(df_csv.equals(df_parquet), "CSV == Parquet")
-check(df_csv.equals(df_feather), "CSV == Feather")
-check(df_csv.equals(df_ndjson), "CSV == NDJSON")
+
+
+def normalise(df: pl.DataFrame) -> pl.DataFrame:
+    """Replace empty strings with null so CSV and Arrow formats compare equal."""
+    return df.with_columns(
+        pl.when(pl.col(c) == "").then(None).otherwise(pl.col(c)).alias(c)
+        for c in df.columns
+        if df[c].dtype == pl.String
+    )
+
+
+check(normalise(df_csv).equals(normalise(df_parquet)), "CSV == Parquet")
+check(normalise(df_csv).equals(normalise(df_feather)), "CSV == Feather")
+check(normalise(df_csv).equals(normalise(df_ndjson)), "CSV == NDJSON")
 print()
 
 # --- Summary ---
