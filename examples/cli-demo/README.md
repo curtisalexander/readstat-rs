@@ -4,6 +4,8 @@ Demonstrates converting a SAS `.sas7bdat` file to CSV, NDJSON, Parquet, and Feat
 
 ## Quick start
 
+### Linux / macOS
+
 ```bash
 # Build the CLI (from repo root)
 cargo build -p readstat-cli
@@ -22,9 +24,29 @@ You can also pass a specific path to the `readstat` binary:
 bash convert.sh /path/to/readstat
 ```
 
+### Windows (PowerShell)
+
+```powershell
+# Build the CLI (from repo root)
+cargo build -p readstat-cli
+
+# Run the conversion script
+cd examples/cli-demo
+./convert.ps1
+
+# Verify the output files
+uv run verify_output.py
+```
+
+You can also pass a specific path to the `readstat` binary:
+
+```powershell
+./convert.ps1 -ReadStat C:\path\to\readstat.exe
+```
+
 ## What it does
 
-The `convert.sh` script:
+The `convert.sh` (Bash) and `convert.ps1` (PowerShell) scripts:
 
 1. **Displays metadata** for the `cars.sas7bdat` dataset (table name, encoding, row count, variable info)
 2. **Previews** the first 5 rows of data
