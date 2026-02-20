@@ -17,6 +17,7 @@ fn main() {
 
     let mut cc = cc::Build::new();
 
+    // Core ReadStat files (always needed)
     cc.file(src.join("CKHashTable.c"))
         .file(src.join("readstat_bits.c"))
         .file(src.join("readstat_convert.c"))
@@ -27,8 +28,10 @@ fn main() {
         .file(src.join("readstat_parser.c"))
         .file(src.join("readstat_value.c"))
         .file(src.join("readstat_variable.c"))
-        .file(src.join("readstat_writer.c"))
-        .file(sas.join("ieee.c"))
+        .file(src.join("readstat_writer.c"));
+
+    // SAS format support (always needed)
+    cc.file(sas.join("ieee.c"))
         .file(sas.join("readstat_sas.c"))
         .file(sas.join("readstat_sas7bcat_read.c"))
         .file(sas.join("readstat_sas7bcat_write.c"))
@@ -38,35 +41,42 @@ fn main() {
         .file(sas.join("readstat_xport.c"))
         .file(sas.join("readstat_xport_read.c"))
         .file(sas.join("readstat_xport_parse_format.c"))
-        .file(sas.join("readstat_xport_write.c"))
-        .file(spss.join("readstat_por.c"))
-        .file(spss.join("readstat_por_parse.c"))
-        .file(spss.join("readstat_por_read.c"))
-        .file(spss.join("readstat_por_write.c"))
-        .file(spss.join("readstat_sav.c"))
-        .file(spss.join("readstat_sav_compress.c"))
-        .file(spss.join("readstat_sav_parse.c"))
-        .file(spss.join("readstat_sav_parse_timestamp.c"))
-        .file(spss.join("readstat_sav_read.c"))
-        .file(spss.join("readstat_sav_write.c"))
-        .file(spss.join("readstat_spss.c"))
-        .file(spss.join("readstat_spss_parse.c"))
-        .file(spss.join("readstat_sav_parse_mr_name.c"))
-        .file(spss.join("readstat_zsav_compress.c"))
-        .file(spss.join("readstat_zsav_read.c"))
-        .file(spss.join("readstat_zsav_write.c"))
-        .file(stata.join("readstat_dta.c"))
-        .file(stata.join("readstat_dta_parse_timestamp.c"))
-        .file(stata.join("readstat_dta_read.c"))
-        .file(stata.join("readstat_dta_write.c"))
-        .file(txt.join("commands_util.c"))
-        .file(txt.join("readstat_copy.c"))
-        .file(txt.join("readstat_sas_commands_read.c"))
-        .file(txt.join("readstat_spss_commands_read.c"))
-        .file(txt.join("readstat_schema.c"))
-        .file(txt.join("readstat_stata_dictionary_read.c"))
-        .file(txt.join("readstat_txt_read.c"))
-        .include(&src)
+        .file(sas.join("readstat_xport_write.c"));
+
+    // SPSS, Stata, and txt format support — skip for Emscripten builds
+    // to reduce wasm binary size and avoid Windows command-line length
+    // limits when archiving many object files with emar.bat
+    if !is_emscripten {
+        cc.file(spss.join("readstat_por.c"))
+            .file(spss.join("readstat_por_parse.c"))
+            .file(spss.join("readstat_por_read.c"))
+            .file(spss.join("readstat_por_write.c"))
+            .file(spss.join("readstat_sav.c"))
+            .file(spss.join("readstat_sav_compress.c"))
+            .file(spss.join("readstat_sav_parse.c"))
+            .file(spss.join("readstat_sav_parse_timestamp.c"))
+            .file(spss.join("readstat_sav_read.c"))
+            .file(spss.join("readstat_sav_write.c"))
+            .file(spss.join("readstat_spss.c"))
+            .file(spss.join("readstat_spss_parse.c"))
+            .file(spss.join("readstat_sav_parse_mr_name.c"))
+            .file(spss.join("readstat_zsav_compress.c"))
+            .file(spss.join("readstat_zsav_read.c"))
+            .file(spss.join("readstat_zsav_write.c"))
+            .file(stata.join("readstat_dta.c"))
+            .file(stata.join("readstat_dta_parse_timestamp.c"))
+            .file(stata.join("readstat_dta_read.c"))
+            .file(stata.join("readstat_dta_write.c"))
+            .file(txt.join("commands_util.c"))
+            .file(txt.join("readstat_copy.c"))
+            .file(txt.join("readstat_sas_commands_read.c"))
+            .file(txt.join("readstat_spss_commands_read.c"))
+            .file(txt.join("readstat_schema.c"))
+            .file(txt.join("readstat_stata_dictionary_read.c"))
+            .file(txt.join("readstat_txt_read.c"));
+    }
+
+    cc.include(&src)
         .warnings(false);
 
     // Include iconv.h — Emscripten provides its own
@@ -143,7 +153,28 @@ fn main() {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
     if is_emscripten {
-        let emsdk = env::var("EMSDK").expect("EMSDK must be set for Emscripten builds");
+        let emsdk = env::var("EMSDK").or_else(|_| {
+            // emsdk_env.sh on Windows/Git Bash sometimes fails to export EMSDK
+            // even though it adds the emsdk directories to PATH. Scan PATH for
+            // a directory that looks like an emsdk root (contains the sysroot).
+            let sysroot_suffix = std::path::Path::new("upstream")
+                .join("emscripten")
+                .join("cache")
+                .join("sysroot");
+            env::var("PATH")
+                .unwrap_or_default()
+                .split(if cfg!(windows) { ';' } else { ':' })
+                .find_map(|dir| {
+                    // PATH contains both <emsdk> and <emsdk>/upstream/emscripten
+                    let candidate = std::path::Path::new(dir);
+                    if candidate.join(&sysroot_suffix).is_dir() {
+                        Some(candidate.to_string_lossy().into_owned())
+                    } else {
+                        None
+                    }
+                })
+                .ok_or(env::VarError::NotPresent)
+        }).expect("EMSDK must be set for Emscripten builds, or emsdk must be on PATH");
         builder = builder
             .clang_arg(format!(
                 "--sysroot={emsdk}/upstream/emscripten/cache/sysroot"

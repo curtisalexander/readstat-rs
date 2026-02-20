@@ -6,6 +6,8 @@ Demonstrates reading SAS `.sas7bdat` file metadata from JavaScript using the `re
 
 If you already have Rust, Emscripten SDK, libclang, and Bun installed:
 
+**macOS / Linux:**
+
 ```bash
 # Activate Emscripten & build zlib port (first time only)
 source /path/to/emsdk/emsdk_env.sh
@@ -28,15 +30,68 @@ bun install
 bun run index.ts
 ```
 
+**Windows (Git Bash):**
+
+```bash
+# Activate Emscripten & build zlib port (first time only)
+/c/path/to/emsdk/emsdk.bat activate latest
+export EMSDK=C:/path/to/emsdk
+embuilder build zlib
+
+# Add the wasm target (first time only)
+rustup target add wasm32-unknown-emscripten
+
+# Initialize submodules (first time only)
+git submodule update --init --recursive
+
+# Build the wasm package
+cd crates/readstat-wasm
+cargo build --target wasm32-unknown-emscripten --release
+cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
+
+# Run the demo
+cd ../../examples/bun-demo
+bun install
+bun run index.ts
+```
+
+**Windows (PowerShell):**
+
+```powershell
+# Activate Emscripten & build zlib port (first time only)
+C:\path\to\emsdk\emsdk.bat activate latest
+$env:EMSDK = "C:\path\to\emsdk"
+embuilder build zlib
+
+# Add the wasm target (first time only)
+rustup target add wasm32-unknown-emscripten
+
+# Initialize submodules (first time only)
+git submodule update --init --recursive
+
+# Build the wasm package
+cd crates\readstat-wasm
+cargo build --target wasm32-unknown-emscripten --release
+copy target\wasm32-unknown-emscripten\release\readstat_wasm.wasm pkg\
+
+# Run the demo
+cd ..\..\examples\bun-demo
+bun install
+bun run index.ts
+```
+
 ## 1. Install dependencies
 
 ### Rust + wasm target
 
 ```bash
 # Install Rust (if not already installed)
+# macOS / Linux
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Add the Emscripten wasm target
+# Windows — download and run rustup-init.exe from https://rustup.rs
+
+# Add the Emscripten wasm target (all platforms)
 rustup target add wasm32-unknown-emscripten
 ```
 
@@ -50,29 +105,39 @@ cd emsdk
 # Install and activate the latest toolchain
 ./emsdk install latest
 ./emsdk activate latest
-
-# Add to your current shell (run this every new terminal session,
-# or add it to your shell profile)
-source ./emsdk_env.sh
 ```
+
+Activate in your shell (run every new terminal session, or add to your profile):
+
+| Platform | Command |
+|----------|---------|
+| macOS / Linux | `source ./emsdk_env.sh` |
+| Windows (cmd) | `emsdk_env.bat` |
+| Windows (PowerShell) | `emsdk_env.bat` (then set `$env:EMSDK = "C:\path\to\emsdk"` if needed) |
+| Windows (Git Bash) | `source ./emsdk_env.sh` (then `export EMSDK=C:/path/to/emsdk` if needed) |
+
+> **Note:** On Windows, `emsdk_env.sh` / `emsdk_env.bat` may update PATH without
+> exporting the `EMSDK` variable. If the build fails with "EMSDK must be set",
+> set it manually as shown above. The build script will also attempt to auto-detect
+> the emsdk root from PATH.
 
 ### libclang (required by bindgen)
 
-```bash
-# macOS
-brew install llvm
-
-# Ubuntu / Debian
-sudo apt-get install libclang-dev
-
-# Fedora
-sudo dnf install clang-devel
-```
+| Platform | Command |
+|----------|---------|
+| macOS | `brew install llvm` |
+| Ubuntu / Debian | `sudo apt-get install libclang-dev` |
+| Fedora | `sudo dnf install clang-devel` |
+| Windows | Install LLVM from https://releases.llvm.org/download.html and set `LIBCLANG_PATH` to the `lib` directory (e.g., `C:\Program Files\LLVM\lib`) |
 
 ### Bun
 
 ```bash
+# macOS / Linux
 curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
 ## 2. Initialize git submodules
@@ -86,8 +151,7 @@ git submodule update --init --recursive
 ## 3. Build the WASM package
 
 ```bash
-# Make sure Emscripten is activated in your shell
-source /path/to/emsdk/emsdk_env.sh
+# Make sure Emscripten is activated in your shell (see table above)
 
 # Build the Emscripten zlib port (first time only — takes ~2 seconds)
 embuilder build zlib
@@ -99,7 +163,10 @@ cd crates/readstat-wasm
 cargo build --target wasm32-unknown-emscripten --release
 
 # Copy the .wasm binary into the pkg/ directory
+# macOS / Linux
 cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
+# Windows (PowerShell)
+# copy target\wasm32-unknown-emscripten\release\readstat_wasm.wasm pkg\
 ```
 
 ## 4. Run the demo
@@ -163,7 +230,10 @@ The JS wrapper in `pkg/readstat_wasm.js` handles:
 Run `embuilder build zlib` to install the Emscripten zlib port.
 
 **`EMSDK must be set for Emscripten builds`**
-Run `source /path/to/emsdk/emsdk_env.sh` to activate the Emscripten SDK in your shell.
+Set the `EMSDK` environment variable to point to your emsdk installation directory. On macOS/Linux: `export EMSDK=/path/to/emsdk`. On Windows (PowerShell): `$env:EMSDK = "C:\path\to\emsdk"`. On Windows (Git Bash): `export EMSDK=C:/path/to/emsdk`. The build script also attempts to auto-detect the emsdk root from your PATH, so simply having Emscripten activated may be sufficient.
 
 **`error: linking with emcc failed` / `undefined symbol: main`**
 Make sure you're building from `crates/readstat-wasm/` (not the repo root). The `.cargo/config.toml` in that directory provides the necessary linker flags.
+
+**`The command line is too long` (Windows)**
+This was a known issue when building all ReadStat C source files for the Emscripten target. It has been fixed — the build script now compiles only the SAS format sources for Emscripten builds, keeping the archiver command within Windows' command-line length limit.
