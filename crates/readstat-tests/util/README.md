@@ -30,6 +30,11 @@ Utility programs to aid development
 - SAS program to create a dataset with a number that initially threw errors when parsed
 - Number in question contains scientific notation
 
+### [create_malformed_utf8_ds.sas](create_malformed_utf8_ds.sas)
+- SAS program to create a dataset with string values that get truncated mid-character
+- SAS truncates character columns at the byte level, not at character boundaries — when a multi-byte UTF-8 character straddles the column width limit, the stored bytes are invalid UTF-8
+- Exercises the lossy UTF-8 fallback added in response to [issue #78](https://github.com/curtisalexander/readstat-rs/issues/78)
+
 ### [download_ahs.sh](download_ahs.sh) / [download_ahs.ps1](download_ahs.ps1)
 - Scripts to download, unzip, and rename the AHS 2019 National PUF `sas7bdat` file from the US Census Bureau
 - Downloads from http://www2.census.gov/programs-surveys/ahs/2019/AHS%202019%20National%20PUF%20v1.1%20Flat%20SAS.zip

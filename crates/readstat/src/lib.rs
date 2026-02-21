@@ -1,4 +1,4 @@
-//! Read SAS binary files (`.sas7bdat`) and convert them to modern columnar formats.
+//! Read SAS binary files (`.sas7bdat`) and convert them to other formats.
 //!
 //! This crate provides a library for parsing SAS binary data files using FFI
 //! bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library,

@@ -274,6 +274,7 @@ jobs:
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-macos-arm:
     runs-on: macos-latest
     env:
@@ -316,3 +317,60 @@ jobs:
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- Memory safety checks ---
+
+  miri:
+    runs-on: ubuntu-latest
+    env:
+      MIRIFLAGS: "-Zmiri-disable-isolation"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain with Miri
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Run Miri on pure-Rust unit tests
+        run: cargo +nightly miri test -p readstat
+
+  asan-linux:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-Zsanitizer=address -Clinker=clang"
+      READSTAT_SANITIZE_ADDRESS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Run tests with AddressSanitizer
+        run: cargo +nightly test --workspace --lib --tests --bins --target x86_64-unknown-linux-gnu
+
+  asan-macos:
+    runs-on: macos-latest
+    env:
+      RUSTFLAGS: "-Zsanitizer=address"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: aarch64-apple-darwin
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Run tests with AddressSanitizer
+        run: cargo +nightly test --workspace --lib --tests --bins --target aarch64-apple-darwin
