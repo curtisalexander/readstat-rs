@@ -79,8 +79,9 @@ $docsMap = @{
     "ARCHITECTURE.md" = "architecture.md"
     "TECHNICAL.md"    = "technical.md"
     "TESTING.md"      = "testing.md"
-    "BENCHMARKING.md" = "benchmarking.md"
-    "CI-CD.md"        = "ci-cd.md"
+    "BENCHMARKING.md"   = "benchmarking.md"
+    "CI-CD.md"          = "ci-cd.md"
+    "MEMORY_SAFETY.md"  = "memory-safety.md"
 }
 
 foreach ($entry in $docsMap.GetEnumerator()) {

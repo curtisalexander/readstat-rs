@@ -12,6 +12,7 @@
 - [Architecture](architecture.md)
 - [Technical Details](technical.md)
 - [Testing](testing.md)
+- [Memory Safety](memory-safety.md)
 - [Benchmarking](benchmarking.md)
 - [CI/CD](ci-cd.md)
 

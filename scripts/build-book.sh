@@ -56,8 +56,9 @@ patch_doc "$REPO_ROOT/docs/USAGE.md"        > "$BOOK_SRC/usage.md"
 patch_doc "$REPO_ROOT/docs/ARCHITECTURE.md" > "$BOOK_SRC/architecture.md"
 patch_doc "$REPO_ROOT/docs/TECHNICAL.md"    > "$BOOK_SRC/technical.md"
 patch_doc "$REPO_ROOT/docs/TESTING.md"      > "$BOOK_SRC/testing.md"
-patch_doc "$REPO_ROOT/docs/BENCHMARKING.md" > "$BOOK_SRC/benchmarking.md"
-patch_doc "$REPO_ROOT/docs/CI-CD.md"        > "$BOOK_SRC/ci-cd.md"
+patch_doc "$REPO_ROOT/docs/BENCHMARKING.md"    > "$BOOK_SRC/benchmarking.md"
+patch_doc "$REPO_ROOT/docs/CI-CD.md"           > "$BOOK_SRC/ci-cd.md"
+patch_doc "$REPO_ROOT/docs/MEMORY_SAFETY.md"   > "$BOOK_SRC/memory-safety.md"
 
 # Crate READMEs
 mkdir -p "$BOOK_SRC/crates"
