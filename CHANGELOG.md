@@ -4,9 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.18.0]
 
 ### Added
+- DataFusion SQL query support behind `sql` feature flag
+- Exposed all ReadStat functionality in readstat-sys 0.3.0
+- Focused documentation files broken out from README
 - Streaming SQL execution via DataFusion `StreamingTable` integration
 - Memory-mapped file reading via `memmap2`
 - Support for reading SAS files from in-memory byte slices
@@ -18,29 +21,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Memory safety documentation (`docs/MEMORY_SAFETY.md`) and mdBook integration
 
 ### Changed
-- Improved parallelism: local thread pool, ordered reads, bounded-batch writes
-
-### Fixed
-- CSV file output missing header row due to file truncation during two-step write
-- CLI demo convert scripts failing to find `readstat` binary on Windows (missing `.exe` extension)
-
-## [0.18.0] - 2026-02-19
-
-### Added
-- DataFusion SQL query support behind `sql` feature flag
-- Exposed all ReadStat functionality in readstat-sys 0.3.0
-- Focused documentation files broken out from README
-
-### Changed
 - Restructured workspace: extracted `readstat-cli` binary crate from `readstat` library crate
 - Feature-gated output format writers (csv, parquet, feather, ndjson) in the library crate
 - Arc-wrapped metadata for zero-cost parallel chunk sharing
 - Replaced `Vec<ReadStatVar>` intermediate representation with direct Arrow builder pipeline for zero-copy parsing
 - Pure-arithmetic f64 rounding (no string formatting or heap allocation)
 - Column widths and SAS format strings persisted as Arrow field metadata
+- Improved parallelism: local thread pool, ordered reads, bounded-batch writes
 
 ### Removed
 - Dead code: `ReadStatVar` type, `lexical` dependency, unused dependencies
+
+### Fixed
+- CSV file output missing header row due to file truncation during two-step write
+- CLI demo convert scripts failing to find `readstat` binary on Windows (missing `.exe` extension)
 
 ## [0.17.0] - 2026-02-17
 
