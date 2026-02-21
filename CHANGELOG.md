@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Support for reading SAS files from in-memory byte slices
 - Benchmarks comparing file, mmap, and bytes I/O strategies
 - CSV integration tests for header and row count verification
+- Miri CI job for detecting undefined behavior in pure-Rust unsafe code
+- AddressSanitizer CI jobs on Linux (with C code instrumentation) and macOS
+- `READSTAT_SANITIZE_ADDRESS` build flag in `readstat-sys` for targeted ASan instrumentation
+- Memory safety documentation (`docs/MEMORY_SAFETY.md`) and mdBook integration
 
 ### Changed
 - Improved parallelism: local thread pool, ordered reads, bounded-batch writes
