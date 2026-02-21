@@ -8,5 +8,9 @@ members = [
     # internal
     "crates/readstat-tests",
 ]
-exclude = ["crates/readstat-wasm"]
+exclude = [
+    "crates/readstat-wasm",
+    "examples/api-demo/rust-server",
+    "examples/api-demo/python-server/readstat_py",
+]
 resolver = "2"
