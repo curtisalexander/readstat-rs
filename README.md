@@ -1,9 +1,7 @@
 [![readstat-rs](https://github.com/curtisalexander/readstat-rs/workflows/readstat-rs/badge.svg)](https://github.com/curtisalexander/readstat-rs/actions)
 
 # readstat-rs
-Command-line tool for working with SAS binary &mdash; `sas7bdat` &mdash; files.
-
-Get metadata, preview data, or convert data to [`csv`](https://en.wikipedia.org/wiki/Comma-separated_values), [`feather`](https://arrow.apache.org/docs/python/feather.html) (or the [Arrow IPC format](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)), [`ndjson`](https://github.com/ndjson/ndjson-spec), or [`parquet`](https://parquet.apache.org/) formats.
+Read, inspect, and convert SAS binary (`.sas7bdat`) files &mdash; from [Rust code](crates/readstat/), the [command line](crates/readstat-cli/), or the [browser](crates/readstat-wasm/). Converts to CSV, Parquet, Feather, and NDJSON using Apache Arrow.
 
 ## :key: Dependencies
 The command-line tool is developed in Rust and is only possible due to the following _**excellent**_ projects:

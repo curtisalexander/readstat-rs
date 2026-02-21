@@ -1,0 +1,15 @@
+[book]
+title = "readstat-rs"
+description = "Command-line tool and library for working with SAS binary files"
+authors = ["Curtis Alexander"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../target/book"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "coal"
+git-repository-url = "https://github.com/curtisalexander/readstat-rs"
+edit-url-template = "https://github.com/curtisalexander/readstat-rs/edit/main/{path}"

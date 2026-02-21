@@ -1,6 +1,6 @@
 # Architecture
 
-Rust CLI tool and library that reads SAS binary files (`.sas7bdat`) and converts them to modern columnar formats (Parquet, Feather, CSV, NDJSON). Uses FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library for parsing, and Apache Arrow for in-memory representation and output.
+Rust CLI tool and library that reads SAS binary files (`.sas7bdat`) and converts them to other formats (CSV, Feather, NDJSON, Parquet). Uses FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library for parsing, and Apache Arrow for in-memory representation and output.
 
 **Scope:** The `readstat-sys` crate exposes the full ReadStat C API, which supports SAS (`.sas7bdat`, `.xpt`), SPSS (`.sav`, `.zsav`, `.por`), and Stata (`.dta`). However, the `readstat`, `readstat-cli`, and `readstat-wasm` crates currently only implement parsing and conversion for **SAS `.sas7bdat` files**.
 

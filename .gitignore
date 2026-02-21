@@ -17,5 +17,15 @@ Cargo.lock
 node_modules/
 bun.lockb
 bun.lock
+# book (generated files copied by build-book.sh)
+/book/src/introduction.md
+/book/src/building.md
+/book/src/usage.md
+/book/src/architecture.md
+/book/src/technical.md
+/book/src/testing.md
+/book/src/benchmarking.md
+/book/src/ci-cd.md
+/book/src/crates/
 # claude
 .claude/

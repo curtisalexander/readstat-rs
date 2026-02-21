@@ -1,6 +1,6 @@
 # readstat-cli
 
-Binary crate producing the `readstat` CLI tool for converting SAS binary files (`.sas7bdat`) to modern columnar formats. Currently supports **SAS `.sas7bdat` files only** (SPSS and Stata formats are not yet implemented).
+Binary crate producing the `readstat` CLI tool for converting SAS binary files (`.sas7bdat`) to other formats. Currently supports **SAS `.sas7bdat` files only** (SPSS and Stata formats are not implemented).
 
 ## Subcommands
 
