@@ -3,6 +3,8 @@
 # readstat-rs
 Read, inspect, and convert SAS binary (`.sas7bdat`) files &mdash; from [Rust code](crates/readstat/), the [command line](crates/readstat-cli/), or the [browser](crates/readstat-wasm/). Converts to CSV, Parquet, Feather, and NDJSON using Apache Arrow.
 
+> The original use case was a command-line tool for converting SAS files, but the project has since expanded into a workspace of crates that can be used as a Rust library, a CLI, or compiled to WebAssembly for browser and JavaScript runtimes.
+
 ## :key: Dependencies
 The command-line tool is developed in Rust and is only possible due to the following _**excellent**_ projects:
 - The [ReadStat](https://github.com/WizardMac/ReadStat) C library developed by [Evan Miller](https://www.evanmiller.org)
@@ -101,6 +103,18 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [`readstat-wasm`](crates/readstat-wasm/) | `crates/readstat-wasm/` | WebAssembly build for browser/JS usage (excluded from workspace, built with Emscripten). |
 
 For full architectural details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## :bulb: Examples
+
+The [`examples/`](examples/) directory contains runnable demos showing different ways to use readstat-rs.
+
+| Example | Description |
+|---------|-------------|
+| [`cli-demo`](examples/cli-demo/) | Convert a `.sas7bdat` file to CSV, NDJSON, Parquet, and Feather using the `readstat` CLI |
+| [`bun-demo`](examples/bun-demo/) | Parse a `.sas7bdat` file from JavaScript using the WebAssembly build with Bun |
+| [`web-demo`](examples/web-demo/) | Browser-based viewer and converter — upload, preview, and export entirely client-side via WASM |
+
+To use `readstat` as a library in your own Rust project, add the [`readstat`](crates/readstat/) crate as a dependency.
 
 ## :link: Resources
 The following have been **_incredibly_** helpful while developing!
