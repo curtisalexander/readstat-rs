@@ -355,7 +355,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run tests with AddressSanitizer
-        run: cargo +nightly test --workspace --target x86_64-unknown-linux-gnu
+        run: cargo +nightly test --workspace --lib --tests --bins --target x86_64-unknown-linux-gnu
 
   asan-macos:
     runs-on: macos-latest
@@ -373,4 +373,4 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run tests with AddressSanitizer
-        run: cargo +nightly test --workspace --target aarch64-apple-darwin
+        run: cargo +nightly test --workspace --lib --tests --bins --target aarch64-apple-darwin
