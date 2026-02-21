@@ -341,7 +341,7 @@ jobs:
   asan-linux:
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: "-Zsanitizer=address"
+      RUSTFLAGS: "-Zsanitizer=address -Clinker=clang"
       READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
@@ -361,7 +361,6 @@ jobs:
     runs-on: macos-latest
     env:
       RUSTFLAGS: "-Zsanitizer=address"
-      READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
