@@ -37,7 +37,7 @@ pub enum ReadStatCliCommands {
     /// Preview sas7bdat data
     Preview {
         /// Path to sas7bdat file
-        #[arg(value_parser)]
+        #[arg(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
         /// Number of rows to write
         #[arg(default_value = "10", long, value_parser)]
@@ -72,7 +72,7 @@ pub enum ReadStatCliCommands {
         #[arg(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
         /// Output file path
-        #[arg(long, short = 'o', value_parser)]
+        #[arg(long, short = 'o', value_hint = ValueHint::FilePath, value_parser)]
         output: Option<PathBuf>,
         /// Output file format{n}Defaults to csv
         #[arg(ignore_case = true, long, short = 'f', value_enum, value_parser)]
@@ -151,7 +151,12 @@ impl From<CliOutFormat> for OutFormat {
 
 impl fmt::Display for CliOutFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self)
+        match self {
+            Self::csv => f.write_str("csv"),
+            Self::feather => f.write_str("feather"),
+            Self::ndjson => f.write_str("ndjson"),
+            Self::parquet => f.write_str("parquet"),
+        }
     }
 }
 
@@ -167,7 +172,10 @@ pub enum Reader {
 
 impl fmt::Display for Reader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self)
+        match self {
+            Self::mem => f.write_str("mem"),
+            Self::stream => f.write_str("stream"),
+        }
     }
 }
 
@@ -203,6 +211,13 @@ impl From<CliParquetCompression> for ParquetCompression {
 
 impl fmt::Display for CliParquetCompression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self)
+        match self {
+            Self::Uncompressed => f.write_str("uncompressed"),
+            Self::Snappy => f.write_str("snappy"),
+            Self::Gzip => f.write_str("gzip"),
+            Self::Lz4Raw => f.write_str("lz4-raw"),
+            Self::Brotli => f.write_str("brotli"),
+            Self::Zstd => f.write_str("zstd"),
+        }
     }
 }

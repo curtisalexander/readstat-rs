@@ -40,7 +40,7 @@ pub fn build_offsets(
 ///
 /// Returns an empty string if the pointer is null. Uses lossy UTF-8 conversion
 /// to handle non-UTF-8 data gracefully.
-pub fn ptr_to_string(x: *const i8) -> String {
+pub(crate) fn ptr_to_string(x: *const i8) -> String {
     if x.is_null() {
         String::new()
     } else {

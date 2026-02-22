@@ -18,7 +18,7 @@ use arrow_schema::Schema;
 #[cfg(feature = "parquet")]
 use parquet::{
     arrow::ArrowWriter as ParquetArrowWriter,
-    basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel},
+    basic::Compression as ParquetCompressionCodec,
     file::properties::WriterProperties,
 };
 #[cfg(feature = "parquet")]
@@ -50,7 +50,7 @@ use crate::rs_write_config::ParquetCompression;
 
 /// Internal wrapper around the Parquet Arrow writer, allowing ownership transfer on close.
 #[cfg(feature = "parquet")]
-pub struct ReadStatParquetWriter {
+pub(crate) struct ReadStatParquetWriter {
     wtr: Option<ParquetArrowWriter<BufWriter<std::fs::File>>>,
 }
 
@@ -62,7 +62,7 @@ impl ReadStatParquetWriter {
 }
 
 /// Format-specific writer variant, created lazily on first write.
-pub enum ReadStatWriterFormat {
+pub(crate) enum ReadStatWriterFormat {
     /// CSV writer to a file.
     #[cfg(feature = "csv")]
     Csv(BufWriter<std::fs::File>),
@@ -88,11 +88,11 @@ pub enum ReadStatWriterFormat {
 #[derive(Default)]
 pub struct ReadStatWriter {
     /// The format-specific writer, created on first write.
-    pub wtr: Option<ReadStatWriterFormat>,
+    pub(crate) wtr: Option<ReadStatWriterFormat>,
     /// Whether the CSV header row has been written.
-    pub wrote_header: bool,
+    pub(crate) wrote_header: bool,
     /// Whether any data has been written (controls file creation vs. append).
-    pub wrote_start: bool,
+    pub(crate) wrote_start: bool,
 }
 
 impl ReadStatWriter {
@@ -221,40 +221,7 @@ impl ReadStatWriter {
         compression: Option<ParquetCompression>,
         compression_level: Option<u32>,
     ) -> Result<ParquetCompressionCodec, ReadStatError> {
-        let codec = match compression {
-            Some(ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
-            Some(ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
-            Some(ParquetCompression::Gzip) => {
-                if let Some(level) = compression_level {
-                    let gzip_level = GzipLevel::try_new(level)
-                        .map_err(|e| ReadStatError::Other(format!("Invalid Gzip compression level: {}", e)))?;
-                    ParquetCompressionCodec::GZIP(gzip_level)
-                } else {
-                    ParquetCompressionCodec::GZIP(GzipLevel::default())
-                }
-            },
-            Some(ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
-            Some(ParquetCompression::Brotli) => {
-                if let Some(level) = compression_level {
-                    let brotli_level = BrotliLevel::try_new(level)
-                        .map_err(|e| ReadStatError::Other(format!("Invalid Brotli compression level: {}", e)))?;
-                    ParquetCompressionCodec::BROTLI(brotli_level)
-                } else {
-                    ParquetCompressionCodec::BROTLI(BrotliLevel::default())
-                }
-            },
-            Some(ParquetCompression::Zstd) => {
-                if let Some(level) = compression_level {
-                    let zstd_level = ZstdLevel::try_new(level as i32)
-                        .map_err(|e| ReadStatError::Other(format!("Invalid Zstd compression level: {}", e)))?;
-                    ParquetCompressionCodec::ZSTD(zstd_level)
-                } else {
-                    ParquetCompressionCodec::ZSTD(ZstdLevel::default())
-                }
-            },
-            None => ParquetCompressionCodec::SNAPPY,
-        };
-        Ok(codec)
+        crate::rs_write_config::resolve_parquet_compression(compression, compression_level)
     }
 
     /// Finalizes the writer, flushing any remaining data and printing a summary.

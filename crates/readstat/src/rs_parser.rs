@@ -14,13 +14,13 @@ use crate::err::{check_c_error, ReadStatError};
 ///
 /// Provides a builder-pattern API for configuring callbacks, row limits/offsets,
 /// and invoking the parse. The underlying C parser is freed on drop.
-pub struct ReadStatParser {
+pub(crate) struct ReadStatParser {
     parser: *mut readstat_sys::readstat_parser_t,
 }
 
 impl ReadStatParser {
     /// Allocates and initializes a new ReadStat C parser.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let parser: *mut readstat_sys::readstat_parser_t =
             unsafe { readstat_sys::readstat_parser_init() };
 
@@ -28,7 +28,7 @@ impl ReadStatParser {
     }
 
     /// Registers the callback invoked when file-level metadata is parsed.
-    pub fn set_metadata_handler(
+    pub(crate) fn set_metadata_handler(
         self,
         metadata_handler: readstat_sys::readstat_metadata_handler,
     ) -> Result<Self, ReadStatError> {
@@ -45,7 +45,7 @@ impl ReadStatParser {
     }
 
     /// Sets the maximum number of rows to read. `None` means no limit.
-    pub fn set_row_limit(
+    pub(crate) fn set_row_limit(
         self,
         row_limit: Option<u32>,
     ) -> Result<Self, ReadStatError> {
@@ -67,7 +67,7 @@ impl ReadStatParser {
     }
 
     /// Sets the starting row offset for reading. `None` means start from row 0.
-    pub fn set_row_offset(
+    pub(crate) fn set_row_offset(
         self,
         row_offset: Option<u32>,
     ) -> Result<Self, ReadStatError> {
@@ -89,7 +89,7 @@ impl ReadStatParser {
     }
 
     /// Registers the callback invoked for each variable (column) definition.
-    pub fn set_variable_handler(
+    pub(crate) fn set_variable_handler(
         self,
         variable_handler: readstat_sys::readstat_variable_handler,
     ) -> Result<Self, ReadStatError> {
@@ -106,7 +106,7 @@ impl ReadStatParser {
     }
 
     /// Registers the callback invoked for each cell value during row parsing.
-    pub fn set_value_handler(
+    pub(crate) fn set_value_handler(
         self,
         value_handler: readstat_sys::readstat_value_handler,
     ) -> Result<Self, ReadStatError> {
@@ -123,7 +123,7 @@ impl ReadStatParser {
     }
 
     /// Registers a custom handler for opening the data source.
-    pub fn set_open_handler(
+    pub(crate) fn set_open_handler(
         self,
         open_handler: readstat_sys::readstat_open_handler,
     ) -> Result<Self, ReadStatError> {
@@ -135,7 +135,7 @@ impl ReadStatParser {
     }
 
     /// Registers a custom handler for closing the data source.
-    pub fn set_close_handler(
+    pub(crate) fn set_close_handler(
         self,
         close_handler: readstat_sys::readstat_close_handler,
     ) -> Result<Self, ReadStatError> {
@@ -147,7 +147,7 @@ impl ReadStatParser {
     }
 
     /// Registers a custom handler for seeking within the data source.
-    pub fn set_seek_handler(
+    pub(crate) fn set_seek_handler(
         self,
         seek_handler: readstat_sys::readstat_seek_handler,
     ) -> Result<Self, ReadStatError> {
@@ -159,7 +159,7 @@ impl ReadStatParser {
     }
 
     /// Registers a custom handler for reading from the data source.
-    pub fn set_read_handler(
+    pub(crate) fn set_read_handler(
         self,
         read_handler: readstat_sys::readstat_read_handler,
     ) -> Result<Self, ReadStatError> {
@@ -171,7 +171,7 @@ impl ReadStatParser {
     }
 
     /// Registers a custom handler for progress updates.
-    pub fn set_update_handler(
+    pub(crate) fn set_update_handler(
         self,
         update_handler: readstat_sys::readstat_update_handler,
     ) -> Result<Self, ReadStatError> {
@@ -183,7 +183,7 @@ impl ReadStatParser {
     }
 
     /// Sets a custom I/O context pointer passed to all I/O handler callbacks.
-    pub fn set_io_ctx(self, io_ctx: *mut c_void) -> Result<Self, ReadStatError> {
+    pub(crate) fn set_io_ctx(self, io_ctx: *mut c_void) -> Result<Self, ReadStatError> {
         let error = unsafe { readstat_sys::readstat_set_io_ctx(self.parser, io_ctx) };
         debug!("After setting io ctx, error ==> {}", &error);
         check_c_error(error as i32)?;
@@ -194,7 +194,7 @@ impl ReadStatParser {
     ///
     /// Returns the raw ReadStat error code. Use [`check_c_error`](crate::err::check_c_error)
     /// to convert to a `Result`.
-    pub fn parse_sas7bdat(
+    pub(crate) fn parse_sas7bdat(
         &mut self,
         path: *const c_char,
         user_ctx: *mut c_void,

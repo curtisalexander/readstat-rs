@@ -42,7 +42,7 @@ impl ReadStatPath {
 
     /// Converts a file path to a [`CString`] for FFI. Uses raw bytes on Unix.
     #[cfg(unix)]
-    pub fn path_to_cstring(path: &PathBuf) -> Result<CString, ReadStatError> {
+    pub(crate) fn path_to_cstring(path: &Path) -> Result<CString, ReadStatError> {
         use std::os::unix::ffi::OsStrExt;
         let bytes = path.as_os_str().as_bytes();
         Ok(CString::new(bytes)?)
@@ -50,7 +50,7 @@ impl ReadStatPath {
 
     /// Converts a file path to a [`CString`] for FFI. Uses UTF-8 on non-Unix platforms.
     #[cfg(not(unix))]
-    pub fn path_to_cstring(path: &Path) -> Result<CString, ReadStatError> {
+    pub(crate) fn path_to_cstring(path: &Path) -> Result<CString, ReadStatError> {
         let rust_str = path
             .as_os_str()
             .to_str()

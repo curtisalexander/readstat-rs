@@ -266,9 +266,8 @@ impl ReadStatMetadata {
         &self,
         columns: Option<Vec<String>>,
     ) -> Result<Option<BTreeMap<i32, i32>>, ReadStatError> {
-        let columns = match columns {
-            Some(c) => c,
-            None => return Ok(None),
+        let Some(columns) = columns else {
+            return Ok(None);
         };
 
         // Deduplicate while preserving order isn't needed - we use dataset order
@@ -395,6 +394,7 @@ pub struct ReadStatVarMetadata {
 
 impl ReadStatVarMetadata {
     /// Creates a new `ReadStatVarMetadata` with the given field values.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         var_name: String,
         var_type: ReadStatVarType,

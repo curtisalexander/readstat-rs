@@ -84,6 +84,4 @@ fn main() {
 
 // no-op for not windows as not needed
 #[cfg(not(windows))]
-fn main() {
-    ()
-}
+fn main() {}

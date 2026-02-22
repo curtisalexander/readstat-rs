@@ -176,7 +176,7 @@ pub enum ReadStatError {
 
 /// Check a readstat C error code, returning Ok(()) for READSTAT_OK
 /// or an appropriate error variant otherwise.
-pub fn check_c_error(code: i32) -> Result<(), ReadStatError> {
+pub(crate) fn check_c_error(code: i32) -> Result<(), ReadStatError> {
     use num_traits::FromPrimitive;
     match FromPrimitive::from_i32(code) {
         Some(ReadStatCError::READSTAT_OK) => Ok(()),
