@@ -307,7 +307,7 @@ fn sql_stream_and_write() {
         "cars",
         "SELECT \"Brand\", \"Model\", \"EngineSize\" FROM cars WHERE \"EngineSize\" > 5.0",
         &out_path,
-        readstat::OutFormat::parquet,
+        readstat::OutFormat::Parquet,
         None,
         None,
     )

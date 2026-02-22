@@ -267,23 +267,23 @@ impl ReadStatWriter {
     ) -> Result<(), ReadStatError> {
         match wc.format {
             #[cfg(feature = "csv")]
-            OutFormat::csv => {
+            OutFormat::Csv => {
                 self.print_finish_message(d, wc, in_path);
                 Ok(())
             }
             #[cfg(feature = "feather")]
-            OutFormat::feather => {
+            OutFormat::Feather => {
                 self.finish_feather()?;
                 self.print_finish_message(d, wc, in_path);
                 Ok(())
             }
             #[cfg(feature = "ndjson")]
-            OutFormat::ndjson => {
+            OutFormat::Ndjson => {
                 self.print_finish_message(d, wc, in_path);
                 Ok(())
             }
             #[cfg(feature = "parquet")]
-            OutFormat::parquet => {
+            OutFormat::Parquet => {
                 self.finish_parquet()?;
                 self.print_finish_message(d, wc, in_path);
                 Ok(())
@@ -363,7 +363,7 @@ impl ReadStatWriter {
     pub fn write(&mut self, d: &ReadStatData, wc: &WriteConfig) -> Result<(), ReadStatError> {
         match wc.format {
             #[cfg(feature = "csv")]
-            OutFormat::csv => {
+            OutFormat::Csv => {
                 if wc.out_path.is_none() {
                     if self.wrote_header {
                         self.write_data_to_stdout(d)
@@ -376,11 +376,11 @@ impl ReadStatWriter {
                 }
             }
             #[cfg(feature = "feather")]
-            OutFormat::feather => self.write_data_to_feather(d, wc),
+            OutFormat::Feather => self.write_data_to_feather(d, wc),
             #[cfg(feature = "ndjson")]
-            OutFormat::ndjson => self.write_data_to_ndjson(d, wc),
+            OutFormat::Ndjson => self.write_data_to_ndjson(d, wc),
             #[cfg(feature = "parquet")]
-            OutFormat::parquet => self.write_data_to_parquet(d, wc),
+            OutFormat::Parquet => self.write_data_to_parquet(d, wc),
             #[allow(unreachable_patterns)]
             _ => Err(ReadStatError::Other(format!(
                 "Output format {:?} is not enabled. Enable the corresponding feature flag.",
@@ -555,11 +555,6 @@ impl ReadStatWriter {
 
     #[cfg(feature = "csv")]
     fn write_data_to_stdout(&mut self, d: &ReadStatData) -> Result<(), ReadStatError> {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pb) = &d.pb {
-            pb.finish_and_clear();
-        }
-
         // writer setup
         if !self.wrote_start {
             self.wtr = Some(ReadStatWriterFormat::CsvStdout(stdout()));
@@ -584,11 +579,6 @@ impl ReadStatWriter {
 
     #[cfg(feature = "csv")]
     fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), ReadStatError> {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pb) = &d.pb {
-            pb.finish_and_clear();
-        }
-
         let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
 
         println!("{}", vars.join(","));

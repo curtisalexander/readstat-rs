@@ -15,7 +15,7 @@ const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 /// Validated file path for SAS file input.
 ///
 /// Encapsulates the input `.sas7bdat` path (validated to exist with correct extension).
-/// The input path is also converted to a [`CString`] for passing to the ReadStat C library.
+/// The input path is also converted to a [`CString`] for passing to the `ReadStat` C library.
 #[derive(Debug, Clone)]
 pub struct ReadStatPath {
     /// Absolute path to the input `.sas7bdat` file.
@@ -61,7 +61,7 @@ impl ReadStatPath {
     fn validate_in_extension(path: &Path) -> Result<String, ReadStatError> {
         path.extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.to_owned())
+            .map(std::borrow::ToOwned::to_owned)
             .map_or(
                 Err(ReadStatError::Other(format!(
                     "File {} does not have an extension!",

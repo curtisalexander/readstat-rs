@@ -1,10 +1,10 @@
 //! Variable types and format classification for SAS data.
 //!
 //! [`ReadStatVarFormatClass`] classifies SAS format strings into semantic categories
-//! (Date, DateTime, Time, and their sub-second precision variants), which determines
+//! (Date, `DateTime`, Time, and their sub-second precision variants), which determines
 //! the Arrow data type used during conversion.
 //!
-//! [`ReadStatVarType`] and [`ReadStatVarTypeClass`] map ReadStat C type codes to Rust
+//! [`ReadStatVarType`] and [`ReadStatVarTypeClass`] map `ReadStat` C type codes to Rust
 //! enums, used during schema construction and builder allocation.
 
 use num_derive::FromPrimitive;
@@ -27,13 +27,13 @@ use serde::Serialize;
 pub enum ReadStatVarFormatClass {
     /// Date format (e.g. `DATE9`, `MMDDYY10`). Maps to Arrow `Date32`.
     Date,
-    /// DateTime format with second precision (e.g. `DATETIME22`).
+    /// `DateTime` format with second precision (e.g. `DATETIME22`).
     DateTime,
-    /// DateTime format with millisecond precision (e.g. `DATETIME22.3`).
+    /// `DateTime` format with millisecond precision (e.g. `DATETIME22.3`).
     DateTimeWithMilliseconds,
-    /// DateTime format with microsecond precision (e.g. `DATETIME22.6`).
+    /// `DateTime` format with microsecond precision (e.g. `DATETIME22.6`).
     DateTimeWithMicroseconds,
-    /// DateTime format with nanosecond precision (e.g. `DATETIME22.9`).
+    /// `DateTime` format with nanosecond precision (e.g. `DATETIME22.9`).
     DateTimeWithNanoseconds,
     /// Time format with second precision (e.g. `TIME8`).
     Time,
@@ -41,7 +41,7 @@ pub enum ReadStatVarFormatClass {
     TimeWithMicroseconds,
 }
 
-/// The storage type of a SAS variable, as reported by the ReadStat C library.
+/// The storage type of a SAS variable, as reported by the `ReadStat` C library.
 #[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
 pub enum ReadStatVarType {
     /// Variable-length string.

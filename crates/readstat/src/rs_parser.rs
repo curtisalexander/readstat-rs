@@ -1,7 +1,7 @@
-//! Safe wrapper around the ReadStat C parser.
+//! Safe wrapper around the `ReadStat` C parser.
 //!
 //! [`ReadStatParser`] provides a builder-pattern API for configuring and invoking the
-//! ReadStat C library's `readstat_parser_t`. It manages the parser lifecycle (init/free)
+//! `ReadStat` C library's `readstat_parser_t`. It manages the parser lifecycle (init/free)
 //! via RAII and exposes methods for setting callback handlers, row limits/offsets,
 //! and triggering the actual `.sas7bdat` parse.
 
@@ -10,7 +10,7 @@ use std::os::raw::{c_char, c_long, c_void};
 
 use crate::err::{ReadStatError, check_c_error};
 
-/// Safe RAII wrapper around the ReadStat C parser (`readstat_parser_t`).
+/// Safe RAII wrapper around the `ReadStat` C parser (`readstat_parser_t`).
 ///
 /// Provides a builder-pattern API for configuring callbacks, row limits/offsets,
 /// and invoking the parse. The underlying C parser is freed on drop.
@@ -19,7 +19,7 @@ pub(crate) struct ReadStatParser {
 }
 
 impl ReadStatParser {
-    /// Allocates and initializes a new ReadStat C parser.
+    /// Allocates and initializes a new `ReadStat` C parser.
     pub(crate) fn new() -> Self {
         let parser: *mut readstat_sys::readstat_parser_t =
             unsafe { readstat_sys::readstat_parser_init() };
@@ -167,7 +167,7 @@ impl ReadStatParser {
 
     /// Parses a `.sas7bdat` file, invoking registered callbacks as data is read.
     ///
-    /// Returns the raw ReadStat error code. Use [`check_c_error`](crate::err::check_c_error)
+    /// Returns the raw `ReadStat` error code. Use [`check_c_error`](crate::err::check_c_error)
     /// to convert to a `Result`.
     pub(crate) fn parse_sas7bdat(
         &mut self,

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 /// 💾 Command-line tool for working with SAS binary files
 ///
-/// 🦀 Rust wrapper of ReadStat C library
+/// 🦀 Rust wrapper of `ReadStat` C library
 #[derive(Parser, Debug)]
 #[command(version)]
 #[command(propagate_version = true)]
@@ -124,27 +124,29 @@ pub enum ReadStatCliCommands {
     },
 }
 
-/// CLI output file format (with clap ValueEnum derive).
+/// CLI output file format (with clap `ValueEnum` derive).
+///
+/// Clap's `ValueEnum` derive converts `PascalCase` variants to lowercase
+/// for CLI input (e.g., `Csv` → `csv`).
 #[derive(Debug, Clone, Copy, ValueEnum)]
-#[allow(non_camel_case_types)]
 pub enum CliOutFormat {
     /// Comma-separated values.
-    csv,
+    Csv,
     /// Feather (Arrow IPC) format.
-    feather,
+    Feather,
     /// Newline-delimited JSON.
-    ndjson,
+    Ndjson,
     /// Apache Parquet columnar format.
-    parquet,
+    Parquet,
 }
 
 impl From<CliOutFormat> for OutFormat {
     fn from(f: CliOutFormat) -> Self {
         match f {
-            CliOutFormat::csv => OutFormat::csv,
-            CliOutFormat::feather => OutFormat::feather,
-            CliOutFormat::ndjson => OutFormat::ndjson,
-            CliOutFormat::parquet => OutFormat::parquet,
+            CliOutFormat::Csv => OutFormat::Csv,
+            CliOutFormat::Feather => OutFormat::Feather,
+            CliOutFormat::Ndjson => OutFormat::Ndjson,
+            CliOutFormat::Parquet => OutFormat::Parquet,
         }
     }
 }
@@ -152,34 +154,36 @@ impl From<CliOutFormat> for OutFormat {
 impl fmt::Display for CliOutFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::csv => f.write_str("csv"),
-            Self::feather => f.write_str("feather"),
-            Self::ndjson => f.write_str("ndjson"),
-            Self::parquet => f.write_str("parquet"),
+            Self::Csv => f.write_str("csv"),
+            Self::Feather => f.write_str("feather"),
+            Self::Ndjson => f.write_str("ndjson"),
+            Self::Parquet => f.write_str("parquet"),
         }
     }
 }
 
 /// Strategy for reading SAS data into memory.
+///
+/// Clap's `ValueEnum` derive converts `PascalCase` variants to lowercase
+/// for CLI input (e.g., `Mem` → `mem`).
 #[derive(Debug, Clone, Copy, ValueEnum)]
-#[allow(non_camel_case_types)]
 pub enum Reader {
     /// Read all data into memory at once.
-    mem,
+    Mem,
     /// Stream data in chunks (default, lower memory usage).
-    stream,
+    Stream,
 }
 
 impl fmt::Display for Reader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::mem => f.write_str("mem"),
-            Self::stream => f.write_str("stream"),
+            Self::Mem => f.write_str("mem"),
+            Self::Stream => f.write_str("stream"),
         }
     }
 }
 
-/// CLI Parquet compression algorithm (with clap ValueEnum derive).
+/// CLI Parquet compression algorithm (with clap `ValueEnum` derive).
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum CliParquetCompression {
     /// No compression.

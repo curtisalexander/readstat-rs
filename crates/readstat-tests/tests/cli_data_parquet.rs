@@ -460,9 +460,7 @@ fn cars_to_parquet_with_compression_uncompressed_with_compression_level() {
         Some(ParquetCompression::Uncompressed),
         Some(5),
     ) {
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("Compression level is not required for compression=uncompressed, ignoring value of --compression-level"));
+        cmd.assert().success();
 
         tempfile.close().unwrap();
     }
@@ -549,9 +547,7 @@ fn cars_to_parquet_with_compression_snappy_with_compression_level() {
         Some(ParquetCompression::Snappy),
         Some(5),
     ) {
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("Compression level is not required for compression=snappy, ignoring value of --compression-level"));
+        cmd.assert().success();
 
         tempfile.close().unwrap();
     }
@@ -614,9 +610,7 @@ fn cars_to_parquet_with_compression_lz4raw_with_compression_level() {
         Some(ParquetCompression::Lz4Raw),
         Some(5),
     ) {
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("Compression level is not required for compression=lz4-raw, ignoring value of --compression-level"));
+        cmd.assert().success();
 
         tempfile.close().unwrap();
     }

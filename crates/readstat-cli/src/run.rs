@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::thread;
 
 use readstat::{
-    OutFormat, ReadStatData, ReadStatError, ReadStatMetadata, ReadStatPath, ReadStatWriter,
-    WriteConfig, build_offsets,
+    OutFormat, ProgressCallback, ReadStatData, ReadStatError, ReadStatMetadata, ReadStatPath,
+    ReadStatWriter, WriteConfig, build_offsets,
 };
 
 use crate::cli::{ReadStatCli, ReadStatCliCommands, Reader};
@@ -27,26 +27,50 @@ const CHANNEL_CAPACITY: usize = 10;
 /// Determine stream row count based on reader type.
 fn resolve_stream_rows(reader: Option<Reader>, stream_rows: Option<u32>, total_rows: u32) -> u32 {
     match reader {
-        Some(Reader::stream) | None => stream_rows.unwrap_or(STREAM_ROWS),
-        Some(Reader::mem) => total_rows,
+        Some(Reader::Stream) | None => stream_rows.unwrap_or(STREAM_ROWS),
+        Some(Reader::Mem) => total_rows,
+    }
+}
+
+/// [`ProgressCallback`] implementation backed by an `indicatif::ProgressBar`.
+struct IndicatifProgress {
+    pb: ProgressBar,
+}
+
+impl ProgressCallback for IndicatifProgress {
+    fn inc(&self, n: u64) {
+        self.pb.inc(n);
+    }
+
+    fn parsing_started(&self, path: &str) {
+        if let Ok(style) = ProgressStyle::default_spinner()
+            .template("[{spinner:.green} {elapsed_precise}] {msg}")
+        {
+            self.pb.set_style(style);
+        }
+        self.pb
+            .set_message(format!("Parsing sas7bdat data from file {path}"));
+        self.pb
+            .enable_steady_tick(std::time::Duration::from_millis(120));
     }
 }
 
 /// Create a progress bar if progress is enabled.
-fn create_progress_bar(
+fn create_progress(
     no_progress: bool,
     total_rows: u32,
-) -> Result<Option<ProgressBar>, ReadStatError> {
+) -> Result<Option<Arc<IndicatifProgress>>, ReadStatError> {
     if no_progress {
         return Ok(None);
     }
     let pb = ProgressBar::new(total_rows as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")?
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")
+            .map_err(|e| ReadStatError::Other(format!("Progress bar template error: {e}")))?
             .progress_chars("##-"),
     );
-    Ok(Some(pb))
+    Ok(Some(Arc::new(IndicatifProgress { pb })))
 }
 
 /// Resolve column names from `--columns` or `--columns-file` CLI options.
@@ -170,7 +194,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             let total_rows_to_stream =
                 resolve_stream_rows(reader, stream_rows, total_rows_to_process);
             let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-            let pb = create_progress_bar(no_progress, total_rows_to_process)?;
+            let progress = create_progress(no_progress, total_rows_to_process)?;
 
             // Build up offsets
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
@@ -200,8 +224,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                         row_end,
                     );
 
-                if let Some(ref pb) = pb {
-                    d = d.set_progress_bar(pb.clone());
+                if let Some(ref p) = progress {
+                    d = d.set_progress(p.clone() as Arc<dyn ProgressCallback>);
                 }
 
                 d.read_data(&rsp)?;
@@ -212,8 +236,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             }
 
             // Finish progress bar
-            if let Some(pb) = pb {
-                pb.finish_with_message("Done");
+            if let Some(p) = progress {
+                p.pb.finish_with_message("Done");
             }
 
             // Apply SQL query if provided, otherwise write directly
@@ -340,14 +364,14 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     let total_rows_to_stream =
                         resolve_stream_rows(reader, stream_rows, total_rows_to_process);
                     let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-                    let pb = create_progress_bar(no_progress, total_rows_to_process)?;
+                    let progress = create_progress(no_progress, total_rows_to_process)?;
 
                     // Build up offsets
                     let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
 
                     // Determine if we should use parallel writes (check before spawning reader thread)
                     let use_parallel_writes =
-                        parallel && parallel_write && matches!(wc.format, OutFormat::parquet);
+                        parallel && parallel_write && matches!(wc.format, OutFormat::Parquet);
 
                     // Save input path for display messages on the writer side
                     let input_path = rsp.path.clone();
@@ -378,8 +402,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     // Create channels with a bounded capacity
                     let (s, r) = bounded(CHANNEL_CAPACITY);
 
-                    // Clone progress bar for the spawned thread
-                    let pb_thread = pb.clone();
+                    // Clone progress for the spawned thread
+                    let progress_thread = progress.clone();
 
                     // Clone wc for use in thread
                     let wc_thread = wc.clone();
@@ -431,8 +455,10 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                                                 row_end,
                                             );
 
-                                        if let Some(ref pb) = pb_thread {
-                                            d = d.set_progress_bar(pb.clone());
+                                        if let Some(ref p) = progress_thread {
+                                            d = d.set_progress(
+                                                p.clone() as Arc<dyn ProgressCallback>,
+                                            );
                                         }
 
                                         d.read_data(&rsp)?;
@@ -543,7 +569,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                             loop {
                                 let mut batch_group: Vec<(ReadStatData, WriteConfig, usize)> =
                                     Vec::with_capacity(CHANNEL_CAPACITY);
-                                for item in r.iter() {
+                                for item in &r {
                                     batch_group.push(item);
                                     if batch_group.len() >= CHANNEL_CAPACITY {
                                         break;
@@ -627,8 +653,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     }
 
                     // Finish progress bar
-                    if let Some(pb) = pb {
-                        pb.finish_with_message("Done");
+                    if let Some(p) = progress {
+                        p.pb.finish_with_message("Done");
                     }
 
                     // Join the reader thread to surface any panics or errors

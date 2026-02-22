@@ -6,7 +6,7 @@
 //! format for output as CSV, Feather (Arrow IPC), NDJSON, or Parquet.
 //!
 //! **Note:** While the underlying [`readstat-sys`](https://docs.rs/readstat-sys) crate
-//! exposes bindings for all formats supported by ReadStat (SAS, SPSS, Stata),
+//! exposes bindings for all formats supported by `ReadStat` (SAS, SPSS, Stata),
 //! this crate currently only implements parsing and conversion for **SAS `.sas7bdat` files**.
 //!
 //! # Data Pipeline
@@ -53,7 +53,7 @@
 //! # }
 //! ```
 //!
-//! ## Read all data into Arrow RecordBatch
+//! ## Read all data into Arrow `RecordBatch`
 //!
 //! Parse the entire file into a single Arrow [`RecordBatch`](arrow_array::RecordBatch).
 //! Best for smaller files that fit comfortably in memory.
@@ -97,7 +97,7 @@
 //! let rsp = ReadStatPath::new("data.sas7bdat".into())?;
 //! let wc = WriteConfig::new(
 //!     Some("output.parquet".into()),
-//!     Some(OutFormat::parquet),
+//!     Some(OutFormat::Parquet),
 //!     false, // overwrite
 //!     None,  // compression (defaults to Snappy for Parquet)
 //!     None,  // compression_level
@@ -191,7 +191,7 @@
 //! # }
 //! ```
 //!
-//! ## Convert RecordBatch to in-memory bytes
+//! ## Convert `RecordBatch` to in-memory bytes
 //!
 //! Serialize a parsed [`RecordBatch`](arrow_array::RecordBatch) directly to
 //! in-memory bytes without writing to a file. Useful for HTTP responses,
@@ -233,7 +233,7 @@
 //! - [`WriteConfig`] — Output configuration (path, format, compression)
 //! - [`ReadStatMetadata`] — File-level metadata (row/var counts, encoding, Arrow schema)
 //! - [`ReadStatData`] — Parsed row data, convertible to Arrow [`RecordBatch`](arrow_array::RecordBatch)
-//! - [`ReadStatVarFormatClass`] — SAS format classification (Date, DateTime, Time variants)
+//! - [`ReadStatVarFormatClass`] — SAS format classification (Date, `DateTime`, Time variants)
 //! - [`ReadStatWriter`] — Writes Arrow batches to the configured output format
 //!
 //! # Features
@@ -249,10 +249,10 @@
 //! | `sql` | SQL | Query data with SQL via DataFusion (not enabled by default) |
 
 #![warn(missing_docs)]
-#![allow(non_camel_case_types)]
 
 pub use common::build_offsets;
 pub use err::{ReadStatCError, ReadStatError};
+pub use progress::ProgressCallback;
 pub use rs_data::ReadStatData;
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
@@ -276,6 +276,7 @@ mod cb;
 mod common;
 mod err;
 mod formats;
+mod progress;
 mod rs_buffer_io;
 mod rs_data;
 mod rs_metadata;

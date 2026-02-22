@@ -14,7 +14,6 @@ use std::fs::File;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     ffi::{CString, c_void},
-    os::raw::c_int,
     path::Path,
 };
 
@@ -33,9 +32,9 @@ use crate::rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClas
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
     /// Number of rows (observations) in the dataset.
-    pub row_count: c_int,
+    pub row_count: i32,
     /// Number of variables (columns) in the dataset.
-    pub var_count: c_int,
+    pub var_count: i32,
     /// Internal table name from the SAS file header.
     pub table_name: String,
     /// User-assigned file label.
@@ -43,9 +42,9 @@ pub struct ReadStatMetadata {
     /// Character encoding of the file (e.g. `"UTF-8"`, `"WINDOWS-1252"`).
     pub file_encoding: String,
     /// SAS file format version number.
-    pub version: c_int,
+    pub version: i32,
     /// Whether the file uses 64-bit format (0 = 32-bit, 1 = 64-bit).
-    pub is64bit: c_int,
+    pub is64bit: i32,
     /// File creation timestamp (formatted as `YYYY-MM-DD HH:MM:SS`).
     pub creation_time: String,
     /// File modification timestamp (formatted as `YYYY-MM-DD HH:MM:SS`).
@@ -154,7 +153,7 @@ impl ReadStatMetadata {
 
     /// Parses metadata from the `.sas7bdat` file referenced by `rsp`.
     ///
-    /// Sets up the ReadStat C parser with metadata and variable handlers, then
+    /// Sets up the `ReadStat` C parser with metadata and variable handlers, then
     /// invokes parsing. On success, builds the Arrow [`Schema`] from the
     /// discovered variable types. If `skip_row_count` is `true`, sets a row
     /// limit of 1 to skip counting all rows (faster for metadata-only queries).
@@ -166,7 +165,7 @@ impl ReadStatMetadata {
         debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        let ctx = self as *mut ReadStatMetadata as *mut c_void;
+        let ctx = std::ptr::from_mut::<ReadStatMetadata>(self) as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {error}");
@@ -198,7 +197,7 @@ impl ReadStatMetadata {
     ) -> Result<(), ReadStatError> {
         let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
 
-        let ctx = self as *mut ReadStatMetadata as *mut c_void;
+        let ctx = std::ptr::from_mut::<ReadStatMetadata>(self) as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {error}");
@@ -255,9 +254,9 @@ impl ReadStatMetadata {
         let contents = std::fs::read_to_string(path)?;
         let names: Vec<String> = contents
             .lines()
-            .map(|line| line.trim())
+            .map(str::trim)
             .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(|line| line.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         Ok(names)
     }
@@ -329,7 +328,7 @@ impl ReadStatMetadata {
 
         let mut filtered = Self {
             row_count: self.row_count,
-            var_count: mapping.len() as c_int,
+            var_count: mapping.len() as i32,
             table_name: self.table_name.clone(),
             file_label: self.file_label.clone(),
             file_encoding: self.file_encoding.clone(),
@@ -442,7 +441,7 @@ mod tests {
                 ),
             );
         }
-        md.var_count = var_names.len() as c_int;
+        md.var_count = var_names.len() as i32;
         md.schema = md.initialize_schema();
         md
     }

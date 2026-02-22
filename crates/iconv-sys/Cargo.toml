@@ -1,5 +1,5 @@
 [package]
-name = "iconv-sys"
+name = "readstat-iconv-sys"
 version = "0.3.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
@@ -9,11 +9,23 @@ homepage = "https://github.com/curtisalexander/readstat-rs"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
-documentation = "https://docs.rs/iconv-sys"
+documentation = "https://docs.rs/readstat-iconv-sys"
 keywords = ["iconv", "ffi", "bindings", "windows"]
 categories = ["external-ffi-bindings"]
 links = "iconv"
 build = "build.rs"
+include = [
+    "build.rs",
+    "src/**",
+    "wrapper.h",
+    "README.md",
+    "vendor/libiconv-win-build/include/**",
+    "vendor/libiconv-win-build/lib/**",
+    "vendor/libiconv-win-build/libcharset/**",
+    "vendor/libiconv-win-build/srclib/**",
+    "vendor/libiconv-win-build/COPYING*",
+    "vendor/libiconv-win-build/LICENSE.md",
+]
 
 [build-dependencies]
 bindgen = "0.72"
