@@ -374,3 +374,35 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run tests with AddressSanitizer
         run: cargo +nightly test --workspace --lib --tests --bins --target aarch64-apple-darwin
+
+  asan-windows:
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: "-Zsanitizer=address"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Cache LLVM and Clang
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\llvm
+          key: llvm-21.1.8
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "21.1.8"
+          directory: ${{ runner.temp }}\llvm
+          cached: ${{ steps.cache-llvm.outputs.cache-hit }}
+      - name: Run tests with AddressSanitizer
+        run: |
+            $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
+            cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
