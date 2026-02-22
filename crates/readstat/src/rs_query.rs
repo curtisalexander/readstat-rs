@@ -224,7 +224,7 @@ pub fn write_sql_results(
     let schema = batches[0].schema();
 
     match format {
-        OutFormat::csv => {
+        OutFormat::Csv => {
             let f = std::fs::File::create(output_path)?;
             let mut writer = CsvWriterBuilder::new()
                 .with_header(true)
@@ -233,7 +233,7 @@ pub fn write_sql_results(
                 writer.write(batch)?;
             }
         }
-        OutFormat::feather => {
+        OutFormat::Feather => {
             let f = std::fs::File::create(output_path)?;
             let mut writer = IpcFileWriter::try_new(BufWriter::new(f), &schema)?;
             for batch in batches {
@@ -241,7 +241,7 @@ pub fn write_sql_results(
             }
             writer.finish()?;
         }
-        OutFormat::ndjson => {
+        OutFormat::Ndjson => {
             let f = std::fs::File::create(output_path)?;
             let mut writer = JsonLineDelimitedWriter::new(BufWriter::new(f));
             for batch in batches {
@@ -249,7 +249,7 @@ pub fn write_sql_results(
             }
             writer.finish()?;
         }
-        OutFormat::parquet => {
+        OutFormat::Parquet => {
             let f = std::fs::File::create(output_path)?;
             let codec = resolve_parquet_compression(compression, compression_level)?;
             let props = WriterProperties::builder()

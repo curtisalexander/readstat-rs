@@ -15,6 +15,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Removed unnecessary `extern crate readstat_sys` from CLI binary
 - Added `version = "0.19.0"` to `readstat` dependency in `readstat-cli` for crates.io compatibility
 
+### crates.io release preparation
+- Renamed `iconv-sys` package to `readstat-iconv-sys` to avoid crates.io name conflict
+- Added `include` fields to `readstat-iconv-sys` and `readstat-sys` `Cargo.toml` to reduce crate package sizes
+- Changed `readme` paths in `readstat` and `readstat-cli` from `../../README.md` to per-crate `README.md`
+- Added `documentation` URL to `readstat-cli` `Cargo.toml`
+- Replaced `println!` with `log::warn!` for compression warnings in `WriteConfig` validation
+- Renamed `OutFormat` variants from `snake_case` to `PascalCase` (`csv` → `Csv`, `parquet` → `Parquet`, etc.)
+- Renamed `CliOutFormat` and `Reader` CLI enum variants to `PascalCase` (clap `ValueEnum` preserves lowercase CLI input)
+- Removed crate-level `#[allow(non_camel_case_types)]` from `readstat` library; added targeted `#[allow]` to C-mirroring enums
+- Added `#[must_use]` to all `ReadStatData` builder methods (`init`, `init_shared`, `set_no_progress`, etc.)
+- Changed `ReadStatMetadata` public fields from `c_int` to `i32` (`row_count`, `var_count`, `version`, `is64bit`)
+- Extracted `indicatif` progress bar from `readstat` library into `ProgressCallback` trait; CLI provides the `indicatif` implementation
+- Removed `indicatif` dependency from `readstat` library crate
+- Fixed clippy `doc_markdown` warnings (backtick `ReadStat` and other identifiers in doc comments)
+- Applied pedantic clippy auto-fixes
+
 ## [0.18.0]
 
 ### Added

@@ -1,6 +1,6 @@
-//! FFI callback functions invoked by the ReadStat C library during parsing.
+//! FFI callback functions invoked by the `ReadStat` C library during parsing.
 //!
-//! The ReadStat C parser uses a callback-driven architecture: as it reads a `.sas7bdat`
+//! The `ReadStat` C parser uses a callback-driven architecture: as it reads a `.sas7bdat`
 //! file, it invokes registered callbacks for metadata, variables, and values. Each
 //! callback receives a raw `*mut c_void` context pointer that is cast back to the
 //! appropriate Rust struct ([`ReadStatMetadata`](crate::ReadStatMetadata) or
@@ -19,12 +19,12 @@ use crate::{
     rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
 
-/// Return codes for ReadStat C callback functions.
+/// Return codes for `ReadStat` C callback functions.
 ///
 /// Mirrors the `readstat_handler_t` enum from the C API. Only `OK` and `ABORT`
 /// are currently used; `SKIP_VARIABLE` is included for completeness with the
 /// C API contract.
-#[allow(dead_code)]
+#[allow(dead_code, non_camel_case_types)]
 #[derive(Debug)]
 #[repr(C)]
 enum ReadStatHandler {
@@ -35,7 +35,7 @@ enum ReadStatHandler {
 
 // C callback functions
 
-/// FFI callback that extracts file-level metadata from the ReadStat C parser.
+/// FFI callback that extracts file-level metadata from the `ReadStat` C parser.
 ///
 /// Called once during parsing. Populates the [`ReadStatMetadata`] struct
 /// (accessed via the `ctx` pointer) with row/variable counts, encoding,
@@ -45,7 +45,7 @@ enum ReadStatHandler {
 ///
 /// - `metadata` must be a valid pointer to a `readstat_metadata_t` produced by the C parser.
 /// - `ctx` must be a valid pointer to a [`ReadStatMetadata`] instance that outlives this call.
-/// - This function must only be called by the ReadStat C library as a registered callback.
+/// - This function must only be called by the `ReadStat` C library as a registered callback.
 pub(crate) extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
@@ -125,7 +125,7 @@ pub(crate) extern "C" fn handle_metadata(
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
 
-/// FFI callback that extracts per-variable metadata from the ReadStat C parser.
+/// FFI callback that extracts per-variable metadata from the `ReadStat` C parser.
 ///
 /// Called once for each variable (column) in the dataset. Populates a
 /// [`ReadStatVarMetadata`] entry in the [`ReadStatMetadata::vars`] map
@@ -135,7 +135,7 @@ pub(crate) extern "C" fn handle_metadata(
 ///
 /// - `variable` must be a valid pointer to a `readstat_variable_t` produced by the C parser.
 /// - `ctx` must be a valid pointer to a [`ReadStatMetadata`] instance that outlives this call.
-/// - This function must only be called by the ReadStat C library as a registered callback.
+/// - This function must only be called by the `ReadStat` C library as a registered callback.
 pub(crate) extern "C" fn handle_variable(
     index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
@@ -205,7 +205,7 @@ const DAY_SHIFT: i32 = 3653;
 /// SAS epoch to Unix epoch offset in seconds.
 const SEC_SHIFT: i64 = 315619200;
 
-/// Scale factor for rounding: 10^DECIMAL_PLACES, computed once.
+/// Scale factor for rounding: `10^DECIMAL_PLACES`, computed once.
 const ROUND_SCALE: f64 = 1e14;
 
 /// Rounds an f64 to [`DECIMAL_PLACES`] decimal places using pure arithmetic.
@@ -254,7 +254,7 @@ fn round_decimal_f32(v: f32) -> f32 {
 /// - `variable` must be a valid pointer to a `readstat_variable_t` produced by the C parser.
 /// - `value` must be a valid `readstat_value_t` produced by the C parser.
 /// - `ctx` must be a valid pointer to a [`ReadStatData`] instance that outlives this call.
-/// - This function must only be called by the ReadStat C library as a registered callback.
+/// - This function must only be called by the `ReadStat` C library as a registered callback.
 pub(crate) extern "C" fn handle_value(
     obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
@@ -449,7 +449,7 @@ pub(crate) extern "C" fn handle_value(
         if let Some(trp) = &d.total_rows_processed {
             trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-    };
+    }
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }

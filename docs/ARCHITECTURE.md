@@ -13,7 +13,7 @@ readstat-rs/
 │   ├── readstat/            # Library crate (parse SAS → Arrow, optional format writers)
 │   ├── readstat-cli/        # Binary crate (CLI arg parsing, orchestration)
 │   ├── readstat-sys/        # FFI bindings to ReadStat C library (bindgen)
-│   ├── iconv-sys/           # FFI bindings to iconv (Windows only)
+│   ├── iconv-sys/           # FFI bindings to iconv (Windows only, package: readstat-iconv-sys)
 │   ├── readstat-tests/      # Integration test suite
 │   └── readstat-wasm/       # WebAssembly build (excluded from workspace)
 └── docs/
@@ -21,7 +21,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.18.0) — Library Crate
+### `readstat` (v0.19.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -41,6 +41,7 @@ Key source modules in `crates/readstat/src/`:
 | `rs_write_config.rs` | Output configuration (path, format, compression) |
 | `rs_var.rs` | Variable types and value handling |
 | `rs_write.rs` | Output writers (CSV, Feather, NDJSON, Parquet) |
+| `progress.rs` | `ProgressCallback` trait for parsing progress reporting |
 | `rs_query.rs` | SQL query execution via DataFusion (feature-gated) |
 | `formats.rs` | SAS format detection (118 date/time/datetime formats, regex-based) |
 | `err.rs` | Error enum (41 variants mapping to C library errors) |
@@ -54,11 +55,12 @@ Key public types:
 - `ReadStatWriter` — writes output in requested format
 - `ReadStatPath` — validated input file path
 - `WriteConfig` — output configuration (path, format, compression)
-- `OutFormat` — output format enum (csv, feather, ndjson, parquet)
+- `OutFormat` — output format enum (Csv, Feather, Ndjson, Parquet)
+- `ProgressCallback` — trait for receiving progress updates during parsing
 
 Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.18.0) — CLI Binary
+### `readstat-cli` (v0.19.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -82,10 +84,10 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 | **Linux** (gnu/musl) | Dynamic — system library | `libz-sys` (prefers system, falls back to source) | No explicit iconv link directives; system linker resolves automatically |
 
 Header include paths are propagated between crates using Cargo's `links` key:
-- `iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`
+- `readstat-iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`
 - `libz-sys` sets `cargo:include=...` which becomes `DEP_Z_INCLUDE` in `readstat-sys`
 
-### `iconv-sys` (v0.3.0) — iconv FFI (Windows)
+### `readstat-iconv-sys` (v0.3.0) — iconv FFI (Windows)
 **Path**: `crates/iconv-sys/`
 
 Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-win-build/` git submodule using the `cc` crate, producing a static library. On non-Windows platforms the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.

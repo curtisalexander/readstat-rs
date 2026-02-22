@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "parquet")]
 use parquet::basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel};
 
+use log::warn;
+
 use crate::err::ReadStatError;
 
 /// Output file format for data conversion.
@@ -16,25 +18,24 @@ use crate::err::ReadStatError;
 /// Attempting to use a format whose feature is not enabled will
 /// result in a compile-time error in the writer code.
 #[derive(Debug, Clone, Copy)]
-#[allow(non_camel_case_types)]
 pub enum OutFormat {
     /// Comma-separated values.
-    csv,
+    Csv,
     /// Feather (Arrow IPC) format.
-    feather,
+    Feather,
     /// Newline-delimited JSON.
-    ndjson,
+    Ndjson,
     /// Apache Parquet columnar format.
-    parquet,
+    Parquet,
 }
 
 impl std::fmt::Display for OutFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::csv => f.write_str("csv"),
-            Self::feather => f.write_str("feather"),
-            Self::ndjson => f.write_str("ndjson"),
-            Self::parquet => f.write_str("parquet"),
+            Self::Csv => f.write_str("csv"),
+            Self::Feather => f.write_str("feather"),
+            Self::Ndjson => f.write_str("ndjson"),
+            Self::Parquet => f.write_str("parquet"),
         }
     }
 }
@@ -108,7 +109,7 @@ impl WriteConfig {
             None => match compression_level {
                 None => None,
                 Some(_) => {
-                    println!("Ignoring value of --compression-level as --compression was not set");
+                    warn!("Ignoring value of --compression-level as --compression was not set");
                     None
                 }
             },
@@ -125,7 +126,7 @@ impl WriteConfig {
     }
 
     fn validate_format(format: Option<OutFormat>) -> Result<OutFormat, ReadStatError> {
-        Ok(format.unwrap_or(OutFormat::csv))
+        Ok(format.unwrap_or(OutFormat::Csv))
     }
 
     /// Validates the output file extension matches the format.
@@ -135,7 +136,7 @@ impl WriteConfig {
     ) -> Result<Option<PathBuf>, ReadStatError> {
         path.extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.to_owned())
+            .map(std::borrow::ToOwned::to_owned)
             .map_or(
                 Err(ReadStatError::Other(format!(
                     "File {} does not have an extension! Expecting extension {}.",
@@ -143,10 +144,10 @@ impl WriteConfig {
                     format
                 ))),
                 |e| match format {
-                    OutFormat::csv
-                    | OutFormat::ndjson
-                    | OutFormat::feather
-                    | OutFormat::parquet => {
+                    OutFormat::Csv
+                    | OutFormat::Ndjson
+                    | OutFormat::Feather
+                    | OutFormat::Parquet => {
                         if e == format.to_string() {
                             Ok(Some(path.to_owned()))
                         } else {
@@ -182,7 +183,7 @@ impl WriteConfig {
                         if parent.exists() {
                             if abs_path.exists() {
                                 if overwrite {
-                                    println!(
+                                    warn!(
                                         "The file {} will be overwritten!",
                                         abs_path.to_string_lossy()
                                     );
@@ -225,7 +226,7 @@ impl WriteConfig {
         match (max_level, compression_level) {
             (None, None) => Ok(None),
             (None, Some(_)) => {
-                println!(
+                warn!(
                     "Compression level is not required for compression={name}, ignoring value of --compression-level"
                 );
                 Ok(None)
@@ -301,13 +302,13 @@ mod tests {
     #[test]
     fn format_none_defaults_to_csv() {
         let f = WriteConfig::validate_format(None).unwrap();
-        assert!(matches!(f, OutFormat::csv));
+        assert!(matches!(f, OutFormat::Csv));
     }
 
     #[test]
     fn format_some_passes_through() {
-        let f = WriteConfig::validate_format(Some(OutFormat::parquet)).unwrap();
-        assert!(matches!(f, OutFormat::parquet));
+        let f = WriteConfig::validate_format(Some(OutFormat::Parquet)).unwrap();
+        assert!(matches!(f, OutFormat::Parquet));
     }
 
     // --- validate_out_extension ---
@@ -315,41 +316,41 @@ mod tests {
     #[test]
     fn valid_csv_out_extension() {
         let path = Path::new("/some/output.csv");
-        let result = WriteConfig::validate_out_extension(path, OutFormat::csv).unwrap();
+        let result = WriteConfig::validate_out_extension(path, OutFormat::Csv).unwrap();
         assert!(result.is_some());
     }
 
     #[test]
     fn valid_parquet_out_extension() {
         let path = Path::new("/some/output.parquet");
-        let result = WriteConfig::validate_out_extension(path, OutFormat::parquet).unwrap();
+        let result = WriteConfig::validate_out_extension(path, OutFormat::Parquet).unwrap();
         assert!(result.is_some());
     }
 
     #[test]
     fn valid_feather_out_extension() {
         let path = Path::new("/some/output.feather");
-        let result = WriteConfig::validate_out_extension(path, OutFormat::feather).unwrap();
+        let result = WriteConfig::validate_out_extension(path, OutFormat::Feather).unwrap();
         assert!(result.is_some());
     }
 
     #[test]
     fn valid_ndjson_out_extension() {
         let path = Path::new("/some/output.ndjson");
-        let result = WriteConfig::validate_out_extension(path, OutFormat::ndjson).unwrap();
+        let result = WriteConfig::validate_out_extension(path, OutFormat::Ndjson).unwrap();
         assert!(result.is_some());
     }
 
     #[test]
     fn mismatched_out_extension() {
         let path = Path::new("/some/output.csv");
-        assert!(WriteConfig::validate_out_extension(path, OutFormat::parquet).is_err());
+        assert!(WriteConfig::validate_out_extension(path, OutFormat::Parquet).is_err());
     }
 
     #[test]
     fn no_out_extension() {
         let path = Path::new("/some/output");
-        assert!(WriteConfig::validate_out_extension(path, OutFormat::csv).is_err());
+        assert!(WriteConfig::validate_out_extension(path, OutFormat::Csv).is_err());
     }
 
     // --- validate_compression_level ---

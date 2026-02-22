@@ -173,7 +173,7 @@ fn bench_write_csv(c: &mut Criterion) {
     group.throughput(Throughput::Elements(rows as u64));
     group.bench_function("sequential", |b| {
         b.iter(|| {
-            let rsp_out = setup_output_path(&temp_dir, "cars.sas7bdat", readstat::OutFormat::csv);
+            let rsp_out = setup_output_path(&temp_dir, "cars.sas7bdat", readstat::OutFormat::Csv);
             let mut wtr = ReadStatWriter::new();
             wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
             wtr.finish(black_box(&d), black_box(&rsp_out)).unwrap();
@@ -221,7 +221,7 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
                     let rsp_out = ReadStatPath::new(
                         input_path,
                         Some(output_path),
-                        Some(readstat::OutFormat::parquet),
+                        Some(readstat::OutFormat::Parquet),
                         true,
                         false,
                         *comp,
@@ -307,10 +307,10 @@ fn bench_write_formats(c: &mut Criterion) {
     group.throughput(Throughput::Elements(rows as u64));
 
     for format in &[
-        ("csv", readstat::OutFormat::csv),
-        ("parquet", readstat::OutFormat::parquet),
-        ("feather", readstat::OutFormat::feather),
-        ("ndjson", readstat::OutFormat::ndjson),
+        ("csv", readstat::OutFormat::Csv),
+        ("parquet", readstat::OutFormat::Parquet),
+        ("feather", readstat::OutFormat::Feather),
+        ("ndjson", readstat::OutFormat::Ndjson),
     ] {
         group.bench_with_input(
             BenchmarkId::from_parameter(format.0),
@@ -342,8 +342,8 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
     group.throughput(Throughput::Elements(rows as u64));
 
     for format in &[
-        ("csv", readstat::OutFormat::csv),
-        ("parquet", readstat::OutFormat::parquet),
+        ("csv", readstat::OutFormat::Csv),
+        ("parquet", readstat::OutFormat::Parquet),
     ] {
         group.bench_with_input(BenchmarkId::new("format", format.0), &format.1, |b, fmt| {
             b.iter(|| {

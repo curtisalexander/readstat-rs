@@ -14,8 +14,6 @@ use arrow_array::{
         TimestampMillisecondBuilder, TimestampNanosecondBuilder, TimestampSecondBuilder,
     },
 };
-#[cfg(not(target_arch = "wasm32"))]
-use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::{
     collections::BTreeMap,
@@ -27,6 +25,7 @@ use std::{
 use crate::{
     cb,
     err::{ReadStatError, check_c_error},
+    progress::ProgressCallback,
     rs_buffer_io::ReadStatBufferCtx,
     rs_metadata::{ReadStatMetadata, ReadStatVarMetadata},
     rs_parser::ReadStatParser,
@@ -193,7 +192,7 @@ pub struct ReadStatData {
     /// Arrow schema for the dataset.
     /// Wrapped in `Arc` for cheap sharing across parallel chunks.
     pub schema: Arc<Schema>,
-    /// The Arrow RecordBatch produced after parsing, if available.
+    /// The Arrow `RecordBatch` produced after parsing, if available.
     pub batch: Option<RecordBatch>,
     /// Number of rows to process in this chunk.
     pub chunk_rows_to_process: usize,
@@ -207,9 +206,8 @@ pub struct ReadStatData {
     pub total_rows_to_process: usize,
     /// Shared atomic counter of total rows processed across all chunks.
     pub total_rows_processed: Option<Arc<AtomicUsize>>,
-    /// Optional progress bar for visual feedback.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub pb: Option<ProgressBar>,
+    /// Optional progress callback for visual feedback during parsing.
+    pub progress: Option<Arc<dyn ProgressCallback>>,
     /// Whether progress display is disabled.
     pub no_progress: bool,
     /// Errors collected during value parsing callbacks.
@@ -218,8 +216,8 @@ pub struct ReadStatData {
     /// Wrapped in `Arc` so parallel chunks share the same filter without deep cloning.
     pub column_filter: Option<Arc<BTreeMap<i32, i32>>>,
     /// Total variable count in the unfiltered dataset.
-    /// Used for row-boundary detection in handle_value when filtering is active.
-    /// Defaults to var_count when no filter is set.
+    /// Used for row-boundary detection in `handle_value` when filtering is active.
+    /// Defaults to `var_count` when no filter is set.
     pub total_var_count: i32,
 }
 
@@ -249,8 +247,7 @@ impl ReadStatData {
             total_rows_to_process: 0,
             total_rows_processed: None,
             // progress
-            #[cfg(not(target_arch = "wasm32"))]
-            pb: None,
+            progress: None,
             no_progress: false,
             // errors
             errors: Vec::new(),
@@ -264,6 +261,7 @@ impl ReadStatData {
     ///
     /// Each builder's type is determined by the variable metadata. String builders
     /// are additionally pre-sized with `storage_width * chunk_rows` bytes.
+    #[must_use]
     pub fn allocate_builders(self) -> Self {
         let capacity = self.chunk_rows_to_process;
         let builders: Vec<ColumnBuilder> = self
@@ -280,7 +278,7 @@ impl ReadStatData {
     /// operation (no data copying). The heavy work was already done during
     /// `handle_value` when values were appended directly into the builders.
     pub(crate) fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
-        let arrays: Vec<ArrayRef> = self.builders.iter_mut().map(|b| b.finish()).collect();
+        let arrays: Vec<ArrayRef> = self.builders.iter_mut().map(ColumnBuilder::finish).collect();
 
         self.batch = Some(RecordBatch::try_new(self.schema.clone(), arrays)?);
 
@@ -328,29 +326,14 @@ impl ReadStatData {
         debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        // Update progress bar with rows processed for this chunk
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pb) = &self.pb {
-            // Increment by the number of rows we're about to process in this chunk
-            pb.inc(self.chunk_rows_to_process as u64);
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pb) = &self.pb {
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("[{spinner:.green} {elapsed_precise}] {msg}")?,
-            );
-            let msg = format!(
-                "Parsing sas7bdat data from file {}",
-                &rsp.path.to_string_lossy()
-            );
-            pb.set_message(msg);
-            pb.enable_steady_tick(std::time::Duration::from_millis(120));
+        // Notify progress callback
+        if let Some(progress) = &self.progress {
+            progress.inc(self.chunk_rows_to_process as u64);
+            progress.parsing_started(&rsp.path.to_string_lossy());
         }
 
         // initialize context
-        let ctx = self as *mut ReadStatData as *mut c_void;
+        let ctx = std::ptr::from_mut::<ReadStatData>(self) as *mut c_void;
 
         // initialize error
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -373,7 +356,7 @@ impl ReadStatData {
         let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
 
         // initialize context
-        let ctx = self as *mut ReadStatData as *mut c_void;
+        let ctx = std::ptr::from_mut::<ReadStatData>(self) as *mut c_void;
 
         // initialize error
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -401,6 +384,7 @@ impl ReadStatData {
     /// Wraps `vars` and `schema` in `Arc` internally. For the parallel read path,
     /// prefer [`init_shared`](ReadStatData::init_shared) which accepts pre-wrapped
     /// `Arc`s to avoid repeated deep clones.
+    #[must_use]
     pub fn init(self, md: ReadStatMetadata, row_start: u32, row_end: u32) -> Self {
         self.set_metadata(md)
             .set_chunk_counts(row_start, row_end)
@@ -412,6 +396,7 @@ impl ReadStatData {
     /// Accepts `Arc`-wrapped `vars` and `schema` for cheap cloning in parallel loops.
     /// Each call only increments reference counts (atomic +1) instead of deep-cloning
     /// the entire metadata tree.
+    #[must_use]
     pub fn init_shared(
         self,
         var_count: i32,
@@ -471,6 +456,7 @@ impl ReadStatData {
     }
 
     /// Disables or enables the progress bar display.
+    #[must_use]
     pub fn set_no_progress(self, no_progress: bool) -> Self {
         Self {
             no_progress,
@@ -479,6 +465,7 @@ impl ReadStatData {
     }
 
     /// Sets the total number of rows to process across all chunks.
+    #[must_use]
     pub fn set_total_rows_to_process(self, total_rows_to_process: usize) -> Self {
         Self {
             total_rows_to_process,
@@ -487,6 +474,7 @@ impl ReadStatData {
     }
 
     /// Sets the shared atomic counter for tracking rows processed across chunks.
+    #[must_use]
     pub fn set_total_rows_processed(self, total_rows_processed: Arc<AtomicUsize>) -> Self {
         Self {
             total_rows_processed: Some(total_rows_processed),
@@ -499,6 +487,7 @@ impl ReadStatData {
     /// Accepts an `Arc`-wrapped filter for cheap sharing across parallel chunks.
     /// Must be called **before** [`init`](ReadStatData::init) so that
     /// `total_var_count` is preserved when `set_metadata` runs.
+    #[must_use]
     pub fn set_column_filter(
         self,
         filter: Option<Arc<BTreeMap<i32, i32>>>,
@@ -511,11 +500,14 @@ impl ReadStatData {
         }
     }
 
-    /// Attaches a progress bar for visual feedback during parsing.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn set_progress_bar(self, pb: ProgressBar) -> Self {
+    /// Attaches a progress callback for feedback during parsing.
+    ///
+    /// The callback receives progress increments and parsing status updates.
+    /// See [`ProgressCallback`] for the required interface.
+    #[must_use]
+    pub fn set_progress(self, progress: Arc<dyn ProgressCallback>) -> Self {
         Self {
-            pb: Some(pb),
+            progress: Some(progress),
             ..self
         }
     }

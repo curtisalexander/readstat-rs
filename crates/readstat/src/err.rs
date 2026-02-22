@@ -1,17 +1,18 @@
 //! Error types for the readstat crate.
 //!
-//! [`ReadStatCError`] maps the 41 error codes from the ReadStat C library to Rust
+//! [`ReadStatCError`] maps the 41 error codes from the `ReadStat` C library to Rust
 //! enum variants. [`ReadStatError`] is the main error type, wrapping C library errors
 //! alongside Arrow, Parquet, I/O, and other failure modes.
 
 use num_derive::FromPrimitive;
 
-/// Error codes returned by the ReadStat C library.
+/// Error codes returned by the `ReadStat` C library.
 ///
 /// Each variant maps directly to a `readstat_error_t` value. A value of
 /// [`READSTAT_OK`](ReadStatCError::READSTAT_OK) indicates success; all other
 /// variants represent specific failure conditions.
 #[derive(Debug, FromPrimitive)]
+#[allow(non_camel_case_types)]
 pub enum ReadStatCError {
     /// Operation completed successfully.
     READSTAT_OK = 0,
@@ -99,11 +100,11 @@ pub enum ReadStatCError {
 
 /// The main error type for the readstat crate.
 ///
-/// Wraps errors from the ReadStat C library, Arrow/Parquet processing,
+/// Wraps errors from the `ReadStat` C library, Arrow/Parquet processing,
 /// I/O operations, and other subsystems into a single error enum.
 #[derive(Debug, thiserror::Error)]
 pub enum ReadStatError {
-    /// Error from the ReadStat C library.
+    /// Error from the `ReadStat` C library.
     #[error("ReadStat C library error: {0:?}")]
     CLibrary(ReadStatCError),
 
@@ -146,11 +147,6 @@ pub enum ReadStatError {
     #[error("{0}")]
     Rayon(#[from] rayon::ThreadPoolBuildError),
 
-    /// Progress bar template error.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[error("{0}")]
-    IndicatifTemplate(#[from] indicatif::style::TemplateError),
-
     /// Null byte found in a string intended for C FFI.
     #[error("{0}")]
     NulError(#[from] std::ffi::NulError),
@@ -174,7 +170,7 @@ pub enum ReadStatError {
     Other(String),
 }
 
-/// Check a readstat C error code, returning Ok(()) for READSTAT_OK
+/// Check a readstat C error code, returning Ok(()) for `READSTAT_OK`
 /// or an appropriate error variant otherwise.
 pub(crate) fn check_c_error(code: i32) -> Result<(), ReadStatError> {
     use num_traits::FromPrimitive;

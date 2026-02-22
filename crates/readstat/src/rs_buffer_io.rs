@@ -1,7 +1,7 @@
 //! Buffer-based I/O handlers for parsing SAS files from in-memory byte slices.
 //!
 //! Provides [`ReadStatBufferCtx`] and a set of `extern "C"` callback functions that
-//! implement the ReadStat I/O interface over a `&[u8]` buffer instead of a file.
+//! implement the `ReadStat` I/O interface over a `&[u8]` buffer instead of a file.
 //! This enables parsing `.sas7bdat` data without filesystem access — useful for
 //! WASM targets, cloud storage, HTTP uploads, and testing.
 
@@ -11,7 +11,7 @@ use std::ptr;
 use crate::err::ReadStatError;
 use crate::rs_parser::ReadStatParser;
 
-/// In-memory buffer context for ReadStat I/O callbacks.
+/// In-memory buffer context for `ReadStat` I/O callbacks.
 ///
 /// Wraps a borrowed byte slice and tracks the current read position.
 /// Passed as the `io_ctx` pointer to all I/O handler callbacks.
@@ -41,7 +41,7 @@ impl ReadStatBufferCtx {
         &mut self,
         parser: ReadStatParser,
     ) -> Result<ReadStatParser, ReadStatError> {
-        let ctx_ptr = self as *mut ReadStatBufferCtx as *mut c_void;
+        let ctx_ptr = std::ptr::from_mut::<ReadStatBufferCtx>(self) as *mut c_void;
         parser
             .set_open_handler(Some(buffer_open))
             .and_then(|p| p.set_close_handler(Some(buffer_close)))

@@ -2,7 +2,7 @@
 //!
 //! SAS variables carry format strings (e.g. `DATE9`, `DATETIME22.3`, `TIME8`) that
 //! determine how raw numeric values should be interpreted. This module classifies
-//! those format strings into [`ReadStatVarFormatClass`] variants (Date, DateTime,
+//! those format strings into [`ReadStatVarFormatClass`] variants (Date, `DateTime`,
 //! Time, and their sub-second precision variants), enabling correct Arrow type mapping.
 //!
 //! Supports all 118+ SAS date/time/datetime formats including ISO 8601 variants,
