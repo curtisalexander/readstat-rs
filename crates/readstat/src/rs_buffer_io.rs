@@ -86,11 +86,7 @@ unsafe extern "C" fn buffer_seek(
 }
 
 /// Read handler that copies bytes from the buffer into the caller's buffer.
-unsafe extern "C" fn buffer_read(
-    buf: *mut c_void,
-    nbytes: usize,
-    io_ctx: *mut c_void,
-) -> isize {
+unsafe extern "C" fn buffer_read(buf: *mut c_void, nbytes: usize, io_ctx: *mut c_void) -> isize {
     let ctx = unsafe { &mut *(io_ctx as *mut ReadStatBufferCtx) };
     let bytes_left = ctx.len.saturating_sub(ctx.pos);
 

@@ -195,7 +195,7 @@ fn parse_messydata_data() {
 
     // Row 0: Subject=1.0, DateArrived="2/7/2005", Gender="M", Married=1.0, Arrival=101.5, Satisfaction=84.7
     let subject = columns
-        .get(0)
+        .first()
         .unwrap()
         .as_any()
         .downcast_ref::<Float64Array>()

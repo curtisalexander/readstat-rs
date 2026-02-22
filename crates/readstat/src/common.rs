@@ -21,10 +21,7 @@ use crate::err::ReadStatError;
 /// assert_eq!(offsets, vec![0, 10, 20, 25]);
 /// // Produces pairs: [0,10), [10,20), [20,25)
 /// ```
-pub fn build_offsets(
-    row_count: u32,
-    stream_rows: u32,
-) -> Result<Vec<u32>, ReadStatError> {
+pub fn build_offsets(row_count: u32, stream_rows: u32) -> Result<Vec<u32>, ReadStatError> {
     let chunks = row_count.div_ceil(stream_rows.max(1));
     let mut offsets = Vec::with_capacity(chunks as usize + 1);
 

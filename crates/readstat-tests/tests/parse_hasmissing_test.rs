@@ -14,7 +14,10 @@ fn parse_hasmissing() {
 
     // Variable 0 metadata
     let m = common::get_metadata(&d, 0);
-    assert!(matches!(m.var_type_class, readstat::ReadStatVarTypeClass::String));
+    assert!(matches!(
+        m.var_type_class,
+        readstat::ReadStatVarTypeClass::String
+    ));
     assert!(matches!(m.var_type, readstat::ReadStatVarType::String));
     assert!(m.var_format_class.is_none());
     assert_eq!(m.var_format, "$");
@@ -41,17 +44,20 @@ fn parse_hasmissing() {
 fn parse_hasmissing_metadata() {
     let (_rsp, md, d) = common::setup_and_read("hasmissing.sas7bdat");
 
-    common::assert_metadata(&md, &ExpectedMetadata {
-        row_count: 50,
-        var_count: 9,
-        table_name: "HASMISSING",
-        file_label: "",
-        file_encoding: "WINDOWS-1252",
-        version: 9,
-        is64bit: 0,
-        creation_time: "2014-11-18 14:44:33",
-        modified_time: "2014-11-18 14:44:33",
-    });
+    common::assert_metadata(
+        &md,
+        &ExpectedMetadata {
+            row_count: 50,
+            var_count: 9,
+            table_name: "HASMISSING",
+            file_label: "",
+            file_encoding: "WINDOWS-1252",
+            version: 9,
+            is64bit: 0,
+            creation_time: "2014-11-18 14:44:33",
+            modified_time: "2014-11-18 14:44:33",
+        },
+    );
 
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
@@ -67,8 +73,14 @@ fn parse_hasmissing_metadata() {
     // 1..8 - All numeric Double -> Float64 with no format
     for i in 1..=8 {
         let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, i);
-        assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric), "var {i} type class");
-        assert!(matches!(vt, readstat::ReadStatVarType::Double), "var {i} type");
+        assert!(
+            matches!(vtc, readstat::ReadStatVarTypeClass::Numeric),
+            "var {i} type class"
+        );
+        assert!(
+            matches!(vt, readstat::ReadStatVarType::Double),
+            "var {i} type"
+        );
         assert!(vfc.is_none(), "var {i} format class");
         assert_eq!(vf, "", "var {i} format");
         assert!(matches!(adt, DataType::Float64), "var {i} arrow type");

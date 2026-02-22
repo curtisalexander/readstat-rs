@@ -21,11 +21,10 @@ fn main() {
 
     println!("Reading parquet file and checking metadata...\n");
 
-    let file = File::open("/tmp/somedata_verify.parquet")
-        .expect("Failed to open parquet file");
+    let file = File::open("/tmp/somedata_verify.parquet").expect("Failed to open parquet file");
 
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file)
-        .expect("Failed to create parquet reader");
+    let builder =
+        ParquetRecordBatchReaderBuilder::try_new(file).expect("Failed to create parquet reader");
 
     let schema = builder.schema();
 
@@ -35,7 +34,7 @@ fn main() {
         println!("  No schema metadata found");
     } else {
         for (key, value) in schema.metadata() {
-            println!("  {}: {}", key, value);
+            println!("  {key}: {value}");
         }
     }
 
@@ -56,29 +55,30 @@ fn main() {
 
     let mut all_correct = true;
     for (col_name, expected_label) in expected_labels {
-        let field = schema.field_with_name(col_name)
-            .expect(&format!("{} field not found", col_name));
+        let field = schema
+            .field_with_name(col_name)
+            .unwrap_or_else(|_| panic!("{col_name} field not found"));
 
         let actual_label = field.metadata().get("label");
 
         match (expected_label, actual_label) {
             (Some(expected), Some(actual)) if expected == actual => {
-                println!("  ✓ {}: \"{}\"", col_name, actual);
+                println!("  ✓ {col_name}: \"{actual}\"");
             }
             (Some(expected), Some(actual)) => {
-                println!("  ✗ {}: expected \"{}\", got \"{}\"", col_name, expected, actual);
+                println!("  ✗ {col_name}: expected \"{expected}\", got \"{actual}\"");
                 all_correct = false;
             }
             (Some(expected), None) => {
-                println!("  ✗ {}: expected \"{}\", but no label found", col_name, expected);
+                println!("  ✗ {col_name}: expected \"{expected}\", but no label found");
                 all_correct = false;
             }
             (None, Some(actual)) => {
-                println!("  ✗ {}: expected no label, but got \"{}\"", col_name, actual);
+                println!("  ✗ {col_name}: expected no label, but got \"{actual}\"");
                 all_correct = false;
             }
             (None, None) => {
-                println!("  ✓ {}: (no label)", col_name);
+                println!("  ✓ {col_name}: (no label)");
             }
         }
     }

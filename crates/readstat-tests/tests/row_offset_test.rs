@@ -12,17 +12,20 @@ fn row_offset_metadata() {
     // row count = 1 due to offset (rows 2..3, only 1 row)
     assert_eq!(d.chunk_rows_to_process, 1);
 
-    common::assert_metadata(&md, &ExpectedMetadata {
-        row_count: 3,
-        var_count: 10,
-        table_name: "",
-        file_label: "",
-        file_encoding: "UTF-8",
-        version: 9,
-        is64bit: 1,
-        creation_time: "2026-02-18 02:32:45",
-        modified_time: "2026-02-18 02:32:45",
-    });
+    common::assert_metadata(
+        &md,
+        &ExpectedMetadata {
+            row_count: 3,
+            var_count: 10,
+            table_name: "",
+            file_label: "",
+            file_encoding: "UTF-8",
+            version: 9,
+            is64bit: 1,
+            creation_time: "2026-02-18 02:32:45",
+            modified_time: "2026-02-18 02:32:45",
+        },
+    );
 
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));

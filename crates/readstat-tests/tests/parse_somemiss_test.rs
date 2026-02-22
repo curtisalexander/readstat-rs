@@ -148,7 +148,7 @@ fn parse_somemiss_data() {
     // Row 0: SID=468879.0, AGE="40", GENDER="Female", RACE="Black", INJSITE="Street and Highway",
     //         INJTYPE="Blunt", ISS=1.0, _="", DISPOSITION="Floor"
     let sid = columns
-        .get(0)
+        .first()
         .unwrap()
         .as_any()
         .downcast_ref::<Float64Array>()

@@ -10,17 +10,20 @@ fn parse_all_types_metadata() {
     let (_rsp, md, d) = common::setup_and_read_skip_row_count("all_types.sas7bdat");
 
     // skip_row_count=true sets row_count to 1
-    common::assert_metadata(&md, &ExpectedMetadata {
-        row_count: 1,
-        var_count: 10,
-        table_name: "",
-        file_label: "",
-        file_encoding: "UTF-8",
-        version: 9,
-        is64bit: 1,
-        creation_time: "2026-02-18 02:32:45",
-        modified_time: "2026-02-18 02:32:45",
-    });
+    common::assert_metadata(
+        &md,
+        &ExpectedMetadata {
+            row_count: 1,
+            var_count: 10,
+            table_name: "",
+            file_label: "",
+            file_encoding: "UTF-8",
+            version: 9,
+            is64bit: 1,
+            creation_time: "2026-02-18 02:32:45",
+            modified_time: "2026-02-18 02:32:45",
+        },
+    );
 
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
@@ -43,19 +46,34 @@ fn parse_all_types_metadata() {
     assert!(matches!(adt, DataType::Timestamp(TimeUnit::Second, None)));
 
     let (_, _, vfc, _, adt) = common::get_var_attrs(&d, 6);
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds));
-    assert!(matches!(adt, DataType::Timestamp(TimeUnit::Millisecond, None)));
+    assert_eq!(
+        vfc,
+        Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds)
+    );
+    assert!(matches!(
+        adt,
+        DataType::Timestamp(TimeUnit::Millisecond, None)
+    ));
 
     let (_, _, vfc, _, adt) = common::get_var_attrs(&d, 7);
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMicroseconds));
-    assert!(matches!(adt, DataType::Timestamp(TimeUnit::Microsecond, None)));
+    assert_eq!(
+        vfc,
+        Some(readstat::ReadStatVarFormatClass::DateTimeWithMicroseconds)
+    );
+    assert!(matches!(
+        adt,
+        DataType::Timestamp(TimeUnit::Microsecond, None)
+    ));
 
     let (_, _, vfc, _, adt) = common::get_var_attrs(&d, 8);
     assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::Time));
     assert!(matches!(adt, DataType::Time32(TimeUnit::Second)));
 
     let (_, _, vfc, _, adt) = common::get_var_attrs(&d, 9);
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds));
+    assert_eq!(
+        vfc,
+        Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds)
+    );
     assert!(matches!(adt, DataType::Time64(TimeUnit::Microsecond)));
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "readstat-cli"
-version = "0.18.0"
+version = "0.19.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
 rust-version = "1.85"
@@ -17,7 +17,7 @@ name = "readstat"
 path = "src/main.rs"
 
 [dependencies]
-readstat = { path = "../readstat" }
+readstat = { path = "../readstat", version = "0.19.0" }
 readstat-sys = { path = "../readstat-sys", version = "0.3.0" }
 
 arrow-array = "57"

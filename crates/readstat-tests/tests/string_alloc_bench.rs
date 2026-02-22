@@ -23,19 +23,28 @@ fn bench_ahs_string_allocation() {
     md.read_metadata(&rsp, false).unwrap();
     let t_metadata = t0.elapsed();
 
-    let string_cols: usize = md.vars.values()
+    let string_cols: usize = md
+        .vars
+        .values()
         .filter(|v| matches!(v.var_type_class, readstat::ReadStatVarTypeClass::String))
         .count();
-    let numeric_cols: usize = md.vars.values()
+    let numeric_cols: usize = md
+        .vars
+        .values()
         .filter(|v| matches!(v.var_type_class, readstat::ReadStatVarTypeClass::Numeric))
         .count();
 
     println!("\n=== AHS 2019 String Allocation Benchmark ===");
-    println!("Rows: {}, Columns: {} ({} string, {} numeric)",
-        md.row_count, md.var_count, string_cols, numeric_cols);
-    println!("Total string cells: {}", string_cols as i64 * md.row_count as i64);
+    println!(
+        "Rows: {}, Columns: {} ({string_cols} string, {numeric_cols} numeric)",
+        md.row_count, md.var_count
+    );
+    println!(
+        "Total string cells: {}",
+        string_cols as i64 * md.row_count as i64
+    );
     println!();
-    println!("Phase 1 — Metadata:       {:>8.2?}", t_metadata);
+    println!("Phase 1 — Metadata:       {t_metadata:>8.2?}");
 
     // Phase 2: Read data in streaming chunks
     let stream_rows: u32 = 10_000;
@@ -49,15 +58,17 @@ fn bench_ahs_string_allocation() {
         let (row_start, row_end) = (window[0], window[1]);
         let chunk_rows = (row_end - row_start) as usize;
 
-        let mut d = readstat::ReadStatData::new()
-            .set_no_progress(true)
-            .init(md.clone(), row_start, row_end);
+        let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
+            md.clone(),
+            row_start,
+            row_end,
+        );
 
         let t1 = Instant::now();
         d.read_data(&rsp).unwrap();
         let t_read = t1.elapsed();
 
-        println!("  Chunk {}: {} rows — {:>7.2?}", i, chunk_rows, t_read);
+        println!("  Chunk {i}: {chunk_rows} rows — {t_read:>7.2?}");
 
         total_read += t_read;
         total_rows += chunk_rows;
@@ -67,22 +78,27 @@ fn bench_ahs_string_allocation() {
     }
 
     println!();
-    println!("Phase 2 — Read (FFI+Arrow): {:>8.2?}  ({} chunks)", total_read, chunks);
-    println!("Total rows processed:       {}", total_rows);
+    println!("Phase 2 — Read (FFI+Arrow): {total_read:>8.2?}  ({chunks} chunks)");
+    println!("Total rows processed:       {total_rows}");
 
     let total = t_metadata + total_read;
     println!();
-    println!("Total wall time:          {:>8.2?}", total);
+    println!("Total wall time:          {total:>8.2?}");
 
     // Memory estimates
-    let avg_width: f64 = md.vars.values()
+    let avg_width: f64 = md
+        .vars
+        .values()
         .filter(|v| matches!(v.var_type_class, readstat::ReadStatVarTypeClass::String))
         .map(|v| v.storage_width as f64)
-        .sum::<f64>() / string_cols as f64;
+        .sum::<f64>()
+        / string_cols as f64;
     println!();
-    println!("Avg string storage_width: {:.1} bytes", avg_width);
-    println!("Estimated per-chunk string data: {:.1} MB",
-        (string_cols as f64 * stream_rows as f64 * avg_width) / 1_048_576.0);
+    println!("Avg string storage_width: {avg_width:.1} bytes");
+    println!(
+        "Estimated per-chunk string data: {:.1} MB",
+        (string_cols as f64 * stream_rows as f64 * avg_width) / 1_048_576.0
+    );
 }
 
 /// Smaller benchmark using cars.sas7bdat for quick iteration.
@@ -94,22 +110,28 @@ fn bench_cars_string_allocation() {
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
+        md.clone(),
+        0,
+        md.row_count as u32,
+    );
 
     let t1 = Instant::now();
     d.read_data(&rsp).unwrap();
     let t_read = t1.elapsed();
 
-    let string_cols: usize = md.vars.values()
+    let string_cols: usize = md
+        .vars
+        .values()
         .filter(|v| matches!(v.var_type_class, readstat::ReadStatVarTypeClass::String))
         .count();
 
     println!("\n=== Cars String Allocation Benchmark ===");
-    println!("Rows: {}, Columns: {} ({} string)",
-        md.row_count, md.var_count, string_cols);
-    println!("Read:    {:>8.2?}", t_read);
+    println!(
+        "Rows: {}, Columns: {} ({string_cols} string)",
+        md.row_count, md.var_count
+    );
+    println!("Read:    {t_read:>8.2?}");
 
     let batch = d.batch.as_ref().unwrap();
     assert_eq!(batch.num_rows(), 1081);

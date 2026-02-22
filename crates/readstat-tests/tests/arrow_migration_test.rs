@@ -17,9 +17,11 @@ fn init_all_types() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let d = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let d = readstat::ReadStatData::new().set_no_progress(true).init(
+        md.clone(),
+        0,
+        md.row_count as u32,
+    );
 
     (rsp, md, d)
 }
@@ -192,7 +194,10 @@ fn migration_array_downcasting() {
 
     // Test Date32Array downcast (column 4)
     let col_date = columns[4].as_any().downcast_ref::<Date32Array>();
-    assert!(col_date.is_some(), "Column 4 should downcast to Date32Array");
+    assert!(
+        col_date.is_some(),
+        "Column 4 should downcast to Date32Array"
+    );
 
     // Test TimestampSecondArray downcast (columns 5, 6)
     let col_timestamp = columns[5].as_any().downcast_ref::<TimestampSecondArray>();
@@ -313,11 +318,17 @@ fn migration_date_values() {
     // Date32 stores days since Unix epoch (1970-01-01)
     let days_since_epoch = col_date.value(0);
     let date = NaiveDate::from_num_days_from_ce_opt(days_since_epoch + 719163);
-    assert!(date.is_some(), "Should be able to convert Date32 to NaiveDate");
+    assert!(
+        date.is_some(),
+        "Should be able to convert Date32 to NaiveDate"
+    );
 
     // Verify year is reasonable (after 2000, before 2100)
     let date = date.unwrap();
-    assert!(date.year() >= 2000 && date.year() <= 2100, "Date year should be reasonable");
+    assert!(
+        date.year() >= 2000 && date.year() <= 2100,
+        "Date year should be reasonable"
+    );
 }
 
 /// Test: Verify timestamp values after migration
@@ -338,14 +349,17 @@ fn migration_timestamp_values() {
         .unwrap();
 
     // Get timestamp value (seconds since Unix epoch)
-    assert!(!col_datetime.is_null(1), "_datetime row 1 should have a value");
+    assert!(
+        !col_datetime.is_null(1),
+        "_datetime row 1 should have a value"
+    );
     let timestamp_seconds = col_datetime.value(1);
 
     // Verify timestamp is reasonable (after 2000, before 2100)
     // 2000-01-01 00:00:00 UTC = 946684800
     // 2100-01-01 00:00:00 UTC = 4102444800
     assert!(
-        timestamp_seconds >= 946684800 && timestamp_seconds <= 4102444800,
+        (946684800..=4102444800).contains(&timestamp_seconds),
         "Timestamp should be in reasonable range"
     );
 }
@@ -434,9 +448,11 @@ fn migration_larger_dataset() {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
+        md.clone(),
+        0,
+        md.row_count as u32,
+    );
 
     let error = d.read_data(&rsp);
     assert!(error.is_ok(), "Should read cars.sas7bdat successfully");
@@ -452,7 +468,7 @@ fn migration_larger_dataset() {
 
     // Verify we can access data from all columns
     for (i, col) in batch.columns().iter().enumerate() {
-        assert_eq!(col.len(), 1081, "Column {} should have 1081 elements", i);
+        assert_eq!(col.len(), 1081, "Column {i} should have 1081 elements");
     }
 }
 
@@ -571,7 +587,7 @@ fn migration_time_values() {
     let time_seconds = col_time.value(0);
     // Should be between 0 and 86400 (seconds in a day)
     assert!(
-        time_seconds >= 0 && time_seconds < 86400,
+        (0..86400).contains(&time_seconds),
         "Time should be valid (0-86399 seconds)"
     );
 }

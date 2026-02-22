@@ -1,8 +1,8 @@
-use std::fs;
-use std::path::PathBuf;
-use arrow_array::{Float64Array, Array, RecordBatch};
+use arrow_array::{Array, Float64Array, RecordBatch};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatWriter};
+use std::fs;
+use std::path::PathBuf;
 
 mod common;
 
@@ -62,7 +62,7 @@ fn test_parallel_write_parquet_basic() {
         d.read_data(&rsp_in).unwrap();
 
         if let Some(batch) = &d.batch {
-            let temp_file = setup_test_output(&format!("temp_{}.parquet", i));
+            let temp_file = setup_test_output(&format!("temp_{i}.parquet"));
             ReadStatWriter::write_batch_to_parquet(
                 batch,
                 &schema,
@@ -70,19 +70,14 @@ fn test_parallel_write_parquet_basic() {
                 None,
                 None,
                 100 * 1024 * 1024, // 100 MB buffer
-            ).unwrap();
+            )
+            .unwrap();
             temp_files.push(temp_file);
         }
     }
 
     // Merge temp files
-    ReadStatWriter::merge_parquet_files(
-        &temp_files,
-        &output_path,
-        &schema,
-        None,
-        None,
-    ).unwrap();
+    ReadStatWriter::merge_parquet_files(&temp_files, &output_path, &schema, None, None).unwrap();
 
     // Verify the output file exists and is valid
     assert!(output_path.exists());
@@ -90,10 +85,10 @@ fn test_parallel_write_parquet_basic() {
     // Read back and verify content
     let file = fs::File::open(&output_path).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let mut reader = builder.build().unwrap();
+    let reader = builder.build().unwrap();
 
     let mut total_rows = 0;
-    while let Some(batch_result) = reader.next() {
+    for batch_result in reader {
         let batch: RecordBatch = batch_result.unwrap();
         total_rows += batch.num_rows();
     }
@@ -134,13 +129,14 @@ fn test_parallel_write_parquet_out_of_order() {
     // Split into 3 batches
     let chunk_size = num_rows / 3 + 1;
 
-    for i in (0..3).rev() {  // Reverse order!
+    for i in (0..3).rev() {
+        // Reverse order!
         let start = i * chunk_size;
         let end = ((i + 1) * chunk_size).min(num_rows);
 
         if start < num_rows {
             let slice = batch.slice(start, end - start);
-            let temp_file = setup_test_output(&format!("temp_ooo_{}.parquet", i));
+            let temp_file = setup_test_output(&format!("temp_ooo_{i}.parquet"));
 
             ReadStatWriter::write_batch_to_parquet(
                 &slice,
@@ -149,20 +145,15 @@ fn test_parallel_write_parquet_out_of_order() {
                 None,
                 None,
                 100 * 1024 * 1024, // 100 MB buffer
-            ).unwrap();
+            )
+            .unwrap();
 
             temp_files.push(temp_file);
         }
     }
 
     // Merge temp files (they were written out of order)
-    ReadStatWriter::merge_parquet_files(
-        &temp_files,
-        &output_path,
-        schema,
-        None,
-        None,
-    ).unwrap();
+    ReadStatWriter::merge_parquet_files(&temp_files, &output_path, schema, None, None).unwrap();
 
     // Verify the output file exists and is valid
     assert!(output_path.exists());
@@ -170,10 +161,10 @@ fn test_parallel_write_parquet_out_of_order() {
     // Read back and verify content
     let file = fs::File::open(&output_path).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let mut reader = builder.build().unwrap();
+    let reader = builder.build().unwrap();
 
     let mut total_rows = 0;
-    while let Some(batch_result) = reader.next() {
+    for batch_result in reader {
         let batch: RecordBatch = batch_result.unwrap();
         total_rows += batch.num_rows();
 
@@ -216,7 +207,8 @@ fn test_parallel_write_parquet_with_compression() {
             Some(readstat::ParquetCompression::Snappy),
             None,
             100 * 1024 * 1024, // 100 MB buffer
-        ).unwrap();
+        )
+        .unwrap();
 
         // Verify the output file exists
         assert!(output_path.exists());
@@ -235,12 +227,14 @@ fn test_parallel_write_parquet_with_compression() {
             assert_eq!(read_batch.num_rows(), batch.num_rows());
 
             // Verify some data matches
-            let col = read_batch.column(0)
+            let col = read_batch
+                .column(0)
                 .as_any()
                 .downcast_ref::<Float64Array>()
                 .unwrap();
 
-            let original_col = batch.column(0)
+            let original_col = batch
+                .column(0)
                 .as_any()
                 .downcast_ref::<Float64Array>()
                 .unwrap();
@@ -279,7 +273,8 @@ fn test_bufwriter_optimization_verification() {
             None,
             None,
             100 * 1024 * 1024, // 100 MB buffer
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(output_path.exists());
     }
@@ -312,7 +307,8 @@ fn test_spooled_tempfile_small_buffer() {
             None,
             None,
             1024, // Only 1 KB buffer - should spill to disk
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(output_path.exists());
 
@@ -354,7 +350,8 @@ fn test_spooled_tempfile_large_buffer() {
             None,
             None,
             1024 * 1024 * 1024, // 1 GB buffer - should stay in memory
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(output_path.exists());
 

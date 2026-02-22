@@ -8,7 +8,7 @@
 use log::debug;
 use std::os::raw::{c_char, c_long, c_void};
 
-use crate::err::{check_c_error, ReadStatError};
+use crate::err::{ReadStatError, check_c_error};
 
 /// Safe RAII wrapper around the ReadStat C parser (`readstat_parser_t`).
 ///
@@ -35,29 +35,20 @@ impl ReadStatParser {
         let set_metadata_handler_error =
             unsafe { readstat_sys::readstat_set_metadata_handler(self.parser, metadata_handler) };
 
-        debug!(
-            "After setting metadata handler, error ==> {}",
-            &set_metadata_handler_error
-        );
+        debug!("After setting metadata handler, error ==> {set_metadata_handler_error}");
 
         check_c_error(set_metadata_handler_error as i32)?;
         Ok(self)
     }
 
     /// Sets the maximum number of rows to read. `None` means no limit.
-    pub(crate) fn set_row_limit(
-        self,
-        row_limit: Option<u32>,
-    ) -> Result<Self, ReadStatError> {
+    pub(crate) fn set_row_limit(self, row_limit: Option<u32>) -> Result<Self, ReadStatError> {
         match row_limit {
             Some(r) => {
                 let set_row_limit_error =
                     unsafe { readstat_sys::readstat_set_row_limit(self.parser, r as c_long) };
 
-                debug!(
-                    "After setting row limit, error ==> {}",
-                    &set_row_limit_error
-                );
+                debug!("After setting row limit, error ==> {set_row_limit_error}");
 
                 check_c_error(set_row_limit_error as i32)?;
                 Ok(self)
@@ -67,19 +58,13 @@ impl ReadStatParser {
     }
 
     /// Sets the starting row offset for reading. `None` means start from row 0.
-    pub(crate) fn set_row_offset(
-        self,
-        row_offset: Option<u32>,
-    ) -> Result<Self, ReadStatError> {
+    pub(crate) fn set_row_offset(self, row_offset: Option<u32>) -> Result<Self, ReadStatError> {
         match row_offset {
             Some(r) => {
                 let set_row_offset_error =
                     unsafe { readstat_sys::readstat_set_row_offset(self.parser, r as c_long) };
 
-                debug!(
-                    "After setting row offset, error ==> {}",
-                    &set_row_offset_error
-                );
+                debug!("After setting row offset, error ==> {set_row_offset_error}");
 
                 check_c_error(set_row_offset_error as i32)?;
                 Ok(self)
@@ -96,10 +81,7 @@ impl ReadStatParser {
         let set_variable_handler_error =
             unsafe { readstat_sys::readstat_set_variable_handler(self.parser, variable_handler) };
 
-        debug!(
-            "After setting variable handler, error ==> {}",
-            &set_variable_handler_error
-        );
+        debug!("After setting variable handler, error ==> {set_variable_handler_error}");
 
         check_c_error(set_variable_handler_error as i32)?;
         Ok(self)
@@ -113,10 +95,7 @@ impl ReadStatParser {
         let set_value_handler_error =
             unsafe { readstat_sys::readstat_set_value_handler(self.parser, value_handler) };
 
-        debug!(
-            "After setting value handler, error ==> {}",
-            &set_value_handler_error
-        );
+        debug!("After setting value handler, error ==> {set_value_handler_error}");
 
         check_c_error(set_value_handler_error as i32)?;
         Ok(self)
@@ -127,9 +106,8 @@ impl ReadStatParser {
         self,
         open_handler: readstat_sys::readstat_open_handler,
     ) -> Result<Self, ReadStatError> {
-        let error =
-            unsafe { readstat_sys::readstat_set_open_handler(self.parser, open_handler) };
-        debug!("After setting open handler, error ==> {}", &error);
+        let error = unsafe { readstat_sys::readstat_set_open_handler(self.parser, open_handler) };
+        debug!("After setting open handler, error ==> {error}");
         check_c_error(error as i32)?;
         Ok(self)
     }
@@ -139,9 +117,8 @@ impl ReadStatParser {
         self,
         close_handler: readstat_sys::readstat_close_handler,
     ) -> Result<Self, ReadStatError> {
-        let error =
-            unsafe { readstat_sys::readstat_set_close_handler(self.parser, close_handler) };
-        debug!("After setting close handler, error ==> {}", &error);
+        let error = unsafe { readstat_sys::readstat_set_close_handler(self.parser, close_handler) };
+        debug!("After setting close handler, error ==> {error}");
         check_c_error(error as i32)?;
         Ok(self)
     }
@@ -151,9 +128,8 @@ impl ReadStatParser {
         self,
         seek_handler: readstat_sys::readstat_seek_handler,
     ) -> Result<Self, ReadStatError> {
-        let error =
-            unsafe { readstat_sys::readstat_set_seek_handler(self.parser, seek_handler) };
-        debug!("After setting seek handler, error ==> {}", &error);
+        let error = unsafe { readstat_sys::readstat_set_seek_handler(self.parser, seek_handler) };
+        debug!("After setting seek handler, error ==> {error}");
         check_c_error(error as i32)?;
         Ok(self)
     }
@@ -163,9 +139,8 @@ impl ReadStatParser {
         self,
         read_handler: readstat_sys::readstat_read_handler,
     ) -> Result<Self, ReadStatError> {
-        let error =
-            unsafe { readstat_sys::readstat_set_read_handler(self.parser, read_handler) };
-        debug!("After setting read handler, error ==> {}", &error);
+        let error = unsafe { readstat_sys::readstat_set_read_handler(self.parser, read_handler) };
+        debug!("After setting read handler, error ==> {error}");
         check_c_error(error as i32)?;
         Ok(self)
     }
@@ -177,7 +152,7 @@ impl ReadStatParser {
     ) -> Result<Self, ReadStatError> {
         let error =
             unsafe { readstat_sys::readstat_set_update_handler(self.parser, update_handler) };
-        debug!("After setting update handler, error ==> {}", &error);
+        debug!("After setting update handler, error ==> {error}");
         check_c_error(error as i32)?;
         Ok(self)
     }
@@ -185,7 +160,7 @@ impl ReadStatParser {
     /// Sets a custom I/O context pointer passed to all I/O handler callbacks.
     pub(crate) fn set_io_ctx(self, io_ctx: *mut c_void) -> Result<Self, ReadStatError> {
         let error = unsafe { readstat_sys::readstat_set_io_ctx(self.parser, io_ctx) };
-        debug!("After setting io ctx, error ==> {}", &error);
+        debug!("After setting io ctx, error ==> {error}");
         check_c_error(error as i32)?;
         Ok(self)
     }
@@ -202,10 +177,7 @@ impl ReadStatParser {
         let parse_sas7bdat_error: readstat_sys::readstat_error_t =
             unsafe { readstat_sys::readstat_parse_sas7bdat(self.parser, path, user_ctx) };
 
-        debug!(
-            "After calling parse sas7bdat, error ==> {}",
-            &parse_sas7bdat_error
-        );
+        debug!("After calling parse sas7bdat, error ==> {parse_sas7bdat_error}");
 
         parse_sas7bdat_error
     }

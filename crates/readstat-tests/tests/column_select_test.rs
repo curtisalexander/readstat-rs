@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use arrow::datatypes::DataType;
 use arrow_array::{Array, Float64Array, StringArray};
 use readstat::{ReadStatData, ReadStatMetadata};
+use std::sync::Arc;
 
 mod common;
 
@@ -48,8 +48,14 @@ fn select_subset_of_columns() {
     assert_eq!(batch.schema().field(2).name(), "EngineSize");
 
     // Data types should be correct
-    assert!(matches!(batch.schema().field(0).data_type(), DataType::Utf8));
-    assert!(matches!(batch.schema().field(1).data_type(), DataType::Utf8));
+    assert!(matches!(
+        batch.schema().field(0).data_type(),
+        DataType::Utf8
+    ));
+    assert!(matches!(
+        batch.schema().field(1).data_type(),
+        DataType::Utf8
+    ));
     assert!(matches!(
         batch.schema().field(2).data_type(),
         DataType::Float64
@@ -61,8 +67,7 @@ fn select_subset_of_columns() {
 
 #[test]
 fn select_single_column() {
-    let (md, d) =
-        read_cars_with_columns(Some(vec!["CityMPG".to_string()])).unwrap();
+    let (md, d) = read_cars_with_columns(Some(vec!["CityMPG".to_string()])).unwrap();
 
     assert_eq!(md.var_count, 1);
     let batch = d.batch.as_ref().unwrap();
@@ -76,7 +81,7 @@ fn select_single_column() {
         .as_any()
         .downcast_ref::<Float64Array>()
         .unwrap();
-    assert!(col.len() > 0);
+    assert!(!col.is_empty());
 }
 
 #[test]
@@ -92,7 +97,7 @@ fn invalid_column_name_returns_error() {
 
     assert!(result.is_err());
     let err = result.unwrap_err();
-    let err_msg = format!("{}", err);
+    let err_msg = format!("{err}");
     assert!(err_msg.contains("NonExistentColumn"));
     assert!(err_msg.contains("Brand")); // available columns should include Brand
 }
@@ -118,9 +123,9 @@ fn duplicate_column_names_are_deduplicated() {
 fn column_order_preserved_from_dataset() {
     // Request columns in reverse order; output should follow dataset order
     let (md, d) = read_cars_with_columns(Some(vec![
-        "Hybrid".to_string(),   // index 12
-        "Brand".to_string(),    // index 0
-        "CityMPG".to_string(),  // index 8
+        "Hybrid".to_string(),  // index 12
+        "Brand".to_string(),   // index 0
+        "CityMPG".to_string(), // index 8
     ]))
     .unwrap();
 

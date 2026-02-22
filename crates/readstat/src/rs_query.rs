@@ -9,17 +9,14 @@ use arrow_csv::WriterBuilder as CsvWriterBuilder;
 use arrow_ipc::writer::FileWriter as IpcFileWriter;
 use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
 use arrow_schema::SchemaRef;
-use datafusion::datasource::MemTable;
 use datafusion::catalog::streaming::StreamingTable;
+use datafusion::datasource::MemTable;
+use datafusion::physical_plan::SendableRecordBatchStream;
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::streaming::PartitionStream;
-use datafusion::physical_plan::SendableRecordBatchStream;
 use datafusion::prelude::*;
 use futures::StreamExt;
-use parquet::{
-    arrow::ArrowWriter as ParquetArrowWriter,
-    file::properties::WriterProperties,
-};
+use parquet::{arrow::ArrowWriter as ParquetArrowWriter, file::properties::WriterProperties};
 use std::io::BufWriter;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -27,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use crate::err::ReadStatError;
 use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
-use crate::rs_write_config::{resolve_parquet_compression, OutFormat, ParquetCompression};
+use crate::rs_write_config::{OutFormat, ParquetCompression, resolve_parquet_compression};
 
 /// Executes a SQL query against in-memory Arrow data.
 ///
@@ -94,10 +91,7 @@ impl PartitionStream for ChannelPartitionStream {
         &self.schema
     }
 
-    fn execute(
-        &self,
-        _ctx: Arc<datafusion::execution::TaskContext>,
-    ) -> SendableRecordBatchStream {
+    fn execute(&self, _ctx: Arc<datafusion::execution::TaskContext>) -> SendableRecordBatchStream {
         let receiver = self
             .receiver
             .lock()
@@ -105,12 +99,8 @@ impl PartitionStream for ChannelPartitionStream {
             .take()
             .expect("ChannelPartitionStream::execute called more than once");
 
-        let stream = futures::stream::iter(
-            receiver
-                .into_iter()
-                .filter_map(|(d, _, _)| d.batch)
-                .map(Ok),
-        );
+        let stream =
+            futures::stream::iter(receiver.into_iter().filter_map(|(d, _, _)| d.batch).map(Ok));
 
         Box::pin(RecordBatchStreamAdapter::new(self.schema.clone(), stream))
     }
@@ -209,7 +199,13 @@ async fn execute_sql_and_write_stream_async(
         result_batches.push(batch?);
     }
 
-    write_sql_results(&result_batches, output_path, format, compression, compression_level)?;
+    write_sql_results(
+        &result_batches,
+        output_path,
+        format,
+        compression,
+        compression_level,
+    )?;
 
     Ok(())
 }
@@ -261,11 +257,7 @@ pub fn write_sql_results(
                 .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
                 .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
                 .build();
-            let mut writer = ParquetArrowWriter::try_new(
-                BufWriter::new(f),
-                schema,
-                Some(props),
-            )?;
+            let mut writer = ParquetArrowWriter::try_new(BufWriter::new(f), schema, Some(props))?;
             for batch in batches {
                 writer.write(batch)?;
             }
@@ -280,9 +272,7 @@ pub fn read_sql_file(path: &std::path::Path) -> Result<String, ReadStatError> {
     let sql = std::fs::read_to_string(path)?;
     let sql = sql.trim().to_string();
     if sql.is_empty() {
-        return Err(ReadStatError::Other(
-            "SQL file is empty".to_string(),
-        ));
+        return Err(ReadStatError::Other("SQL file is empty".to_string()));
     }
     Ok(sql)
 }
