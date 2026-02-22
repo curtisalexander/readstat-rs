@@ -27,5 +27,10 @@ bun.lock
 /book/src/benchmarking.md
 /book/src/ci-cd.md
 /book/src/crates/
+# examples
+__pycache__/
+/examples/api-demo/python-server/readstat_py/target/
+/examples/api-demo/python-server/uv.lock
+/examples/api-demo/rust-server/target/
 # claude
 .claude/
