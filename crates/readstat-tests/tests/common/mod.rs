@@ -2,10 +2,9 @@
 
 use arrow::datatypes::DataType;
 use arrow_array::{
-    Array, Date32Array, Float64Array, Int16Array, Int32Array, StringArray,
-    Time32SecondArray, Time64MicrosecondArray,
-    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampSecondArray,
-    RecordBatch,
+    Array, Date32Array, Float64Array, Int16Array, Int32Array, RecordBatch, StringArray,
+    Time32SecondArray, Time64MicrosecondArray, TimestampMicrosecondArray,
+    TimestampMillisecondArray, TimestampSecondArray,
 };
 use std::os::raw::c_int;
 use std::path::PathBuf;
@@ -29,13 +28,19 @@ where
 /// Returns (path, metadata, data) with the batch already produced.
 pub fn setup_and_read(
     dataset: &str,
-) -> (readstat::ReadStatPath, readstat::ReadStatMetadata, readstat::ReadStatData) {
+) -> (
+    readstat::ReadStatPath,
+    readstat::ReadStatMetadata,
+    readstat::ReadStatData,
+) {
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let mut d = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
+        md.clone(),
+        0,
+        md.row_count as u32,
+    );
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }
@@ -45,13 +50,18 @@ pub fn setup_and_read_rows(
     dataset: &str,
     row_start: u32,
     row_end: u32,
-) -> (readstat::ReadStatPath, readstat::ReadStatMetadata, readstat::ReadStatData) {
+) -> (
+    readstat::ReadStatPath,
+    readstat::ReadStatMetadata,
+    readstat::ReadStatData,
+) {
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let mut d = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), row_start, row_end);
+    let mut d =
+        readstat::ReadStatData::new()
+            .set_no_progress(true)
+            .init(md.clone(), row_start, row_end);
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }
@@ -59,13 +69,19 @@ pub fn setup_and_read_rows(
 /// Reads a dataset with `skip_row_count = true`.
 pub fn setup_and_read_skip_row_count(
     dataset: &str,
-) -> (readstat::ReadStatPath, readstat::ReadStatMetadata, readstat::ReadStatData) {
+) -> (
+    readstat::ReadStatPath,
+    readstat::ReadStatMetadata,
+    readstat::ReadStatData,
+) {
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, true).unwrap();
-    let mut d = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
+        md.clone(),
+        0,
+        md.row_count as u32,
+    );
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }

@@ -7,17 +7,20 @@ mod common;
 fn parse_somedata_metadata() {
     let (_rsp, md, d) = common::setup_and_read("somedata.sas7bdat");
 
-    common::assert_metadata(&md, &ExpectedMetadata {
-        row_count: 50,
-        var_count: 10,
-        table_name: "SOMEDATA",
-        file_label: "",
-        file_encoding: "WINDOWS-1252",
-        version: 9,
-        is64bit: 0,
-        creation_time: "2008-09-30 16:23:56",
-        modified_time: "2008-09-30 16:23:56",
-    });
+    common::assert_metadata(
+        &md,
+        &ExpectedMetadata {
+            row_count: 50,
+            var_count: 10,
+            table_name: "SOMEDATA",
+            file_label: "",
+            file_encoding: "WINDOWS-1252",
+            version: 9,
+            is64bit: 0,
+            creation_time: "2008-09-30 16:23:56",
+            modified_time: "2008-09-30 16:23:56",
+        },
+    );
 
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
@@ -52,8 +55,14 @@ fn parse_somedata_metadata() {
     // 2..8 - All numeric Double -> Float64 with no format
     for i in 2..=8 {
         let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, i);
-        assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric), "var {i} type class");
-        assert!(matches!(vt, readstat::ReadStatVarType::Double), "var {i} type");
+        assert!(
+            matches!(vtc, readstat::ReadStatVarTypeClass::Numeric),
+            "var {i} type class"
+        );
+        assert!(
+            matches!(vt, readstat::ReadStatVarType::Double),
+            "var {i} type"
+        );
         assert!(vfc.is_none(), "var {i} format class");
         assert_eq!(vf, "", "var {i} format");
         assert!(matches!(adt, DataType::Float64), "var {i} arrow type");

@@ -8,17 +8,20 @@ mod common;
 fn parse_cars_metadata() {
     let (_rsp, md, d) = common::setup_and_read("cars.sas7bdat");
 
-    common::assert_metadata(&md, &ExpectedMetadata {
-        row_count: 1081,
-        var_count: 13,
-        table_name: "CARS",
-        file_label: "Written by SAS",
-        file_encoding: "WINDOWS-1252",
-        version: 9,
-        is64bit: 0,
-        creation_time: "2008-09-30 12:55:01",
-        modified_time: "2008-09-30 12:55:01",
-    });
+    common::assert_metadata(
+        &md,
+        &ExpectedMetadata {
+            row_count: 1081,
+            var_count: 13,
+            table_name: "CARS",
+            file_label: "Written by SAS",
+            file_encoding: "WINDOWS-1252",
+            version: 9,
+            is64bit: 0,
+            creation_time: "2008-09-30 12:55:01",
+            modified_time: "2008-09-30 12:55:01",
+        },
+    );
 
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
@@ -35,7 +38,10 @@ fn parse_cars_metadata() {
     assert_eq!(vf, "");
     assert!(matches!(adt, DataType::Utf8));
     let brand_meta = common::get_metadata(&d, 0);
-    assert!(brand_meta.storage_width > 0, "Brand storage_width should be > 0");
+    assert!(
+        brand_meta.storage_width > 0,
+        "Brand storage_width should be > 0"
+    );
 
     // 1 - Model (String)
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 1);
@@ -45,18 +51,30 @@ fn parse_cars_metadata() {
     assert_eq!(vf, "");
     assert!(matches!(adt, DataType::Utf8));
     let model_meta = common::get_metadata(&d, 1);
-    assert!(model_meta.storage_width > 0, "Model storage_width should be > 0");
+    assert!(
+        model_meta.storage_width > 0,
+        "Model storage_width should be > 0"
+    );
 
     // 2..12 - All numeric Double -> Float64 with no format
     for i in 2..=12 {
         let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, i);
-        assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric), "var {i} type class");
-        assert!(matches!(vt, readstat::ReadStatVarType::Double), "var {i} type");
+        assert!(
+            matches!(vtc, readstat::ReadStatVarTypeClass::Numeric),
+            "var {i} type class"
+        );
+        assert!(
+            matches!(vt, readstat::ReadStatVarType::Double),
+            "var {i} type"
+        );
         assert!(vfc.is_none(), "var {i} format class");
         assert_eq!(vf, "", "var {i} format");
         assert!(matches!(adt, DataType::Float64), "var {i} arrow type");
         let num_meta = common::get_metadata(&d, i);
-        assert_eq!(num_meta.storage_width, 8, "var {i} storage_width should be 8 for numeric");
+        assert_eq!(
+            num_meta.storage_width, 8,
+            "var {i} storage_width should be 8 for numeric"
+        );
     }
 }
 
@@ -105,7 +123,7 @@ fn parse_cars_data() {
             continue;
         }
         let v = engine_size.value(i);
-        let displayed = format!("{}", v);
+        let displayed = format!("{v}");
         assert!(
             !displayed.contains("0000000"),
             "row {i}: EngineSize {v} has IEEE 754 noise ({displayed})"

@@ -76,8 +76,7 @@ fn main() {
             .file(txt.join("readstat_txt_read.c"));
     }
 
-    cc.include(&src)
-        .warnings(false);
+    cc.include(&src).warnings(false);
 
     // AddressSanitizer: instrument ReadStat C code when requested.
     // Uses a targeted env var so third-party sys crates (e.g. zstd-sys)
@@ -162,28 +161,30 @@ fn main() {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
     if is_emscripten {
-        let emsdk = env::var("EMSDK").or_else(|_| {
-            // emsdk_env.sh on Windows/Git Bash sometimes fails to export EMSDK
-            // even though it adds the emsdk directories to PATH. Scan PATH for
-            // a directory that looks like an emsdk root (contains the sysroot).
-            let sysroot_suffix = std::path::Path::new("upstream")
-                .join("emscripten")
-                .join("cache")
-                .join("sysroot");
-            env::var("PATH")
-                .unwrap_or_default()
-                .split(if cfg!(windows) { ';' } else { ':' })
-                .find_map(|dir| {
-                    // PATH contains both <emsdk> and <emsdk>/upstream/emscripten
-                    let candidate = std::path::Path::new(dir);
-                    if candidate.join(&sysroot_suffix).is_dir() {
-                        Some(candidate.to_string_lossy().into_owned())
-                    } else {
-                        None
-                    }
-                })
-                .ok_or(env::VarError::NotPresent)
-        }).expect("EMSDK must be set for Emscripten builds, or emsdk must be on PATH");
+        let emsdk = env::var("EMSDK")
+            .or_else(|_| {
+                // emsdk_env.sh on Windows/Git Bash sometimes fails to export EMSDK
+                // even though it adds the emsdk directories to PATH. Scan PATH for
+                // a directory that looks like an emsdk root (contains the sysroot).
+                let sysroot_suffix = std::path::Path::new("upstream")
+                    .join("emscripten")
+                    .join("cache")
+                    .join("sysroot");
+                env::var("PATH")
+                    .unwrap_or_default()
+                    .split(if cfg!(windows) { ';' } else { ':' })
+                    .find_map(|dir| {
+                        // PATH contains both <emsdk> and <emsdk>/upstream/emscripten
+                        let candidate = std::path::Path::new(dir);
+                        if candidate.join(&sysroot_suffix).is_dir() {
+                            Some(candidate.to_string_lossy().into_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(env::VarError::NotPresent)
+            })
+            .expect("EMSDK must be set for Emscripten builds, or emsdk must be on PATH");
         builder = builder
             .clang_arg(format!(
                 "--sysroot={emsdk}/upstream/emscripten/cache/sysroot"

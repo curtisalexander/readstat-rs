@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter};
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -21,7 +21,11 @@ fn setup_path(filename: &str) -> ReadStatPath {
 }
 
 // Helper to setup output path
-fn setup_output_path(temp_dir: &TempDir, filename: &str, format: readstat::OutFormat) -> ReadStatPath {
+fn setup_output_path(
+    temp_dir: &TempDir,
+    filename: &str,
+    format: readstat::OutFormat,
+) -> ReadStatPath {
     let input_path = get_test_data_path(filename);
     let output_path = temp_dir.path().join(format!("output.{:?}", format));
     ReadStatPath::new(
@@ -32,7 +36,8 @@ fn setup_output_path(temp_dir: &TempDir, filename: &str, format: readstat::OutFo
         false,
         None,
         None,
-    ).unwrap()
+    )
+    .unwrap()
 }
 
 /// Benchmark: Read metadata only (no data)
@@ -68,19 +73,15 @@ fn bench_read_data_single_chunk(c: &mut Criterion) {
         let rows = md.row_count as u32;
         group.throughput(Throughput::Elements(rows as u64));
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(filename),
-            filename,
-            |b, _| {
-                b.iter(|| {
-                    let mut d = ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), 0, rows);
-                    d.read_data(black_box(&rsp)).unwrap();
-                    black_box(d)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(filename), filename, |b, _| {
+            b.iter(|| {
+                let mut d = ReadStatData::new()
+                    .set_no_progress(true)
+                    .init(md.clone(), 0, rows);
+                d.read_data(black_box(&rsp)).unwrap();
+                black_box(d)
+            });
+        });
     }
     group.finish();
 }
@@ -105,9 +106,11 @@ fn bench_read_data_chunked(c: &mut Criterion) {
                     let mut total_read = 0;
                     while total_read < total_rows {
                         let end = std::cmp::min(total_read + chunk_size, total_rows);
-                        let mut d = ReadStatData::new()
-                            .set_no_progress(true)
-                            .init(md.clone(), total_read, end);
+                        let mut d = ReadStatData::new().set_no_progress(true).init(
+                            md.clone(),
+                            total_read,
+                            end,
+                        );
                         d.read_data(black_box(&rsp)).unwrap();
                         black_box(&d);
                         total_read = end;
@@ -199,7 +202,10 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
     group.throughput(Throughput::Elements(rows as u64));
 
     for compression in &[
-        ("uncompressed", Some(readstat::ParquetCompression::Uncompressed)),
+        (
+            "uncompressed",
+            Some(readstat::ParquetCompression::Uncompressed),
+        ),
         ("snappy", Some(readstat::ParquetCompression::Snappy)),
         ("zstd", Some(readstat::ParquetCompression::Zstd)),
     ] {
@@ -209,7 +215,9 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
             |b, comp| {
                 b.iter(|| {
                     let input_path = get_test_data_path("cars.sas7bdat");
-                    let output_path = temp_dir.path().join(format!("output_{}.parquet", compression.0));
+                    let output_path = temp_dir
+                        .path()
+                        .join(format!("output_{}.parquet", compression.0));
                     let rsp_out = ReadStatPath::new(
                         input_path,
                         Some(output_path),
@@ -218,7 +226,8 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
                         false,
                         *comp,
                         None,
-                    ).unwrap();
+                    )
+                    .unwrap();
 
                     let mut wtr = ReadStatWriter::new();
                     wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
@@ -255,7 +264,9 @@ fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
             buffer_mb,
             |b, &buffer_mb| {
                 b.iter(|| {
-                    let output_path = temp_dir.path().join(format!("output_buf_{}.parquet", buffer_mb));
+                    let output_path = temp_dir
+                        .path()
+                        .join(format!("output_buf_{}.parquet", buffer_mb));
                     let buffer_bytes = buffer_mb * 1024 * 1024;
 
                     if let Some(batch) = &d.batch {
@@ -266,7 +277,8 @@ fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
                             None,
                             None,
                             buffer_bytes,
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                 });
             },
@@ -333,25 +345,21 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
         ("csv", readstat::OutFormat::csv),
         ("parquet", readstat::OutFormat::parquet),
     ] {
-        group.bench_with_input(
-            BenchmarkId::new("format", format.0),
-            &format.1,
-            |b, fmt| {
-                b.iter(|| {
-                    // Read
-                    let mut d = ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), 0, rows);
-                    d.read_data(black_box(&rsp_in)).unwrap();
+        group.bench_with_input(BenchmarkId::new("format", format.0), &format.1, |b, fmt| {
+            b.iter(|| {
+                // Read
+                let mut d = ReadStatData::new()
+                    .set_no_progress(true)
+                    .init(md.clone(), 0, rows);
+                d.read_data(black_box(&rsp_in)).unwrap();
 
-                    // Write
-                    let rsp_out = setup_output_path(&temp_dir, "cars.sas7bdat", *fmt);
-                    let mut wtr = ReadStatWriter::new();
-                    wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
-                    wtr.finish(black_box(&d), black_box(&rsp_out)).unwrap();
-                });
-            },
-        );
+                // Write
+                let rsp_out = setup_output_path(&temp_dir, "cars.sas7bdat", *fmt);
+                let mut wtr = ReadStatWriter::new();
+                wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
+                wtr.finish(black_box(&d), black_box(&rsp_out)).unwrap();
+            });
+        });
     }
 
     group.finish();
@@ -365,43 +373,32 @@ fn bench_io_metadata(c: &mut Criterion) {
         let path = get_test_data_path(filename);
         let rsp = setup_path(filename);
 
-        group.bench_with_input(
-            BenchmarkId::new("file", filename),
-            filename,
-            |b, _| {
-                b.iter(|| {
-                    let mut md = ReadStatMetadata::new();
-                    md.read_metadata(black_box(&rsp), false).unwrap();
-                    black_box(md)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("file", filename), filename, |b, _| {
+            b.iter(|| {
+                let mut md = ReadStatMetadata::new();
+                md.read_metadata(black_box(&rsp), false).unwrap();
+                black_box(md)
+            });
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("mmap", filename),
-            filename,
-            |b, _| {
-                b.iter(|| {
-                    let mut md = ReadStatMetadata::new();
-                    md.read_metadata_from_mmap(black_box(&path), false).unwrap();
-                    black_box(md)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("mmap", filename), filename, |b, _| {
+            b.iter(|| {
+                let mut md = ReadStatMetadata::new();
+                md.read_metadata_from_mmap(black_box(&path), false).unwrap();
+                black_box(md)
+            });
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("bytes", filename),
-            filename,
-            |b, _| {
-                // Pre-load file into memory (included in measurement for fairness)
-                b.iter(|| {
-                    let bytes = std::fs::read(&path).unwrap();
-                    let mut md = ReadStatMetadata::new();
-                    md.read_metadata_from_bytes(black_box(&bytes), false).unwrap();
-                    black_box(md)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("bytes", filename), filename, |b, _| {
+            // Pre-load file into memory (included in measurement for fairness)
+            b.iter(|| {
+                let bytes = std::fs::read(&path).unwrap();
+                let mut md = ReadStatMetadata::new();
+                md.read_metadata_from_bytes(black_box(&bytes), false)
+                    .unwrap();
+                black_box(md)
+            });
+        });
 
         // bytes_preloaded: measure only the parsing, not the file read
         let bytes = std::fs::read(&path).unwrap();
@@ -411,7 +408,8 @@ fn bench_io_metadata(c: &mut Criterion) {
             |b, _| {
                 b.iter(|| {
                     let mut md = ReadStatMetadata::new();
-                    md.read_metadata_from_bytes(black_box(&bytes), false).unwrap();
+                    md.read_metadata_from_bytes(black_box(&bytes), false)
+                        .unwrap();
                     black_box(md)
                 });
             },
@@ -434,33 +432,25 @@ fn bench_io_read_data(c: &mut Criterion) {
 
         group.throughput(Throughput::Bytes(file_size));
 
-        group.bench_with_input(
-            BenchmarkId::new("file", filename),
-            filename,
-            |b, _| {
-                b.iter(|| {
-                    let mut d = ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), 0, rows);
-                    d.read_data(black_box(&rsp)).unwrap();
-                    black_box(d)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("file", filename), filename, |b, _| {
+            b.iter(|| {
+                let mut d = ReadStatData::new()
+                    .set_no_progress(true)
+                    .init(md.clone(), 0, rows);
+                d.read_data(black_box(&rsp)).unwrap();
+                black_box(d)
+            });
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("mmap", filename),
-            filename,
-            |b, _| {
-                b.iter(|| {
-                    let mut d = ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), 0, rows);
-                    d.read_data_from_mmap(black_box(&path)).unwrap();
-                    black_box(d)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("mmap", filename), filename, |b, _| {
+            b.iter(|| {
+                let mut d = ReadStatData::new()
+                    .set_no_progress(true)
+                    .init(md.clone(), 0, rows);
+                d.read_data_from_mmap(black_box(&path)).unwrap();
+                black_box(d)
+            });
+        });
 
         let bytes = std::fs::read(&path).unwrap();
         group.bench_with_input(
@@ -499,9 +489,10 @@ fn bench_io_chunked(c: &mut Criterion) {
             let mut total_read = 0;
             while total_read < total_rows {
                 let end = std::cmp::min(total_read + chunk_size, total_rows);
-                let mut d = ReadStatData::new()
-                    .set_no_progress(true)
-                    .init(md.clone(), total_read, end);
+                let mut d =
+                    ReadStatData::new()
+                        .set_no_progress(true)
+                        .init(md.clone(), total_read, end);
                 d.read_data(black_box(&rsp)).unwrap();
                 black_box(&d);
                 total_read = end;
@@ -514,9 +505,10 @@ fn bench_io_chunked(c: &mut Criterion) {
             let mut total_read = 0;
             while total_read < total_rows {
                 let end = std::cmp::min(total_read + chunk_size, total_rows);
-                let mut d = ReadStatData::new()
-                    .set_no_progress(true)
-                    .init(md.clone(), total_read, end);
+                let mut d =
+                    ReadStatData::new()
+                        .set_no_progress(true)
+                        .init(md.clone(), total_read, end);
                 d.read_data_from_mmap(black_box(&path)).unwrap();
                 black_box(&d);
                 total_read = end;
@@ -530,9 +522,10 @@ fn bench_io_chunked(c: &mut Criterion) {
             let mut total_read = 0;
             while total_read < total_rows {
                 let end = std::cmp::min(total_read + chunk_size, total_rows);
-                let mut d = ReadStatData::new()
-                    .set_no_progress(true)
-                    .init(md.clone(), total_read, end);
+                let mut d =
+                    ReadStatData::new()
+                        .set_no_progress(true)
+                        .init(md.clone(), total_read, end);
                 d.read_data_from_bytes(black_box(&bytes)).unwrap();
                 black_box(&d);
                 total_read = end;

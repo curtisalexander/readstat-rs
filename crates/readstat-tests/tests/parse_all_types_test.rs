@@ -9,17 +9,20 @@ mod common;
 fn parse_all_types_metadata() {
     let (_rsp, md, d) = common::setup_and_read("all_types.sas7bdat");
 
-    common::assert_metadata(&md, &ExpectedMetadata {
-        row_count: 3,
-        var_count: 10,
-        table_name: "",
-        file_label: "",
-        file_encoding: "UTF-8",
-        version: 9,
-        is64bit: 1,
-        creation_time: "2026-02-18 02:32:45",
-        modified_time: "2026-02-18 02:32:45",
-    });
+    common::assert_metadata(
+        &md,
+        &ExpectedMetadata {
+            row_count: 3,
+            var_count: 10,
+            table_name: "",
+            file_label: "",
+            file_encoding: "UTF-8",
+            version: 9,
+            is64bit: 1,
+            creation_time: "2026-02-18 02:32:45",
+            modified_time: "2026-02-18 02:32:45",
+        },
+    );
 
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
@@ -79,17 +82,29 @@ fn parse_all_types_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 6);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds));
+    assert_eq!(
+        vfc,
+        Some(readstat::ReadStatVarFormatClass::DateTimeWithMilliseconds)
+    );
     assert_eq!(vf, "DATETIME22.3");
-    assert!(matches!(adt, DataType::Timestamp(TimeUnit::Millisecond, None)));
+    assert!(matches!(
+        adt,
+        DataType::Timestamp(TimeUnit::Millisecond, None)
+    ));
 
     // 7 - _datetime_with_us (Timestamp Microsecond)
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 7);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::DateTimeWithMicroseconds));
+    assert_eq!(
+        vfc,
+        Some(readstat::ReadStatVarFormatClass::DateTimeWithMicroseconds)
+    );
     assert_eq!(vf, "DATETIME26.6");
-    assert!(matches!(adt, DataType::Timestamp(TimeUnit::Microsecond, None)));
+    assert!(matches!(
+        adt,
+        DataType::Timestamp(TimeUnit::Microsecond, None)
+    ));
 
     // 8 - _time (Time32 Second)
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 8);
@@ -103,7 +118,10 @@ fn parse_all_types_metadata() {
     let (vtc, vt, vfc, vf, adt) = common::get_var_attrs(&d, 9);
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
-    assert_eq!(vfc, Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds));
+    assert_eq!(
+        vfc,
+        Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds)
+    );
     assert_eq!(vf, "TIME15.6");
     assert!(matches!(adt, DataType::Time64(TimeUnit::Microsecond)));
 }
@@ -211,7 +229,11 @@ fn parse_all_types_time_with_microseconds() {
         .signed_duration_since(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
         .num_microseconds()
         .unwrap();
-    assert_eq!(col.value(0), expected_micros, "Row 0: Expected 02:14:13.654321");
+    assert_eq!(
+        col.value(0),
+        expected_micros,
+        "Row 0: Expected 02:14:13.654321"
+    );
 
     // Row 1: 19:54:42.123456
     let expected_micros = NaiveTime::from_hms_micro_opt(19, 54, 42, 123456)
@@ -219,7 +241,11 @@ fn parse_all_types_time_with_microseconds() {
         .signed_duration_since(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
         .num_microseconds()
         .unwrap();
-    assert_eq!(col.value(1), expected_micros, "Row 1: Expected 19:54:42.123456");
+    assert_eq!(
+        col.value(1),
+        expected_micros,
+        "Row 1: Expected 19:54:42.123456"
+    );
 
     // Row 2: missing
     assert!(col.is_null(2));

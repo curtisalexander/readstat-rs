@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::thread;
 
 use readstat::{
-    build_offsets, OutFormat, ReadStatData, ReadStatError, ReadStatMetadata, ReadStatPath,
-    ReadStatWriter, WriteConfig,
+    OutFormat, ReadStatData, ReadStatError, ReadStatMetadata, ReadStatPath, ReadStatWriter,
+    WriteConfig, build_offsets,
 };
 
 use crate::cli::{ReadStatCli, ReadStatCliCommands, Reader};
@@ -284,9 +284,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
             let rsp = ReadStatPath::new(sas_path)?;
             let wc = WriteConfig::new(
                 output,
-                format.map(|f| f.into()),
+                format.map(Into::into),
                 overwrite,
-                compression.map(|c| c.into()),
+                compression.map(Into::into),
                 compression_level,
             )?;
 
@@ -339,8 +339,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
 
                     let total_rows_to_stream =
                         resolve_stream_rows(reader, stream_rows, total_rows_to_process);
-                    let total_rows_processed =
-                        Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                    let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
                     let pb = create_progress_bar(no_progress, total_rows_to_process)?;
 
                     // Build up offsets
@@ -386,97 +385,91 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     let wc_thread = wc.clone();
 
                     // Process data in batches (i.e. stream chunks of rows)
-                    let reader_handle =
-                        thread::spawn(move || -> Result<(), ReadStatError> {
-                            // Create windows
-                            let offsets_pairs: Vec<_> = offsets.windows(2).collect();
-                            let pairs_cnt = offsets_pairs.len();
+                    let reader_handle = thread::spawn(move || -> Result<(), ReadStatError> {
+                        // Create windows
+                        let offsets_pairs: Vec<_> = offsets.windows(2).collect();
+                        let pairs_cnt = offsets_pairs.len();
 
-                            // Build a local thread pool instead of mutating the global one
-                            let num_threads = if parallel { 0 } else { 1 };
-                            let pool = rayon::ThreadPoolBuilder::new()
-                                .num_threads(num_threads)
-                                .build()
-                                .map_err(|e| {
-                                    ReadStatError::Other(format!(
-                                        "Failed to build thread pool: {e}"
-                                    ))
-                                })?;
+                        // Build a local thread pool instead of mutating the global one
+                        let num_threads = if parallel { 0 } else { 1 };
+                        let pool = rayon::ThreadPoolBuilder::new()
+                            .num_threads(num_threads)
+                            .build()
+                            .map_err(|e| {
+                                ReadStatError::Other(format!("Failed to build thread pool: {e}"))
+                            })?;
 
-                            // Read all chunks (potentially in parallel), collecting results in order
-                            let results: Vec<
-                                Result<(ReadStatData, WriteConfig, usize), ReadStatError>,
-                            > = pool.install(|| {
-                                offsets_pairs
-                                    .par_iter()
-                                    .map(
-                                        |w| -> Result<
-                                            (ReadStatData, WriteConfig, usize),
-                                            ReadStatError,
-                                        > {
-                                            let row_start = w[0];
-                                            let row_end = w[1];
+                        // Read all chunks (potentially in parallel), collecting results in order
+                        let results: Vec<
+                            Result<(ReadStatData, WriteConfig, usize), ReadStatError>,
+                        > = pool.install(|| {
+                            offsets_pairs
+                                .par_iter()
+                                .map(
+                                    |w| -> Result<
+                                        (ReadStatData, WriteConfig, usize),
+                                        ReadStatError,
+                                    > {
+                                        let row_start = w[0];
+                                        let row_end = w[1];
 
-                                            let mut d = ReadStatData::new()
-                                                .set_column_filter(
-                                                    column_filter.clone(),
-                                                    original_var_count,
-                                                )
-                                                .set_no_progress(no_progress)
-                                                .set_total_rows_to_process(
-                                                    total_rows_to_process as usize,
-                                                )
-                                                .set_total_rows_processed(
-                                                    total_rows_processed.clone(),
-                                                )
-                                                .init_shared(
-                                                    var_count,
-                                                    vars_shared.clone(),
-                                                    schema_shared.clone(),
-                                                    row_start,
-                                                    row_end,
-                                                );
+                                        let mut d = ReadStatData::new()
+                                            .set_column_filter(
+                                                column_filter.clone(),
+                                                original_var_count,
+                                            )
+                                            .set_no_progress(no_progress)
+                                            .set_total_rows_to_process(
+                                                total_rows_to_process as usize,
+                                            )
+                                            .set_total_rows_processed(total_rows_processed.clone())
+                                            .init_shared(
+                                                var_count,
+                                                vars_shared.clone(),
+                                                schema_shared.clone(),
+                                                row_start,
+                                                row_end,
+                                            );
 
-                                            if let Some(ref pb) = pb_thread {
-                                                d = d.set_progress_bar(pb.clone());
-                                            }
-
-                                            d.read_data(&rsp)?;
-
-                                            Ok((d, wc_thread.clone(), pairs_cnt))
-                                        },
-                                    )
-                                    .collect()
-                            });
-
-                            // Send results over the channel in order
-                            let mut errors = Vec::new();
-                            for result in results {
-                                match result {
-                                    Ok(data) => {
-                                        if s.send(data).is_err() {
-                                            errors.push(ReadStatError::Other(
-                                                "Error when attempting to send read data for writing".to_string(),
-                                            ));
+                                        if let Some(ref pb) = pb_thread {
+                                            d = d.set_progress_bar(pb.clone());
                                         }
-                                    }
-                                    Err(e) => errors.push(e),
-                                }
-                            }
 
-                            drop(s);
+                                        d.read_data(&rsp)?;
 
-                            if !errors.is_empty() {
-                                eprintln!(
-                                    "The following errors occurred when processing data:"
-                                );
-                                for e in &errors {
-                                    eprintln!("    Error: {e:#?}");
-                                }
-                            }
-
-                            Ok(())
+                                        Ok((d, wc_thread.clone(), pairs_cnt))
+                                    },
+                                )
+                                .collect()
                         });
+
+                        // Send results over the channel in order
+                        let mut errors = Vec::new();
+                        for result in results {
+                            match result {
+                                Ok(data) => {
+                                    if s.send(data).is_err() {
+                                        errors.push(ReadStatError::Other(
+                                            "Error when attempting to send read data for writing"
+                                                .to_string(),
+                                        ));
+                                    }
+                                }
+                                Err(e) => errors.push(e),
+                            }
+                        }
+
+                        drop(s);
+
+                        if !errors.is_empty() {
+                            eprintln!("The following errors occurred when processing data:");
+                            for e in &errors {
+                                eprintln!("    Error: {e:#?}");
+                            }
+                        }
+
+                        Ok(())
+                    });
 
                     // Write
 
@@ -489,7 +482,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     if has_sql {
                         #[cfg(feature = "sql")]
                         {
-                            let query = sql_query.as_ref().expect("sql_query must be set when has_sql is true");
+                            let query = sql_query
+                                .as_ref()
+                                .expect("sql_query must be set when has_sql is true");
                             if let Some(out_path) = &out_path_clone {
                                 // Collect batches and pass through SQL
                                 let mut all_batches = Vec::new();
@@ -546,11 +541,8 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                             let mut batch_idx: usize = 0;
 
                             loop {
-                                let mut batch_group: Vec<(
-                                    ReadStatData,
-                                    WriteConfig,
-                                    usize,
-                                )> = Vec::with_capacity(CHANNEL_CAPACITY);
+                                let mut batch_group: Vec<(ReadStatData, WriteConfig, usize)> =
+                                    Vec::with_capacity(CHANNEL_CAPACITY);
                                 for item in r.iter() {
                                     batch_group.push(item);
                                     if batch_group.len() >= CHANNEL_CAPACITY {
@@ -565,32 +557,32 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                                 if schema.is_none() {
                                     schema = Some(batch_group[0].0.schema.clone());
                                 }
-                                let schema_ref = schema.as_ref().expect("schema must be set after first batch group");
+                                let schema_ref = schema
+                                    .as_ref()
+                                    .expect("schema must be set after first batch group");
 
                                 let temp_files: Vec<PathBuf> = batch_group
                                     .par_iter()
                                     .enumerate()
-                                    .map(
-                                        |(i, (d, _wc, _))| -> Result<PathBuf, ReadStatError> {
-                                            let temp_file = temp_dir.join(format!(
-                                                ".readstat_temp_{}.parquet",
-                                                batch_idx + i
-                                            ));
+                                    .map(|(i, (d, _wc, _))| -> Result<PathBuf, ReadStatError> {
+                                        let temp_file = temp_dir.join(format!(
+                                            ".readstat_temp_{}.parquet",
+                                            batch_idx + i
+                                        ));
 
-                                            if let Some(batch) = &d.batch {
-                                                ReadStatWriter::write_batch_to_parquet(
-                                                    batch,
-                                                    schema_ref,
-                                                    &temp_file,
-                                                    compression_clone,
-                                                    compression_level_clone,
-                                                    buffer_size_bytes as usize,
-                                                )?;
-                                            }
+                                        if let Some(batch) = &d.batch {
+                                            ReadStatWriter::write_batch_to_parquet(
+                                                batch,
+                                                schema_ref,
+                                                &temp_file,
+                                                compression_clone,
+                                                compression_level_clone,
+                                                buffer_size_bytes as usize,
+                                            )?;
+                                        }
 
-                                            Ok(temp_file)
-                                        },
-                                    )
+                                        Ok(temp_file)
+                                    })
                                     .collect::<Result<Vec<_>, _>>()?;
 
                                 batch_idx += batch_group.len();
@@ -605,7 +597,9 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                                 ReadStatWriter::merge_parquet_files(
                                     &all_temp_files,
                                     out_path,
-                                    schema.as_ref().expect("schema must be set when temp files exist"),
+                                    schema
+                                        .as_ref()
+                                        .expect("schema must be set when temp files exist"),
                                     compression_clone,
                                     compression_level_clone,
                                 )?;
@@ -642,9 +636,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                         Ok(Ok(())) => {}
                         Ok(Err(e)) => return Err(e),
                         Err(_) => {
-                            return Err(ReadStatError::Other(
-                                "Reader thread panicked".to_string(),
-                            ))
+                            return Err(ReadStatError::Other("Reader thread panicked".to_string()));
                         }
                     }
 

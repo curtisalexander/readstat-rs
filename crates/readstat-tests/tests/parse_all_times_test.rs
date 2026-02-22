@@ -27,16 +27,13 @@ fn all_time_value_columns_have_time_format_class() {
 
         assert!(
             col_name.ends_with("_value"),
-            "Column at index {} should be a _value column, got: {}",
-            idx,
-            col_name
+            "Column at index {idx} should be a _value column, got: {col_name}"
         );
 
         assert_eq!(
             m.var_format_class,
             Some(ReadStatVarFormatClass::Time),
-            "Column {} (format={}) should have Time format class",
-            col_name,
+            "Column {col_name} (format={}) should have Time format class",
             m.var_format
         );
 
@@ -45,8 +42,7 @@ fn all_time_value_columns_have_time_format_class() {
                 d.schema.fields[idx as usize].data_type(),
                 DataType::Time32(TimeUnit::Second)
             ),
-            "Column {} (format={}) should have Time32(Second) arrow type, got {:?}",
-            col_name,
+            "Column {col_name} (format={}) should have Time32(Second) arrow type, got {:?}",
             m.var_format,
             d.schema.fields[idx as usize].data_type()
         );

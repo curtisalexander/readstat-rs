@@ -40,323 +40,298 @@ fn cli_data_to_parquet(
 ) -> Result<(Command, NamedTempFile), Box<dyn std::error::Error>> {
     let mut cmd = readstat_cmd();
     let tempfile = match (overwrite, rows_to_stream, compression, compression_level) {
-            // Overwrite | Streaming | No Compression | No Compression Level
-            (OverwriteOption::Overwrite(tempfile), Some(rows), None, None) => {
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()])
-                    .arg("--overwrite");
+        // Overwrite | Streaming | No Compression | No Compression Level
+        (OverwriteOption::Overwrite(tempfile), Some(rows), None, None) => {
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .arg("--overwrite");
 
-                tempfile
-            }
-            // Do Not Overwrite | Streaming | No Compression | No Compression Level
-            (OverwriteOption::DoNotOverwrite, Some(rows), None, None) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | Streaming | No Compression | No Compression Level
+        (OverwriteOption::DoNotOverwrite, Some(rows), None, None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()]);
 
-                tempfile
-            }
-            // Overwrite | No Streaming | No Compression | No Compression Level
-            (OverwriteOption::Overwrite(tempfile), None, None, None) => {
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .arg("--overwrite");
+            tempfile
+        }
+        // Overwrite | No Streaming | No Compression | No Compression Level
+        (OverwriteOption::Overwrite(tempfile), None, None, None) => {
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .arg("--overwrite");
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | No Compression | No Compression Level
-            (OverwriteOption::DoNotOverwrite, None, None, None) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | No Compression | No Compression Level
+        (OverwriteOption::DoNotOverwrite, None, None, None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Uncompressed | No Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                None,
-                Some(ParquetCompression::Uncompressed),
-                None,
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Uncompressed | No Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Uncompressed), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "uncompressed"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "uncompressed"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | Streaming | Uncompressed | No Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                Some(rows),
-                Some(ParquetCompression::Uncompressed),
-                None,
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | Streaming | Uncompressed | No Compression Level
+        (
+            OverwriteOption::DoNotOverwrite,
+            Some(rows),
+            Some(ParquetCompression::Uncompressed),
+            None,
+        ) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()])
-                    .args(["--compression", "uncompressed"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .args(["--compression", "uncompressed"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Uncompressed | Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                None,
-                Some(ParquetCompression::Uncompressed),
-                Some(cl),
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Uncompressed | Compression Level
+        (
+            OverwriteOption::DoNotOverwrite,
+            None,
+            Some(ParquetCompression::Uncompressed),
+            Some(cl),
+        ) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "uncompressed"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "uncompressed"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Snappy | No Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Snappy), None) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Snappy | No Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Snappy), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "snappy"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "snappy"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | Streaming | Snappy | No Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                Some(rows),
-                Some(ParquetCompression::Snappy),
-                None,
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | Streaming | Snappy | No Compression Level
+        (OverwriteOption::DoNotOverwrite, Some(rows), Some(ParquetCompression::Snappy), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()])
-                    .args(["--compression", "snappy"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .args(["--compression", "snappy"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Snappy | Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Snappy), Some(cl)) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Snappy | Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Snappy), Some(cl)) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "snappy"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "snappy"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Lz4Raw | No Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Lz4Raw), None) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Lz4Raw | No Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Lz4Raw), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "lz4-raw"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "lz4-raw"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | Streaming | Lz4Raw | No Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                Some(rows),
-                Some(ParquetCompression::Lz4Raw),
-                None,
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | Streaming | Lz4Raw | No Compression Level
+        (OverwriteOption::DoNotOverwrite, Some(rows), Some(ParquetCompression::Lz4Raw), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()])
-                    .args(["--compression", "lz4-raw"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .args(["--compression", "lz4-raw"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Lz4Raw | Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Lz4Raw), Some(cl)) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Lz4Raw | Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Lz4Raw), Some(cl)) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "lz4-raw"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "lz4-raw"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Gzip | Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Gzip), Some(cl)) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Gzip | Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Gzip), Some(cl)) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "gzip"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "gzip"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | Streaming | Gzip | Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                Some(rows),
-                Some(ParquetCompression::Gzip),
-                Some(cl),
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | Streaming | Gzip | Compression Level
+        (OverwriteOption::DoNotOverwrite, Some(rows), Some(ParquetCompression::Gzip), Some(cl)) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()])
-                    .args(["--compression", "gzip"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .args(["--compression", "gzip"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Gzip | No Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Gzip), None) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Gzip | No Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Gzip), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "gzip"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "gzip"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Brotli | Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Brotli), Some(cl)) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Brotli | Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Brotli), Some(cl)) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "brotli"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "brotli"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | Streaming | Brotli | Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                Some(rows),
-                Some(ParquetCompression::Brotli),
-                Some(cl),
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | Streaming | Brotli | Compression Level
+        (
+            OverwriteOption::DoNotOverwrite,
+            Some(rows),
+            Some(ParquetCompression::Brotli),
+            Some(cl),
+        ) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()])
-                    .args(["--compression", "brotli"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .args(["--compression", "brotli"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Brotli | No Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Brotli), None) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Brotli | No Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Brotli), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "brotli"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "brotli"]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Zstd | Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Zstd), Some(cl)) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Zstd | Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Zstd), Some(cl)) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "zstd"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "zstd"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | Streaming | Zstd | Compression Level
-            (
-                OverwriteOption::DoNotOverwrite,
-                Some(rows),
-                Some(ParquetCompression::Zstd),
-                Some(cl),
-            ) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | Streaming | Zstd | Compression Level
+        (OverwriteOption::DoNotOverwrite, Some(rows), Some(ParquetCompression::Zstd), Some(cl)) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--stream-rows", rows.to_string().as_str()])
-                    .args(["--compression", "zstd"])
-                    .args(["--compression-level", cl.to_string().as_str()]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--stream-rows", rows.to_string().as_str()])
+                .args(["--compression", "zstd"])
+                .args(["--compression-level", cl.to_string().as_str()]);
 
-                tempfile
-            }
-            // Do Not Overwrite | No Streaming | Zstd | No Compression Level
-            (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Zstd), None) => {
-                let tempfile = NamedTempFile::new(format!("{}.parquet", base_file_name))?;
+            tempfile
+        }
+        // Do Not Overwrite | No Streaming | Zstd | No Compression Level
+        (OverwriteOption::DoNotOverwrite, None, Some(ParquetCompression::Zstd), None) => {
+            let tempfile = NamedTempFile::new(format!("{base_file_name}.parquet"))?;
 
-                cmd.arg("data")
-                    .arg(format!("tests/data/{}.sas7bdat", base_file_name))
-                    .args(["--format", "parquet"])
-                    .args(["--output", tempfile.as_os_str().to_str().unwrap()])
-                    .args(["--compression", "zstd"]);
+            cmd.arg("data")
+                .arg(format!("tests/data/{base_file_name}.sas7bdat"))
+                .args(["--format", "parquet"])
+                .args(["--output", tempfile.as_os_str().to_str().unwrap()])
+                .args(["--compression", "zstd"]);
 
-                tempfile
-            }
-            _ => unreachable!(),
-        };
+            tempfile
+        }
+        _ => unreachable!(),
+    };
 
     Ok((cmd, tempfile))
 }

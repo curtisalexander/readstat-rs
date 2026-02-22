@@ -27,8 +27,19 @@ fn readstat_cmd() -> Command {
 }
 
 const EXPECTED_COLUMNS: &[&str] = &[
-    "Brand", "Model", "Minivan", "Wagon", "Pickup", "Automatic",
-    "EngineSize", "Cylinders", "CityMPG", "HwyMPG", "SUV", "AWD", "Hybrid",
+    "Brand",
+    "Model",
+    "Minivan",
+    "Wagon",
+    "Pickup",
+    "Automatic",
+    "EngineSize",
+    "Cylinders",
+    "CityMPG",
+    "HwyMPG",
+    "SUV",
+    "AWD",
+    "Hybrid",
 ];
 
 /// Read a CSV file and return (header_fields, data_row_count).
@@ -61,7 +72,10 @@ fn cars_to_csv() {
     let (header, data_rows) = read_csv_info(tempfile.path());
     let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(|s| s.to_string()).collect();
 
-    assert_eq!(header, expected, "CSV header row should contain the correct column names");
+    assert_eq!(
+        header, expected,
+        "CSV header row should contain the correct column names"
+    );
     assert_eq!(data_rows, 1081, "CSV should contain 1081 data rows");
 
     tempfile.close().unwrap();
@@ -85,7 +99,10 @@ fn cars_to_csv_with_streaming() {
     let (header, data_rows) = read_csv_info(tempfile.path());
     let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(|s| s.to_string()).collect();
 
-    assert_eq!(header, expected, "CSV header row should contain the correct column names");
+    assert_eq!(
+        header, expected,
+        "CSV header row should contain the correct column names"
+    );
     assert_eq!(data_rows, 1081, "CSV should contain 1081 data rows");
 
     tempfile.close().unwrap();
@@ -115,8 +132,14 @@ fn cars_to_csv_overwrite() {
     let (header, data_rows) = read_csv_info(tempfile.path());
     let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(|s| s.to_string()).collect();
 
-    assert_eq!(header, expected, "CSV header row should be present after overwrite");
-    assert_eq!(data_rows, 1081, "CSV should contain 1081 data rows after overwrite");
+    assert_eq!(
+        header, expected,
+        "CSV header row should be present after overwrite"
+    );
+    assert_eq!(
+        data_rows, 1081,
+        "CSV should contain 1081 data rows after overwrite"
+    );
 
     tempfile.close().unwrap();
 }

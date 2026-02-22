@@ -122,7 +122,7 @@ fn parse_intel_data() {
 
     // Row 0: COMPUTATION=5.0, VOCABULARY=4.0, INFERENCE=5.0, REASONING=4.0, WRITING=7.0, GRAMMAR=6.0
     let computation = columns
-        .get(0)
+        .first()
         .unwrap()
         .as_any()
         .downcast_ref::<Float64Array>()

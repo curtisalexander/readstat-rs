@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.19.0]
+
+### Changed
+- Bumped `readstat` and `readstat-cli` to 0.19.0 for crates.io release
+- Modernized format strings to use inline variable capture (`{var}` instead of `{}", var`)
+- Changed `&PathBuf` parameters to `&Path` in public API for idiomatic Rust
+- Replaced `Debug`-based `Display` impls with explicit `Display` for `OutFormat` and `ParquetCompression`
+- Replaced redundant closures with function references (e.g., `.map(Into::into)`)
+- Removed unnecessary `extern crate readstat_sys` from CLI binary
+- Added `version = "0.19.0"` to `readstat` dependency in `readstat-cli` for crates.io compatibility
+
 ## [0.18.0]
 
 ### Added

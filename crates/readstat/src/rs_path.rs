@@ -103,13 +103,19 @@ mod tests {
     #[test]
     fn valid_sas7bdat_extension() {
         let path = Path::new("/some/file.sas7bdat");
-        assert_eq!(ReadStatPath::validate_in_extension(path).unwrap(), "sas7bdat");
+        assert_eq!(
+            ReadStatPath::validate_in_extension(path).unwrap(),
+            "sas7bdat"
+        );
     }
 
     #[test]
     fn valid_sas7bcat_extension() {
         let path = Path::new("/some/file.sas7bcat");
-        assert_eq!(ReadStatPath::validate_in_extension(path).unwrap(), "sas7bcat");
+        assert_eq!(
+            ReadStatPath::validate_in_extension(path).unwrap(),
+            "sas7bcat"
+        );
     }
 
     #[test]

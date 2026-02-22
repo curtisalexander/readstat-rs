@@ -7,13 +7,12 @@
 
 use arrow::datatypes::Schema;
 use arrow_array::{
-    builder::{
-        Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
-        StringBuilder, Time32SecondBuilder, Time64MicrosecondBuilder,
-        TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
-        TimestampNanosecondBuilder, TimestampSecondBuilder,
-    },
     ArrayRef, RecordBatch,
+    builder::{
+        Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, StringBuilder,
+        Time32SecondBuilder, Time64MicrosecondBuilder, TimestampMicrosecondBuilder,
+        TimestampMillisecondBuilder, TimestampNanosecondBuilder, TimestampSecondBuilder,
+    },
 };
 #[cfg(not(target_arch = "wasm32"))]
 use indicatif::{ProgressBar, ProgressStyle};
@@ -22,12 +21,12 @@ use std::{
     collections::BTreeMap,
     ffi::CString,
     os::raw::c_void,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{Arc, atomic::AtomicUsize},
 };
 
 use crate::{
     cb,
-    err::{check_c_error, ReadStatError},
+    err::{ReadStatError, check_c_error},
     rs_buffer_io::ReadStatBufferCtx,
     rs_metadata::{ReadStatMetadata, ReadStatVarMetadata},
     rs_parser::ReadStatParser,
@@ -122,22 +121,18 @@ impl ColumnBuilder {
     /// For string columns, `storage_width` provides a byte-level capacity hint.
     fn from_metadata(vm: &ReadStatVarMetadata, capacity: usize) -> Self {
         match vm.var_type_class {
-            ReadStatVarTypeClass::String => {
-                ColumnBuilder::Str(StringBuilder::with_capacity(
-                    capacity,
-                    capacity * vm.storage_width,
-                ))
-            }
+            ReadStatVarTypeClass::String => ColumnBuilder::Str(StringBuilder::with_capacity(
+                capacity,
+                capacity * vm.storage_width,
+            )),
             ReadStatVarTypeClass::Numeric => {
                 match vm.var_format_class {
                     Some(ReadStatVarFormatClass::Date) => {
                         ColumnBuilder::Date32(Date32Builder::with_capacity(capacity))
                     }
-                    Some(ReadStatVarFormatClass::DateTime) => {
-                        ColumnBuilder::TimestampSecond(
-                            TimestampSecondBuilder::with_capacity(capacity),
-                        )
-                    }
+                    Some(ReadStatVarFormatClass::DateTime) => ColumnBuilder::TimestampSecond(
+                        TimestampSecondBuilder::with_capacity(capacity),
+                    ),
                     Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
                         ColumnBuilder::TimestampMillisecond(
                             TimestampMillisecondBuilder::with_capacity(capacity),
@@ -154,14 +149,12 @@ impl ColumnBuilder {
                         )
                     }
                     Some(ReadStatVarFormatClass::Time) => {
-                        ColumnBuilder::Time32Second(
-                            Time32SecondBuilder::with_capacity(capacity),
-                        )
+                        ColumnBuilder::Time32Second(Time32SecondBuilder::with_capacity(capacity))
                     }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
-                        ColumnBuilder::Time64Microsecond(
-                            Time64MicrosecondBuilder::with_capacity(capacity),
-                        )
+                        ColumnBuilder::Time64Microsecond(Time64MicrosecondBuilder::with_capacity(
+                            capacity,
+                        ))
                     }
                     None => {
                         // Plain numeric — dispatch by storage type
@@ -175,9 +168,7 @@ impl ColumnBuilder {
                             ReadStatVarType::Float => {
                                 ColumnBuilder::Float32(Float32Builder::with_capacity(capacity))
                             }
-                            _ => {
-                                ColumnBuilder::Float64(Float64Builder::with_capacity(capacity))
-                            }
+                            _ => ColumnBuilder::Float64(Float64Builder::with_capacity(capacity)),
                         }
                     }
                 }
@@ -289,11 +280,7 @@ impl ReadStatData {
     /// operation (no data copying). The heavy work was already done during
     /// `handle_value` when values were appended directly into the builders.
     pub(crate) fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
-        let arrays: Vec<ArrayRef> = self
-            .builders
-            .iter_mut()
-            .map(|b| b.finish())
-            .collect();
+        let arrays: Vec<ArrayRef> = self.builders.iter_mut().map(|b| b.finish()).collect();
 
         self.batch = Some(RecordBatch::try_new(self.schema.clone(), arrays)?);
 
@@ -338,7 +325,7 @@ impl ReadStatData {
     /// Parses row data from the file via FFI callbacks (without Arrow conversion).
     pub(crate) fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
-        debug!("Path as C string is {:?}", &rsp.cstring_path);
+        debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
         // Update progress bar with rows processed for this chunk
@@ -367,7 +354,7 @@ impl ReadStatData {
 
         // initialize error
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {:#?}", &error);
+        debug!("Initially, error ==> {error:#?}");
 
         // setup parser
         // once call parse_sas7bdat, iteration begins
@@ -390,7 +377,7 @@ impl ReadStatData {
 
         // initialize error
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {:#?}", &error);
+        debug!("Initially, error ==> {error:#?}");
 
         // Dummy path — custom I/O handlers ignore it
         let dummy_path = CString::new("").unwrap();
@@ -401,7 +388,7 @@ impl ReadStatData {
                 ReadStatParser::new()
                     .set_value_handler(Some(cb::handle_value))?
                     .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
-                    .set_row_offset(Some(self.chunk_row_start.try_into()?))?
+                    .set_row_offset(Some(self.chunk_row_start.try_into()?))?,
             )?
             .parse_sas7bdat(dummy_path.as_ptr(), ctx);
 
@@ -512,7 +499,11 @@ impl ReadStatData {
     /// Accepts an `Arc`-wrapped filter for cheap sharing across parallel chunks.
     /// Must be called **before** [`init`](ReadStatData::init) so that
     /// `total_var_count` is preserved when `set_metadata` runs.
-    pub fn set_column_filter(self, filter: Option<Arc<BTreeMap<i32, i32>>>, total_var_count: i32) -> Self {
+    pub fn set_column_filter(
+        self,
+        filter: Option<Arc<BTreeMap<i32, i32>>>,
+        total_var_count: i32,
+    ) -> Self {
         Self {
             column_filter: filter,
             total_var_count,

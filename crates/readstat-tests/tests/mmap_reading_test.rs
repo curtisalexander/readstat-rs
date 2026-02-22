@@ -11,17 +11,17 @@ fn test_data_path(dataset: &str) -> std::path::PathBuf {
 }
 
 /// Helper: reads metadata + data from mmap and returns (metadata, data).
-fn setup_and_read_from_mmap(
-    dataset: &str,
-) -> (readstat::ReadStatMetadata, readstat::ReadStatData) {
+fn setup_and_read_from_mmap(dataset: &str) -> (readstat::ReadStatMetadata, readstat::ReadStatData) {
     let path = test_data_path(dataset);
 
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata_from_mmap(&path, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
+        md.clone(),
+        0,
+        md.row_count as u32,
+    );
     d.read_data_from_mmap(&path).unwrap();
 
     (md, d)
@@ -33,17 +33,20 @@ fn setup_and_read_from_mmap(
 fn mmap_cars_metadata() {
     let (md, _d) = setup_and_read_from_mmap("cars.sas7bdat");
 
-    common::assert_metadata(&md, &ExpectedMetadata {
-        row_count: 1081,
-        var_count: 13,
-        table_name: "CARS",
-        file_label: "Written by SAS",
-        file_encoding: "WINDOWS-1252",
-        version: 9,
-        is64bit: 0,
-        creation_time: "2008-09-30 12:55:01",
-        modified_time: "2008-09-30 12:55:01",
-    });
+    common::assert_metadata(
+        &md,
+        &ExpectedMetadata {
+            row_count: 1081,
+            var_count: 13,
+            table_name: "CARS",
+            file_label: "Written by SAS",
+            file_encoding: "WINDOWS-1252",
+            version: 9,
+            is64bit: 0,
+            creation_time: "2008-09-30 12:55:01",
+            modified_time: "2008-09-30 12:55:01",
+        },
+    );
 
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
     assert!(matches!(md.endianness, readstat::ReadStatEndian::Little));
@@ -114,9 +117,10 @@ fn mmap_streaming_chunks() {
     let mut total_read = 0usize;
 
     for w in offsets.windows(2) {
-        let mut d = readstat::ReadStatData::new()
-            .set_no_progress(true)
-            .init(md.clone(), w[0], w[1]);
+        let mut d =
+            readstat::ReadStatData::new()
+                .set_no_progress(true)
+                .init(md.clone(), w[0], w[1]);
         d.read_data_from_mmap(&path).unwrap();
         let batch = d.batch.as_ref().unwrap();
         total_read += batch.num_rows();

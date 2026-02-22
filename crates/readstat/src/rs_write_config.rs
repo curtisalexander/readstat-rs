@@ -6,9 +6,7 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "parquet")]
-use parquet::basic::{
-    BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel,
-};
+use parquet::basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel};
 
 use crate::err::ReadStatError;
 
@@ -32,7 +30,12 @@ pub enum OutFormat {
 
 impl std::fmt::Display for OutFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", &self)
+        match self {
+            Self::csv => f.write_str("csv"),
+            Self::feather => f.write_str("feather"),
+            Self::ndjson => f.write_str("ndjson"),
+            Self::parquet => f.write_str("parquet"),
+        }
     }
 }
 
@@ -55,7 +58,14 @@ pub enum ParquetCompression {
 
 impl std::fmt::Display for ParquetCompression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", &self)
+        match self {
+            Self::Uncompressed => f.write_str("uncompressed"),
+            Self::Snappy => f.write_str("snappy"),
+            Self::Gzip => f.write_str("gzip"),
+            Self::Lz4Raw => f.write_str("lz4-raw"),
+            Self::Brotli => f.write_str("brotli"),
+            Self::Zstd => f.write_str("zstd"),
+        }
     }
 }
 
@@ -98,9 +108,7 @@ impl WriteConfig {
             None => match compression_level {
                 None => None,
                 Some(_) => {
-                    println!(
-                        "Ignoring value of --compression-level as --compression was not set"
-                    );
+                    println!("Ignoring value of --compression-level as --compression was not set");
                     None
                 }
             },
@@ -174,7 +182,10 @@ impl WriteConfig {
                         if parent.exists() {
                             if abs_path.exists() {
                                 if overwrite {
-                                    println!("The file {} will be overwritten!", abs_path.to_string_lossy());
+                                    println!(
+                                        "The file {} will be overwritten!",
+                                        abs_path.to_string_lossy()
+                                    );
                                     Ok(Some(abs_path))
                                 } else {
                                     Err(ReadStatError::Other(format!(
@@ -215,8 +226,7 @@ impl WriteConfig {
             (None, None) => Ok(None),
             (None, Some(_)) => {
                 println!(
-                    "Compression level is not required for compression={}, ignoring value of --compression-level",
-                    name
+                    "Compression level is not required for compression={name}, ignoring value of --compression-level"
                 );
                 Ok(None)
             }
@@ -226,9 +236,8 @@ impl WriteConfig {
                     Ok(Some(c))
                 } else {
                     Err(ReadStatError::Other(format!(
-                        "The compression level of {} is not a valid level for {} compression. \
-                         Instead, please use values between 0-{max}.",
-                        c, name
+                        "The compression level of {c} is not a valid level for {name} compression. \
+                         Instead, please use values between 0-{max}."
                     )))
                 }
             }
@@ -347,97 +356,79 @@ mod tests {
 
     #[test]
     fn uncompressed_ignores_level() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Uncompressed,
-            Some(5),
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Uncompressed, Some(5))
+                .unwrap();
         assert_eq!(result, None);
     }
 
     #[test]
     fn snappy_ignores_level() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Snappy,
-            Some(5),
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Snappy, Some(5)).unwrap();
         assert_eq!(result, None);
     }
 
     #[test]
     fn lz4raw_ignores_level() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Lz4Raw,
-            Some(5),
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Lz4Raw, Some(5)).unwrap();
         assert_eq!(result, None);
     }
 
     #[test]
     fn gzip_valid_level() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Gzip,
-            Some(5),
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Gzip, Some(5)).unwrap();
         assert_eq!(result, Some(5));
     }
 
     #[test]
     fn gzip_max_valid_level() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Gzip,
-            Some(9),
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Gzip, Some(9)).unwrap();
         assert_eq!(result, Some(9));
     }
 
     #[test]
     fn gzip_invalid_level() {
-        assert!(WriteConfig::validate_compression_level(
-            ParquetCompression::Gzip,
-            Some(10),
-        ).is_err());
+        assert!(
+            WriteConfig::validate_compression_level(ParquetCompression::Gzip, Some(10),).is_err()
+        );
     }
 
     #[test]
     fn brotli_valid_level() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Brotli,
-            Some(11),
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Brotli, Some(11)).unwrap();
         assert_eq!(result, Some(11));
     }
 
     #[test]
     fn brotli_invalid_level() {
-        assert!(WriteConfig::validate_compression_level(
-            ParquetCompression::Brotli,
-            Some(12),
-        ).is_err());
+        assert!(
+            WriteConfig::validate_compression_level(ParquetCompression::Brotli, Some(12),).is_err()
+        );
     }
 
     #[test]
     fn zstd_valid_level() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Zstd,
-            Some(22),
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Zstd, Some(22)).unwrap();
         assert_eq!(result, Some(22));
     }
 
     #[test]
     fn zstd_invalid_level() {
-        assert!(WriteConfig::validate_compression_level(
-            ParquetCompression::Zstd,
-            Some(23),
-        ).is_err());
+        assert!(
+            WriteConfig::validate_compression_level(ParquetCompression::Zstd, Some(23),).is_err()
+        );
     }
 
     #[test]
     fn no_level_passes_through() {
-        let result = WriteConfig::validate_compression_level(
-            ParquetCompression::Gzip,
-            None,
-        ).unwrap();
+        let result =
+            WriteConfig::validate_compression_level(ParquetCompression::Gzip, None).unwrap();
         assert_eq!(result, None);
     }
 
@@ -445,6 +436,10 @@ mod tests {
 
     #[test]
     fn validate_out_path_none() {
-        assert!(WriteConfig::validate_out_path(None, false).unwrap().is_none());
+        assert!(
+            WriteConfig::validate_out_path(None, false)
+                .unwrap()
+                .is_none()
+        );
     }
 }

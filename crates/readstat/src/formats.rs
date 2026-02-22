@@ -131,7 +131,6 @@ static RE_DATE: LazyLock<Regex> = LazyLock::new(|| {
 /// Matching is case-insensitive and handles both numeric widths (`DATE9`)
 /// and letter-width suffixes (`DATEW`).
 pub(crate) fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
-
     // Check order matters:
     // 1. DATETIME precision variants (most specific, numeric width only)
     // 2. TIME precision variants (most specific, numeric width only)
@@ -166,28 +165,94 @@ mod tests {
     #[test]
     fn date_formats_with_numeric_width() {
         // Existing formats that were already supported
-        assert_eq!(match_var_format("DATE9"), Some(ReadStatVarFormatClass::Date));
-        assert_eq!(match_var_format("DDMMYY10"), Some(ReadStatVarFormatClass::Date));
-        assert_eq!(match_var_format("DDMMYYB10"), Some(ReadStatVarFormatClass::Date));
-        assert_eq!(match_var_format("MMDDYY10"), Some(ReadStatVarFormatClass::Date));
-        assert_eq!(match_var_format("YYMMDD10"), Some(ReadStatVarFormatClass::Date));
+        assert_eq!(
+            match_var_format("DATE9"),
+            Some(ReadStatVarFormatClass::Date)
+        );
+        assert_eq!(
+            match_var_format("DDMMYY10"),
+            Some(ReadStatVarFormatClass::Date)
+        );
+        assert_eq!(
+            match_var_format("DDMMYYB10"),
+            Some(ReadStatVarFormatClass::Date)
+        );
+        assert_eq!(
+            match_var_format("MMDDYY10"),
+            Some(ReadStatVarFormatClass::Date)
+        );
+        assert_eq!(
+            match_var_format("YYMMDD10"),
+            Some(ReadStatVarFormatClass::Date)
+        );
     }
 
     #[test]
     fn date_formats_with_letter_width() {
         // Format strings as stored in the test SAS datasets
         let date_formats = [
-            "B8601DAW", "B8601DNW", "DATEW", "DAYW", "DDMMYYW", "DDMMYYXW",
-            "DOWNAMEW", "DTDATEW", "DTMONXYW", "DTWKDATXW", "DTYEARW", "DTYYQCW",
-            "E8601DAW", "E8601DNW", "JULDAYW", "JULIANW", "MMDDYYW", "MMDDYYXW",
-            "MMYYW", "MMYYXW", "MONNAMEW", "MONTHW", "MONYYW", "NENGOW",
-            "NLDATEW", "NLDATECPWP", "NLDATELW", "NLDATEMW", "NLDATEMDW",
-            "NLDATEMDLW", "NLDATEMDMW", "NLDATEMDSW", "NLDATEMNW", "NLDATESW",
-            "NLDATEWW", "NLDATEWNW", "NLDATEYMW", "NLDATEYMLW", "NLDATEYMMW",
-            "NLDATEYMSW", "NLDATEYQW", "NLDATEYQLW", "NLDATEYQMW", "NLDATEYQSW",
-            "NLDATEYRW", "NLDATEYWW", "QTRW", "QTRRW", "WEEKDATXW", "WEEKDAYW",
-            "YEARW", "YYMMW", "YYMMDDW", "YYMMDDXW", "YYMMXW", "YYMONW",
-            "YYQW", "YYQXW", "YYQRW", "YYQRXW", "YYWEEKUW", "YYWEEKVW",
+            "B8601DAW",
+            "B8601DNW",
+            "DATEW",
+            "DAYW",
+            "DDMMYYW",
+            "DDMMYYXW",
+            "DOWNAMEW",
+            "DTDATEW",
+            "DTMONXYW",
+            "DTWKDATXW",
+            "DTYEARW",
+            "DTYYQCW",
+            "E8601DAW",
+            "E8601DNW",
+            "JULDAYW",
+            "JULIANW",
+            "MMDDYYW",
+            "MMDDYYXW",
+            "MMYYW",
+            "MMYYXW",
+            "MONNAMEW",
+            "MONTHW",
+            "MONYYW",
+            "NENGOW",
+            "NLDATEW",
+            "NLDATECPWP",
+            "NLDATELW",
+            "NLDATEMW",
+            "NLDATEMDW",
+            "NLDATEMDLW",
+            "NLDATEMDMW",
+            "NLDATEMDSW",
+            "NLDATEMNW",
+            "NLDATESW",
+            "NLDATEWW",
+            "NLDATEWNW",
+            "NLDATEYMW",
+            "NLDATEYMLW",
+            "NLDATEYMMW",
+            "NLDATEYMSW",
+            "NLDATEYQW",
+            "NLDATEYQLW",
+            "NLDATEYQMW",
+            "NLDATEYQSW",
+            "NLDATEYRW",
+            "NLDATEYWW",
+            "QTRW",
+            "QTRRW",
+            "WEEKDATXW",
+            "WEEKDAYW",
+            "YEARW",
+            "YYMMW",
+            "YYMMDDW",
+            "YYMMDDXW",
+            "YYMMXW",
+            "YYMONW",
+            "YYQW",
+            "YYQXW",
+            "YYQRW",
+            "YYQRXW",
+            "YYWEEKUW",
+            "YYWEEKVW",
             "YYWEEKWW",
         ];
         for fmt in &date_formats {
@@ -205,16 +270,33 @@ mod tests {
     #[test]
     fn time_format_bare() {
         assert_eq!(match_var_format("TIME"), Some(ReadStatVarFormatClass::Time));
-        assert_eq!(match_var_format("TIME8"), Some(ReadStatVarFormatClass::Time));
+        assert_eq!(
+            match_var_format("TIME8"),
+            Some(ReadStatVarFormatClass::Time)
+        );
     }
 
     #[test]
     fn time_formats_with_letter_width() {
         let time_formats = [
-            "B8601LZW", "B8601TMWD", "B8601TXW", "B8601TZW",
-            "E8601LZW", "E8601TMWD", "E8601TXW", "E8601TZWD",
-            "HHMMWD", "HOURWD", "MMSSWD", "NLDATMTMW", "NLDATMTZW",
-            "NLTIMAPW", "NLTIMEW", "TIMEWD", "TIMEAMPMWD", "TODWD",
+            "B8601LZW",
+            "B8601TMWD",
+            "B8601TXW",
+            "B8601TZW",
+            "E8601LZW",
+            "E8601TMWD",
+            "E8601TXW",
+            "E8601TZWD",
+            "HHMMWD",
+            "HOURWD",
+            "MMSSWD",
+            "NLDATMTMW",
+            "NLDATMTZW",
+            "NLTIMAPW",
+            "NLTIMEW",
+            "TIMEWD",
+            "TIMEAMPMWD",
+            "TODWD",
         ];
         for fmt in &time_formats {
             assert_eq!(
@@ -230,7 +312,10 @@ mod tests {
 
     #[test]
     fn datetime_format_with_numeric_width() {
-        assert_eq!(match_var_format("DATETIME22"), Some(ReadStatVarFormatClass::DateTime));
+        assert_eq!(
+            match_var_format("DATETIME22"),
+            Some(ReadStatVarFormatClass::DateTime)
+        );
     }
 
     #[test]
@@ -273,16 +358,43 @@ mod tests {
     #[test]
     fn datetime_formats_with_letter_width() {
         let datetime_formats = [
-            "B8601DTWD", "B8601DXW", "B8601DZW", "B8601LXW",
-            "DATEAMPMWD", "DATETIMEWD",
-            "E8601DTWD", "E8601DXW", "E8601DZW", "E8601LXW",
+            "B8601DTWD",
+            "B8601DXW",
+            "B8601DZW",
+            "B8601LXW",
+            "DATEAMPMWD",
+            "DATETIMEWD",
+            "E8601DTWD",
+            "E8601DXW",
+            "E8601DZW",
+            "E8601LXW",
             "MDYAMPMWD",
-            "NLDATMW", "NLDATMAPW", "NLDATMCPWP", "NLDATMDTW", "NLDATMLW",
-            "NLDATMMW", "NLDATMMDW", "NLDATMMDLW", "NLDATMMDMW", "NLDATMMDSW",
-            "NLDATMMNW", "NLDATMSW", "NLDATMWW", "NLDATMWNW", "NLDATMWZW",
-            "NLDATMYMW", "NLDATMYMLW", "NLDATMYMMW", "NLDATMYMSW",
-            "NLDATMYQW", "NLDATMYQLW", "NLDATMYQMW", "NLDATMYQSW",
-            "NLDATMYRW", "NLDATMYWW", "NLDATMZW",
+            "NLDATMW",
+            "NLDATMAPW",
+            "NLDATMCPWP",
+            "NLDATMDTW",
+            "NLDATMLW",
+            "NLDATMMW",
+            "NLDATMMDW",
+            "NLDATMMDLW",
+            "NLDATMMDMW",
+            "NLDATMMDSW",
+            "NLDATMMNW",
+            "NLDATMSW",
+            "NLDATMWW",
+            "NLDATMWNW",
+            "NLDATMWZW",
+            "NLDATMYMW",
+            "NLDATMYMLW",
+            "NLDATMYMMW",
+            "NLDATMYMSW",
+            "NLDATMYQW",
+            "NLDATMYQLW",
+            "NLDATMYQMW",
+            "NLDATMYQSW",
+            "NLDATMYRW",
+            "NLDATMYWW",
+            "NLDATMZW",
         ];
         for fmt in &datetime_formats {
             assert_eq!(
@@ -309,8 +421,17 @@ mod tests {
 
     #[test]
     fn case_insensitive() {
-        assert_eq!(match_var_format("date9"), Some(ReadStatVarFormatClass::Date));
-        assert_eq!(match_var_format("datetime22"), Some(ReadStatVarFormatClass::DateTime));
-        assert_eq!(match_var_format("time8"), Some(ReadStatVarFormatClass::Time));
+        assert_eq!(
+            match_var_format("date9"),
+            Some(ReadStatVarFormatClass::Date)
+        );
+        assert_eq!(
+            match_var_format("datetime22"),
+            Some(ReadStatVarFormatClass::DateTime)
+        );
+        assert_eq!(
+            match_var_format("time8"),
+            Some(ReadStatVarFormatClass::Time)
+        );
     }
 }

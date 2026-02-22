@@ -9,12 +9,17 @@ use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use log::debug;
 use num_derive::FromPrimitive;
 use serde::Serialize;
-use std::{collections::{BTreeMap, BTreeSet, HashMap}, ffi::{c_void, CString}, os::raw::c_int, path::Path};
 #[cfg(any(not(target_arch = "wasm32"), test))]
 use std::fs::File;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    ffi::{CString, c_void},
+    os::raw::c_int,
+    path::Path,
+};
 
 use crate::cb::{handle_metadata, handle_variable};
-use crate::err::{check_c_error, ReadStatError};
+use crate::err::{ReadStatError, check_c_error};
 use crate::rs_buffer_io::ReadStatBufferCtx;
 use crate::rs_parser::ReadStatParser;
 use crate::rs_path::ReadStatPath;
@@ -158,13 +163,13 @@ impl ReadStatMetadata {
         rsp: &ReadStatPath,
         skip_row_count: bool,
     ) -> Result<(), ReadStatError> {
-        debug!("Path as C string is {:?}", &rsp.cstring_path);
+        debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
         let ctx = self as *mut ReadStatMetadata as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
+        debug!("Initially, error ==> {error}");
 
         let row_limit = if skip_row_count { Some(1) } else { None };
 
@@ -196,7 +201,7 @@ impl ReadStatMetadata {
         let ctx = self as *mut ReadStatMetadata as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
-        debug!("Initially, error ==> {}", &error);
+        debug!("Initially, error ==> {error}");
 
         let row_limit = if skip_row_count { Some(1) } else { None };
 
@@ -288,11 +293,7 @@ impl ReadStatMetadata {
             .collect();
 
         if !not_found.is_empty() {
-            let available: Vec<String> = self
-                .vars
-                .values()
-                .map(|vm| vm.var_name.clone())
-                .collect();
+            let available: Vec<String> = self.vars.values().map(|vm| vm.var_name.clone()).collect();
             return Err(ReadStatError::ColumnsNotFound {
                 requested: not_found,
                 available,
@@ -475,7 +476,10 @@ mod tests {
             .resolve_selected_columns(Some(vec!["a".into(), "nonexistent".into()]))
             .unwrap_err();
         match err {
-            ReadStatError::ColumnsNotFound { requested, available } => {
+            ReadStatError::ColumnsNotFound {
+                requested,
+                available,
+            } => {
                 assert_eq!(requested, vec!["nonexistent"]);
                 assert_eq!(available, vec!["a", "b", "c"]);
             }
@@ -530,16 +534,19 @@ mod tests {
     #[test]
     fn schema_string_type() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "name".into(),
-            ReadStatVarType::String,
-            ReadStatVarTypeClass::String,
-            String::new(),
-            "$30".into(),
-            None,
-            30,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "name".into(),
+                ReadStatVarType::String,
+                ReadStatVarTypeClass::String,
+                String::new(),
+                "$30".into(),
+                None,
+                30,
+                0,
+            ),
+        );
         md.var_count = 1;
         let schema = md.initialize_schema();
         assert_eq!(*schema.fields()[0].data_type(), DataType::Utf8);
@@ -548,16 +555,19 @@ mod tests {
     #[test]
     fn schema_float64_type() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "value".into(),
-            ReadStatVarType::Double,
-            ReadStatVarTypeClass::Numeric,
-            String::new(),
-            "BEST12".into(),
-            None,
-            8,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "value".into(),
+                ReadStatVarType::Double,
+                ReadStatVarTypeClass::Numeric,
+                String::new(),
+                "BEST12".into(),
+                None,
+                8,
+                0,
+            ),
+        );
         md.var_count = 1;
         let schema = md.initialize_schema();
         assert_eq!(*schema.fields()[0].data_type(), DataType::Float64);
@@ -566,16 +576,19 @@ mod tests {
     #[test]
     fn schema_date_type() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "dt".into(),
-            ReadStatVarType::Double,
-            ReadStatVarTypeClass::Numeric,
-            String::new(),
-            "DATE9".into(),
-            Some(ReadStatVarFormatClass::Date),
-            8,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "dt".into(),
+                ReadStatVarType::Double,
+                ReadStatVarTypeClass::Numeric,
+                String::new(),
+                "DATE9".into(),
+                Some(ReadStatVarFormatClass::Date),
+                8,
+                0,
+            ),
+        );
         md.var_count = 1;
         let schema = md.initialize_schema();
         assert_eq!(*schema.fields()[0].data_type(), DataType::Date32);
@@ -584,16 +597,19 @@ mod tests {
     #[test]
     fn schema_datetime_type() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "ts".into(),
-            ReadStatVarType::Double,
-            ReadStatVarTypeClass::Numeric,
-            String::new(),
-            "DATETIME22".into(),
-            Some(ReadStatVarFormatClass::DateTime),
-            8,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "ts".into(),
+                ReadStatVarType::Double,
+                ReadStatVarTypeClass::Numeric,
+                String::new(),
+                "DATETIME22".into(),
+                Some(ReadStatVarFormatClass::DateTime),
+                8,
+                0,
+            ),
+        );
         md.var_count = 1;
         let schema = md.initialize_schema();
         assert_eq!(
@@ -605,16 +621,19 @@ mod tests {
     #[test]
     fn schema_time_type() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "tm".into(),
-            ReadStatVarType::Double,
-            ReadStatVarTypeClass::Numeric,
-            String::new(),
-            "TIME8".into(),
-            Some(ReadStatVarFormatClass::Time),
-            8,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "tm".into(),
+                ReadStatVarType::Double,
+                ReadStatVarTypeClass::Numeric,
+                String::new(),
+                "TIME8".into(),
+                Some(ReadStatVarFormatClass::Time),
+                8,
+                0,
+            ),
+        );
         md.var_count = 1;
         let schema = md.initialize_schema();
         assert_eq!(
@@ -626,16 +645,19 @@ mod tests {
     #[test]
     fn schema_int32_type() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "count".into(),
-            ReadStatVarType::Int32,
-            ReadStatVarTypeClass::Numeric,
-            String::new(),
-            String::new(),
-            None,
-            4,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "count".into(),
+                ReadStatVarType::Int32,
+                ReadStatVarTypeClass::Numeric,
+                String::new(),
+                String::new(),
+                None,
+                4,
+                0,
+            ),
+        );
         md.var_count = 1;
         let schema = md.initialize_schema();
         assert_eq!(*schema.fields()[0].data_type(), DataType::Int32);
@@ -644,16 +666,19 @@ mod tests {
     #[test]
     fn schema_with_labels_metadata() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "col".into(),
-            ReadStatVarType::Double,
-            ReadStatVarTypeClass::Numeric,
-            "My Label".into(),
-            "BEST12".into(),
-            None,
-            8,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "col".into(),
+                ReadStatVarType::Double,
+                ReadStatVarTypeClass::Numeric,
+                "My Label".into(),
+                "BEST12".into(),
+                None,
+                8,
+                0,
+            ),
+        );
         md.var_count = 1;
         md.file_label = "My Table".into();
         let schema = md.initialize_schema();
@@ -670,16 +695,19 @@ mod tests {
     #[test]
     fn schema_no_labels_has_format_and_width_metadata() {
         let mut md = ReadStatMetadata::new();
-        md.vars.insert(0, ReadStatVarMetadata::new(
-            "col".into(),
-            ReadStatVarType::Double,
-            ReadStatVarTypeClass::Numeric,
-            String::new(),
-            "BEST12".into(),
-            None,
-            8,
+        md.vars.insert(
             0,
-        ));
+            ReadStatVarMetadata::new(
+                "col".into(),
+                ReadStatVarType::Double,
+                ReadStatVarTypeClass::Numeric,
+                String::new(),
+                "BEST12".into(),
+                None,
+                8,
+                0,
+            ),
+        );
         md.var_count = 1;
         let schema = md.initialize_schema();
 

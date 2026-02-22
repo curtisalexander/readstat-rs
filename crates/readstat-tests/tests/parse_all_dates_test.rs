@@ -29,26 +29,19 @@ fn all_date_value_columns_have_date_format_class() {
 
         assert!(
             col_name.ends_with("_value"),
-            "Column at index {} should be a _value column, got: {}",
-            idx,
-            col_name
+            "Column at index {idx} should be a _value column, got: {col_name}"
         );
 
         assert_eq!(
             m.var_format_class,
             Some(ReadStatVarFormatClass::Date),
-            "Column {} (format={}) should have Date format class",
-            col_name,
+            "Column {col_name} (format={}) should have Date format class",
             m.var_format
         );
 
         assert!(
-            matches!(
-                d.schema.fields[idx as usize].data_type(),
-                DataType::Date32
-            ),
-            "Column {} (format={}) should have Date32 arrow type, got {:?}",
-            col_name,
+            matches!(d.schema.fields[idx as usize].data_type(), DataType::Date32),
+            "Column {col_name} (format={}) should have Date32 arrow type, got {:?}",
             m.var_format,
             d.schema.fields[idx as usize].data_type()
         );

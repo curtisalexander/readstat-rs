@@ -78,32 +78,34 @@ pub(crate) extern "C" fn handle_metadata(
     .to_string();
 
     #[allow(clippy::useless_conversion)]
-    let compression = match FromPrimitive::from_i32(
-        unsafe { readstat_sys::readstat_get_compression(metadata) } as i32,
-    ) {
-        Some(t) => t,
-        None => ReadStatCompress::None,
-    };
+    let compression =
+        match FromPrimitive::from_i32(
+            unsafe { readstat_sys::readstat_get_compression(metadata) } as i32
+        ) {
+            Some(t) => t,
+            None => ReadStatCompress::None,
+        };
 
     #[allow(clippy::useless_conversion)]
-    let endianness = match FromPrimitive::from_i32(
-        unsafe { readstat_sys::readstat_get_endianness(metadata) } as i32,
-    ) {
-        Some(t) => t,
-        None => ReadStatEndian::None,
-    };
+    let endianness =
+        match FromPrimitive::from_i32(
+            unsafe { readstat_sys::readstat_get_endianness(metadata) } as i32
+        ) {
+            Some(t) => t,
+            None => ReadStatEndian::None,
+        };
 
-    debug!("row_count is {}", rc);
-    debug!("var_count is {}", vc);
-    debug!("table_name is {}", &table_name);
-    debug!("file_label is {}", &file_label);
-    debug!("file_encoding is {}", &file_encoding);
-    debug!("version is {}", version);
-    debug!("is64bit is {}", is64bit);
-    debug!("creation_time is {}", &ct);
-    debug!("modified_time is {}", &mt);
-    debug!("compression is {:#?}", &compression);
-    debug!("endianness is {:#?}", &endianness);
+    debug!("row_count is {rc}");
+    debug!("var_count is {vc}");
+    debug!("table_name is {table_name}");
+    debug!("file_label is {file_label}");
+    debug!("file_encoding is {file_encoding}");
+    debug!("version is {version}");
+    debug!("is64bit is {is64bit}");
+    debug!("creation_time is {ct}");
+    debug!("modified_time is {mt}");
+    debug!("compression is {compression:#?}");
+    debug!("endianness is {endianness:#?}");
 
     // insert into ReadStatMetadata struct
     m.row_count = rc;
@@ -118,7 +120,7 @@ pub(crate) extern "C" fn handle_metadata(
     m.compression = compression;
     m.endianness = endianness;
 
-    debug!("metadata struct is {:#?}", &m);
+    debug!("metadata struct is {m:#?}");
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
@@ -145,17 +147,19 @@ pub(crate) extern "C" fn handle_variable(
 
     // get variable metadata
     #[allow(clippy::useless_conversion)]
-    let var_type = match FromPrimitive::from_i32(
-        unsafe { readstat_sys::readstat_variable_get_type(variable) } as i32,
-    ) {
-        Some(t) => t,
-        None => ReadStatVarType::Unknown,
-    };
+    let var_type =
+        match FromPrimitive::from_i32(
+            unsafe { readstat_sys::readstat_variable_get_type(variable) } as i32,
+        ) {
+            Some(t) => t,
+            None => ReadStatVarType::Unknown,
+        };
 
     #[allow(clippy::useless_conversion)]
-    let var_type_class = match FromPrimitive::from_i32(
-        unsafe { readstat_sys::readstat_variable_get_type_class(variable) } as i32,
-    ) {
+    let var_type_class = match FromPrimitive::from_i32(unsafe {
+        readstat_sys::readstat_variable_get_type_class(variable)
+    } as i32)
+    {
         Some(t) => t,
         None => ReadStatVarTypeClass::Numeric,
     };
@@ -169,14 +173,14 @@ pub(crate) extern "C" fn handle_variable(
     let display_width =
         unsafe { readstat_sys::readstat_variable_get_display_width(variable) } as i32;
 
-    debug!("var_type is {:#?}", &var_type);
-    debug!("var_type_class is {:#?}", &var_type_class);
-    debug!("var_name is {}", &var_name);
-    debug!("var_label is {}", &var_label);
-    debug!("var_format is {}", &var_format);
-    debug!("var_format_class is {:#?}", &var_format_class);
-    debug!("storage_width is {}", storage_width);
-    debug!("display_width is {}", display_width);
+    debug!("var_type is {var_type:#?}");
+    debug!("var_type_class is {var_type_class:#?}");
+    debug!("var_name is {var_name}");
+    debug!("var_label is {var_label}");
+    debug!("var_format is {var_format}");
+    debug!("var_format_class is {var_format_class:#?}");
+    debug!("storage_width is {storage_width}");
+    debug!("display_width is {display_width}");
 
     // insert into BTreeMap within ReadStatMetadata struct
     m.vars.insert(
@@ -271,10 +275,10 @@ pub(crate) extern "C" fn handle_value(
     debug!("chunk_row_end is {}", d.chunk_row_end);
     debug!("chunk_rows_processed is {}", d.chunk_rows_processed);
     debug!("var_count is {}", d.var_count);
-    debug!("obs_index is {}", obs_index);
-    debug!("var_index is {}", var_index);
-    debug!("value_type is {:#?}", &value_type);
-    debug!("is_missing is {}", is_missing);
+    debug!("obs_index is {obs_index}");
+    debug!("var_index is {var_index}");
+    debug!("value_type is {value_type:#?}");
+    debug!("is_missing is {is_missing}");
 
     // Determine the column index for storage, applying column filter if active
     let col_index = if let Some(ref filter) = d.column_filter {
@@ -327,10 +331,10 @@ pub(crate) extern "C" fn handle_value(
                 builder.append_null();
             } else {
                 let v = unsafe { readstat_sys::readstat_int8_value(value) };
-                debug!("value is {:#?}", v);
+                debug!("value is {v:#?}");
                 // Schema maps Int8 → Int16, so widen
                 if let ColumnBuilder::Int16(b) = builder {
-                    b.append_value(v as i16);
+                    b.append_value(i16::from(v));
                 }
             }
         }
@@ -339,7 +343,7 @@ pub(crate) extern "C" fn handle_value(
                 builder.append_null();
             } else {
                 let v = unsafe { readstat_sys::readstat_int16_value(value) };
-                debug!("value is {:#?}", v);
+                debug!("value is {v:#?}");
                 if let ColumnBuilder::Int16(b) = builder {
                     b.append_value(v);
                 }
@@ -350,7 +354,7 @@ pub(crate) extern "C" fn handle_value(
                 builder.append_null();
             } else {
                 let v = unsafe { readstat_sys::readstat_int32_value(value) };
-                debug!("value is {:#?}", v);
+                debug!("value is {v:#?}");
                 if let ColumnBuilder::Int32(b) = builder {
                     b.append_value(v);
                 }
@@ -361,26 +365,24 @@ pub(crate) extern "C" fn handle_value(
                 builder.append_null();
             } else {
                 let raw = unsafe { readstat_sys::readstat_float_value(value) };
-                debug!("value (before parsing) is {:#?}", raw);
+                debug!("value (before parsing) is {raw:#?}");
                 let val = round_decimal_f32(raw);
-                debug!("value (after parsing) is {:#?}", val);
+                debug!("value (after parsing) is {val:#?}");
                 if let ColumnBuilder::Float32(b) = builder {
                     b.append_value(val);
                 }
             }
         }
         readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE => {
-            let var_format_class = d.vars
-                .get(&col_index)
-                .and_then(|vm| vm.var_format_class);
+            let var_format_class = d.vars.get(&col_index).and_then(|vm| vm.var_format_class);
 
             if is_missing == 1 {
                 builder.append_null();
             } else {
                 let raw = unsafe { readstat_sys::readstat_double_value(value) };
-                debug!("value (before parsing) is {:#?}", raw);
+                debug!("value (before parsing) is {raw:#?}");
                 let val = round_decimal_f64(raw);
-                debug!("value (after parsing) is {:#?}", val);
+                debug!("value (after parsing) is {val:#?}");
 
                 match var_format_class {
                     None => {

@@ -1,6 +1,6 @@
 #![cfg(feature = "sql")]
 
-use arrow_array::{Float64Array, Array};
+use arrow_array::{Array, Float64Array};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
 use std::sync::Arc;
 
@@ -26,13 +26,7 @@ fn sql_select_all() {
     let (md, batches) = read_cars_batches();
     let schema = Arc::new(md.schema.clone());
 
-    let results = readstat::execute_sql(
-        batches,
-        schema,
-        "cars",
-        "SELECT * FROM cars",
-    )
-    .unwrap();
+    let results = readstat::execute_sql(batches, schema, "cars", "SELECT * FROM cars").unwrap();
 
     assert_eq!(results.len(), 1);
     let batch = &results[0];
@@ -98,13 +92,8 @@ fn sql_count_aggregation() {
     let (md, batches) = read_cars_batches();
     let schema = Arc::new(md.schema.clone());
 
-    let results = readstat::execute_sql(
-        batches,
-        schema,
-        "cars",
-        "SELECT COUNT(*) as cnt FROM cars",
-    )
-    .unwrap();
+    let results =
+        readstat::execute_sql(batches, schema, "cars", "SELECT COUNT(*) as cnt FROM cars").unwrap();
 
     assert_eq!(results.len(), 1);
     let batch = &results[0];
@@ -326,7 +315,8 @@ fn sql_stream_and_write() {
 
     // Verify the written file is valid and contains data
     let file = std::fs::File::open(&out_path).unwrap();
-    let reader = parquet::arrow::arrow_reader::ParquetRecordBatchReader::try_new(file, 1024).unwrap();
+    let reader =
+        parquet::arrow::arrow_reader::ParquetRecordBatchReader::try_new(file, 1024).unwrap();
     let batches: Vec<_> = reader.into_iter().map(|b| b.unwrap()).collect();
     let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
     assert!(total_rows > 0);
