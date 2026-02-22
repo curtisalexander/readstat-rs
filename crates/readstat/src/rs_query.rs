@@ -18,7 +18,6 @@ use datafusion::prelude::*;
 use futures::StreamExt;
 use parquet::{
     arrow::ArrowWriter as ParquetArrowWriter,
-    basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel},
     file::properties::WriterProperties,
 };
 use std::io::BufWriter;
@@ -28,7 +27,7 @@ use std::sync::{Arc, Mutex};
 use crate::err::ReadStatError;
 use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
-use crate::rs_write_config::{OutFormat, ParquetCompression};
+use crate::rs_write_config::{resolve_parquet_compression, OutFormat, ParquetCompression};
 
 /// Executes a SQL query against in-memory Arrow data.
 ///
@@ -274,46 +273,6 @@ pub fn write_sql_results(
         }
     }
     Ok(())
-}
-
-fn resolve_parquet_compression(
-    compression: Option<ParquetCompression>,
-    compression_level: Option<u32>,
-) -> Result<ParquetCompressionCodec, ReadStatError> {
-    let codec = match compression {
-        Some(ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
-        Some(ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
-        Some(ParquetCompression::Gzip) => {
-            if let Some(level) = compression_level {
-                let gzip_level = GzipLevel::try_new(level)
-                    .map_err(|e| ReadStatError::Other(format!("Invalid Gzip compression level: {}", e)))?;
-                ParquetCompressionCodec::GZIP(gzip_level)
-            } else {
-                ParquetCompressionCodec::GZIP(GzipLevel::default())
-            }
-        }
-        Some(ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
-        Some(ParquetCompression::Brotli) => {
-            if let Some(level) = compression_level {
-                let brotli_level = BrotliLevel::try_new(level)
-                    .map_err(|e| ReadStatError::Other(format!("Invalid Brotli compression level: {}", e)))?;
-                ParquetCompressionCodec::BROTLI(brotli_level)
-            } else {
-                ParquetCompressionCodec::BROTLI(BrotliLevel::default())
-            }
-        }
-        Some(ParquetCompression::Zstd) => {
-            if let Some(level) = compression_level {
-                let zstd_level = ZstdLevel::try_new(level as i32)
-                    .map_err(|e| ReadStatError::Other(format!("Invalid Zstd compression level: {}", e)))?;
-                ParquetCompressionCodec::ZSTD(zstd_level)
-            } else {
-                ParquetCompressionCodec::ZSTD(ZstdLevel::default())
-            }
-        }
-        None => ParquetCompressionCodec::SNAPPY,
-    };
-    Ok(codec)
 }
 
 /// Reads a SQL query from a file path.

@@ -40,7 +40,7 @@ use crate::{
 /// Each variant wraps the corresponding Arrow builder, pre-sized with capacity
 /// hints from the metadata (row count, string `storage_width`). Values are
 /// appended directly during FFI callbacks, eliminating intermediate allocations.
-pub enum ColumnBuilder {
+pub(crate) enum ColumnBuilder {
     /// UTF-8 string column.
     Str(StringBuilder),
     /// 16-bit signed integer column (covers both SAS Int8 and Int16).
@@ -198,7 +198,7 @@ pub struct ReadStatData {
     /// Wrapped in `Arc` so parallel chunks share the same metadata without deep cloning.
     pub vars: Arc<BTreeMap<i32, ReadStatVarMetadata>>,
     /// Typed Arrow builders — one per variable, pre-sized with capacity hints.
-    pub builders: Vec<ColumnBuilder>,
+    pub(crate) builders: Vec<ColumnBuilder>,
     /// Arrow schema for the dataset.
     /// Wrapped in `Arc` for cheap sharing across parallel chunks.
     pub schema: Arc<Schema>,

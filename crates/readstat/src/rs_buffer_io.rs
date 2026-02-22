@@ -116,9 +116,8 @@ unsafe extern "C" fn buffer_update(
     user_ctx: *mut c_void,
     io_ctx: *mut c_void,
 ) -> readstat_sys::readstat_error_t {
-    let handler = match progress_handler {
-        Some(h) => h,
-        None => return readstat_sys::readstat_error_e_READSTAT_OK,
+    let Some(handler) = progress_handler else {
+        return readstat_sys::readstat_error_e_READSTAT_OK;
     };
 
     let ctx = unsafe { &*(io_ctx as *mut ReadStatBufferCtx) };

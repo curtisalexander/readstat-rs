@@ -3,7 +3,9 @@ name = "readstat"
 version = "0.18.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
-description = "Rust wrapper of the ReadStat C library"
+rust-version = "1.85"
+description = "Read SAS binary files (.sas7bdat) and convert to Arrow, Parquet, CSV, and other formats"
+homepage = "https://github.com/curtisalexander/readstat-rs"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 documentation = "https://docs.rs/readstat"
@@ -30,7 +32,6 @@ tempfile = { version = "3", optional = true }
 
 chrono = { version = "0.4", features = ["serde"] }
 crossbeam = "0.8"
-lazy_static = "1.5"
 log = "0.4"
 num-derive = "0.4"
 num-traits = "0.2"

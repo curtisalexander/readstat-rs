@@ -19,7 +19,11 @@ use crate::{
     rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
 
-// C types
+/// Return codes for ReadStat C callback functions.
+///
+/// Mirrors the `readstat_handler_t` enum from the C API. Only `OK` and `ABORT`
+/// are currently used; `SKIP_VARIABLE` is included for completeness with the
+/// C API contract.
 #[allow(dead_code)]
 #[derive(Debug)]
 #[repr(C)]
@@ -36,7 +40,13 @@ enum ReadStatHandler {
 /// Called once during parsing. Populates the [`ReadStatMetadata`] struct
 /// (accessed via the `ctx` pointer) with row/variable counts, encoding,
 /// timestamps, compression, and endianness.
-pub extern "C" fn handle_metadata(
+///
+/// # Safety
+///
+/// - `metadata` must be a valid pointer to a `readstat_metadata_t` produced by the C parser.
+/// - `ctx` must be a valid pointer to a [`ReadStatMetadata`] instance that outlives this call.
+/// - This function must only be called by the ReadStat C library as a registered callback.
+pub(crate) extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
 ) -> c_int {
@@ -118,7 +128,13 @@ pub extern "C" fn handle_metadata(
 /// Called once for each variable (column) in the dataset. Populates a
 /// [`ReadStatVarMetadata`] entry in the [`ReadStatMetadata::vars`] map
 /// with the variable's name, type, label, and SAS format classification.
-pub extern "C" fn handle_variable(
+///
+/// # Safety
+///
+/// - `variable` must be a valid pointer to a `readstat_variable_t` produced by the C parser.
+/// - `ctx` must be a valid pointer to a [`ReadStatMetadata`] instance that outlives this call.
+/// - This function must only be called by the ReadStat C library as a registered callback.
+pub(crate) extern "C" fn handle_variable(
     index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     #[allow(unused_variables)] val_labels: *const c_char,
@@ -228,7 +244,14 @@ fn round_decimal_f32(v: f32) -> f32 {
 /// appropriate typed Arrow [`ColumnBuilder`] in [`ReadStatData::builders`],
 /// eliminating intermediate `String` allocations for string columns.
 /// Tracks row completion for progress reporting.
-pub extern "C" fn handle_value(
+///
+/// # Safety
+///
+/// - `variable` must be a valid pointer to a `readstat_variable_t` produced by the C parser.
+/// - `value` must be a valid `readstat_value_t` produced by the C parser.
+/// - `ctx` must be a valid pointer to a [`ReadStatData`] instance that outlives this call.
+/// - This function must only be called by the ReadStat C library as a registered callback.
+pub(crate) extern "C" fn handle_value(
     obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     value: readstat_sys::readstat_value_t,

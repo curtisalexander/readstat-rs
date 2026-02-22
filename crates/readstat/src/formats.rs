@@ -8,10 +8,121 @@
 //! Supports all 118+ SAS date/time/datetime formats including ISO 8601 variants,
 //! national language (`NL*`) formats, and precision-based datetime/time formats.
 
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::rs_var::ReadStatVarFormatClass;
+
+// DATETIME with nanosecond precision (DATETIMEw.d where d=7-9)
+static RE_DATETIME_WITH_NANO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?xi)^DATETIME[0-9]{1,2}\.[7-9]$").unwrap());
+
+// DATETIME with microsecond precision (DATETIMEw.d where d=4-6)
+static RE_DATETIME_WITH_MICRO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?xi)^DATETIME[0-9]{1,2}\.[4-6]$").unwrap());
+
+// DATETIME with millisecond precision (DATETIMEw.d where d=1-3)
+static RE_DATETIME_WITH_MILLI: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?xi)^DATETIME[0-9]{1,2}\.[1-3]$").unwrap());
+
+// TIME with microsecond precision (TIMEw.d where d=4-6)
+static RE_TIME_WITH_MICRO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?xi)^TIME[0-9]{1,2}\.[4-6]$").unwrap());
+
+// All time formats - checked before datetime to catch NLDATMTM and NLDATMTZ
+// Suffix allows letter width/decimal (W, WD) and/or numeric width/decimal (8, 8.2)
+static RE_TIME: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?xi)
+        ^(
+            B8601LZ  |
+            B8601TM  |
+            B8601TX  |
+            B8601TZ  |
+            E8601LZ  |
+            E8601TM  |
+            E8601TX  |
+            E8601TZ  |
+            HHMM     |
+            HOUR     |
+            MMSS     |
+            NLDATMTM |
+            NLDATMTZ |
+            NLTIMAP  |
+            NLTIME   |
+            TIMEAMPM |
+            TIME     |
+            TOD
+        )[A-Z0-9]*(\.[A-Z0-9]*)?$",
+    )
+    .unwrap()
+});
+
+// All datetime formats - checked before date to catch DATEAMPM and DATETIME
+// NLDATM matches all NLDATM* variants; NLDATMTM/NLDATMTZ already caught by RE_TIME
+static RE_DATETIME: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?xi)
+        ^(
+            B8601DT  |
+            B8601DX  |
+            B8601DZ  |
+            B8601LX  |
+            DATEAMPM |
+            DATETIME |
+            E8601DT  |
+            E8601DX  |
+            E8601DZ  |
+            E8601LX  |
+            MDYAMPM  |
+            NLDATM
+        )[A-Z0-9]*(\.[A-Z0-9]*)?$",
+    )
+    .unwrap()
+});
+
+// All date formats
+static RE_DATE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?xi)
+        ^(
+            B8601DA   |
+            B8601DN   |
+            DATE      |
+            DAY       |
+            DDMMYY    |
+            DOWNAME   |
+            DTDATE    |
+            DTMONXY   |
+            DTWKDATX  |
+            DTYEAR    |
+            DTYYQC    |
+            E8601DA   |
+            E8601DN   |
+            JULDAY    |
+            JULIAN    |
+            MMDDYY    |
+            MMYY      |
+            MONNAME   |
+            MONTH     |
+            MONYY     |
+            NENGO     |
+            NLDATE    |
+            QTRR?     |
+            WEEKDATX  |
+            WEEKDAY   |
+            YEAR      |
+            YYMMDD    |
+            YYMM      |
+            YYMON     |
+            YYQR      |
+            YYQ       |
+            YYWEEK[UVW]
+        )[A-Z0-9]*(\.[A-Z0-9]*)?$",
+    )
+    .unwrap()
+});
 
 /// Classifies a SAS format string into a [`ReadStatVarFormatClass`].
 ///
@@ -19,131 +130,7 @@ use crate::rs_var::ReadStatVarFormatClass;
 /// for numeric/character formats that don't represent temporal data.
 /// Matching is case-insensitive and handles both numeric widths (`DATE9`)
 /// and letter-width suffixes (`DATEW`).
-pub fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
-    lazy_static! {
-        // DATETIME with nanosecond precision (DATETIMEw.d where d=7-9)
-        static ref RE_DATETIME_WITH_NANO: Regex = Regex::new(
-            r#"(?xi)
-            ^DATETIME[0-9]{1,2}\.[7-9]$
-            "#
-        )
-        .unwrap();
-
-        // DATETIME with microsecond precision (DATETIMEw.d where d=4-6)
-        static ref RE_DATETIME_WITH_MICRO: Regex = Regex::new(
-            r#"(?xi)
-            ^DATETIME[0-9]{1,2}\.[4-6]$
-            "#
-        )
-        .unwrap();
-
-        // DATETIME with millisecond precision (DATETIMEw.d where d=1-3)
-        static ref RE_DATETIME_WITH_MILLI: Regex = Regex::new(
-            r#"(?xi)
-            ^DATETIME[0-9]{1,2}\.[1-3]$
-            "#
-        )
-        .unwrap();
-
-        // TIME with microsecond precision (TIMEw.d where d=4-6)
-        static ref RE_TIME_WITH_MICRO: Regex = Regex::new(
-            r#"(?xi)
-            ^TIME[0-9]{1,2}\.[4-6]$
-            "#
-        )
-        .unwrap();
-
-        // All time formats - checked before datetime to catch NLDATMTM and NLDATMTZ
-        // Suffix allows letter width/decimal (W, WD) and/or numeric width/decimal (8, 8.2)
-        static ref RE_TIME: Regex = Regex::new(
-            r#"(?xi)
-            ^(
-                B8601LZ  |
-                B8601TM  |
-                B8601TX  |
-                B8601TZ  |
-                E8601LZ  |
-                E8601TM  |
-                E8601TX  |
-                E8601TZ  |
-                HHMM     |
-                HOUR     |
-                MMSS     |
-                NLDATMTM |
-                NLDATMTZ |
-                NLTIMAP  |
-                NLTIME   |
-                TIMEAMPM |
-                TIME     |
-                TOD
-            )[A-Z0-9]*(\.[A-Z0-9]*)?$
-            "#
-        )
-        .unwrap();
-
-        // All datetime formats - checked before date to catch DATEAMPM and DATETIME
-        // NLDATM matches all NLDATM* variants; NLDATMTM/NLDATMTZ already caught by RE_TIME
-        static ref RE_DATETIME: Regex = Regex::new(
-            r#"(?xi)
-            ^(
-                B8601DT  |
-                B8601DX  |
-                B8601DZ  |
-                B8601LX  |
-                DATEAMPM |
-                DATETIME |
-                E8601DT  |
-                E8601DX  |
-                E8601DZ  |
-                E8601LX  |
-                MDYAMPM  |
-                NLDATM
-            )[A-Z0-9]*(\.[A-Z0-9]*)?$
-            "#
-        )
-        .unwrap();
-
-        // All date formats
-        static ref RE_DATE: Regex = Regex::new(
-            r#"(?xi)
-            ^(
-                B8601DA   |
-                B8601DN   |
-                DATE      |
-                DAY       |
-                DDMMYY    |
-                DOWNAME   |
-                DTDATE    |
-                DTMONXY   |
-                DTWKDATX  |
-                DTYEAR    |
-                DTYYQC    |
-                E8601DA   |
-                E8601DN   |
-                JULDAY    |
-                JULIAN    |
-                MMDDYY    |
-                MMYY      |
-                MONNAME   |
-                MONTH     |
-                MONYY     |
-                NENGO     |
-                NLDATE    |
-                QTRR?     |
-                WEEKDATX  |
-                WEEKDAY   |
-                YEAR      |
-                YYMMDD    |
-                YYMM      |
-                YYMON     |
-                YYQR      |
-                YYQ       |
-                YYWEEK[UVW]
-            )[A-Z0-9]*(\.[A-Z0-9]*)?$
-            "#
-        )
-        .unwrap();
-    };
+pub(crate) fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
 
     // Check order matters:
     // 1. DATETIME precision variants (most specific, numeric width only)

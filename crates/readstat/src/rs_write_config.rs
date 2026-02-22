@@ -5,6 +5,11 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "parquet")]
+use parquet::basic::{
+    BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel,
+};
+
 use crate::err::ReadStatError;
 
 /// Output file format for data conversion.
@@ -116,7 +121,7 @@ impl WriteConfig {
     }
 
     /// Validates the output file extension matches the format.
-    pub fn validate_out_extension(
+    fn validate_out_extension(
         path: &Path,
         format: OutFormat,
     ) -> Result<Option<PathBuf>, ReadStatError> {
@@ -150,7 +155,7 @@ impl WriteConfig {
     }
 
     /// Validates the output path exists and handles overwrite logic.
-    pub fn validate_out_path(
+    fn validate_out_path(
         path: Option<PathBuf>,
         overwrite: bool,
     ) -> Result<Option<PathBuf>, ReadStatError> {
@@ -193,7 +198,7 @@ impl WriteConfig {
     }
 
     /// Validates compression level is valid for the given compression algorithm.
-    pub fn validate_compression_level(
+    fn validate_compression_level(
         compression: ParquetCompression,
         compression_level: Option<u32>,
     ) -> Result<Option<u32>, ReadStatError> {
@@ -229,6 +234,53 @@ impl WriteConfig {
             }
         }
     }
+}
+
+/// Resolves [`ParquetCompression`] and an optional level into a Parquet compression codec.
+///
+/// Defaults to Snappy when no compression is specified.
+#[cfg(feature = "parquet")]
+pub fn resolve_parquet_compression(
+    compression: Option<ParquetCompression>,
+    compression_level: Option<u32>,
+) -> Result<ParquetCompressionCodec, ReadStatError> {
+    let codec = match compression {
+        Some(ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
+        Some(ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
+        Some(ParquetCompression::Gzip) => {
+            if let Some(level) = compression_level {
+                let gzip_level = GzipLevel::try_new(level).map_err(|e| {
+                    ReadStatError::Other(format!("Invalid Gzip compression level: {e}"))
+                })?;
+                ParquetCompressionCodec::GZIP(gzip_level)
+            } else {
+                ParquetCompressionCodec::GZIP(GzipLevel::default())
+            }
+        }
+        Some(ParquetCompression::Lz4Raw) => ParquetCompressionCodec::LZ4_RAW,
+        Some(ParquetCompression::Brotli) => {
+            if let Some(level) = compression_level {
+                let brotli_level = BrotliLevel::try_new(level).map_err(|e| {
+                    ReadStatError::Other(format!("Invalid Brotli compression level: {e}"))
+                })?;
+                ParquetCompressionCodec::BROTLI(brotli_level)
+            } else {
+                ParquetCompressionCodec::BROTLI(BrotliLevel::default())
+            }
+        }
+        Some(ParquetCompression::Zstd) => {
+            if let Some(level) = compression_level {
+                let zstd_level = ZstdLevel::try_new(level as i32).map_err(|e| {
+                    ReadStatError::Other(format!("Invalid Zstd compression level: {e}"))
+                })?;
+                ParquetCompressionCodec::ZSTD(zstd_level)
+            } else {
+                ParquetCompressionCodec::ZSTD(ZstdLevel::default())
+            }
+        }
+        None => ParquetCompressionCodec::SNAPPY,
+    };
+    Ok(codec)
 }
 
 #[cfg(test)]

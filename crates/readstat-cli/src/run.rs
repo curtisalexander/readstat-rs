@@ -467,11 +467,11 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                             drop(s);
 
                             if !errors.is_empty() {
-                                println!(
-                                    "The following errors occured when processing data:"
+                                eprintln!(
+                                    "The following errors occurred when processing data:"
                                 );
                                 for e in &errors {
-                                    println!("    Error: {:#?}", e);
+                                    eprintln!("    Error: {e:#?}");
                                 }
                             }
 
@@ -489,7 +489,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                     if has_sql {
                         #[cfg(feature = "sql")]
                         {
-                            let query = sql_query.as_ref().unwrap();
+                            let query = sql_query.as_ref().expect("sql_query must be set when has_sql is true");
                             if let Some(out_path) = &out_path_clone {
                                 // Collect batches and pass through SQL
                                 let mut all_batches = Vec::new();
@@ -565,7 +565,7 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                                 if schema.is_none() {
                                     schema = Some(batch_group[0].0.schema.clone());
                                 }
-                                let schema_ref = schema.as_ref().unwrap();
+                                let schema_ref = schema.as_ref().expect("schema must be set after first batch group");
 
                                 let temp_files: Vec<PathBuf> = batch_group
                                     .par_iter()
@@ -599,16 +599,16 @@ pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
                             }
 
                             // Merge all temp files into final output
-                            if !all_temp_files.is_empty() {
-                                if let Some(out_path) = &out_path_clone {
-                                    ReadStatWriter::merge_parquet_files(
-                                        &all_temp_files,
-                                        out_path,
-                                        schema.as_ref().unwrap(),
-                                        compression_clone,
-                                        compression_level_clone,
-                                    )?;
-                                }
+                            if !all_temp_files.is_empty()
+                                && let Some(out_path) = &out_path_clone
+                            {
+                                ReadStatWriter::merge_parquet_files(
+                                    &all_temp_files,
+                                    out_path,
+                                    schema.as_ref().expect("schema must be set when temp files exist"),
+                                    compression_clone,
+                                    compression_level_clone,
+                                )?;
                             }
                         }
                         #[cfg(not(feature = "parquet"))]

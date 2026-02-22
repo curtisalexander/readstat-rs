@@ -93,17 +93,13 @@ fn main() {
     }
 
     // Include iconv.h — Emscripten provides its own
-    if !is_emscripten {
-        if let Some(include) = env::var_os("DEP_ICONV_INCLUDE") {
-            cc.include(include);
-        }
+    if !is_emscripten && let Some(include) = env::var_os("DEP_ICONV_INCLUDE") {
+        cc.include(include);
     }
 
     // Include zlib.h — Emscripten provides its own
-    if !is_emscripten {
-        if let Some(include) = env::var_os("DEP_Z_INCLUDE") {
-            cc.include(include);
-        }
+    if !is_emscripten && let Some(include) = env::var_os("DEP_Z_INCLUDE") {
+        cc.include(include);
     }
 
     // Linking
