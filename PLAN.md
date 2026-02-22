@@ -1,153 +1,132 @@
-# Crates.io Release Preparation Plan
+# Pre-crates.io Release Cleanup Plan
 
-Comprehensive cleanup of the readstat-rs workspace before publishing to crates.io.
+## Current State Assessment
 
----
-
-## Phase 1: Fix All Clippy Warnings (Default Lints)
-
-These are the warnings that show up with a plain `cargo clippy --workspace`.
-
-### 1.1 `readstat-sys/build.rs` — Collapse nested `if` statements
-- **Lines 96-100**: Collapse `if !is_emscripten { if let Some(include) = ... }` into `if !is_emscripten && let Some(include) = ...`
-- **Lines 103-107**: Same pattern for `DEP_Z_INCLUDE`
-
-### 1.2 `readstat/src/rs_metadata.rs` — Too many arguments
-- **Line 398**: `ReadStatVarMetadata::new()` has 8 args (max recommended: 7). Refactor to use a builder or struct argument.
-
-### 1.3 `readstat/src/rs_path.rs` — `&PathBuf` instead of `&Path`
-- **Line 45** (Unix variant): Change `path: &PathBuf` → `path: &Path`
-
-### 1.4 `readstat/src/rs_write.rs` — Manual `is_multiple_of`
-- **Line 732**: Replace `(len - i) % 3 == 0` with `(len - i).is_multiple_of(3)`
-
-### 1.5 `readstat-cli/src/run.rs` — Collapse nested `if`
-- **Lines 602-612**: Collapse `if !all_temp_files.is_empty() { if let Some(out_path) = ... }` into single condition
-
-### 1.6 `iconv-sys/build.rs` — Unneeded unit expression
-- **Line 88**: Remove trailing `()`
+| Check | Status |
+|-------|--------|
+| Build | Clean — compiles with zero errors |
+| Tests | All pass (1 ignored test in readstat-tests) |
+| Clippy (default) | Clean — zero warnings |
+| Clippy (pedantic) | ~230 warnings in non-sys crates |
+| Formatting | Drift in benchmarks and several source files |
+| Doc build | Clean (1 known cargo filename collision warning between `readstat` lib and `readstat` bin) |
+| Crate metadata | All 4 publishable crates have complete crates.io metadata |
+| TODO/FIXME | None found in any source files |
+| `unwrap()` in non-test code | Only in `LazyLock::new()` regex compilation (acceptable) and 1 `CString::new("").unwrap()` in dummy paths |
 
 ---
 
-## Phase 2: Replace `lazy_static` with `std::sync::LazyLock`
+## Phase 1: Code Formatting
 
-### 2.1 `readstat/src/formats.rs` — Replace `lazy_static!` with `LazyLock`
-- Replace 5 `lazy_static!` Regex declarations with `static REG: LazyLock<Regex> = LazyLock::new(|| ...)`
-- Remove `lazy_static` dependency from `readstat/Cargo.toml`
-
----
-
-## Phase 3: Deduplicate Compression Resolution
-
-### 3.1 Extract shared `resolve_compression` function
-- `rs_write.rs:220-258` and `rs_query.rs:279-317` contain identical `resolve_compression` / `resolve_parquet_compression` logic
-- Extract to a shared location (e.g. `rs_write_config.rs` or a new `rs_compression.rs` module) and call from both places
+Run `cargo fmt --all`. Drift detected in:
+- `crates/readstat/benches/readstat_benchmarks.rs` — import order, line wrapping
+- `crates/readstat/src/lib.rs` — re-export ordering
+- `crates/readstat/src/rs_buffer_io.rs` — function signature line breaks
+- `crates/readstat/src/rs_data.rs` — import grouping
+- `crates/readstat/src/formats.rs` — array literal formatting
 
 ---
 
-## Phase 4: Fix Code Quality Issues in `readstat-cli`
+## Phase 2: Critical Dependency Fix for crates.io
 
-### 4.1 Add missing `value_hint` attributes in `cli.rs`
-- **Line 40**: Add `value_hint = ValueHint::FilePath` to `Preview::input`
-- **Line 75**: Add `value_hint = ValueHint::FilePath` to `Data::output`
-
-### 4.2 Fix `Display` implementations in `cli.rs`
-- **Lines 154, 170, 206**: `CliOutFormat`, `Reader`, and `CliParquetCompression` all use `write!(f, "{:?}", &self)` (Debug format) for Display. Implement proper Display matching the lowercase/expected variant names.
-
-### 4.3 Fix error output in `run.rs`
-- **Line 471**: Change `println!` → `eprintln!` for error messages (errors should go to stderr)
-- **Line 471**: Fix typo "occured" → "occurred"
-
-### 4.4 Replace bare `.unwrap()` with `.expect()` in `run.rs`
-- **Line 492**: `sql_query.as_ref().unwrap()` → `.expect("...")`
-- **Line 568**: `schema.as_ref().unwrap()` → `.expect("...")`
-- **Line 607**: `schema.as_ref().unwrap()` → `.expect("...")`
+**`readstat-cli/Cargo.toml`** — The `readstat` dependency is missing a `version` field:
+```toml
+# Current:
+readstat = { path = "../readstat" }
+# Required for crates.io:
+readstat = { path = "../readstat", version = "0.18.0" }
+```
+Without this, `cargo publish` will fail for `readstat-cli`.
 
 ---
 
-## Phase 5: Improve Safety Documentation
+## Phase 3: Remove Unnecessary `extern crate`
 
-### 5.1 Add `# Safety` sections to FFI callbacks in `cb.rs`
-- `handle_metadata()` (line 39)
-- `handle_variable()` (line ~121)
-- `handle_value()` (line ~231)
-
-### 5.2 Document magic constants in `cb.rs`
-- `DAY_SHIFT: i32 = 3653` — SAS epoch (1960-01-01) to Unix epoch (1970-01-01) day offset
-- `SEC_SHIFT: i64 = 315619200` — SAS epoch to Unix epoch second offset
-- `ROUND_SCALE: f64 = 1e14` — Rounding scale for sub-second precision
+**`readstat-cli/src/main.rs:1`** — `extern crate readstat_sys;` is unnecessary in edition 2024. Remove it.
 
 ---
 
-## Phase 6: Suppress Bindgen-Generated Clippy Warnings
+## Phase 4: Targeted Clippy Pedantic Fixes
 
-### 6.1 Add clippy suppression for auto-generated code in `readstat-sys/src/lib.rs`
-- The 12 warnings about `missing_safety_doc`, `ptr_offset_with_cast` come from auto-generated `bindings.rs`
-- Add `#![allow(clippy::missing_safety_doc)]` and `#![allow(clippy::ptr_offset_with_cast)]` to `lib.rs` since we don't control bindgen output
+Focus on warnings that represent genuine code quality improvements. Skip warnings from bindgen-generated code and FFI-boundary casts where the C API dictates types.
 
----
+### 4a. `cb.rs` (~56 warnings)
+- Replace `format!("foo is {}", var)` with `format!("foo is {var}")` in ~20 `debug!()` calls
+- Replace safe widening `as` casts with `From` (e.g., `v as i16` → `i16::from(v)` for Int8→Int16)
+- Add `#[allow(clippy::cast_possible_truncation)]` with comments on FFI-dictated casts (SAS dates `as i32`, timestamps `as i64`)
+- Use `if let` instead of `match` for single-pattern destructuring where applicable
 
-## Phase 7: Crate Metadata Polish
+### 4b. `rs_write.rs` (~34 warnings)
+- Change `&PathBuf` → `&Path` in function signatures (`open_output`, `write_batch_to_parquet`, `merge_parquet_files`)
+- Remove double blank line at line 543-544
+- Simplify unnecessary `Ok()` wrapping where functions trivially succeed
 
-### 7.1 Add `rust-version` (MSRV) to all publishable crates
-- Determine the actual MSRV (edition 2024 requires Rust 1.85+)
-- Add `rust-version = "1.85"` to Cargo.toml for: `readstat`, `readstat-cli`, `readstat-sys`, `iconv-sys`
+### 4c. `rs_metadata.rs` (~29 warnings)
+- Inline variables in `format!`/`debug!` strings
+- Use `if let` for single-pattern matches
+- Consider adding a `#[allow(clippy::too_many_lines)]` with a comment for the schema-building function, or extract a helper
 
-### 7.2 Add `homepage` to publishable crates
-- Add `homepage = "https://github.com/curtisalexander/readstat-rs"` to crates missing it
+### 4d. `rs_data.rs` (~29 warnings)
+- Replace safe widening `as` casts with `From`/`TryFrom`
+- Inline variables in format strings
+- Add `#[allow]` with comment for the `init` function length (148 lines — initialization logic that's clearer as one block)
 
-### 7.3 Add `readme` to crates missing it
-- `readstat-sys/Cargo.toml`: Add `readme = "README.md"`
-- `iconv-sys/Cargo.toml`: Add `readme = "README.md"`
+### 4e. `rs_parser.rs` (~18 warnings)
+- Inline variables in `debug!()` calls
+- Add `#[allow]` with comments for FFI error code casts (`as i32`)
 
-### 7.4 Ensure `readstat-tests` is not published
-- Add `publish = false` to `readstat-tests/Cargo.toml` if not already present
+### 4f. `rs_buffer_io.rs` (~16 warnings)
+- Add `#[allow]` with safety comments for raw pointer casts and `usize as isize` at FFI boundary
 
----
+### 4g. `rs_write_config.rs` (~9 warnings)
+- `validate_format` always returns `Ok` — simplify return type or add `#[allow]` if the `Result` is intentional for API consistency
+- Inline format string variables
 
-## Phase 8: Remove Dead Code / Clean Up Allows
+### 4h. `err.rs` (~5 warnings)
+- Add backticks around `READSTAT_OK` in doc comments
 
-### 8.1 Evaluate `#[allow(dead_code)]` on `ReadStatHandler` enum in `cb.rs`
-- If `READSTAT_HANDLER_ABORT` and `READSTAT_HANDLER_SKIP_VARIABLE` are unused, consider removing the enum entirely and using the integer constants directly, or keep it documented as a reference for the C API contract
+### 4i. `rs_path.rs` (~4 warnings)
+- Minor doc/format cleanups
 
----
+### 4j. `readstat-cli/run.rs` (~10 warnings)
+- Replace safe `as` casts with `From` where applicable
+- Add `#[allow(clippy::too_many_lines)]` to `run()` with a comment explaining the linear dispatch structure
 
-## Phase 9: Minor Idiomatic Improvements
-
-### 9.1 Use `let...else` where appropriate
-- Check for `match`/`if let` patterns that could use `let...else` (clippy pedantic flagged 2 instances)
-
-### 9.2 Clean up unnecessary raw string hashes
-- 3 instances of `r#"..."#` where the string doesn't contain `"` — simplify to `r"..."`
-
-### 9.3 Use `format!` variable capture
-- 25 instances where `format!("{}", var)` could be `format!("{var}")`
-
----
-
-## Phase 10: Verify & Validate
-
-### 10.1 Run `cargo clippy --workspace` — should produce zero warnings
-### 10.2 Run `cargo test --workspace` — all tests should pass
-### 10.3 Run `cargo doc --workspace --no-deps` — docs should build cleanly
-### 10.4 Run `cargo publish --dry-run` on each publishable crate to verify packaging
+### 4k. `readstat-cli/main.rs` (1 warning)
+- Covered by Phase 3 (remove `extern crate`)
 
 ---
 
-## Questions for Discussion
+## Phase 5: Documentation Refinements
 
-1. **MSRV**: Is `1.85` the right minimum? Or do you want to support older Rust versions? (Edition 2024 requires at least 1.85.)
+1. **CHANGELOG.md** — Set release date for 0.18.0
+2. **README.md** — Add crates.io and docs.rs badges for the published crates
+3. **Verify doc build** — Confirm `cargo doc --workspace --no-deps` has no new warnings
+4. **Review `#![warn(missing_docs)]`** — Already enabled on `readstat` crate; confirm all public items are documented
 
-2. **`lazy_static` → `LazyLock`**: `LazyLock` was stabilized in Rust 1.80. Since we're already on edition 2024 (requiring 1.85+), this is safe. Do you want to proceed with this modernization?
+---
 
-3. **`ReadStatVarMetadata::new()` too-many-args**: The clippy lint flags 8 args (limit 7). Options:
-   - (a) Suppress with `#[allow(clippy::too_many_arguments)]` — it's a constructor, arguably fine
-   - (b) Switch to a builder pattern
-   - (c) Group some args into a sub-struct
-   Which approach do you prefer?
+## Phase 6: Final Verification
 
-4. **`ReadStatHandler` enum in `cb.rs`**: It has `#[allow(dead_code)]` because `READSTAT_HANDLER_ABORT` and `READSTAT_HANDLER_SKIP_VARIABLE` are defined but only `READSTAT_HANDLER_OK` is used. Keep it as documentation of the C API contract, or remove?
+1. `cargo fmt --all -- --check` — zero diff
+2. `cargo clippy --workspace` — zero warnings
+3. `cargo test --workspace` — all pass
+4. `cargo doc --workspace --no-deps` — clean
+5. `cargo package --list -p readstat-sys` — verify contents
+6. `cargo package --list -p iconv-sys` — verify contents
+7. `cargo package --list -p readstat` — verify contents
+8. `cargo package --list -p readstat-cli` — verify contents
 
-5. **Pedantic clippy lints**: The pedantic pass shows ~300 warnings (many from bindgen output). Should we enable any specific pedantic lints workspace-wide, or just fix the default-level ones?
+---
 
-6. **`readstat` crate description**: Currently "Rust wrapper of the ReadStat C library" — do you want something more descriptive for crates.io, like "Read SAS binary files (.sas7bdat) and convert to Arrow, Parquet, CSV, and other formats"?
+## Questions for Owner
+
+1. **Pedantic clippy scope**: Should I fix all ~230 actionable pedantic warnings, or focus only on the high-impact ones (function signatures with `&PathBuf` → `&Path`, `From` instead of `as` for safe widenings, format string modernization)? The remaining warnings are mostly cast warnings in FFI callbacks where the C API dictates the types.
+
+2. **`run.rs` refactoring**: The 439-line `run()` function handles 3 subcommands × multiple modes. Should I extract helper functions for the Data subcommand's parallel-write and SQL branches, or leave it as-is since it's a CLI dispatch function with clear section comments?
+
+3. **CHANGELOG release date**: Should I set 0.18.0's date to today (2026-02-22)?
+
+4. **Publish order**: crates.io requires dependencies to be published first. The order would be: `iconv-sys` → `readstat-sys` → `readstat` → `readstat-cli`. Should both `readstat` and `readstat-cli` use `0.18.0`? (They currently do.)
+
+5. **`readstat-tests` cleanup**: This is internal-only. Should I apply the same cleanup standards, or focus exclusively on the 4 publishable crates?
