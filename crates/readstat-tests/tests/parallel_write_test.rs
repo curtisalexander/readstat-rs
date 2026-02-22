@@ -85,7 +85,7 @@ fn test_parallel_write_parquet_basic() {
     // Read back and verify content
     let file = fs::File::open(&output_path).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let mut reader = builder.build().unwrap();
+    let reader = builder.build().unwrap();
 
     let mut total_rows = 0;
     for batch_result in reader {
@@ -161,7 +161,7 @@ fn test_parallel_write_parquet_out_of_order() {
     // Read back and verify content
     let file = fs::File::open(&output_path).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let mut reader = builder.build().unwrap();
+    let reader = builder.build().unwrap();
 
     let mut total_rows = 0;
     for batch_result in reader {
