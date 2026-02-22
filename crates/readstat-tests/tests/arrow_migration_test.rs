@@ -468,7 +468,7 @@ fn migration_larger_dataset() {
 
     // Verify we can access data from all columns
     for (i, col) in batch.columns().iter().enumerate() {
-        assert_eq!(col.len(), 1081, "Column {} should have 1081 elements", i);
+        assert_eq!(col.len(), 1081, "Column {i} should have 1081 elements");
     }
 }
 
