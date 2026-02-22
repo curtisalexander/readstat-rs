@@ -83,8 +83,13 @@ fn main() {
     // Uses a targeted env var so third-party sys crates (e.g. zstd-sys)
     // are not affected — global CFLAGS would break their linking.
     if env::var("READSTAT_SANITIZE_ADDRESS").is_ok() {
-        cc.flag("-fsanitize=address");
-        cc.flag("-fno-omit-frame-pointer");
+        if target.contains("windows-msvc") {
+            // MSVC cl.exe uses /fsanitize=address (forward-slash syntax)
+            cc.flag("/fsanitize=address");
+        } else {
+            cc.flag("-fsanitize=address");
+            cc.flag("-fno-omit-frame-pointer");
+        }
     }
 
     // Include iconv.h — Emscripten provides its own
