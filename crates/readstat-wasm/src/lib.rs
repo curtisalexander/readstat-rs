@@ -1,5 +1,7 @@
-use readstat::{ReadStatData, ReadStatMetadata, write_batch_to_csv_bytes, write_batch_to_ndjson_bytes};
-use readstat::{write_batch_to_parquet_bytes, write_batch_to_feather_bytes};
+use readstat::{
+    ReadStatData, ReadStatMetadata, write_batch_to_csv_bytes, write_batch_to_ndjson_bytes,
+};
+use readstat::{write_batch_to_feather_bytes, write_batch_to_parquet_bytes};
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::slice;
@@ -37,7 +39,7 @@ pub unsafe extern "C" fn read_metadata_fast(ptr: *const u8, len: usize) -> *mut 
 /// Returns null on error.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
-    unsafe { read_data_inner(ptr, len, OutputFormat::Csv) }
+    unsafe { read_data_inner(ptr, len, &OutputFormat::Csv) }
 }
 
 /// Read data from a `.sas7bdat` file and return it as NDJSON.
@@ -47,7 +49,7 @@ pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
 /// Same contract as [`read_data`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data_ndjson(ptr: *const u8, len: usize) -> *mut c_char {
-    unsafe { read_data_inner(ptr, len, OutputFormat::Ndjson) }
+    unsafe { read_data_inner(ptr, len, &OutputFormat::Ndjson) }
 }
 
 /// Read data from a `.sas7bdat` file and return it as Parquet bytes.
@@ -65,7 +67,7 @@ pub unsafe extern "C" fn read_data_parquet(
     len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
-    unsafe { read_data_binary_inner(ptr, len, BinaryOutputFormat::Parquet, out_len) }
+    unsafe { read_data_binary_inner(ptr, len, &BinaryOutputFormat::Parquet, out_len) }
 }
 
 /// Read data from a `.sas7bdat` file and return it as Feather (Arrow IPC) bytes.
@@ -79,7 +81,7 @@ pub unsafe extern "C" fn read_data_feather(
     len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
-    unsafe { read_data_binary_inner(ptr, len, BinaryOutputFormat::Feather, out_len) }
+    unsafe { read_data_binary_inner(ptr, len, &BinaryOutputFormat::Feather, out_len) }
 }
 
 /// Free a string previously returned by any of the `read_*` string functions.
@@ -139,7 +141,7 @@ enum BinaryOutputFormat {
     Feather,
 }
 
-unsafe fn read_data_inner(ptr: *const u8, len: usize, format: OutputFormat) -> *mut c_char {
+unsafe fn read_data_inner(ptr: *const u8, len: usize, format: &OutputFormat) -> *mut c_char {
     if ptr.is_null() || len == 0 {
         return std::ptr::null_mut();
     }
@@ -152,6 +154,7 @@ unsafe fn read_data_inner(ptr: *const u8, len: usize, format: OutputFormat) -> *
         return std::ptr::null_mut();
     }
 
+    #[allow(clippy::cast_sign_loss)]
     let row_count = md.row_count as u32;
 
     // Second pass: read data
@@ -160,9 +163,8 @@ unsafe fn read_data_inner(ptr: *const u8, len: usize, format: OutputFormat) -> *
         return std::ptr::null_mut();
     }
 
-    let batch = match &d.batch {
-        Some(b) => b,
-        None => return std::ptr::null_mut(),
+    let Some(batch) = &d.batch else {
+        return std::ptr::null_mut();
     };
 
     let output_bytes = match format {
@@ -182,7 +184,7 @@ unsafe fn read_data_inner(ptr: *const u8, len: usize, format: OutputFormat) -> *
 unsafe fn read_data_binary_inner(
     ptr: *const u8,
     len: usize,
-    format: BinaryOutputFormat,
+    format: &BinaryOutputFormat,
     out_len: *mut usize,
 ) -> *mut u8 {
     if ptr.is_null() || len == 0 || out_len.is_null() {
@@ -197,6 +199,7 @@ unsafe fn read_data_binary_inner(
         return std::ptr::null_mut();
     }
 
+    #[allow(clippy::cast_sign_loss)]
     let row_count = md.row_count as u32;
 
     // Second pass: read data
@@ -205,9 +208,8 @@ unsafe fn read_data_binary_inner(
         return std::ptr::null_mut();
     }
 
-    let batch = match &d.batch {
-        Some(b) => b,
-        None => return std::ptr::null_mut(),
+    let Some(batch) = &d.batch else {
+        return std::ptr::null_mut();
     };
 
     let output_bytes = match format {
