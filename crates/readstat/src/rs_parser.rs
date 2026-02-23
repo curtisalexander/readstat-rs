@@ -5,6 +5,12 @@
 //! via RAII and exposes methods for setting callback handlers, row limits/offsets,
 //! and triggering the actual `.sas7bdat` parse.
 
+#![allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::cast_lossless
+)]
+
 use log::debug;
 use std::os::raw::{c_char, c_long, c_void};
 
@@ -43,33 +49,31 @@ impl ReadStatParser {
 
     /// Sets the maximum number of rows to read. `None` means no limit.
     pub(crate) fn set_row_limit(self, row_limit: Option<u32>) -> Result<Self, ReadStatError> {
-        match row_limit {
-            Some(r) => {
-                let set_row_limit_error =
-                    unsafe { readstat_sys::readstat_set_row_limit(self.parser, r as c_long) };
+        if let Some(r) = row_limit {
+            let set_row_limit_error =
+                unsafe { readstat_sys::readstat_set_row_limit(self.parser, r as c_long) };
 
-                debug!("After setting row limit, error ==> {set_row_limit_error}");
+            debug!("After setting row limit, error ==> {set_row_limit_error}");
 
-                check_c_error(set_row_limit_error as i32)?;
-                Ok(self)
-            }
-            None => Ok(self),
+            check_c_error(set_row_limit_error as i32)?;
+            Ok(self)
+        } else {
+            Ok(self)
         }
     }
 
     /// Sets the starting row offset for reading. `None` means start from row 0.
     pub(crate) fn set_row_offset(self, row_offset: Option<u32>) -> Result<Self, ReadStatError> {
-        match row_offset {
-            Some(r) => {
-                let set_row_offset_error =
-                    unsafe { readstat_sys::readstat_set_row_offset(self.parser, r as c_long) };
+        if let Some(r) = row_offset {
+            let set_row_offset_error =
+                unsafe { readstat_sys::readstat_set_row_offset(self.parser, r as c_long) };
 
-                debug!("After setting row offset, error ==> {set_row_offset_error}");
+            debug!("After setting row offset, error ==> {set_row_offset_error}");
 
-                check_c_error(set_row_offset_error as i32)?;
-                Ok(self)
-            }
-            None => Ok(self),
+            check_c_error(set_row_offset_error as i32)?;
+            Ok(self)
+        } else {
+            Ok(self)
         }
     }
 

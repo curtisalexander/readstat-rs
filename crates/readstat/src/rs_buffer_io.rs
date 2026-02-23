@@ -5,6 +5,14 @@
 //! This enables parsing `.sas7bdat` data without filesystem access — useful for
 //! WASM targets, cloud storage, HTTP uploads, and testing.
 
+#![allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::ptr_as_ptr
+)]
+
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::ptr;
 

@@ -92,6 +92,11 @@ pub struct WriteConfig {
 impl WriteConfig {
     /// Creates a new `WriteConfig` after validating the output path, format,
     /// and compression settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if the output path, format, or compression settings
+    /// are invalid.
     pub fn new(
         out_path: Option<PathBuf>,
         format: Option<OutFormat>,
@@ -99,20 +104,20 @@ impl WriteConfig {
         compression: Option<ParquetCompression>,
         compression_level: Option<u32>,
     ) -> Result<Self, ReadStatError> {
-        let f = Self::validate_format(format)?;
+        let f = Self::validate_format(format);
         let op = Self::validate_out_path(out_path, overwrite)?;
-        let op = match op {
-            None => op,
-            Some(op) => Self::validate_out_extension(&op, f)?,
+        let op = if let Some(op) = op {
+            Self::validate_out_extension(&op, f)?
+        } else {
+            None
         };
         let cl = match compression {
-            None => match compression_level {
-                None => None,
-                Some(_) => {
+            None => {
+                if compression_level.is_some() {
                     warn!("Ignoring value of --compression-level as --compression was not set");
-                    None
                 }
-            },
+                None
+            }
             Some(pc) => Self::validate_compression_level(pc, compression_level)?,
         };
 
@@ -125,8 +130,8 @@ impl WriteConfig {
         })
     }
 
-    fn validate_format(format: Option<OutFormat>) -> Result<OutFormat, ReadStatError> {
-        Ok(format.unwrap_or(OutFormat::Csv))
+    fn validate_format(format: Option<OutFormat>) -> OutFormat {
+        format.unwrap_or(OutFormat::Csv)
     }
 
     /// Validates the output file extension matches the format.
@@ -143,21 +148,16 @@ impl WriteConfig {
                     path.to_string_lossy(),
                     format
                 ))),
-                |e| match format {
-                    OutFormat::Csv
-                    | OutFormat::Ndjson
-                    | OutFormat::Feather
-                    | OutFormat::Parquet => {
-                        if e == format.to_string() {
-                            Ok(Some(path.to_owned()))
-                        } else {
-                            Err(ReadStatError::Other(format!(
-                                "Expecting extension {}. Instead, file {} has extension {}.",
-                                format,
-                                path.to_string_lossy(),
-                                e
-                            )))
-                        }
+                |e| {
+                    if e == format.to_string() {
+                        Ok(Some(path.to_owned()))
+                    } else {
+                        Err(ReadStatError::Other(format!(
+                            "Expecting extension {}. Instead, file {} has extension {}.",
+                            format,
+                            path.to_string_lossy(),
+                            e
+                        )))
                     }
                 },
             )
@@ -224,14 +224,13 @@ impl WriteConfig {
         };
 
         match (max_level, compression_level) {
-            (None, None) => Ok(None),
+            (None | Some(_), None) => Ok(None),
             (None, Some(_)) => {
                 warn!(
                     "Compression level is not required for compression={name}, ignoring value of --compression-level"
                 );
                 Ok(None)
             }
-            (Some(_), None) => Ok(None),
             (Some(max), Some(c)) => {
                 if c <= max {
                     Ok(Some(c))
@@ -250,13 +249,14 @@ impl WriteConfig {
 ///
 /// Defaults to Snappy when no compression is specified.
 #[cfg(feature = "parquet")]
+#[allow(clippy::cast_possible_wrap)]
 pub fn resolve_parquet_compression(
     compression: Option<ParquetCompression>,
     compression_level: Option<u32>,
 ) -> Result<ParquetCompressionCodec, ReadStatError> {
     let codec = match compression {
         Some(ParquetCompression::Uncompressed) => ParquetCompressionCodec::UNCOMPRESSED,
-        Some(ParquetCompression::Snappy) => ParquetCompressionCodec::SNAPPY,
+        Some(ParquetCompression::Snappy) | None => ParquetCompressionCodec::SNAPPY,
         Some(ParquetCompression::Gzip) => {
             if let Some(level) = compression_level {
                 let gzip_level = GzipLevel::try_new(level).map_err(|e| {
@@ -288,7 +288,6 @@ pub fn resolve_parquet_compression(
                 ParquetCompressionCodec::ZSTD(ZstdLevel::default())
             }
         }
-        None => ParquetCompressionCodec::SNAPPY,
     };
     Ok(codec)
 }
@@ -301,13 +300,13 @@ mod tests {
 
     #[test]
     fn format_none_defaults_to_csv() {
-        let f = WriteConfig::validate_format(None).unwrap();
+        let f = WriteConfig::validate_format(None);
         assert!(matches!(f, OutFormat::Csv));
     }
 
     #[test]
     fn format_some_passes_through() {
-        let f = WriteConfig::validate_format(Some(OutFormat::Parquet)).unwrap();
+        let f = WriteConfig::validate_format(Some(OutFormat::Parquet));
         assert!(matches!(f, OutFormat::Parquet));
     }
 

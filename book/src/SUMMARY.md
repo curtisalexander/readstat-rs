@@ -15,6 +15,7 @@
 - [Memory Safety](memory-safety.md)
 - [Benchmarking](benchmarking.md)
 - [CI/CD](ci-cd.md)
+- [Releasing](releasing.md)
 
 # Crates
 

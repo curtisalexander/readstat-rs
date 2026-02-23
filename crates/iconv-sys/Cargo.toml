@@ -28,5 +28,5 @@ include = [
 ]
 
 [build-dependencies]
-bindgen = "0.72"
-cc = "1.2"
+bindgen = { workspace = true }
+cc = { workspace = true }
