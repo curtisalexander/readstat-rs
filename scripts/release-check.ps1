@@ -50,6 +50,28 @@ if ($clippyOutput -match "warning:") {
     Write-Pass "cargo clippy"
 }
 
+# 2b. readstat-wasm (excluded from workspace - check separately)
+Write-Host "Checking readstat-wasm..."
+$WasmDir = Join-Path $RootDir "crates\readstat-wasm"
+if (Test-Path $WasmDir) {
+    Push-Location $WasmDir
+    $wasmFmtOutput = cargo fmt -- --check 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Pass "readstat-wasm fmt"
+    } else {
+        Write-Fail "readstat-wasm fmt - run 'cargo fmt' in crates\readstat-wasm\"
+    }
+    $wasmClippyOutput = cargo clippy 2>&1
+    if ($wasmClippyOutput -match "warning:") {
+        Write-Fail "readstat-wasm clippy - warnings found"
+    } else {
+        Write-Pass "readstat-wasm clippy"
+    }
+    Pop-Location
+} else {
+    Write-Warn "readstat-wasm directory not found - skipping"
+}
+
 # 3. Tests
 Write-Host "Running tests..."
 $testOutput = cargo test --workspace 2>&1

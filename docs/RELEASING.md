@@ -71,6 +71,7 @@ Add an entry for the new version:
 This runs:
 - `cargo fmt --all -- --check` — formatting
 - `cargo clippy --workspace` — linting
+- `readstat-wasm` fmt and clippy (excluded from workspace, checked separately)
 - `cargo test --workspace` — all tests
 - `cargo doc --workspace --no-deps` — documentation build
 - `cargo deny check` — license and security audit (if installed)
@@ -86,6 +87,7 @@ Fix any failures before proceeding.
 - [ ] Documentation reflects any API changes
 - [ ] Architecture docs (`docs/ARCHITECTURE.md`) are current
 - [ ] mdbook builds cleanly: `./scripts/build-book.sh`
+- [ ] `readstat-wasm` builds and exports are up to date (excluded from workspace; not published to crates.io)
 
 ---
 

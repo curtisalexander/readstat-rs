@@ -97,7 +97,7 @@ Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-wi
 
 WebAssembly build of the `readstat` library for parsing SAS `.sas7bdat` files in JavaScript. Compiles the ReadStat C library and the Rust `readstat` library to WebAssembly via the `wasm32-unknown-emscripten` target. Excluded from the Cargo workspace (built separately with Emscripten).
 
-Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_ndjson`, `free_string`.
+Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_ndjson`, `read_data_parquet`, `read_data_feather`, `free_string`, `free_binary`. Not published to crates.io (`publish = false`).
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`

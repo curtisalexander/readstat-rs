@@ -54,6 +54,24 @@ else
     pass "cargo clippy"
 fi
 
+# 2b. readstat-wasm (excluded from workspace — check separately)
+echo "Checking readstat-wasm..."
+WASM_DIR="$ROOT_DIR/crates/readstat-wasm"
+if [ -d "$WASM_DIR" ]; then
+    if (cd "$WASM_DIR" && cargo fmt -- --check) &>/dev/null; then
+        pass "readstat-wasm fmt"
+    else
+        fail "readstat-wasm fmt — run 'cargo fmt' in crates/readstat-wasm/"
+    fi
+    if (cd "$WASM_DIR" && cargo clippy) 2>&1 | grep -q "warning:"; then
+        fail "readstat-wasm clippy — warnings found"
+    else
+        pass "readstat-wasm clippy"
+    fi
+else
+    warn "readstat-wasm directory not found — skipping"
+fi
+
 # 3. Tests
 echo "Running tests..."
 if cargo test --workspace 2>&1 | grep -q "test result: ok"; then
