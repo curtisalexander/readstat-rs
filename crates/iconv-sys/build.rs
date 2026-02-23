@@ -1,5 +1,3 @@
-extern crate bindgen;
-
 #[cfg(windows)]
 fn main() {
     use std::env;
@@ -29,15 +27,12 @@ fn main() {
         .warnings(false)
         .compile("iconv");
 
-    // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
 
     // Copy and communicate headers
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-    // Linking
-    if env::var_os("LIBCLANG_PATH").is_some() {
-    } else {
+    if env::var_os("LIBCLANG_PATH").is_none() {
         println!("cargo:rustc-env=LIBCLANG_PATH='C:/Program Files/LLVM/lib'");
     }
     println!("cargo:rustc-link-lib=static=iconv");
@@ -55,27 +50,13 @@ fn main() {
 
     println!("cargo:include={}/include", out_path.to_str().unwrap());
 
-    // The bindgen::Builder is the main entry point
-    // to bindgen, and lets you build up options for
-    // the resulting bindings.
+    // Generate bindings
     let bindings = bindgen::Builder::default()
-        // The input header we would like to generate bindings for
         .header("wrapper.h")
-        // Select which functions and types to build bindings for
-        // Register callbacks
-        //.allowlist_function("libiconv_close")
-        //.allowlist_function("libiconv_open")
-        // Types
-        //.allowlist_type("libiconv_t")
-        // Tell cargo to invalidate the built crate whenever any of the
-        // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        // Finish the builder and generate the bindings
         .generate()
-        // Unwrap the Result and panic on failure
         .expect("Unable to generate bindings");
 
-    // Write the bindings to the $OUT_DIR/bindings.rs file.
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("bindings.rs"))

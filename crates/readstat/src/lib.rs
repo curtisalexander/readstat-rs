@@ -249,6 +249,9 @@
 //! | `sql` | SQL | Query data with SQL via DataFusion (not enabled by default) |
 
 #![warn(missing_docs)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::return_self_not_must_use)]
 
 pub use common::build_offsets;
 pub use err::{ReadStatCError, ReadStatError};

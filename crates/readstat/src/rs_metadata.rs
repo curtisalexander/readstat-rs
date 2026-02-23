@@ -142,12 +142,12 @@ impl ReadStatMetadata {
             .collect();
 
         // Add table label as schema metadata if not empty
-        if !self.file_label.is_empty() {
+        if self.file_label.is_empty() {
+            Schema::new(fields)
+        } else {
             let mut schema_metadata = HashMap::new();
             schema_metadata.insert("table_label".to_string(), self.file_label.clone());
             Schema::new_with_metadata(fields, schema_metadata)
-        } else {
-            Schema::new(fields)
         }
     }
 
@@ -157,6 +157,11 @@ impl ReadStatMetadata {
     /// invokes parsing. On success, builds the Arrow [`Schema`] from the
     /// discovered variable types. If `skip_row_count` is `true`, sets a row
     /// limit of 1 to skip counting all rows (faster for metadata-only queries).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if FFI parsing fails.
+    #[allow(clippy::cast_possible_wrap, clippy::ptr_as_ptr)]
     pub fn read_metadata(
         &mut self,
         rsp: &ReadStatPath,
@@ -190,6 +195,15 @@ impl ReadStatMetadata {
     /// Equivalent to [`read_metadata`](ReadStatMetadata::read_metadata) but reads from
     /// a `&[u8]` buffer instead of a file path. Useful for WASM targets, cloud storage,
     /// HTTP uploads, and testing without filesystem access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if FFI parsing fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the dummy path `CString` allocation fails (should never happen).
+    #[allow(clippy::cast_possible_wrap, clippy::ptr_as_ptr)]
     pub fn read_metadata_from_bytes(
         &mut self,
         bytes: &[u8],
@@ -235,6 +249,10 @@ impl ReadStatMetadata {
     /// Memory mapping is safe as long as the file is not modified or truncated by
     /// another process while the map is active. This is the standard expectation
     /// for `.sas7bdat` files, which are read-only artifacts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if the file cannot be opened, mapped, or parsed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_metadata_from_mmap(
         &mut self,
@@ -250,6 +268,10 @@ impl ReadStatMetadata {
     ///
     /// Lines starting with `#` are treated as comments and blank lines are skipped.
     /// Each remaining line is trimmed and used as a column name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if the file cannot be read.
     pub fn parse_columns_file(path: &Path) -> Result<Vec<String>, ReadStatError> {
         let contents = std::fs::read_to_string(path)?;
         let names: Vec<String> = contents
@@ -266,6 +288,11 @@ impl ReadStatMetadata {
     ///
     /// Returns `Ok(None)` if `columns` is `None` (no filtering requested).
     /// Returns `Err(ColumnsNotFound)` if any requested names are not in the dataset.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError::ColumnsNotFound`] if any requested column names
+    /// do not exist in the dataset.
     pub fn resolve_selected_columns(
         &self,
         columns: Option<Vec<String>>,
@@ -318,6 +345,7 @@ impl ReadStatMetadata {
     ///
     /// Constructs the result directly instead of cloning the full struct,
     /// avoiding a deep clone of unselected variables and the original schema.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     pub fn filter_to_selected_columns(&self, mapping: &BTreeMap<i32, i32>) -> Self {
         let new_vars: BTreeMap<i32, ReadStatVarMetadata> = mapping
             .iter()
@@ -348,6 +376,7 @@ impl ReadStatMetadata {
 
 /// Compression method used in a `.sas7bdat` file.
 #[derive(Clone, Debug, Default, FromPrimitive, Serialize)]
+#[allow(clippy::cast_possible_wrap)]
 pub enum ReadStatCompress {
     /// No compression.
     #[default]
@@ -360,6 +389,7 @@ pub enum ReadStatCompress {
 
 /// Byte order (endianness) of a `.sas7bdat` file.
 #[derive(Clone, Debug, Default, FromPrimitive, Serialize)]
+#[allow(clippy::cast_possible_wrap)]
 pub enum ReadStatEndian {
     /// Endianness not specified.
     #[default]

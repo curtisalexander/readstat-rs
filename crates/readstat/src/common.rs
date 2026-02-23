@@ -13,6 +13,10 @@ use crate::err::ReadStatError;
 /// vector of offsets for use with [`windows(2)`](slice::windows) to form
 /// `[start, end)` pairs.
 ///
+/// # Errors
+///
+/// Returns [`ReadStatError`] if offset computation fails.
+///
 /// # Example
 ///
 /// ```

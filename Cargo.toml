@@ -14,3 +14,26 @@ exclude = [
     "examples/api-demo/python-server/readstat_py",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+# Arrow ecosystem (keep all Arrow crates at the same major version)
+arrow = { version = "57", features = ["chrono-tz"] }
+arrow-array = "57"
+arrow-cast = "57"
+arrow-csv = "57"
+arrow-ipc = { version = "57", features = ["zstd"] }
+arrow-json = "57"
+arrow-schema = "57"
+parquet = { version = "57", features = ["snap", "zstd", "brotli", "flate2", "lz4"] }
+
+# Shared dependencies
+chrono = { version = "0.4", features = ["serde"] }
+crossbeam = "0.8"
+log = "0.4"
+path_abs = "0.5"
+rayon = "1.11"
+serde = { version = "1", features = ["derive"] }
+
+# Build dependencies
+bindgen = "0.72"
+cc = "1.2"

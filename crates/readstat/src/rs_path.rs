@@ -28,8 +28,13 @@ pub struct ReadStatPath {
 
 impl ReadStatPath {
     /// Creates a new `ReadStatPath` after validating the input path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if the path does not exist or has an invalid extension.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(path: PathBuf) -> Result<Self, ReadStatError> {
-        let p = Self::validate_path(path)?;
+        let p = Self::validate_path(&path)?;
         let ext = Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
 
@@ -79,8 +84,8 @@ impl ReadStatPath {
             )
     }
 
-    fn validate_path(path: PathBuf) -> Result<PathBuf, ReadStatError> {
-        let abs_path = std::path::absolute(&path)
+    fn validate_path(path: &Path) -> Result<PathBuf, ReadStatError> {
+        let abs_path = std::path::absolute(path)
             .map_err(|e| ReadStatError::Other(format!("Failed to resolve path: {e}")))?;
 
         if abs_path.exists() {

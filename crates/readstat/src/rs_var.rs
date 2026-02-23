@@ -43,6 +43,7 @@ pub enum ReadStatVarFormatClass {
 
 /// The storage type of a SAS variable, as reported by the `ReadStat` C library.
 #[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
+#[allow(clippy::cast_possible_wrap)]
 pub enum ReadStatVarType {
     /// Variable-length string.
     String = readstat_sys::readstat_type_e_READSTAT_TYPE_STRING as isize,
@@ -64,6 +65,7 @@ pub enum ReadStatVarType {
 
 /// High-level type class of a SAS variable: string or numeric.
 #[derive(Clone, Copy, Debug, FromPrimitive, Serialize)]
+#[allow(clippy::cast_possible_wrap)]
 pub enum ReadStatVarTypeClass {
     /// Character/string data.
     String = readstat_sys::readstat_type_class_e_READSTAT_TYPE_CLASS_STRING as isize,

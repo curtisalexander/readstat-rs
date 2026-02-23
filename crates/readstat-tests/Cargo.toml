@@ -7,15 +7,15 @@ publish = false
 
 [dev-dependencies]
 # Arrow ecosystem crates
-arrow = { version = "57" }
-arrow-array = "57"
-arrow-cast = "57"
-arrow-schema = "57"
-parquet = "57"
-crossbeam = "0.8"
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-cast = { workspace = true }
+arrow-schema = { workspace = true }
+parquet = { workspace = true }
+chrono = { workspace = true }
+crossbeam = { workspace = true }
 assert_cmd = "2.1"
 assert_fs = "1.1"
-chrono = { version = "0.4", features = ["serde"] }
 escargot = "0.5"
 polars = { version = "0.52", features = ["parquet"] }
 predicates = "3"

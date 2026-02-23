@@ -46,12 +46,17 @@ enum ReadStatHandler {
 /// - `metadata` must be a valid pointer to a `readstat_metadata_t` produced by the C parser.
 /// - `ctx` must be a valid pointer to a [`ReadStatMetadata`] instance that outlives this call.
 /// - This function must only be called by the `ReadStat` C library as a registered callback.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 pub(crate) extern "C" fn handle_metadata(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
+    let m = unsafe { &mut *ctx.cast::<ReadStatMetadata>() };
 
     // get metadata
     let rc: c_int = unsafe { readstat_sys::readstat_get_row_count(metadata) };
@@ -136,6 +141,11 @@ pub(crate) extern "C" fn handle_metadata(
 /// - `variable` must be a valid pointer to a `readstat_variable_t` produced by the C parser.
 /// - `ctx` must be a valid pointer to a [`ReadStatMetadata`] instance that outlives this call.
 /// - This function must only be called by the `ReadStat` C library as a registered callback.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 pub(crate) extern "C" fn handle_variable(
     index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
@@ -143,7 +153,7 @@ pub(crate) extern "C" fn handle_variable(
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let m = unsafe { &mut *(ctx as *mut ReadStatMetadata) };
+    let m = unsafe { &mut *ctx.cast::<ReadStatMetadata>() };
 
     // get variable metadata
     #[allow(clippy::useless_conversion)]
@@ -203,7 +213,7 @@ pub(crate) extern "C" fn handle_variable(
 /// SAS epoch (1960-01-01) to Unix epoch (1970-01-01) offset in days.
 const DAY_SHIFT: i32 = 3653;
 /// SAS epoch to Unix epoch offset in seconds.
-const SEC_SHIFT: i64 = 315619200;
+const SEC_SHIFT: i64 = 315_619_200;
 
 /// Scale factor for rounding: `10^DECIMAL_PLACES`, computed once.
 const ROUND_SCALE: f64 = 1e14;
@@ -230,12 +240,13 @@ fn round_decimal_f64(v: f64) -> f64 {
 
 /// Rounds an f32 to [`DECIMAL_PLACES`] decimal places using pure arithmetic.
 #[inline]
+#[allow(clippy::cast_possible_truncation)]
 fn round_decimal_f32(v: f32) -> f32 {
     if !v.is_finite() {
         return v;
     }
     // Promote to f64 for the rounding to avoid f32 precision loss
-    let v64 = v as f64;
+    let v64 = f64::from(v);
     let int_part = v64.trunc();
     let frac_part = v64.fract();
     let rounded_frac = (frac_part * ROUND_SCALE).round() / ROUND_SCALE;
@@ -255,6 +266,12 @@ fn round_decimal_f32(v: f32) -> f32 {
 /// - `value` must be a valid `readstat_value_t` produced by the C parser.
 /// - `ctx` must be a valid pointer to a [`ReadStatData`] instance that outlives this call.
 /// - This function must only be called by the `ReadStat` C library as a registered callback.
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 pub(crate) extern "C" fn handle_value(
     obs_index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
@@ -262,7 +279,7 @@ pub(crate) extern "C" fn handle_value(
     ctx: *mut c_void,
 ) -> c_int {
     // dereference ctx pointer
-    let d = unsafe { &mut *(ctx as *mut ReadStatData) };
+    let d = unsafe { &mut *ctx.cast::<ReadStatData>() };
 
     // get index, type, and missingness
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
@@ -282,18 +299,17 @@ pub(crate) extern "C" fn handle_value(
 
     // Determine the column index for storage, applying column filter if active
     let col_index = if let Some(ref filter) = d.column_filter {
-        match filter.get(&var_index) {
-            Some(&mapped) => mapped,
-            None => {
-                // This variable is not selected; skip it but still check row boundary
-                if var_index == (d.total_var_count - 1) {
-                    d.chunk_rows_processed += 1;
-                    if let Some(trp) = &d.total_rows_processed {
-                        trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
+        if let Some(&mapped) = filter.get(&var_index) {
+            mapped
+        } else {
+            // This variable is not selected; skip it but still check row boundary
+            if var_index == (d.total_var_count - 1) {
+                d.chunk_rows_processed += 1;
+                if let Some(trp) = &d.total_rows_processed {
+                    trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
-                return ReadStatHandler::READSTAT_HANDLER_OK as c_int;
             }
+            return ReadStatHandler::READSTAT_HANDLER_OK as c_int;
         }
     } else {
         var_index
@@ -315,13 +331,12 @@ pub(crate) extern "C" fn handle_value(
                 } else {
                     let cstr = unsafe { std::ffi::CStr::from_ptr(ptr) };
                     // Fast path: valid UTF-8 (the common case for SAS data)
-                    match cstr.to_str() {
-                        Ok(s) => sb.append_value(s),
-                        Err(_) => {
-                            // Lossy fallback for rare non-UTF-8 data
-                            let s = String::from_utf8_lossy(cstr.to_bytes());
-                            sb.append_value(s.as_ref());
-                        }
+                    if let Ok(s) = cstr.to_str() {
+                        sb.append_value(s);
+                    } else {
+                        // Lossy fallback for rare non-UTF-8 data
+                        let s = String::from_utf8_lossy(cstr.to_bytes());
+                        sb.append_value(s.as_ref());
                     }
                 }
             }
@@ -392,23 +407,21 @@ pub(crate) extern "C" fn handle_value(
                     }
                     Some(ReadStatVarFormatClass::Date) => {
                         if let ColumnBuilder::Date32(b) = builder {
-                            match (val as i32).checked_sub(DAY_SHIFT) {
-                                Some(shifted) => b.append_value(shifted),
-                                None => {
-                                    d.errors.push("Date overflow".to_string());
-                                    return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
-                                }
+                            if let Some(shifted) = (val as i32).checked_sub(DAY_SHIFT) {
+                                b.append_value(shifted);
+                            } else {
+                                d.errors.push("Date overflow".to_string());
+                                return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
                             }
                         }
                     }
                     Some(ReadStatVarFormatClass::DateTime) => {
                         if let ColumnBuilder::TimestampSecond(b) = builder {
-                            match (val as i64).checked_sub(SEC_SHIFT) {
-                                Some(shifted) => b.append_value(shifted),
-                                None => {
-                                    d.errors.push("DateTime overflow".to_string());
-                                    return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
-                                }
+                            if let Some(shifted) = (val as i64).checked_sub(SEC_SHIFT) {
+                                b.append_value(shifted);
+                            } else {
+                                d.errors.push("DateTime overflow".to_string());
+                                return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
                             }
                         }
                     }
@@ -419,12 +432,12 @@ pub(crate) extern "C" fn handle_value(
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
                         if let ColumnBuilder::TimestampMicrosecond(b) = builder {
-                            b.append_value(((val - SEC_SHIFT as f64) * 1000000.0) as i64);
+                            b.append_value(((val - SEC_SHIFT as f64) * 1_000_000.0) as i64);
                         }
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
                         if let ColumnBuilder::TimestampNanosecond(b) = builder {
-                            b.append_value(((val - SEC_SHIFT as f64) * 1000000000.0) as i64);
+                            b.append_value(((val - SEC_SHIFT as f64) * 1_000_000_000.0) as i64);
                         }
                     }
                     Some(ReadStatVarFormatClass::Time) => {
@@ -434,7 +447,7 @@ pub(crate) extern "C" fn handle_value(
                     }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                         if let ColumnBuilder::Time64Microsecond(b) = builder {
-                            b.append_value((val * 1000000.0) as i64);
+                            b.append_value((val * 1_000_000.0) as i64);
                         }
                     }
                 }

@@ -278,7 +278,11 @@ impl ReadStatData {
     /// operation (no data copying). The heavy work was already done during
     /// `handle_value` when values were appended directly into the builders.
     pub(crate) fn cols_to_batch(&mut self) -> Result<(), ReadStatError> {
-        let arrays: Vec<ArrayRef> = self.builders.iter_mut().map(ColumnBuilder::finish).collect();
+        let arrays: Vec<ArrayRef> = self
+            .builders
+            .iter_mut()
+            .map(ColumnBuilder::finish)
+            .collect();
 
         self.batch = Some(RecordBatch::try_new(self.schema.clone(), arrays)?);
 
@@ -286,6 +290,10 @@ impl ReadStatData {
     }
 
     /// Parses row data from the file and converts it to an Arrow [`RecordBatch`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if FFI parsing or Arrow conversion fails.
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // parse data and if successful then convert cols into a record batch
         self.parse_data(rsp)?;
@@ -297,6 +305,10 @@ impl ReadStatData {
     ///
     /// Equivalent to [`read_data`](ReadStatData::read_data) but reads from a `&[u8]`
     /// buffer instead of a file path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if FFI parsing or Arrow conversion fails.
     pub fn read_data_from_bytes(&mut self, bytes: &[u8]) -> Result<(), ReadStatError> {
         self.parse_data_from_bytes(bytes)?;
         self.cols_to_batch()?;
@@ -313,6 +325,10 @@ impl ReadStatData {
     ///
     /// Memory mapping is safe as long as the file is not modified or truncated by
     /// another process while the map is active.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError`] if the file cannot be opened, mapped, or parsed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_data_from_mmap(&mut self, path: &std::path::Path) -> Result<(), ReadStatError> {
         let file = std::fs::File::open(path)?;
@@ -321,6 +337,7 @@ impl ReadStatData {
     }
 
     /// Parses row data from the file via FFI callbacks (without Arrow conversion).
+    #[allow(clippy::cast_possible_wrap, clippy::ptr_as_ptr)]
     pub(crate) fn parse_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
         // path as pointer
         debug!("Path as C string is {:?}", rsp.cstring_path);
@@ -352,6 +369,7 @@ impl ReadStatData {
         Ok(())
     }
 
+    #[allow(clippy::cast_possible_wrap, clippy::ptr_as_ptr)]
     fn parse_data_from_bytes(&mut self, bytes: &[u8]) -> Result<(), ReadStatError> {
         let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
 
@@ -421,6 +439,7 @@ impl ReadStatData {
         .allocate_builders()
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn set_chunk_counts(self, row_start: u32, row_end: u32) -> Self {
         let chunk_rows_to_process = (row_end - row_start) as usize;
         let chunk_row_start = row_start as usize;

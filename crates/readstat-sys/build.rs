@@ -1,8 +1,7 @@
-extern crate bindgen;
-
 use std::env;
 use std::path::PathBuf;
 
+#[allow(clippy::too_many_lines)]
 fn main() {
     let target = env::var("TARGET").unwrap();
     let is_emscripten = target.contains("emscripten");
@@ -83,7 +82,6 @@ fn main() {
     // are not affected — global CFLAGS would break their linking.
     if env::var("READSTAT_SANITIZE_ADDRESS").is_ok() {
         if target.contains("windows-msvc") {
-            // MSVC cl.exe uses /fsanitize=address (forward-slash syntax)
             cc.flag("/fsanitize=address");
         } else {
             cc.flag("-fsanitize=address");
@@ -105,29 +103,27 @@ fn main() {
     // Note: zlib linking is handled by the libz-sys crate dependency
     if is_emscripten {
         // Emscripten provides iconv and zlib — no extra link directives needed.
-        // emcc links them automatically.
     } else if target.contains("windows-msvc") {
         // Ensure LIBCLANG_PATH is set so bindgen can find libclang.dll
         if env::var_os("LIBCLANG_PATH").is_none() {
             let default = PathBuf::from(r"C:\Program Files\LLVM\lib");
-            if !default.exists() {
-                panic!(
-                    "\n\
-                    \n  error: LIBCLANG_PATH is not set and the default path does not exist:\
-                    \n           {}\
-                    \n\
-                    \n  bindgen requires libclang to generate Rust bindings.\
-                    \n  Install LLVM from https://releases.llvm.org/download.html\
-                    \n  then set the LIBCLANG_PATH environment variable.\
-                    \n\
-                    \n  PowerShell (user-level, persistent):\
-                    \n    [Environment]::SetEnvironmentVariable(\"LIBCLANG_PATH\", \"C:\\Program Files\\LLVM\\lib\", \"User\")\
-                    \n\
-                    \n  After setting the variable, restart your terminal.\
-                    \n",
-                    default.display()
-                );
-            }
+            assert!(
+                default.exists(),
+                "\n\
+                \n  error: LIBCLANG_PATH is not set and the default path does not exist:\
+                \n           {}\
+                \n\
+                \n  bindgen requires libclang to generate Rust bindings.\
+                \n  Install LLVM from https://releases.llvm.org/download.html\
+                \n  then set the LIBCLANG_PATH environment variable.\
+                \n\
+                \n  PowerShell (user-level, persistent):\
+                \n    [Environment]::SetEnvironmentVariable(\"LIBCLANG_PATH\", \"C:\\Program Files\\LLVM\\lib\", \"User\")\
+                \n\
+                \n  After setting the variable, restart your terminal.\
+                \n",
+                default.display()
+            );
             // SAFETY: This runs in a build script which is single-threaded.
             unsafe { env::set_var("LIBCLANG_PATH", &default) };
         }
@@ -136,28 +132,18 @@ fn main() {
         println!("cargo:rustc-link-lib=iconv");
     }
 
-    // Compile
     cc.compile("readstat");
 
-    // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
-
-    // Linking
     println!("cargo:rustc-link-lib=static=readstat");
 
-    // The bindgen::Builder is the main entry point
-    // to bindgen, and lets you build up options for
-    // the resulting bindings.
+    // Generate bindings
     let mut builder = bindgen::Builder::default()
-        // The input header we would like to generate bindings for
         .header("wrapper.h")
-        // Expose all ReadStat public API functions and types
         .allowlist_function("readstat_.*")
         .allowlist_function("xport_.*")
         .allowlist_type("readstat_.*")
         .allowlist_type("xport_.*")
-        // Tell cargo to invalidate the built crate whenever any of the
-        // included header files changed
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
     if is_emscripten {
@@ -174,7 +160,6 @@ fn main() {
                     .unwrap_or_default()
                     .split(if cfg!(windows) { ';' } else { ':' })
                     .find_map(|dir| {
-                        // PATH contains both <emsdk> and <emsdk>/upstream/emscripten
                         let candidate = std::path::Path::new(dir);
                         if candidate.join(&sysroot_suffix).is_dir() {
                             Some(candidate.to_string_lossy().into_owned())
@@ -197,13 +182,8 @@ fn main() {
             .clang_arg("-fvisibility=default");
     }
 
-    let bindings = builder
-        // Finish the builder and generate the bindings
-        .generate()
-        // Unwrap the Result and panic on failure
-        .expect("Unable to generate bindings");
+    let bindings = builder.generate().expect("Unable to generate bindings");
 
-    // Write the bindings to the $OUT_DIR/bindings.rs file.
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("bindings.rs"))

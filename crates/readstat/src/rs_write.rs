@@ -302,6 +302,7 @@ impl ReadStatWriter {
         feature = "ndjson",
         feature = "parquet"
     ))]
+    #[allow(clippy::unused_self)]
     fn print_finish_message(&self, d: &ReadStatData, wc: &WriteConfig, in_path: &std::path::Path) {
         let rows = if let Some(trp) = &d.total_rows_processed {
             trp.load(std::sync::atomic::Ordering::SeqCst)
@@ -578,6 +579,7 @@ impl ReadStatWriter {
     }
 
     #[cfg(feature = "csv")]
+    #[allow(clippy::unnecessary_wraps)]
     fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), ReadStatError> {
         let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
 
@@ -623,6 +625,7 @@ impl ReadStatWriter {
     ///
     /// This method currently always succeeds but returns `Result` for
     /// consistency with other writer methods.
+    #[allow(clippy::cast_sign_loss, clippy::unnecessary_wraps)]
     pub fn write_metadata_to_stdout(
         &self,
         md: &ReadStatMetadata,

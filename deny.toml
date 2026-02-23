@@ -1,0 +1,57 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+#
+# Run: cargo deny check
+# Install: cargo install cargo-deny
+
+[advisories]
+# Lint level for crates with known security vulnerabilities
+vulnerability = "deny"
+# Lint level for unmaintained crates
+unmaintained = "warn"
+# Lint level for crates that have been yanked
+yanked = "warn"
+# Lint level for crates with no security notice
+notice = "warn"
+
+[licenses]
+# Confidence threshold for license detection (0.0 - 1.0)
+confidence-threshold = 0.8
+# Lint level for unlicensed crates
+unlicensed = "deny"
+# List of allowed licenses (SPDX identifiers)
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "OpenSSL",
+]
+
+# Specific exceptions for crates with non-standard but acceptable licenses
+[[licenses.exceptions]]
+name = "ring"
+allow = ["OpenSSL"]
+
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[bans]
+# Lint level for multiple versions of the same crate
+multiple-versions = "warn"
+# Lint level for wildcard dependencies (e.g. `*`)
+wildcards = "allow"
+
+[sources]
+# Lint level for crates not from an allowed source
+unknown-registry = "deny"
+# Lint level for crates not from an allowed git repository
+unknown-git = "warn"
+# Allowed registries
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
