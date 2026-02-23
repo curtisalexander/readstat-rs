@@ -55,7 +55,7 @@ Run the binary.
 readstat --help
 ```
 
-## :gear: Usage
+## :gear: CLI Usage
 
 The binary is invoked using subcommands:
 - `metadata` &rarr; writes file and variable metadata to standard out or JSON
@@ -65,6 +65,8 @@ The binary is invoked using subcommands:
 Column metadata &mdash; labels, SAS format strings, and storage widths &mdash; is preserved in Parquet and Feather output as Arrow field metadata. See **[docs/TECHNICAL.md](docs/TECHNICAL.md#column-metadata-in-arrow-and-parquet)** for details.
 
 For the full CLI reference &mdash; including column selection, parallelism, memory considerations, SQL queries, reader modes, and debug options &mdash; see **[docs/USAGE.md](docs/USAGE.md)**.
+
+For library, API server, and WebAssembly usage, see **[Examples](#bulb-examples)** below.
 
 ## :hammer_and_wrench: Build from Source
 
@@ -111,6 +113,7 @@ The [`examples/`](examples/) directory contains runnable demos showing different
 | Example | Description |
 |---------|-------------|
 | [`cli-demo`](examples/cli-demo/) | Convert a `.sas7bdat` file to CSV, NDJSON, Parquet, and Feather using the `readstat` CLI |
+| [`api-demo`](examples/api-demo/) | API servers in [Rust](examples/api-demo/rust-server/) (Axum) and [Python](examples/api-demo/python-server/) (FastAPI + PyO3) — upload, inspect, and convert SAS files over HTTP |
 | [`bun-demo`](examples/bun-demo/) | Parse a `.sas7bdat` file from JavaScript using the WebAssembly build with Bun |
 | [`web-demo`](examples/web-demo/) | Browser-based viewer and converter — upload, preview, and export entirely client-side via WASM |
 
