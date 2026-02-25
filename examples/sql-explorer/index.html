@@ -492,15 +492,15 @@ let tableData = [];
 let lastResults = [];
 let editorView = null;
 
-const DEFAULT_QUERY = "SELECT * FROM data LIMIT 100";
+const DEFAULT_QUERY = "select *\nfrom data\nlimit 100";
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 const modKey = isMac ? "Cmd" : "Ctrl";
 
 const EXAMPLE_QUERIES = [
-  "SELECT * FROM data LIMIT 100",
-  "SELECT COUNT(*) AS total_rows FROM data",
-  "SELECT * FROM data ORDER BY 1 DESC LIMIT 20",
-  "SELECT * FROM data WHERE 1=1 LIMIT 50",
+  "select *\nfrom data\nlimit 100",
+  "select count(*) as total_rows\nfrom data",
+  "select *\nfrom data\norder by 1 desc\nlimit 20",
+  "select *\nfrom data\nwhere 1=1\nlimit 50",
 ];
 
 // ── DOM refs ───────────────────────────────────────────────────────────
@@ -568,10 +568,10 @@ metadataToggle.addEventListener("click", () => {
 EXAMPLE_QUERIES.forEach(q => {
   const chip = document.createElement("button");
   chip.className = "example-chip";
-  chip.textContent = q;
+  chip.textContent = q.replace(/\n/g, " ");
   chip.addEventListener("click", () => {
     setEditorContent(q);
-    runQuery();
+    editorView.focus();
   });
   examplesList.appendChild(chip);
 });
@@ -667,9 +667,9 @@ async function handleFile(file) {
   // Register data in AlaSQL
   try {
     if (alasql.tables.data) {
-      alasql("DROP TABLE IF EXISTS data");
+      alasql("drop table if exists data");
     }
-    alasql("CREATE TABLE data");
+    alasql("create table data");
     alasql.tables.data.data = tableData;
   } catch (err) {
     setStatus(`AlaSQL registration error: ${err.message}`, "error");
@@ -698,30 +698,30 @@ function updateExampleQueries() {
   const columns = Object.keys(tableData[0]);
   const firstCol = columns[0];
   const dynamicQueries = [
-    "SELECT * FROM data LIMIT 100",
-    "SELECT COUNT(*) AS total_rows FROM data",
+    "select *\nfrom data\nlimit 100",
+    "select count(*) as total_rows\nfrom data",
   ];
 
   if (firstCol) {
-    dynamicQueries.push(`SELECT * FROM data ORDER BY [${firstCol}] DESC LIMIT 20`);
+    dynamicQueries.push(`select *\nfrom data\norder by [${firstCol}] desc\nlimit 20`);
   }
 
   if (columns.length >= 2) {
-    dynamicQueries.push(`SELECT [${columns[0]}], [${columns[1]}] FROM data LIMIT 50`);
+    dynamicQueries.push(`select [${columns[0]}], [${columns[1]}]\nfrom data\nlimit 50`);
   }
 
   dynamicQueries.push(
-    "SELECT DISTINCT * FROM data LIMIT 50",
+    "select distinct *\nfrom data\nlimit 50",
   );
 
   examplesList.innerHTML = "";
   dynamicQueries.forEach(q => {
     const chip = document.createElement("button");
     chip.className = "example-chip";
-    chip.textContent = q;
+    chip.textContent = q.replace(/\n/g, " ");
     chip.addEventListener("click", () => {
       setEditorContent(q);
-      runQuery();
+      editorView.focus();
     });
     examplesList.appendChild(chip);
   });

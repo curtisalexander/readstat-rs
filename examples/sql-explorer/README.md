@@ -15,14 +15,13 @@ No data leaves your browser — all processing happens locally.
 
 ## Quick Start
 
-Serve the directory with any static HTTP server. From the repository root:
+Serve the directory with any static HTTP server. The entire directory must be served (not just `index.html`) so the browser can load the `.js` and `.wasm` files alongside it.
+
+From the repository root:
 
 ```bash
 # Python
 python -m http.server 8000 -d examples/sql-explorer
-
-# Bun
-bun --serve examples/sql-explorer/index.html
 ```
 
 Or `cd` into the directory and serve from there:
@@ -30,8 +29,10 @@ Or `cd` into the directory and serve from there:
 ```bash
 cd examples/sql-explorer
 
+# Python
 python -m http.server 8000
-# or
+
+# Bun
 bunx serve .
 ```
 
