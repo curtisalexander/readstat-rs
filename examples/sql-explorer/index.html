@@ -319,6 +319,7 @@ header p {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .example-chip {
@@ -423,6 +424,10 @@ header p {
 <!-- SQL Query -->
 <div class="panel hidden" id="query-panel">
   <h2>SQL Query</h2>
+  <div class="hidden" id="examples-section">
+    <h3 style="font-size:0.85rem;font-weight:600;margin:0 0 0.5rem;color:#666">Example Queries</h3>
+    <div class="examples-list" id="examples-list"></div>
+  </div>
   <div id="editor-wrap"></div>
   <div class="query-toolbar">
     <button class="btn-run" id="btn-run" disabled>Run</button>
@@ -451,11 +456,6 @@ header p {
   <div id="results-container"></div>
 </div>
 
-<!-- Example Queries -->
-<div class="panel hidden" id="examples-panel">
-  <h2>Example Queries</h2>
-  <div class="examples-list" id="examples-list"></div>
-</div>
 
 </div>
 
@@ -528,7 +528,7 @@ const resultInfo       = document.getElementById("result-info");
 const resultsContainer = document.getElementById("results-container");
 const btnExportCsv     = document.getElementById("btn-export-csv");
 const btnExportNdjson  = document.getElementById("btn-export-ndjson");
-const examplesPanel    = document.getElementById("examples-panel");
+const examplesSection  = document.getElementById("examples-section");
 const examplesList     = document.getElementById("examples-list");
 
 // ── CodeMirror setup ───────────────────────────────────────────────────
@@ -682,7 +682,7 @@ async function handleFile(file) {
 
   // Show query panel and examples
   queryPanel.classList.remove("hidden");
-  examplesPanel.classList.remove("hidden");
+  examplesSection.classList.remove("hidden");
   btnRun.disabled = false;
 
   // Update example queries with actual column names if available
