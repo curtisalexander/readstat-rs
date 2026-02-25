@@ -391,21 +391,31 @@ jobs:
           targets: x86_64-pc-windows-msvc
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+      - name: Detect LLVM version from Rust nightly
+        id: llvm-version
+        run: |
+            $llvm = (rustc +nightly -vV | Select-String "LLVM version: (\d+)\.(\d+)\.(\d+)").Matches.Groups
+            $full = "$($llvm[1].Value).$($llvm[2].Value).$($llvm[3].Value)"
+            $major = $llvm[1].Value
+            Write-Host "Rust nightly uses LLVM $full"
+            echo "full=$full" >> $env:GITHUB_OUTPUT
+            echo "major=$major" >> $env:GITHUB_OUTPUT
+        shell: pwsh
       - name: Cache LLVM and Clang
         id: cache-llvm
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}\llvm
-          key: llvm-21.1.8
+          key: llvm-${{ steps.llvm-version.outputs.full }}
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2
         with:
-          version: "21.1.8"
+          version: ${{ steps.llvm-version.outputs.full }}
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
       - name: Run tests with AddressSanitizer
         run: |
             $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
             # ASAN runtime DLL lives at <llvm>/lib/clang/<major>/lib/windows/
-            $env:PATH = "${{ runner.temp }}\llvm\lib\clang\21\lib\windows;${{ runner.temp }}\llvm\bin;$env:PATH"
+            $env:PATH = "${{ runner.temp }}\llvm\lib\clang\${{ steps.llvm-version.outputs.major }}\lib\windows;${{ runner.temp }}\llvm\bin;$env:PATH"
             cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
