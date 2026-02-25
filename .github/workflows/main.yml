@@ -406,7 +406,6 @@ jobs:
       - name: Run tests with AddressSanitizer
         run: |
             $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
-            # Add Rust toolchain's target lib dir to PATH so clang_rt.asan_dynamic-x86_64.dll is found at runtime
-            $asanLibDir = rustc +nightly --print target-libdir --target x86_64-pc-windows-msvc
-            $env:PATH = "$asanLibDir;${{ runner.temp }}\llvm\bin;$env:PATH"
+            # ASAN runtime DLL lives at <llvm>/lib/clang/<major>/lib/windows/
+            $env:PATH = "${{ runner.temp }}\llvm\lib\clang\21\lib\windows;${{ runner.temp }}\llvm\bin;$env:PATH"
             cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
