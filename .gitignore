@@ -26,6 +26,8 @@ bun.lock
 /book/src/testing.md
 /book/src/benchmarking.md
 /book/src/ci-cd.md
+/book/src/memory-safety.md
+/book/src/releasing.md
 /book/src/crates/
 # examples
 __pycache__/
