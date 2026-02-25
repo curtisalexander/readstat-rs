@@ -39,7 +39,7 @@ Update version numbers in these files (keep them in sync):
 | `crates/readstat/Cargo.toml` | `version` |
 | `crates/readstat-cli/Cargo.toml` | `version`, `readstat` dependency version |
 | `crates/readstat-sys/Cargo.toml` | `version` |
-| `crates/iconv-sys/Cargo.toml` | `version` |
+| `crates/readstat-iconv-sys/Cargo.toml` | `version` |
 | `crates/readstat/Cargo.toml` | `readstat-sys` dependency version |
 | `crates/readstat-sys/Cargo.toml` | `readstat-iconv-sys` dependency version |
 

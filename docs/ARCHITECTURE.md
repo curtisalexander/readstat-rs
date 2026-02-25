@@ -15,7 +15,7 @@ readstat-rs/
 │   ├── readstat/            # Library crate (parse SAS → Arrow, optional format writers)
 │   ├── readstat-cli/        # Binary crate (CLI arg parsing, orchestration)
 │   ├── readstat-sys/        # FFI bindings to ReadStat C library (bindgen)
-│   ├── iconv-sys/           # FFI bindings to iconv (Windows only, package: readstat-iconv-sys)
+│   ├── readstat-iconv-sys/   # FFI bindings to iconv (Windows only)
 │   ├── readstat-tests/      # Integration test suite
 │   └── readstat-wasm/       # WebAssembly build (excluded from workspace)
 └── docs/
@@ -81,7 +81,7 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
-| **Windows** (`windows-msvc`) | Static — compiled from vendored `iconv-sys` submodule | Static — compiled via `libz-sys` crate | `iconv-sys` is a `cfg(windows)` dependency; needs `LIBCLANG_PATH` |
+| **Windows** (`windows-msvc`) | Static — compiled from vendored `readstat-iconv-sys` submodule | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency; needs `LIBCLANG_PATH` |
 | **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | `libz-sys` (uses system zlib) | iconv linked via `cargo:rustc-link-lib=iconv` |
 | **Linux** (gnu/musl) | Dynamic — system library | `libz-sys` (prefers system, falls back to source) | No explicit iconv link directives; system linker resolves automatically |
 
@@ -90,7 +90,7 @@ Header include paths are propagated between crates using Cargo's `links` key:
 - `libz-sys` sets `cargo:include=...` which becomes `DEP_Z_INCLUDE` in `readstat-sys`
 
 ### `readstat-iconv-sys` (v0.3.0) — iconv FFI (Windows)
-**Path**: `crates/iconv-sys/`
+**Path**: `crates/readstat-iconv-sys/`
 
 Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-win-build/` git submodule using the `cc` crate, producing a static library. On non-Windows platforms the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
 

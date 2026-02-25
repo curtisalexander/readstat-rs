@@ -15,7 +15,7 @@ LOCK_FILE="$ROOT_DIR/vendor-lock.txt"
 
 # Vendor directories and their submodule paths
 READSTAT_VENDOR="$ROOT_DIR/crates/readstat-sys/vendor/ReadStat"
-ICONV_VENDOR="$ROOT_DIR/crates/iconv-sys/vendor/libiconv-win-build"
+ICONV_VENDOR="$ROOT_DIR/crates/readstat-iconv-sys/vendor/libiconv-win-build"
 
 # Files to copy for readstat-sys (matches Cargo.toml include patterns)
 # Only source files needed by build.rs — excludes bin/, fuzz/, test/
@@ -129,7 +129,7 @@ do_prepare() {
     # Deinit submodules (removes the checkout but keeps .gitmodules)
     echo "Deinitializing submodules..."
     git -C "$ROOT_DIR" submodule deinit --force crates/readstat-sys/vendor/ReadStat 2>/dev/null || true
-    git -C "$ROOT_DIR" submodule deinit --force crates/iconv-sys/vendor/libiconv-win-build 2>/dev/null || true
+    git -C "$ROOT_DIR" submodule deinit --force crates/readstat-iconv-sys/vendor/libiconv-win-build 2>/dev/null || true
 
     # Remove submodule directories
     rm -rf "$READSTAT_VENDOR"

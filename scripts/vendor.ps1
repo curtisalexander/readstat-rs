@@ -19,7 +19,7 @@ $RootDir = Split-Path -Parent $ScriptDir
 $LockFile = Join-Path $RootDir "vendor-lock.txt"
 
 $ReadStatVendor = Join-Path $RootDir "crates\readstat-sys\vendor\ReadStat"
-$IconvVendor = Join-Path $RootDir "crates\iconv-sys\vendor\libiconv-win-build"
+$IconvVendor = Join-Path $RootDir "crates\readstat-iconv-sys\vendor\libiconv-win-build"
 
 function Test-GitRepo {
     $result = git -C $RootDir rev-parse --is-inside-work-tree 2>$null
@@ -117,7 +117,7 @@ function Invoke-Prepare {
 
     Write-Host "Deinitializing submodules..."
     git -C $RootDir submodule deinit --force "crates/readstat-sys/vendor/ReadStat" 2>$null
-    git -C $RootDir submodule deinit --force "crates/iconv-sys/vendor/libiconv-win-build" 2>$null
+    git -C $RootDir submodule deinit --force "crates/readstat-iconv-sys/vendor/libiconv-win-build" 2>$null
 
     if (Test-Path $ReadStatVendor) { Remove-Item -Recurse -Force $ReadStatVendor }
     if (Test-Path $IconvVendor) { Remove-Item -Recurse -Force $IconvVendor }

@@ -66,7 +66,7 @@ mkdir -p "$BOOK_SRC/crates"
 cp "$REPO_ROOT/crates/readstat/README.md"       "$BOOK_SRC/crates/readstat.md"
 cp "$REPO_ROOT/crates/readstat-cli/README.md"   "$BOOK_SRC/crates/readstat-cli.md"
 cp "$REPO_ROOT/crates/readstat-sys/README.md"   "$BOOK_SRC/crates/readstat-sys.md"
-cp "$REPO_ROOT/crates/iconv-sys/README.md"      "$BOOK_SRC/crates/iconv-sys.md"
+cp "$REPO_ROOT/crates/readstat-iconv-sys/README.md"      "$BOOK_SRC/crates/readstat-iconv-sys.md"
 cp "$REPO_ROOT/crates/readstat-tests/README.md" "$BOOK_SRC/crates/readstat-tests.md"
 cp "$REPO_ROOT/crates/readstat-wasm/README.md"  "$BOOK_SRC/crates/readstat-wasm.md"
 
