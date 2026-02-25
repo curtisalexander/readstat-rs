@@ -1,3 +1,5 @@
+[< Back to README](../README.md)
+
 # Performance Benchmarking with Criterion
 
 ## Overview

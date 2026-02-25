@@ -16,4 +16,4 @@ Binary crate producing the `readstat` CLI tool for converting SAS binary files (
 - SQL queries via DataFusion (`--sql`, feature-gated)
 - Parquet compression settings (`--compression`, `--compression-level`)
 
-For the full CLI reference, see [docs/USAGE.md](../../docs/USAGE.md).
+For the full CLI reference, see [docs/USAGE.md](https://github.com/curtisalexander/readstat-rs/blob/main/docs/USAGE.md).
