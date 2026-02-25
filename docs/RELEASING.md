@@ -1,3 +1,5 @@
+[< Back to README](../README.md)
+
 # Releasing to crates.io
 
 Step-by-step guide for publishing readstat-rs crates to crates.io.

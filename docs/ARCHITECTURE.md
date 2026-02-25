@@ -1,3 +1,5 @@
+[< Back to README](../README.md)
+
 # Architecture
 
 Rust CLI tool and library that reads SAS binary files (`.sas7bdat`) and converts them to other formats (CSV, Feather, NDJSON, Parquet). Uses FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library for parsing, and Apache Arrow for in-memory representation and output.
@@ -102,7 +104,7 @@ Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_nd
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-30 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, malformed UTF-8, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
+29 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, malformed UTF-8, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
 
 Test data lives in `tests/data/*.sas7bdat` (14 datasets). SAS scripts to regenerate test data are in `util/`.
 
