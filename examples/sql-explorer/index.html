@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAS7BDAT SQL Explorer</title>
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@6/dist/css/tabulator_simple.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1a1a1a;
+  background: #f5f5f5;
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+header p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 1.5rem;
+}
+
+.upload-zone.drag-over {
+  border-color: #4a90d9;
+  background: #eef4fc;
+}
+
+.upload-zone p {
+  margin: 0 0 0.75rem;
+  color: #888;
+}
+
+.upload-zone input[type="file"] {
+  display: none;
+}
+
+.upload-zone label {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  background: #4a90d9;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.upload-zone label:hover {
+  background: #3a7bc8;
+}
+
+/* Status / loading */
+#status {
+  text-align: center;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  min-height: 1.4em;
+}
+
+#status.error { color: #c0392b; }
+#status.info  { color: #666; }
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ccc;
+  border-top-color: #4a90d9;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Panels */
+.panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.hidden { display: none !important; }
+
+/* Collapsible panel header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  margin: 0 0 1rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+}
+
+.panel-header .toggle-icon {
+  font-size: 0.8rem;
+  color: #888;
+  transition: transform 0.2s;
+}
+
+.panel-header .toggle-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.panel-body.collapsed {
+  display: none;
+}
+
+/* Metadata grid */
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.meta-grid dt {
+  font-size: 0.8rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.meta-grid dd {
+  margin: 0 0 0.5rem;
+  font-weight: 500;
+}
+
+/* Variable table */
+.var-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.var-table th,
+.var-table td {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.var-table th {
+  background: #fafafa;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.var-table-wrap {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* SQL editor panel */
+.query-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.query-toolbar button {
+  padding: 0.45rem 1.25rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.btn-run {
+  background: #4a90d9;
+  color: #fff;
+}
+
+.btn-run:hover {
+  background: #3a7bc8;
+}
+
+.btn-run:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-reset {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.btn-reset:hover {
+  background: #d0d0d0;
+}
+
+.query-shortcut {
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.query-stats {
+  font-size: 0.8rem;
+  color: #666;
+  margin-left: auto;
+}
+
+.query-error {
+  background: #fdf0ef;
+  border: 1px solid #e8c4c0;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  color: #c0392b;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  white-space: pre-wrap;
+  font-family: monospace;
+}
+
+#editor-wrap {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+#editor-wrap .cm-editor {
+  font-size: 0.9rem;
+}
+
+#editor-wrap .cm-editor.cm-focused {
+  outline: none;
+}
+
+/* Result export bar */
+.result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.result-bar .result-info {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.result-bar button {
+  padding: 0.4rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.result-bar button:hover {
+  background: #f0f0f0;
+  border-color: #aaa;
+}
+
+/* Example queries */
+.examples-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.example-chip {
+  padding: 0.35rem 0.75rem;
+  background: #eef4fc;
+  border: 1px solid #c8ddf2;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  color: #2a6cb6;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: monospace;
+}
+
+.example-chip:hover {
+  background: #d8e8f8;
+}
+
+/* SQL reference link */
+.sql-reference {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 0.5rem;
+}
+
+.sql-reference a {
+  color: #4a90d9;
+  text-decoration: none;
+}
+
+.sql-reference a:hover {
+  text-decoration: underline;
+}
+
+/* File name display */
+.file-name {
+  font-weight: 600;
+  color: #333;
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: #2ecc71;
+  color: #fff;
+  padding: 0.6rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>SAS7BDAT SQL Explorer</h1>
+  <p>Upload a .sas7bdat file, explore with SQL queries, and export results — all client-side via WebAssembly.</p>
+</header>
+
+<!-- Upload -->
+<div class="upload-zone" id="upload-zone">
+  <p>Drag &amp; drop a <strong>.sas7bdat</strong> file here, or</p>
+  <label for="file-input">Choose File</label>
+  <input type="file" id="file-input" accept=".sas7bdat">
+</div>
+
+<!-- Status -->
+<div id="status" class="info"></div>
+
+<!-- Metadata -->
+<div class="panel hidden" id="metadata-panel">
+  <div class="panel-header" id="metadata-toggle">
+    <h2>Metadata <span class="file-name" id="file-name"></span></h2>
+    <span class="toggle-icon">&#9660;</span>
+  </div>
+  <div class="panel-body" id="metadata-body">
+    <dl class="meta-grid" id="meta-grid"></dl>
+    <h3 style="font-size:1rem;font-weight:600;margin:0 0 0.75rem">Variables</h3>
+    <div class="var-table-wrap">
+      <table class="var-table">
+        <thead><tr><th>#</th><th>Name</th><th>Type</th><th>Label</th><th>Format</th></tr></thead>
+        <tbody id="var-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SQL Query -->
+<div class="panel hidden" id="query-panel">
+  <h2>SQL Query</h2>
+  <div id="editor-wrap"></div>
+  <div class="query-toolbar">
+    <button class="btn-run" id="btn-run" disabled>Run</button>
+    <button class="btn-reset" id="btn-reset">Reset</button>
+    <span class="query-shortcut" id="shortcut-hint"></span>
+    <span class="query-stats" id="query-stats"></span>
+  </div>
+  <div class="query-error hidden" id="query-error"></div>
+  <div class="sql-reference">
+    SQL engine: <a href="https://github.com/AlaSQL/alasql/wiki/SQL%20statements" target="_blank" rel="noopener">AlaSQL SQL Reference</a>
+  </div>
+</div>
+
+<!-- Query Results -->
+<div class="panel hidden" id="results-panel">
+  <h2>Query Results</h2>
+  <div class="result-bar">
+    <span class="result-info" id="result-info"></span>
+    <button id="btn-export-csv">Export Results as CSV</button>
+  </div>
+  <div id="results-container"></div>
+</div>
+
+<!-- Example Queries -->
+<div class="panel hidden" id="examples-panel">
+  <h2>Example Queries</h2>
+  <div class="examples-list" id="examples-list"></div>
+</div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/alasql@4/dist/alasql.min.js"></script>
+<script src="https://unpkg.com/tabulator-tables@6/dist/js/tabulator.min.js"></script>
+
+<!-- Global error handler -->
+<script>
+window.addEventListener("error", function(e) {
+  var el = document.getElementById("status");
+  if (el) { el.className = "error"; el.textContent = "Error: " + (e.message || e); }
+  console.error("Global error:", e);
+});
+window.addEventListener("unhandledrejection", function(e) {
+  var el = document.getElementById("status");
+  if (el) { el.className = "error"; el.textContent = "Error: " + (e.reason?.message || e.reason || "unknown"); }
+  console.error("Unhandled rejection:", e.reason);
+});
+</script>
+
+<script type="module">
+import { init, read_metadata, read_data_ndjson } from "./readstat_wasm.js";
+
+// ── CodeMirror imports (ES modules from esm.sh) ────────────────────────
+import { EditorView, keymap, placeholder as cmPlaceholder } from "https://esm.sh/@codemirror/view@6";
+import { EditorState } from "https://esm.sh/@codemirror/state@6";
+import { defaultKeymap, history, historyKeymap } from "https://esm.sh/@codemirror/commands@6";
+import { sql } from "https://esm.sh/@codemirror/lang-sql@6";
+import { syntaxHighlighting, defaultHighlightStyle } from "https://esm.sh/@codemirror/language@6";
+
+// ── State ──────────────────────────────────────────────────────────────
+let fileBytes = null;
+let fileName = "";
+let tableData = [];
+let lastResults = [];
+let editorView = null;
+
+const DEFAULT_QUERY = "SELECT * FROM data LIMIT 100";
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+const modKey = isMac ? "Cmd" : "Ctrl";
+
+const EXAMPLE_QUERIES = [
+  "SELECT * FROM data LIMIT 100",
+  "SELECT COUNT(*) AS total_rows FROM data",
+  "SELECT * FROM data ORDER BY 1 DESC LIMIT 20",
+  "SELECT * FROM data WHERE 1=1 LIMIT 50",
+];
+
+// ── DOM refs ───────────────────────────────────────────────────────────
+const statusEl         = document.getElementById("status");
+const uploadZone       = document.getElementById("upload-zone");
+const fileInput        = document.getElementById("file-input");
+const metadataPanel    = document.getElementById("metadata-panel");
+const metadataToggle   = document.getElementById("metadata-toggle");
+const metadataBody     = document.getElementById("metadata-body");
+const fileNameEl       = document.getElementById("file-name");
+const metaGrid         = document.getElementById("meta-grid");
+const varTbody         = document.getElementById("var-tbody");
+const queryPanel       = document.getElementById("query-panel");
+const editorWrap       = document.getElementById("editor-wrap");
+const btnRun           = document.getElementById("btn-run");
+const btnReset         = document.getElementById("btn-reset");
+const shortcutHint     = document.getElementById("shortcut-hint");
+const queryStats       = document.getElementById("query-stats");
+const queryError       = document.getElementById("query-error");
+const resultsPanel     = document.getElementById("results-panel");
+const resultInfo       = document.getElementById("result-info");
+const resultsContainer = document.getElementById("results-container");
+const btnExportCsv     = document.getElementById("btn-export-csv");
+const examplesPanel    = document.getElementById("examples-panel");
+const examplesList     = document.getElementById("examples-list");
+
+// ── CodeMirror setup ───────────────────────────────────────────────────
+function initEditor() {
+  const runQueryKeymap = keymap.of([{
+    key: "Ctrl-Enter",
+    mac: "Cmd-Enter",
+    run: () => { runQuery(); return true; },
+  }]);
+
+  editorView = new EditorView({
+    state: EditorState.create({
+      doc: DEFAULT_QUERY,
+      extensions: [
+        runQueryKeymap,
+        history(),
+        keymap.of([...defaultKeymap, ...historyKeymap]),
+        sql(),
+        syntaxHighlighting(defaultHighlightStyle),
+        cmPlaceholder("Enter SQL query..."),
+        EditorView.lineWrapping,
+      ],
+    }),
+    parent: editorWrap,
+  });
+
+  shortcutHint.textContent = `${modKey}+Enter to run`;
+}
+
+initEditor();
+
+// ── Collapsible metadata ───────────────────────────────────────────────
+metadataToggle.addEventListener("click", () => {
+  const icon = metadataToggle.querySelector(".toggle-icon");
+  const body = metadataBody;
+  icon.classList.toggle("collapsed");
+  body.classList.toggle("collapsed");
+});
+
+// ── Example queries ────────────────────────────────────────────────────
+EXAMPLE_QUERIES.forEach(q => {
+  const chip = document.createElement("button");
+  chip.className = "example-chip";
+  chip.textContent = q;
+  chip.addEventListener("click", () => {
+    setEditorContent(q);
+    runQuery();
+  });
+  examplesList.appendChild(chip);
+});
+
+// ── WASM init ──────────────────────────────────────────────────────────
+setStatus("Loading WASM module...", "info", true);
+
+init().then(() => {
+  setStatus("Ready — upload a .sas7bdat file to begin.", "info");
+}).catch(err => {
+  setStatus(`Failed to load WASM module: ${err.message}`, "error");
+});
+
+// ── Upload handling ────────────────────────────────────────────────────
+uploadZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  uploadZone.classList.add("drag-over");
+});
+
+uploadZone.addEventListener("dragleave", () => {
+  uploadZone.classList.remove("drag-over");
+});
+
+uploadZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file).catch(err => setStatus(`Unexpected error: ${err.message}`, "error"));
+});
+
+uploadZone.addEventListener("click", (e) => {
+  if (e.target.tagName !== "LABEL" && e.target.tagName !== "INPUT") {
+    fileInput.click();
+  }
+});
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]).catch(err => setStatus(`Unexpected error: ${err.message}`, "error"));
+});
+
+function yieldToUI() {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
+
+async function handleFile(file) {
+  fileName = file.name;
+
+  // Reset previous state
+  tableData = [];
+  lastResults = [];
+  queryError.classList.add("hidden");
+  queryStats.textContent = "";
+  resultsPanel.classList.add("hidden");
+  resultsContainer.innerHTML = "";
+
+  setStatus(`Reading ${fileName}...`, "info", true);
+  await yieldToUI();
+
+  try {
+    const buffer = await file.arrayBuffer();
+    fileBytes = new Uint8Array(buffer);
+  } catch (err) {
+    setStatus(`Failed to read file: ${err.message}`, "error");
+    return;
+  }
+
+  // Show metadata
+  setStatus("Parsing metadata...", "info", true);
+  await yieldToUI();
+  try {
+    const metaJson = read_metadata(fileBytes);
+    const meta = JSON.parse(metaJson);
+    renderMetadata(meta);
+    metadataPanel.classList.remove("hidden");
+  } catch (err) {
+    setStatus(`Metadata error: ${err.message}`, "error");
+    return;
+  }
+
+  // Parse data as NDJSON
+  setStatus("Loading data...", "info", true);
+  await yieldToUI();
+  try {
+    const ndjson = read_data_ndjson(fileBytes);
+    tableData = ndjson.trim().split("\n").filter(Boolean).map(JSON.parse);
+  } catch (err) {
+    setStatus(`Data parse error: ${err.message}`, "error");
+    return;
+  }
+
+  // Register data in AlaSQL
+  try {
+    if (alasql.tables.data) {
+      alasql("DROP TABLE IF EXISTS data");
+    }
+    alasql("CREATE TABLE data");
+    alasql.tables.data.data = tableData;
+  } catch (err) {
+    setStatus(`AlaSQL registration error: ${err.message}`, "error");
+    return;
+  }
+
+  // Show query panel and examples
+  queryPanel.classList.remove("hidden");
+  examplesPanel.classList.remove("hidden");
+  btnRun.disabled = false;
+
+  // Update example queries with actual column names if available
+  updateExampleQueries();
+
+  setStatus(`Loaded ${fileName} — ${tableData.length.toLocaleString()} rows`, "info");
+
+  // Auto-run default query
+  setEditorContent(DEFAULT_QUERY);
+  runQuery();
+}
+
+// ── Dynamic example queries ────────────────────────────────────────────
+function updateExampleQueries() {
+  if (tableData.length === 0) return;
+
+  const columns = Object.keys(tableData[0]);
+  const firstCol = columns[0];
+  const dynamicQueries = [
+    "SELECT * FROM data LIMIT 100",
+    "SELECT COUNT(*) AS total_rows FROM data",
+  ];
+
+  if (firstCol) {
+    dynamicQueries.push(`SELECT * FROM data ORDER BY [${firstCol}] DESC LIMIT 20`);
+  }
+
+  if (columns.length >= 2) {
+    dynamicQueries.push(`SELECT [${columns[0]}], [${columns[1]}] FROM data LIMIT 50`);
+  }
+
+  dynamicQueries.push(
+    "SELECT DISTINCT * FROM data LIMIT 50",
+  );
+
+  examplesList.innerHTML = "";
+  dynamicQueries.forEach(q => {
+    const chip = document.createElement("button");
+    chip.className = "example-chip";
+    chip.textContent = q;
+    chip.addEventListener("click", () => {
+      setEditorContent(q);
+      runQuery();
+    });
+    examplesList.appendChild(chip);
+  });
+}
+
+// ── Metadata rendering ─────────────────────────────────────────────────
+function renderMetadata(meta) {
+  fileNameEl.textContent = `— ${fileName}`;
+
+  const fields = [
+    ["Table Name",     meta.table_name || "—"],
+    ["Encoding",       meta.file_encoding || "—"],
+    ["Row Count",      meta.row_count?.toLocaleString() ?? "—"],
+    ["Variable Count", meta.var_count?.toLocaleString() ?? "—"],
+    ["Compression",    meta.compression || "None"],
+    ["Endianness",     meta.endianness || "—"],
+    ["Created",        meta.creation_time || "—"],
+    ["Modified",       meta.modified_time || "—"],
+  ];
+
+  metaGrid.innerHTML = fields.map(([label, value]) =>
+    `<div><dt>${label}</dt><dd>${escapeHtml(String(value))}</dd></div>`
+  ).join("");
+
+  varTbody.innerHTML = "";
+  const vars = meta.variables || meta.vars || [];
+  for (let i = 0; i < vars.length; i++) {
+    const v = vars[i];
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i}</td><td>${escapeHtml(v.name || "")}</td><td>${escapeHtml(v.type || v.var_type || "")}</td><td>${escapeHtml(v.label || "")}</td><td>${escapeHtml(v.format || "")}</td>`;
+    varTbody.appendChild(tr);
+  }
+}
+
+// ── SQL execution ──────────────────────────────────────────────────────
+function runQuery() {
+  const queryText = editorView.state.doc.toString().trim();
+  if (!queryText) return;
+
+  queryError.classList.add("hidden");
+  queryStats.textContent = "";
+
+  const t0 = performance.now();
+  let results;
+  try {
+    results = alasql(queryText);
+  } catch (err) {
+    queryError.textContent = err.message;
+    queryError.classList.remove("hidden");
+    resultsPanel.classList.add("hidden");
+    return;
+  }
+  const elapsed = performance.now() - t0;
+
+  // AlaSQL returns different types depending on the statement
+  if (!Array.isArray(results)) {
+    queryStats.textContent = `Executed in ${elapsed.toFixed(1)}ms`;
+    resultsPanel.classList.add("hidden");
+    return;
+  }
+
+  lastResults = results;
+
+  queryStats.textContent = `${results.length.toLocaleString()} row${results.length !== 1 ? "s" : ""} in ${elapsed.toFixed(1)}ms`;
+
+  renderResults(results);
+  resultsPanel.classList.remove("hidden");
+}
+
+btnRun.addEventListener("click", runQuery);
+
+btnReset.addEventListener("click", () => {
+  setEditorContent(DEFAULT_QUERY);
+  queryError.classList.add("hidden");
+  queryStats.textContent = "";
+});
+
+// ── Results rendering ──────────────────────────────────────────────────
+function renderResults(results) {
+  resultsContainer.innerHTML = "";
+
+  if (results.length === 0) {
+    resultInfo.textContent = "No rows returned";
+    return;
+  }
+
+  resultInfo.textContent = `${results.length.toLocaleString()} row${results.length !== 1 ? "s" : ""}`;
+
+  const columns = Object.keys(results[0]).map(key => ({
+    title: key,
+    field: key,
+    headerSort: true,
+    tooltip: true,
+  }));
+
+  if (typeof Tabulator !== "undefined") {
+    new Tabulator(resultsContainer, {
+      data: results,
+      columns,
+      layout: "fitDataFill",
+      height: "450px",
+      placeholder: "No data",
+    });
+  } else {
+    // Fallback plain table
+    const table = document.createElement("table");
+    table.className = "var-table";
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    Object.keys(results[0]).forEach(k => {
+      const th = document.createElement("th");
+      th.textContent = k;
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    results.forEach(row => {
+      const tr = document.createElement("tr");
+      Object.values(row).forEach(v => {
+        const td = document.createElement("td");
+        td.textContent = v == null ? "" : String(v);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    const wrap = document.createElement("div");
+    wrap.style.maxHeight = "450px";
+    wrap.style.overflow = "auto";
+    wrap.appendChild(table);
+    resultsContainer.appendChild(wrap);
+  }
+}
+
+// ── CSV export ─────────────────────────────────────────────────────────
+btnExportCsv.addEventListener("click", () => {
+  if (lastResults.length === 0) return;
+
+  const headers = Object.keys(lastResults[0]);
+  const csvRows = [headers.join(",")];
+  for (const row of lastResults) {
+    csvRows.push(headers.map(h => {
+      const val = row[h];
+      if (val == null) return "";
+      const str = String(val);
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    }).join(","));
+  }
+
+  const csv = csvRows.join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "query_results.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast("Downloaded query_results.csv");
+});
+
+// ── Editor helpers ─────────────────────────────────────────────────────
+function setEditorContent(text) {
+  editorView.dispatch({
+    changes: { from: 0, to: editorView.state.doc.length, insert: text },
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function setStatus(msg, type, loading) {
+  statusEl.className = type || "info";
+  statusEl.innerHTML = (loading ? '<span class="spinner"></span>' : "") + escapeHtml(msg);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
+}
+</script>
+</body>
+</html>
