@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.19.0]
+## [0.19.0] - 2026-02-25
+
+### Added
+- SQL Explorer web example for interactive SAS7BDAT querying with NDJSON export (#138)
+- API server examples: Rust/Axum and Python/FastAPI (#127)
+- API usage examples to `readstat` crate rustdoc (#130)
+- Windows AddressSanitizer CI job and MSVC sanitizer flags (#128)
+- Plan document for numeric type narrowing (#129)
 
 ### Changed
 - Bumped `readstat` and `readstat-cli` to 0.19.0 for crates.io release
@@ -14,9 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Replaced redundant closures with function references (e.g., `.map(Into::into)`)
 - Removed unnecessary `extern crate readstat_sys` from CLI binary
 - Added `version = "0.19.0"` to `readstat` dependency in `readstat-cli` for crates.io compatibility
+- Updated README: renamed Usage to CLI Usage, added api-demo examples (#135)
+
+### Fixed
+- Variable metadata parsing in SQL Explorer (#138)
 
 ### crates.io release preparation
-- Renamed `iconv-sys` package to `readstat-iconv-sys` to avoid crates.io name conflict
+- Renamed `iconv-sys` package to `readstat-iconv-sys` to avoid crates.io name conflict (#136)
+- Renamed `crates/iconv-sys` directory to `crates/readstat-iconv-sys`
 - Added `include` fields to `readstat-iconv-sys` and `readstat-sys` `Cargo.toml` to reduce crate package sizes
 - Changed `readme` paths in `readstat` and `readstat-cli` from `../../README.md` to per-crate `README.md`
 - Added `documentation` URL to `readstat-cli` `Cargo.toml`
