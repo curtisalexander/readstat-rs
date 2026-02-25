@@ -272,6 +272,14 @@ header p {
   font-size: 0.9rem;
 }
 
+#editor-wrap .cm-content {
+  min-height: 8lh;
+}
+
+#editor-wrap .cm-gutter {
+  min-height: 8lh;
+}
+
 #editor-wrap .cm-editor.cm-focused {
   outline: none;
 }
@@ -425,6 +433,8 @@ header p {
   <div class="query-error hidden" id="query-error"></div>
   <div class="sql-reference">
     SQL engine: <a href="https://github.com/AlaSQL/alasql/wiki/SQL%20statements" target="_blank" rel="noopener">AlaSQL SQL Reference</a>
+    <br>The table name is always <code style="background:#eef4fc;padding:0.1rem 0.35rem;border-radius:3px;font-size:0.85em">data</code>.
+    Column names are <strong>case sensitive</strong> — use <code style="background:#eef4fc;padding:0.1rem 0.35rem;border-radius:3px;font-size:0.85em">[ColumnName]</code> for names with spaces or special characters.
   </div>
 </div>
 
