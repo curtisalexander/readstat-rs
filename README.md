@@ -116,6 +116,7 @@ The [`examples/`](examples/) directory contains runnable demos showing different
 | [`api-demo`](examples/api-demo/) | API servers in [Rust](examples/api-demo/rust-server/) (Axum) and [Python](examples/api-demo/python-server/) (FastAPI + PyO3) — upload, inspect, and convert SAS files over HTTP |
 | [`bun-demo`](examples/bun-demo/) | Parse a `.sas7bdat` file from JavaScript using the WebAssembly build with Bun |
 | [`web-demo`](examples/web-demo/) | Browser-based viewer and converter — upload, preview, and export entirely client-side via WASM |
+| [`sql-explorer`](examples/sql-explorer/) | Browser-based SQL explorer — upload a `.sas7bdat` file and query it interactively with SQL via AlaSQL |
 
 To use `readstat` as a library in your own Rust project, add the [`readstat`](crates/readstat/) crate as a dependency.
 

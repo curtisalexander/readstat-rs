@@ -18,6 +18,12 @@ readstat-rs/
 │   ├── readstat-iconv-sys/   # FFI bindings to iconv (Windows only)
 │   ├── readstat-tests/      # Integration test suite
 │   └── readstat-wasm/       # WebAssembly build (excluded from workspace)
+├── examples/
+│   ├── cli-demo/            # CLI conversion demo
+│   ├── api-demo/            # REST API servers (Rust + Python)
+│   ├── bun-demo/            # WASM usage from Bun/JS
+│   ├── web-demo/            # Browser-based viewer and converter
+│   └── sql-explorer/        # Browser-based SQL explorer (AlaSQL + WASM)
 └── docs/
 ```
 

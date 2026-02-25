@@ -751,11 +751,12 @@ function renderMetadata(meta) {
   ).join("");
 
   varTbody.innerHTML = "";
-  const vars = meta.variables || meta.vars || [];
-  for (let i = 0; i < vars.length; i++) {
-    const v = vars[i];
+  const varsObj = meta.vars || {};
+  const varKeys = Object.keys(varsObj).sort((a, b) => Number(a) - Number(b));
+  for (const key of varKeys) {
+    const v = varsObj[key];
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i}</td><td>${escapeHtml(v.name || "")}</td><td>${escapeHtml(v.type || v.var_type || "")}</td><td>${escapeHtml(v.label || "")}</td><td>${escapeHtml(v.format || "")}</td>`;
+    tr.innerHTML = `<td>${key}</td><td>${escapeHtml(v.var_name || "")}</td><td>${escapeHtml(v.var_type || "")}</td><td>${escapeHtml(v.var_label || "")}</td><td>${escapeHtml(v.var_format || "")}</td>`;
     varTbody.appendChild(tr);
   }
 }
