@@ -36,4 +36,4 @@ cc = { workspace = true }
 libz-sys = "1.1"
 
 [target.'cfg(windows)'.dependencies]
-readstat-iconv-sys = { path = "../iconv-sys", version = "0.3.0" }
+readstat-iconv-sys = { path = "../readstat-iconv-sys", version = "0.3.0" }

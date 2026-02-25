@@ -22,7 +22,7 @@
 - [readstat](crates/readstat.md)
 - [readstat-cli](crates/readstat-cli.md)
 - [readstat-sys](crates/readstat-sys.md)
-- [iconv-sys](crates/iconv-sys.md)
+- [readstat-iconv-sys](crates/readstat-iconv-sys.md)
 - [readstat-tests](crates/readstat-tests.md)
 - [readstat-wasm](crates/readstat-wasm.md)
 

@@ -106,7 +106,7 @@ echo "Checking version consistency..."
 READSTAT_VER=$(grep '^version' "$ROOT_DIR/crates/readstat/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 CLI_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-cli/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 SYS_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
-ICONV_VER=$(grep '^version' "$ROOT_DIR/crates/iconv-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+ICONV_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-iconv-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
 # readstat and readstat-cli should match
 if [ "$READSTAT_VER" = "$CLI_VER" ]; then

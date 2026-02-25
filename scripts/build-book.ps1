@@ -98,7 +98,7 @@ $crateMap = @{
     "readstat"       = "readstat.md"
     "readstat-cli"   = "readstat-cli.md"
     "readstat-sys"   = "readstat-sys.md"
-    "iconv-sys"      = "iconv-sys.md"
+    "readstat-iconv-sys" = "readstat-iconv-sys.md"
     "readstat-tests" = "readstat-tests.md"
     "readstat-wasm"  = "readstat-wasm.md"
 }

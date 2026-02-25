@@ -57,7 +57,7 @@ Build
 cargo build
 ```
 
-**iconv**: Compiled from source using the vendored [libiconv-win-build](https://github.com/kiyolee/libiconv-win-build) submodule (located at `crates/iconv-sys/vendor/libiconv-win-build/`) via the [iconv-sys](../crates/iconv-sys/) crate. `iconv-sys` is a Windows-only dependency (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](../crates/readstat-sys/Cargo.toml)).
+**iconv**: Compiled from source using the vendored [libiconv-win-build](https://github.com/kiyolee/libiconv-win-build) submodule (located at `crates/readstat-iconv-sys/vendor/libiconv-win-build/`) via the [readstat-iconv-sys](../crates/readstat-iconv-sys/) crate. `readstat-iconv-sys` is a Windows-only dependency (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](../crates/readstat-sys/Cargo.toml)).
 
 **zlib**: Compiled from source via the [libz-sys](https://crates.io/crates/libz-sys) crate (statically linked).
 

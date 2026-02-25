@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/iconv-sys",
+    "crates/readstat-iconv-sys",
     "crates/readstat",
     "crates/readstat-cli",
     "crates/readstat-sys",
