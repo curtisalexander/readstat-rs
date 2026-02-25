@@ -22,6 +22,9 @@ From the repository root:
 ```bash
 # Python
 python -m http.server 8000 -d examples/sql-explorer
+
+# Bun
+bunx serve examples/sql-explorer
 ```
 
 Or `cd` into the directory and serve from there:

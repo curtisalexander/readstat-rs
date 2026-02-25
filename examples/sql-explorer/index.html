@@ -443,7 +443,10 @@ header p {
   <h2>Query Results</h2>
   <div class="result-bar">
     <span class="result-info" id="result-info"></span>
-    <button id="btn-export-csv">Export Results as CSV</button>
+    <span>
+      <button id="btn-export-csv">Export as CSV</button>
+      <button id="btn-export-ndjson">Export as NDJSON</button>
+    </span>
   </div>
   <div id="results-container"></div>
 </div>
@@ -524,6 +527,7 @@ const resultsPanel     = document.getElementById("results-panel");
 const resultInfo       = document.getElementById("result-info");
 const resultsContainer = document.getElementById("results-container");
 const btnExportCsv     = document.getElementById("btn-export-csv");
+const btnExportNdjson  = document.getElementById("btn-export-ndjson");
 const examplesPanel    = document.getElementById("examples-panel");
 const examplesList     = document.getElementById("examples-list");
 
@@ -887,6 +891,24 @@ btnExportCsv.addEventListener("click", () => {
   URL.revokeObjectURL(url);
 
   showToast("Downloaded query_results.csv");
+});
+
+// ── NDJSON export ──────────────────────────────────────────────────────
+btnExportNdjson.addEventListener("click", () => {
+  if (lastResults.length === 0) return;
+
+  const ndjson = lastResults.map(row => JSON.stringify(row)).join("\n");
+  const blob = new Blob([ndjson], { type: "application/x-ndjson" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "query_results.ndjson";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast("Downloaded query_results.ndjson");
 });
 
 // ── Editor helpers ─────────────────────────────────────────────────────
