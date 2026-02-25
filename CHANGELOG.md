@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Variable metadata parsing in SQL Explorer (#138)
+- Windows AddressSanitizer CI failing with `STATUS_DLL_NOT_FOUND` by adding ASAN runtime DLL to PATH
 
 ### crates.io release preparation
 - Renamed `iconv-sys` package to `readstat-iconv-sys` to avoid crates.io name conflict (#136)
