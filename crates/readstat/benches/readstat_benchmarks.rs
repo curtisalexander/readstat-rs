@@ -1,3 +1,4 @@
+#![allow(clippy::cast_sign_loss, clippy::cast_lossless)]
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter, WriteConfig};
 use std::path::PathBuf;
@@ -25,7 +26,7 @@ fn setup_write_config(
     temp_dir: &TempDir,
     format: readstat::OutFormat,
 ) -> WriteConfig {
-    let output_path = temp_dir.path().join(format!("output.{:?}", format));
+    let output_path = temp_dir.path().join(format!("output.{format:?}"));
     WriteConfig::new(Some(output_path), Some(format), true, None, None).unwrap()
 }
 
@@ -111,7 +112,7 @@ fn bench_read_data_chunked(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: Arrow RecordBatch conversion
+/// Benchmark: Arrow `RecordBatch` conversion
 fn bench_arrow_conversion(c: &mut Criterion) {
     let mut group = c.benchmark_group("arrow_conversion");
 
@@ -226,7 +227,7 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: Parallel write with SpooledTempFile (different buffer sizes)
+/// Benchmark: Parallel write with `SpooledTempFile` (different buffer sizes)
 fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
     let mut group = c.benchmark_group("parallel_write_buffer_sizes");
 
@@ -252,7 +253,7 @@ fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
                 b.iter(|| {
                     let output_path = temp_dir
                         .path()
-                        .join(format!("output_buf_{}.parquet", buffer_mb));
+                        .join(format!("output_buf_{buffer_mb}.parquet"));
                     let buffer_bytes = buffer_mb * 1024 * 1024;
 
                     if let Some(batch) = &d.batch {

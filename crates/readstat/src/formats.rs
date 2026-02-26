@@ -259,8 +259,7 @@ mod tests {
             assert_eq!(
                 match_var_format(fmt),
                 Some(ReadStatVarFormatClass::Date),
-                "Expected Date for format: {}",
-                fmt
+                "Expected Date for format: {fmt}"
             );
         }
     }
@@ -302,8 +301,7 @@ mod tests {
             assert_eq!(
                 match_var_format(fmt),
                 Some(ReadStatVarFormatClass::Time),
-                "Expected Time for format: {}",
-                fmt
+                "Expected Time for format: {fmt}"
             );
         }
     }
@@ -400,8 +398,7 @@ mod tests {
             assert_eq!(
                 match_var_format(fmt),
                 Some(ReadStatVarFormatClass::DateTime),
-                "Expected DateTime for format: {}",
-                fmt
+                "Expected DateTime for format: {fmt}"
             );
         }
     }

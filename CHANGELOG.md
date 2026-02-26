@@ -27,6 +27,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Variable metadata parsing in SQL Explorer (#138)
 - Windows ASAN CI: pinned LLVM for bindgen only and added MSVC ASan runtime DLL to PATH via `vswhere.exe` to fix `STATUS_DLL_NOT_FOUND` at test time
 - Suppressed `improper_ctypes` warning in `readstat-iconv-sys` from bindgen-generated SIMD intrinsic bindings
+- Resolved all `clippy::pedantic` warnings across the workspace (zero warnings with `-W clippy::all -W clippy::pedantic`)
+- Fixed `ptr_as_ptr` lints in `readstat` library (`.cast::<i8>()` instead of `as *const i8`)
+- Fixed `uninlined_format_args` in library tests and benchmarks
+- Suppressed bindgen-generated lint noise (`missing_safety_doc`, `useless_transmute`, `ptr_offset_with_cast`) in `-sys` crates
+- Added pedantic clippy `#![allow]` blocks to all integration test files for test-acceptable patterns (`float_cmp`, `cast_sign_loss`, etc.)
+- Replaced `String::from("")` with `String::new()` across test crate
+- Added missing date to CHANGELOG version 0.18.0
 
 ### crates.io release preparation
 - Renamed `iconv-sys` package to `readstat-iconv-sys` to avoid crates.io name conflict (#136)
@@ -45,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed clippy `doc_markdown` warnings (backtick `ReadStat` and other identifiers in doc comments)
 - Applied pedantic clippy auto-fixes
 
-## [0.18.0]
+## [0.18.0] - 2026-02-20
 
 ### Added
 - DataFusion SQL query support behind `sql` feature flag

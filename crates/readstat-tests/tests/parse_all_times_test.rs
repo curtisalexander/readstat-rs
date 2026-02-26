@@ -1,3 +1,13 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 use arrow::datatypes::{DataType, TimeUnit};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatVarFormatClass};
 
@@ -67,10 +77,10 @@ fn parse_all_times_metadata() {
     assert_eq!(md.var_count, 38);
 
     // table name
-    assert_eq!(md.table_name, String::from(""));
+    assert_eq!(md.table_name, String::new());
 
     // table label
-    assert_eq!(md.file_label, String::from(""));
+    assert_eq!(md.file_label, String::new());
 
     // file encoding
     assert_eq!(md.file_encoding, String::from("UTF-8"));

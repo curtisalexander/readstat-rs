@@ -1,7 +1,17 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 //! Benchmark the full data reading pipeline (FFI parse + Arrow conversion).
 //!
 //! Run with:
-//!   cargo test -p readstat-tests --release string_alloc_bench -- --nocapture --ignored
+//!   cargo test -p readstat-tests --release `string_alloc_bench` -- --nocapture --ignored
 
 mod common;
 
@@ -12,7 +22,7 @@ use std::time::Instant;
 /// Requires the AHS dataset to be downloaded first:
 ///   ./crates/readstat-tests/util/download_ahs.sh
 #[test]
-#[ignore] // Large file — run explicitly
+#[ignore = "benchmark, not a regular test"]
 fn bench_ahs_string_allocation() {
     let dataset = "_ahs2019n.sas7bdat";
 

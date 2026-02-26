@@ -1,3 +1,13 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 use assert_cmd::Command;
 use assert_fs::NamedTempFile;
 use predicates::prelude::*;
@@ -42,14 +52,14 @@ const EXPECTED_COLUMNS: &[&str] = &[
     "Hybrid",
 ];
 
-/// Read a CSV file and return (header_fields, data_row_count).
+/// Read a CSV file and return (`header_fields`, `data_row_count`).
 fn read_csv_info(path: &std::path::Path) -> (Vec<String>, usize) {
     let f = std::fs::File::open(path).expect("failed to open CSV file");
     let reader = BufReader::new(f);
     let mut lines = reader.lines();
 
     let header_line = lines.next().expect("CSV file is empty").unwrap();
-    let header_fields: Vec<String> = header_line.split(',').map(|s| s.to_string()).collect();
+    let header_fields: Vec<String> = header_line.split(',').map(ToString::to_string).collect();
 
     let data_row_count = lines.count();
     (header_fields, data_row_count)
@@ -70,7 +80,7 @@ fn cars_to_csv() {
     ));
 
     let (header, data_rows) = read_csv_info(tempfile.path());
-    let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(|s| s.to_string()).collect();
+    let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(ToString::to_string).collect();
 
     assert_eq!(
         header, expected,
@@ -97,7 +107,7 @@ fn cars_to_csv_with_streaming() {
     ));
 
     let (header, data_rows) = read_csv_info(tempfile.path());
-    let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(|s| s.to_string()).collect();
+    let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(ToString::to_string).collect();
 
     assert_eq!(
         header, expected,
@@ -130,7 +140,7 @@ fn cars_to_csv_overwrite() {
     cmd.assert().success();
 
     let (header, data_rows) = read_csv_info(tempfile.path());
-    let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(|s| s.to_string()).collect();
+    let expected: Vec<String> = EXPECTED_COLUMNS.iter().map(ToString::to_string).collect();
 
     assert_eq!(
         header, expected,
