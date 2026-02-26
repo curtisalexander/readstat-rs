@@ -12,8 +12,11 @@
 //! Most users should depend on the higher-level [`readstat`](https://docs.rs/readstat)
 //! crate instead of using these bindings directly.
 
-// Auto-generated bindgen code — suppress all pedantic lints
+// Auto-generated bindgen code — suppress lints from generated bindings
 #![allow(clippy::pedantic)]
+#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::ptr_offset_with_cast)]
+#![allow(clippy::useless_transmute)]
 #![allow(dead_code)]
 #![allow(deref_nullptr)]
 #![allow(non_upper_case_globals)]

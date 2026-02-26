@@ -1,3 +1,13 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 use arrow::datatypes::DataType;
 use arrow_array::{Array, Float64Array, StringArray};
 use readstat::{ReadStatData, ReadStatMetadata};

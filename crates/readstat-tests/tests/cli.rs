@@ -1,3 +1,13 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::path::PathBuf;
@@ -25,12 +35,11 @@ fn readstat_cmd() -> Command {
 }
 
 #[test]
-fn cli_file_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
+fn cli_file_does_not_exist() {
     let mut cmd = readstat_cmd();
     cmd.arg("data").arg("tests/data/adataset.sas7bdat");
     cmd.assert().failure().stderr(
-        predicate::str::is_match(r#"^(Stopping with error: File)\s(.+)\s(does not exist!\n)$"#)
+        predicate::str::is_match(r"^(Stopping with error: File)\s(.+)\s(does not exist!\n)$")
             .unwrap(),
     );
-    Ok(())
 }

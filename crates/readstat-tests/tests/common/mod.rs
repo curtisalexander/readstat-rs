@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(clippy::cast_sign_loss)]
 
 use arrow::datatypes::DataType;
 use arrow_array::{
@@ -23,7 +24,7 @@ where
     readstat::ReadStatPath::new(sas_path)
 }
 
-/// Reads a dataset fully: path -> metadata -> data -> RecordBatch.
+/// Reads a dataset fully: path -> metadata -> data -> `RecordBatch`.
 ///
 /// Returns (path, metadata, data) with the batch already produced.
 pub fn setup_and_read(

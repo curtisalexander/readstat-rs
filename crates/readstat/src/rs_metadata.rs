@@ -454,6 +454,7 @@ mod tests {
     use std::io::Write;
 
     /// Create a test metadata instance with the given variable names.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     fn test_metadata(var_names: &[&str]) -> ReadStatMetadata {
         let mut md = ReadStatMetadata::new();
         for (i, name) in var_names.iter().enumerate() {

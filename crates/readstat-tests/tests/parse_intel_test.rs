@@ -1,3 +1,13 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 use arrow::datatypes::DataType;
 use arrow_array::Float64Array;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
@@ -31,7 +41,7 @@ fn parse_intel_metadata() {
     assert_eq!(md.table_name, String::from("INTEL"));
 
     // table label
-    assert_eq!(md.file_label, String::from(""));
+    assert_eq!(md.file_label, String::new());
 
     // file encoding
     assert_eq!(md.file_encoding, String::from("WINDOWS-1252"));
@@ -66,7 +76,7 @@ fn parse_intel_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, String::new());
     assert!(matches!(adt, DataType::Float64));
 
     // 1 - VOCABULARY
@@ -74,7 +84,7 @@ fn parse_intel_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, String::new());
     assert!(matches!(adt, DataType::Float64));
 
     // 2 - INFERENCE
@@ -82,7 +92,7 @@ fn parse_intel_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, String::new());
     assert!(matches!(adt, DataType::Float64));
 
     // 3 - REASONING
@@ -90,7 +100,7 @@ fn parse_intel_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, String::new());
     assert!(matches!(adt, DataType::Float64));
 
     // 4 - WRITING
@@ -98,7 +108,7 @@ fn parse_intel_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, String::new());
     assert!(matches!(adt, DataType::Float64));
 
     // 5 - GRAMMAR
@@ -106,7 +116,7 @@ fn parse_intel_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from(""));
+    assert_eq!(vf, String::new());
     assert!(matches!(adt, DataType::Float64));
 }
 

@@ -1,3 +1,13 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 /// Tests to verify the arrow2 -> arrow migration correctness.
 /// These tests ensure that the migration from arrow2 to the arrow crate
 /// does not introduce any data integrity issues.
@@ -26,7 +36,7 @@ fn init_all_types() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     (rsp, md, d)
 }
 
-/// Test: Verify RecordBatch structure is correctly created
+/// Test: Verify `RecordBatch` structure is correctly created
 #[test]
 fn migration_record_batch_structure() {
     let (rsp, md, mut d) = init_all_types();
@@ -364,7 +374,7 @@ fn migration_timestamp_values() {
     );
 }
 
-/// Test: Verify Arc<Schema> is properly shared in RecordBatch
+/// Test: Verify `Arc<Schema>` is properly shared in `RecordBatch`
 #[test]
 fn migration_schema_arc_sharing() {
     let (rsp, _md, mut d) = init_all_types();
@@ -472,7 +482,7 @@ fn migration_larger_dataset() {
     }
 }
 
-/// Test: Verify metadata skip_row_count functionality
+/// Test: Verify metadata `skip_row_count` functionality
 #[test]
 fn migration_metadata_skip_row_count() {
     let rsp = common::setup_path("all_types.sas7bdat").unwrap();
@@ -505,7 +515,7 @@ fn migration_metadata_skip_row_count() {
     assert_eq!(md_skip.row_count, 1, "Skip metadata should report 1 row");
 }
 
-/// Test: Verify RecordBatch can be cloned (important for data sharing)
+/// Test: Verify `RecordBatch` can be cloned (important for data sharing)
 #[test]
 fn migration_record_batch_clone() {
     let (rsp, _md, mut d) = init_all_types();

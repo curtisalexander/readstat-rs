@@ -1,3 +1,13 @@
+#![allow(clippy::float_cmp)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_lossless)]
+
 use ::predicates::prelude::*;
 use assert_cmd::Command;
 use assert_fs::NamedTempFile;
@@ -674,7 +684,7 @@ fn cars_to_parquet_with_compression_gzip_level_10() {
         Some(10),
     ) {
         cmd.assert().failure().stderr(
-            predicate::str::is_match(r#"^Stopping with error: The compression level of \d+ is not a valid level for gzip compression. Instead, please use values between 0-9.\n?"#)
+            predicate::str::is_match(r"^Stopping with error: The compression level of \d+ is not a valid level for gzip compression. Instead, please use values between 0-9.\n?")
                 .unwrap(),
         );
 
@@ -692,7 +702,7 @@ fn cars_to_parquet_with_compression_gzip_level_55() {
         Some(55),
     ) {
         cmd.assert().failure().stderr(
-            predicate::str::is_match(r#"^error: invalid value '\d+' for '--compression-level <COMPRESSION_LEVEL>': \d+ is not in 0..=22\n?"#)
+            predicate::str::is_match(r"^error: invalid value '\d+' for '--compression-level <COMPRESSION_LEVEL>': \d+ is not in 0..=22\n?")
                 .unwrap(),
         );
 
@@ -758,7 +768,7 @@ fn cars_to_parquet_with_compression_brotli_level_12() {
         Some(12),
     ) {
         cmd.assert().failure().stderr(
-            predicate::str::is_match(r#"^Stopping with error: The compression level of \d+ is not a valid level for brotli compression. Instead, please use values between 0-11.\n?"#)
+            predicate::str::is_match(r"^Stopping with error: The compression level of \d+ is not a valid level for brotli compression. Instead, please use values between 0-11.\n?")
                 .unwrap(),
         );
 
@@ -776,7 +786,7 @@ fn cars_to_parquet_with_compression_brotli_level_55() {
         Some(55),
     ) {
         cmd.assert().failure().stderr(
-            predicate::str::is_match(r#"^error: invalid value '\d+' for '--compression-level <COMPRESSION_LEVEL>': \d+ is not in 0..=22\n?"#)
+            predicate::str::is_match(r"^error: invalid value '\d+' for '--compression-level <COMPRESSION_LEVEL>': \d+ is not in 0..=22\n?")
                 .unwrap(),
         );
 
@@ -866,7 +876,7 @@ fn cars_to_parquet_with_compression_zstd_level_55() {
         Some(55),
     ) {
         cmd.assert().failure().stderr(
-            predicate::str::is_match(r#"^error: invalid value '\d+' for '--compression-level <COMPRESSION_LEVEL>': \d+ is not in 0..=22\n?"#)
+            predicate::str::is_match(r"^error: invalid value '\d+' for '--compression-level <COMPRESSION_LEVEL>': \d+ is not in 0..=22\n?")
                 .unwrap(),
         );
 
