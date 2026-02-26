@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added missing date to CHANGELOG version 0.18.0
 - Updated `cargo-deny` configuration for latest API and added MPL-2.0, CC0-1.0, LGPL-2.1-or-later to allowed licenses
 - Fixed release check script to use `cargo deny` exit code instead of fragile grep
+- Synced `release-check.ps1` with `release-check.sh` (cargo-deny exit code, readstat-sys dep check, vendor status check)
 
 ### crates.io release preparation
 - Renamed `iconv-sys` package to `readstat-iconv-sys` to avoid crates.io name conflict (#136)
