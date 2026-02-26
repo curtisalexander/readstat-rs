@@ -422,3 +422,58 @@ jobs:
             $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
             $env:PATH = "${{ steps.asan-rt.outputs.dir }};$env:PATH"
             cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
+
+  # Option 2: Full Rust + C ASAN instrumentation on Windows.
+  # Both Rust and MSVC's cl.exe use the same MSVC ASAN runtime, so full
+  # instrumentation SHOULD work. Marked continue-on-error because this is
+  # experimental — no one has publicly documented this combination working.
+  # See docs/WINDOWS_MEMORY_SAFETY_RESEARCH.md for details.
+  asan-windows-full:
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      RUSTFLAGS: "-Zsanitizer=address"
+      READSTAT_SANITIZE_ADDRESS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      # LLVM is needed only for libclang (bindgen).
+      # The ASAN runtime comes from Visual Studio (MSVC), not from this LLVM install.
+      - name: Cache LLVM and Clang
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\llvm
+          key: llvm-21.1.8
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "21.1.8"
+          directory: ${{ runner.temp }}\llvm
+          cached: ${{ steps.cache-llvm.outputs.cache-hit }}
+      - name: Find MSVC ASAN runtime
+        id: asan-rt
+        shell: pwsh
+        run: |
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -latest -property installationPath
+          $msvcRoot = Join-Path $vsPath "VC\Tools\MSVC"
+          $msvcVer = (Get-ChildItem $msvcRoot | Sort-Object Name -Descending | Select-Object -First 1).Name
+          $asanDir = Join-Path $msvcRoot $msvcVer "bin" "Hostx64" "x64"
+          $asanDll = Join-Path $asanDir "clang_rt.asan_dynamic-x86_64.dll"
+          if (!(Test-Path $asanDll)) { throw "ASAN runtime not found at $asanDll" }
+          Write-Host "Found ASAN runtime: $asanDll"
+          echo "dir=$asanDir" >> $env:GITHUB_OUTPUT
+      - name: Run tests with AddressSanitizer (full C+Rust)
+        run: |
+            $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
+            $env:PATH = "${{ steps.asan-rt.outputs.dir }};$env:PATH"
+            cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
