@@ -1,4 +1,4 @@
-# iconv-sys
+# readstat-iconv-sys
 
 Windows-only FFI bindings to [libiconv](https://www.gnu.org/software/libiconv/) for character encoding conversion.
 

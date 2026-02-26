@@ -5,10 +5,13 @@ fn main() {
     println!("Converting somedata.sas7bdat to parquet...");
 
     // First, convert the file using the CLI
+    let out_path = std::env::temp_dir().join("somedata_verify.parquet");
+    let out_path_str = out_path.to_str().expect("temp dir path is not valid UTF-8");
+
     let output = std::process::Command::new("cargo")
         .args(["run", "--release", "-p", "readstat", "--"])
         .args(["data", "tests/data/somedata.sas7bdat"])
-        .args(["-o", "/tmp/somedata_verify.parquet", "-f", "parquet"])
+        .args(["-o", out_path_str, "-f", "parquet"])
         .args(["--overwrite", "--no-progress"])
         .output()
         .expect("Failed to execute conversion");
@@ -21,7 +24,7 @@ fn main() {
 
     println!("Reading parquet file and checking metadata...\n");
 
-    let file = File::open("/tmp/somedata_verify.parquet").expect("Failed to open parquet file");
+    let file = File::open(&out_path).expect("Failed to open parquet file");
 
     let builder =
         ParquetRecordBatchReaderBuilder::try_new(file).expect("Failed to create parquet reader");

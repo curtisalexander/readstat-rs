@@ -1,5 +1,5 @@
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter};
+use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter, WriteConfig};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -17,27 +17,16 @@ fn get_test_data_path(filename: &str) -> PathBuf {
 // Helper to setup ReadStatPath
 fn setup_path(filename: &str) -> ReadStatPath {
     let path = get_test_data_path(filename);
-    ReadStatPath::new(path, None, None, false, false, None, None).unwrap()
+    ReadStatPath::new(path).unwrap()
 }
 
-// Helper to setup output path
-fn setup_output_path(
+// Helper to setup WriteConfig for output
+fn setup_write_config(
     temp_dir: &TempDir,
-    filename: &str,
     format: readstat::OutFormat,
-) -> ReadStatPath {
-    let input_path = get_test_data_path(filename);
+) -> WriteConfig {
     let output_path = temp_dir.path().join(format!("output.{:?}", format));
-    ReadStatPath::new(
-        input_path,
-        Some(output_path),
-        Some(format),
-        true,
-        false,
-        None,
-        None,
-    )
-    .unwrap()
+    WriteConfig::new(Some(output_path), Some(format), true, None, None).unwrap()
 }
 
 /// Benchmark: Read metadata only (no data)
@@ -173,10 +162,10 @@ fn bench_write_csv(c: &mut Criterion) {
     group.throughput(Throughput::Elements(rows as u64));
     group.bench_function("sequential", |b| {
         b.iter(|| {
-            let rsp_out = setup_output_path(&temp_dir, "cars.sas7bdat", readstat::OutFormat::Csv);
+            let wc = setup_write_config(&temp_dir, readstat::OutFormat::Csv);
             let mut wtr = ReadStatWriter::new();
-            wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
-            wtr.finish(black_box(&d), black_box(&rsp_out)).unwrap();
+            wtr.write(black_box(&d), black_box(&wc)).unwrap();
+            wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
         });
     });
 
@@ -214,24 +203,21 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
             &compression.1,
             |b, comp| {
                 b.iter(|| {
-                    let input_path = get_test_data_path("cars.sas7bdat");
                     let output_path = temp_dir
                         .path()
                         .join(format!("output_{}.parquet", compression.0));
-                    let rsp_out = ReadStatPath::new(
-                        input_path,
+                    let wc = WriteConfig::new(
                         Some(output_path),
                         Some(readstat::OutFormat::Parquet),
                         true,
-                        false,
                         *comp,
                         None,
                     )
                     .unwrap();
 
                     let mut wtr = ReadStatWriter::new();
-                    wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
-                    wtr.finish(black_box(&d), black_box(&rsp_out)).unwrap();
+                    wtr.write(black_box(&d), black_box(&wc)).unwrap();
+                    wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
                 });
             },
         );
@@ -317,10 +303,10 @@ fn bench_write_formats(c: &mut Criterion) {
             &format.1,
             |b, fmt| {
                 b.iter(|| {
-                    let rsp_out = setup_output_path(&temp_dir, "cars.sas7bdat", *fmt);
+                    let wc = setup_write_config(&temp_dir, *fmt);
                     let mut wtr = ReadStatWriter::new();
-                    wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
-                    wtr.finish(black_box(&d), black_box(&rsp_out)).unwrap();
+                    wtr.write(black_box(&d), black_box(&wc)).unwrap();
+                    wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
                 });
             },
         );
@@ -354,10 +340,10 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
                 d.read_data(black_box(&rsp_in)).unwrap();
 
                 // Write
-                let rsp_out = setup_output_path(&temp_dir, "cars.sas7bdat", *fmt);
+                let wc = setup_write_config(&temp_dir, *fmt);
                 let mut wtr = ReadStatWriter::new();
-                wtr.write(black_box(&d), black_box(&rsp_out)).unwrap();
-                wtr.finish(black_box(&d), black_box(&rsp_out)).unwrap();
+                wtr.write(black_box(&d), black_box(&wc)).unwrap();
+                wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
             });
         });
     }
