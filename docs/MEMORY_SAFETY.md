@@ -38,7 +38,7 @@ Configuration:
 
 Configuration:
 - `RUSTFLAGS="-Zsanitizer=address"` — instruments Rust code only
-- The ReadStat C library is **not** instrumented on macOS because Apple Clang and Rust's LLVM have incompatible ASan runtimes — see [ASan Runtime Mismatch](#asan-runtime-mismatch-macos-and-windows) below
+- The ReadStat C library is **not** instrumented on macOS because Apple Clang and Rust's LLVM have incompatible ASan runtimes — see [ASan Runtime Mismatch](#asan-runtime-mismatch-macos) below
 - LeakSanitizer is not supported on macOS
 - Doctests excluded for the same reason as Linux
 
@@ -50,8 +50,9 @@ Configuration:
 
 Configuration:
 - `RUSTFLAGS="-Zsanitizer=address"` — instruments Rust code only
-- LLVM is installed for `libclang` (required by bindgen), same as the regular Windows build job
-- The ReadStat C library is **not** instrumented on Windows because MSVC's `cl.exe` ASan runtime (`/fsanitize=address`) is separate from the LLVM ASan runtime that Rust links against — see [ASan Runtime Mismatch](#asan-runtime-mismatch-macos-and-windows) below
+- Rust on Windows MSVC uses **Microsoft's ASan runtime** (from Visual Studio), not LLVM's compiler-rt. The compiler passes `/INFERASANLIBS` to the MSVC linker, which auto-discovers the runtime DLL (`clang_rt.asan_dynamic-x86_64.dll`) from the Visual Studio installation. See [PR #118521](https://github.com/rust-lang/rust/pull/118521).
+- LLVM is installed only for `libclang` (required by bindgen), pinned to the same version as the regular Windows build job. It is **not** used for the ASan runtime.
+- The ReadStat C library is **not** instrumented on Windows currently. Unlike macOS, there is no runtime mismatch — both Rust and `cl.exe` use the same MSVC ASan runtime. Full C instrumentation is a future improvement (see [Future Work](#future-work-windows-c-instrumentation)).
 - LeakSanitizer is not supported on Windows
 - Doctests excluded for the same reason as Linux
 
@@ -63,17 +64,25 @@ The flags are platform-specific:
 - **Linux/macOS**: `-fsanitize=address -fno-omit-frame-pointer` (GCC/Clang syntax)
 - **Windows MSVC**: `/fsanitize=address` (MSVC syntax)
 
-Currently only the Linux CI job sets `READSTAT_SANITIZE_ADDRESS=1` because it is the only platform where both Rust and C use the same ASan runtime (LLVM's, via clang).
+Currently only the Linux CI job sets `READSTAT_SANITIZE_ADDRESS=1` because it is the only platform where C instrumentation has been validated.
 
-## ASan Runtime Mismatch (macOS and Windows)
+## ASan Runtime Mismatch (macOS)
 
-Both macOS and Windows have an ASan runtime mismatch that prevents instrumenting the C code alongside Rust:
+**macOS** has an ASan runtime mismatch that prevents instrumenting the C code alongside Rust. Apple Clang is a fork of LLVM with its own ASan runtime versioning. When both Rust and the C library are instrumented, the linker sees two incompatible ASan runtimes and fails with `___asan_version_mismatch_check_apple_clang_*` vs `___asan_version_mismatch_check_v8`. A potential workaround is to install upstream LLVM via Homebrew (`brew install llvm`) and set `CC=/opt/homebrew/opt/llvm/bin/clang` so both the C code and Rust use the same LLVM ASan runtime. However, this is fragile — the Homebrew LLVM version must stay close to the LLVM version used by Rust nightly, which changes frequently.
 
-**macOS**: Apple Clang is a fork of LLVM with its own ASan runtime versioning. When both Rust and the C library are instrumented, the linker sees two incompatible ASan runtimes and fails with `___asan_version_mismatch_check_apple_clang_*` vs `___asan_version_mismatch_check_v8`. A potential workaround is to install upstream LLVM via Homebrew (`brew install llvm`) and set `CC=/opt/homebrew/opt/llvm/bin/clang` so both the C code and Rust use the same LLVM ASan runtime. However, this is fragile — the Homebrew LLVM version must stay close to the LLVM version used by Rust nightly, which changes frequently.
+**Windows does NOT have this problem.** Rust on `x86_64-pc-windows-msvc` uses Microsoft's ASan runtime ([PR #118521](https://github.com/rust-lang/rust/pull/118521)), and so does `cl.exe /fsanitize=address`. Both link the same `clang_rt.asan_dynamic-x86_64.dll` from Visual Studio. Full C + Rust ASan instrumentation is theoretically possible on Windows — see [Future Work](#future-work-windows-c-instrumentation).
 
-**Windows**: MSVC's `cl.exe` ships its own ASan runtime that is distinct from the LLVM ASan runtime Rust uses. Mixing `/fsanitize=address` (MSVC) with `-Zsanitizer=address` (Rust/LLVM) produces linker conflicts. A potential workaround is to use `clang-cl` (LLVM's MSVC-compatible driver) as the C compiler via `CC=clang-cl`, which would use the same LLVM ASan runtime as Rust. The LLVM installation in CI already includes `clang-cl.exe`, but this approach has not been validated and may have its own integration issues with MSVC headers and libraries.
+**Bottom line**: Linux has full C + Rust ASan coverage. macOS provides Rust-only coverage due to the Apple Clang runtime mismatch. Windows provides Rust-only coverage currently, but full coverage is a future improvement since there is no runtime mismatch.
 
-**Bottom line**: Linux is the only platform with full C + Rust ASan coverage. macOS and Windows provide Rust-only coverage, catching errors in Rust code and at the FFI boundary. This is sufficient because the ReadStat C library itself is third-party code with its own testing, and our primary concern is the Rust-side unsafe code that interacts with it.
+## Future Work: Windows C Instrumentation
+
+Since Rust and MSVC share the same ASan runtime on Windows, enabling `READSTAT_SANITIZE_ADDRESS=1` in the Windows CI job should allow full C + Rust instrumentation — matching Linux's coverage. This requires:
+
+1. Setting `READSTAT_SANITIZE_ADDRESS=1` so `readstat-sys/build.rs` adds `/fsanitize=address` when compiling the ReadStat C library
+2. Verifying there are no linker conflicts (if conflicts arise, the unstable `-Zexternal-clangrt` flag can tell Rust to skip linking its own runtime copy)
+3. Ensuring the MSVC ASan runtime DLL is on PATH at test time (it should be discoverable from the Visual Studio installation on `windows-latest` runners)
+
+See [WINDOWS_MEMORY_SAFETY_RESEARCH.md](WINDOWS_MEMORY_SAFETY_RESEARCH.md) for detailed analysis.
 
 ## Running Locally
 
@@ -118,5 +127,5 @@ valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 | Miri | Linux | Unit tests only | No (FFI excluded) | No |
 | ASan | Linux | Full workspace | Yes (instrumented) | Yes |
 | ASan | macOS | Full workspace | No (runtime mismatch) | No |
-| ASan | Windows | Full workspace | No (runtime mismatch) | No |
+| ASan | Windows | Full workspace | Not yet (no mismatch — see [future work](#future-work-windows-c-instrumentation)) | No |
 | Valgrind | Linux (manual) | Full | Full | Yes |
