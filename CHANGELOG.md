@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.19.0] - 2026-02-25
+## [0.19.0] - 2026-02-26
 
 ### Added
 - SQL Explorer web example for interactive SAS7BDAT querying with NDJSON export (#138)
@@ -34,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added pedantic clippy `#![allow]` blocks to all integration test files for test-acceptable patterns (`float_cmp`, `cast_sign_loss`, etc.)
 - Replaced `String::from("")` with `String::new()` across test crate
 - Added missing date to CHANGELOG version 0.18.0
+- Updated `cargo-deny` configuration for latest API and added MPL-2.0, CC0-1.0, LGPL-2.1-or-later to allowed licenses
+- Fixed release check script to use `cargo deny` exit code instead of fragile grep
 
 ### crates.io release preparation
 - Renamed `iconv-sys` package to `readstat-iconv-sys` to avoid crates.io name conflict (#136)

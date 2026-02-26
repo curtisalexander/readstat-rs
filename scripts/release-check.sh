@@ -92,10 +92,10 @@ fi
 # 5. cargo-deny (optional)
 echo "Checking dependencies..."
 if command -v cargo-deny &>/dev/null; then
-    if cargo deny check 2>&1 | grep -q "error"; then
-        fail "cargo deny — license/security issues found"
-    else
+    if cargo deny check &>/dev/null; then
         pass "cargo deny"
+    else
+        fail "cargo deny — license/security issues found"
     fi
 else
     warn "cargo-deny not installed — skipping (install with: cargo install cargo-deny)"

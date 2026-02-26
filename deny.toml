@@ -5,20 +5,16 @@
 # Install: cargo install cargo-deny
 
 [advisories]
-# Lint level for crates with known security vulnerabilities
-vulnerability = "deny"
-# Lint level for unmaintained crates
-unmaintained = "warn"
+# Scope for unmaintained crate advisories: all, workspace, transitive, none
+unmaintained = "workspace"
+# Scope for unsound crate advisories: all, workspace, transitive, none
+unsound = "workspace"
 # Lint level for crates that have been yanked
 yanked = "warn"
-# Lint level for crates with no security notice
-notice = "warn"
 
 [licenses]
 # Confidence threshold for license detection (0.0 - 1.0)
 confidence-threshold = 0.8
-# Lint level for unlicensed crates
-unlicensed = "deny"
 # List of allowed licenses (SPDX identifiers)
 allow = [
     "MIT",
@@ -28,19 +24,14 @@ allow = [
     "ISC",
     "Zlib",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
-    "OpenSSL",
+    "MPL-2.0",
+    "CC0-1.0",
+    "LGPL-2.1-or-later",
 ]
 
-# Specific exceptions for crates with non-standard but acceptable licenses
-[[licenses.exceptions]]
-name = "ring"
-allow = ["OpenSSL"]
-
-[[licenses.clarify]]
-name = "ring"
-expression = "MIT AND ISC AND OpenSSL"
-license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+# Treat unpublished workspace crates as private (no license required)
+[licenses.private]
+ignore = true
 
 [bans]
 # Lint level for multiple versions of the same crate
