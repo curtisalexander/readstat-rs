@@ -7,7 +7,6 @@
 #![allow(clippy::unreadable_literal)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_lossless)]
-
 #![cfg(feature = "sql")]
 
 use arrow_array::{Array, Float64Array};

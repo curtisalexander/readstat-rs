@@ -22,10 +22,7 @@ fn setup_path(filename: &str) -> ReadStatPath {
 }
 
 // Helper to setup WriteConfig for output
-fn setup_write_config(
-    temp_dir: &TempDir,
-    format: readstat::OutFormat,
-) -> WriteConfig {
+fn setup_write_config(temp_dir: &TempDir, format: readstat::OutFormat) -> WriteConfig {
     let output_path = temp_dir.path().join(format!("output.{format:?}"));
     WriteConfig::new(Some(output_path), Some(format), true, None, None).unwrap()
 }
@@ -166,7 +163,12 @@ fn bench_write_csv(c: &mut Criterion) {
             let wc = setup_write_config(&temp_dir, readstat::OutFormat::Csv);
             let mut wtr = ReadStatWriter::new();
             wtr.write(black_box(&d), black_box(&wc)).unwrap();
-            wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
+            wtr.finish(
+                black_box(&d),
+                black_box(&wc),
+                black_box(rsp_in.path.as_path()),
+            )
+            .unwrap();
         });
     });
 
@@ -218,7 +220,12 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
 
                     let mut wtr = ReadStatWriter::new();
                     wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
+                    wtr.finish(
+                        black_box(&d),
+                        black_box(&wc),
+                        black_box(rsp_in.path.as_path()),
+                    )
+                    .unwrap();
                 });
             },
         );
@@ -307,7 +314,12 @@ fn bench_write_formats(c: &mut Criterion) {
                     let wc = setup_write_config(&temp_dir, *fmt);
                     let mut wtr = ReadStatWriter::new();
                     wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
+                    wtr.finish(
+                        black_box(&d),
+                        black_box(&wc),
+                        black_box(rsp_in.path.as_path()),
+                    )
+                    .unwrap();
                 });
             },
         );
@@ -344,7 +356,12 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
                 let wc = setup_write_config(&temp_dir, *fmt);
                 let mut wtr = ReadStatWriter::new();
                 wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                wtr.finish(black_box(&d), black_box(&wc), black_box(rsp_in.path.as_path())).unwrap();
+                wtr.finish(
+                    black_box(&d),
+                    black_box(&wc),
+                    black_box(rsp_in.path.as_path()),
+                )
+                .unwrap();
             });
         });
     }
