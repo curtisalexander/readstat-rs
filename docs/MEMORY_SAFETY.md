@@ -50,7 +50,8 @@ Configuration:
 
 Configuration:
 - `RUSTFLAGS="-Zsanitizer=address"` — instruments Rust code only
-- Rust on Windows MSVC uses **Microsoft's ASan runtime** (from Visual Studio), not LLVM's compiler-rt. The compiler passes `/INFERASANLIBS` to the MSVC linker, which auto-discovers the runtime DLL (`clang_rt.asan_dynamic-x86_64.dll`) from the Visual Studio installation. See [PR #118521](https://github.com/rust-lang/rust/pull/118521).
+- Rust on Windows MSVC uses **Microsoft's ASan runtime** (from Visual Studio), not LLVM's compiler-rt. The compiler passes `/INFERASANLIBS` to the MSVC linker, which auto-discovers the runtime import library at **link time**. See [PR #118521](https://github.com/rust-lang/rust/pull/118521).
+- **Important**: the MSVC ASan runtime DLL (`clang_rt.asan_dynamic-x86_64.dll`) is NOT on PATH by default. The linker finds the import library at build time via `/INFERASANLIBS`, but the DLL loader needs the DLL on PATH at **test runtime**. The CI job uses `vswhere.exe` to locate the DLL directory (e.g., `C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\<ver>\bin\Hostx64\x64\`) and prepends it to PATH.
 - LLVM is installed only for `libclang` (required by bindgen), pinned to the same version as the regular Windows build job. It is **not** used for the ASan runtime.
 - The ReadStat C library is **not** instrumented on Windows currently. Unlike macOS, there is no runtime mismatch — both Rust and `cl.exe` use the same MSVC ASan runtime. Full C instrumentation is a future improvement (see [Future Work](#future-work-windows-c-instrumentation)).
 - LeakSanitizer is not supported on Windows
@@ -80,7 +81,7 @@ Since Rust and MSVC share the same ASan runtime on Windows, enabling `READSTAT_S
 
 1. Setting `READSTAT_SANITIZE_ADDRESS=1` so `readstat-sys/build.rs` adds `/fsanitize=address` when compiling the ReadStat C library
 2. Verifying there are no linker conflicts (if conflicts arise, the unstable `-Zexternal-clangrt` flag can tell Rust to skip linking its own runtime copy)
-3. Ensuring the MSVC ASan runtime DLL is on PATH at test time (it should be discoverable from the Visual Studio installation on `windows-latest` runners)
+3. Ensuring the MSVC ASan runtime DLL is on PATH at test time (the CI job already does this via `vswhere.exe`)
 
 See [WINDOWS_MEMORY_SAFETY_RESEARCH.md](WINDOWS_MEMORY_SAFETY_RESEARCH.md) for detailed analysis.
 
@@ -108,6 +109,10 @@ cargo +nightly test --workspace --lib --tests --bins --target aarch64-apple-darw
 ### ASan on Windows
 ```powershell
 $env:RUSTFLAGS = "-Zsanitizer=address"
+# The MSVC ASAN runtime DLL must be on PATH. Find it via vswhere:
+$vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+$msvcVer = (Get-ChildItem "$vsPath\VC\Tools\MSVC" | Sort-Object Name -Descending | Select-Object -First 1).Name
+$env:PATH = "$vsPath\VC\Tools\MSVC\$msvcVer\bin\Hostx64\x64;$env:PATH"
 cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
 ```
 

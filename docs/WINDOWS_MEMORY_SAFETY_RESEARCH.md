@@ -154,11 +154,16 @@ already present on the runner. Only Rust code is instrumented. The C library
 (ReadStat) is NOT instrumented.
 
 **Changes needed:**
-- Remove the version-detection and ASAN DLL PATH manipulation
+- Remove the version-detection and ASAN DLL PATH manipulation for the
+  standalone LLVM
 - Keep LLVM install only for `LIBCLANG_PATH` (bindgen needs it)
 - Remove `READSTAT_SANITIZE_ADDRESS` from env (don't instrument C code)
-- Ensure the MSVC ASAN runtime DLL is on PATH (it may already be via
-  `VsDevCmd.bat` or similar)
+- **Add the MSVC ASAN runtime DLL directory to PATH** — while the linker finds
+  the import library at build time via `/INFERASANLIBS`, the DLL loader still
+  needs the runtime DLL on PATH at test time. Use `vswhere.exe` to locate the
+  Visual Studio installation, then find the DLL under
+  `VC\Tools\MSVC\<ver>\bin\Hostx64\x64\`. (Note: `VsDevCmd.bat` does NOT add
+  this directory to PATH by default.)
 
 **Simplified CI job:**
 ```yaml
@@ -185,9 +190,22 @@ asan-windows:
         version: "21.1.8"
         directory: ${{ runner.temp }}\llvm
         cached: ${{ steps.cache-llvm.outputs.cache-hit }}
+    # The MSVC linker finds the ASAN import library at build time via
+    # /INFERASANLIBS, but the DLL loader needs the runtime DLL on PATH.
+    - name: Find MSVC ASAN runtime
+      id: asan-rt
+      shell: pwsh
+      run: |
+        $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+          -latest -property installationPath
+        $msvcRoot = Join-Path $vsPath "VC\Tools\MSVC"
+        $msvcVer = (Get-ChildItem $msvcRoot | Sort-Object Name -Descending | Select-Object -First 1).Name
+        $asanDir = Join-Path $msvcRoot $msvcVer "bin" "Hostx64" "x64"
+        echo "dir=$asanDir" >> $env:GITHUB_OUTPUT
     - name: Run tests with AddressSanitizer
       run: |
         $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
+        $env:PATH = "${{ steps.asan-rt.outputs.dir }};$env:PATH"
         cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
 ```
 
