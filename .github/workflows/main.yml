@@ -427,7 +427,6 @@ jobs:
   # Both Rust and MSVC's cl.exe use the same MSVC ASAN runtime, so full
   # instrumentation SHOULD work. Marked continue-on-error because this is
   # experimental — no one has publicly documented this combination working.
-  # See docs/WINDOWS_MEMORY_SAFETY_RESEARCH.md for details.
   asan-windows-full:
     runs-on: windows-latest
     continue-on-error: true

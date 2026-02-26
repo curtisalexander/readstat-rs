@@ -83,8 +83,6 @@ Since Rust and MSVC share the same ASan runtime on Windows, enabling `READSTAT_S
 2. Verifying there are no linker conflicts (if conflicts arise, the unstable `-Zexternal-clangrt` flag can tell Rust to skip linking its own runtime copy)
 3. Ensuring the MSVC ASan runtime DLL is on PATH at test time (the CI job already does this via `vswhere.exe`)
 
-See [WINDOWS_MEMORY_SAFETY_RESEARCH.md](WINDOWS_MEMORY_SAFETY_RESEARCH.md) for detailed analysis.
-
 ## Running Locally
 
 ### Miri

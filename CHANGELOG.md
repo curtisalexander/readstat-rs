@@ -10,8 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - SQL Explorer web example for interactive SAS7BDAT querying with NDJSON export (#138)
 - API server examples: Rust/Axum and Python/FastAPI (#127)
 - API usage examples to `readstat` crate rustdoc (#130)
-- Windows AddressSanitizer CI job and MSVC sanitizer flags (#128)
-- Experimental `asan-windows-full` CI job — instruments both Rust and ReadStat C code with ASAN on Windows using the shared MSVC runtime (`continue-on-error: true` while validating)
+- Windows AddressSanitizer CI jobs: Rust-only (`asan-windows`) and experimental full C+Rust (`asan-windows-full`) using the shared MSVC runtime (#128)
 - Plan document for numeric type narrowing (#129)
 
 ### Changed
@@ -26,8 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Variable metadata parsing in SQL Explorer (#138)
-- Simplified Windows AddressSanitizer CI — Rust on MSVC uses Microsoft's ASan runtime (not LLVM's), so the dynamic LLVM version detection and DLL path manipulation were unnecessary. LLVM is now pinned for bindgen only, matching the regular build job.
-- Fixed Windows ASAN `STATUS_DLL_NOT_FOUND` — the MSVC linker finds the ASan import library at build time via `/INFERASANLIBS`, but the DLL loader needs `clang_rt.asan_dynamic-x86_64.dll` on PATH at test runtime. The CI job now uses `vswhere.exe` to locate the Visual Studio MSVC tools directory and prepends it to PATH.
+- Windows ASAN CI: pinned LLVM for bindgen only and added MSVC ASan runtime DLL to PATH via `vswhere.exe` to fix `STATUS_DLL_NOT_FOUND` at test time
 - Suppressed `improper_ctypes` warning in `readstat-iconv-sys` from bindgen-generated SIMD intrinsic bindings
 
 ### crates.io release preparation
