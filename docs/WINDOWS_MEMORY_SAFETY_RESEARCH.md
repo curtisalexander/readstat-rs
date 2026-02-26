@@ -444,23 +444,21 @@ C+Rust coverage) plus Miri for memory safety.
 
 Based on this research, here is a recommended tiered approach:
 
-### Tier 1 (Do now): Simplify ASAN to Rust-only (Option 1)
+### Tier 1 (Done): Simplify ASAN to Rust-only (Option 1) ✅
 
-Fix the current CI job by removing the LLVM version chasing and ASAN DLL path
-manipulation. Just use Rust's ASAN with the MSVC runtime that's already on the
-GitHub Actions runner. This eliminates the maintenance burden while still
-catching Rust-side memory errors and FFI boundary issues.
+Implemented as the `asan-windows` CI job. Removed the LLVM version chasing and
+ASAN DLL path manipulation. Uses Rust's ASAN with the MSVC runtime already on
+the GitHub Actions runner, with a pinned LLVM version for `LIBCLANG_PATH`
+(bindgen) only.
 
-The LLVM install is still needed for `LIBCLANG_PATH` (bindgen), but we can pin
-it to a specific version like the `build-win` job does — no need to match Rust
-nightly's LLVM version.
+### Tier 2 (In progress): Attempt full Rust + C ASAN (Option 2) 🧪
 
-### Tier 2 (Try next): Attempt full Rust + C ASAN (Option 2)
-
-Since Rust and MSVC share the same ASAN runtime on Windows, full instrumentation
-SHOULD work. Try enabling `READSTAT_SANITIZE_ADDRESS=1` with the simplified
-setup. If linker conflicts arise, try `-Zexternal-clangrt`. This would give
-Windows the same coverage as Linux.
+Implemented as the `asan-windows-full` CI job with `continue-on-error: true`
+(experimental). Sets `READSTAT_SANITIZE_ADDRESS=1` to instrument the ReadStat C
+library with `/fsanitize=address` via MSVC's `cl.exe`. Since Rust and MSVC share
+the same ASAN runtime, this should work without runtime conflicts. If linker
+conflicts arise, the next step is to try adding `-Zexternal-clangrt` to
+RUSTFLAGS.
 
 ### Tier 3 (Complement): Add cargo-careful (Option 3)
 

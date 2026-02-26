@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API server examples: Rust/Axum and Python/FastAPI (#127)
 - API usage examples to `readstat` crate rustdoc (#130)
 - Windows AddressSanitizer CI job and MSVC sanitizer flags (#128)
+- Experimental `asan-windows-full` CI job — instruments both Rust and ReadStat C code with ASAN on Windows using the shared MSVC runtime (`continue-on-error: true` while validating)
 - Plan document for numeric type narrowing (#129)
 
 ### Changed
