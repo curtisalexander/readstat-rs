@@ -14,14 +14,14 @@ The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arro
 
 > :bulb: **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](crates/readstat-sys/) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, the higher-level crates (`readstat`, `readstat-cli`, `readstat-wasm`, `readstat-tests`) currently only implement support for **SAS `.sas7bdat` files**.
 
-## :rocket: Quickstart
+## :rocket: CLI Quickstart
 
 Convert the first 50,000 rows of `example.sas7bdat` (by performing the read in parallel) to the file `example.parquet`, overwriting the file if it already exists.
 ```sh
 readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 50000 --overwrite --parallel
 ```
 
-## :package: Install
+## :package: CLI Install
 
 ### Download a Release
 \[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
@@ -92,6 +92,8 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/TESTING.md](docs/TESTING.md) | Running tests, dataset table, valgrind |
 | [docs/BENCHMARKING.md](docs/BENCHMARKING.md) | Criterion benchmarks, hyperfine, and profiling |
 | [docs/CI-CD.md](docs/CI-CD.md) | GitHub Actions triggers and artifacts |
+| [docs/MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) | Automated memory-safety CI checks (Valgrind, ASan, Miri, unsafe audit) |
+| [docs/RELEASING.md](docs/RELEASING.md) | Step-by-step guide for publishing crates to crates.io |
 
 ## :jigsaw: Workspace Crates
 
