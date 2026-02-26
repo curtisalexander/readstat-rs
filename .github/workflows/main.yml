@@ -413,6 +413,7 @@ jobs:
           version: ${{ steps.llvm-version.outputs.full }}
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
+          force-url: https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ steps.llvm-version.outputs.full }}/LLVM-${{ steps.llvm-version.outputs.full }}-win64.exe
       - name: Run tests with AddressSanitizer
         run: |
             $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
