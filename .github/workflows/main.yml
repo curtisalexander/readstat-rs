@@ -404,7 +404,21 @@ jobs:
           version: "21.1.8"
           directory: ${{ runner.temp }}\llvm
           cached: ${{ steps.cache-llvm.outputs.cache-hit }}
+      - name: Find MSVC ASAN runtime
+        id: asan-rt
+        shell: pwsh
+        run: |
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -latest -property installationPath
+          $msvcRoot = Join-Path $vsPath "VC\Tools\MSVC"
+          $msvcVer = (Get-ChildItem $msvcRoot | Sort-Object Name -Descending | Select-Object -First 1).Name
+          $asanDir = Join-Path $msvcRoot $msvcVer "bin" "Hostx64" "x64"
+          $asanDll = Join-Path $asanDir "clang_rt.asan_dynamic-x86_64.dll"
+          if (!(Test-Path $asanDll)) { throw "ASAN runtime not found at $asanDll" }
+          Write-Host "Found ASAN runtime: $asanDll"
+          echo "dir=$asanDir" >> $env:GITHUB_OUTPUT
       - name: Run tests with AddressSanitizer
         run: |
             $env:LIBCLANG_PATH = "${{ runner.temp }}\llvm\bin"
+            $env:PATH = "${{ steps.asan-rt.outputs.dir }};$env:PATH"
             cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
