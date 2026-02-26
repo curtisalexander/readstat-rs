@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Variable metadata parsing in SQL Explorer (#138)
-- Windows AddressSanitizer CI failing with `STATUS_DLL_NOT_FOUND` by using LLVM's known ASAN runtime path
+- Simplified Windows AddressSanitizer CI — Rust on MSVC uses Microsoft's ASan runtime (not LLVM's), so the dynamic LLVM version detection and DLL path manipulation were unnecessary. LLVM is now pinned for bindgen only, matching the regular build job.
 - Suppressed `improper_ctypes` warning in `readstat-iconv-sys` from bindgen-generated SIMD intrinsic bindings
 
 ### crates.io release preparation
