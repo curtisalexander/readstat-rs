@@ -38,14 +38,14 @@ $fmtOutput = cargo fmt --all -- --check 2>&1
 if ($LASTEXITCODE -eq 0) {
     Write-Pass "cargo fmt"
 } else {
-    Write-Fail "cargo fmt - run 'cargo fmt --all' to fix"
+    Write-Fail "cargo fmt — run 'cargo fmt --all' to fix"
 }
 
 # 2. Clippy
 Write-Host "Checking clippy..."
 $clippyOutput = cargo clippy --workspace 2>&1
 if ($clippyOutput -match "warning:") {
-    Write-Fail "cargo clippy - warnings found"
+    Write-Fail "cargo clippy — warnings found"
 } else {
     Write-Pass "cargo clippy"
 }
@@ -59,17 +59,17 @@ if (Test-Path $WasmDir) {
     if ($LASTEXITCODE -eq 0) {
         Write-Pass "readstat-wasm fmt"
     } else {
-        Write-Fail "readstat-wasm fmt - run 'cargo fmt' in crates\readstat-wasm\"
+        Write-Fail "readstat-wasm fmt — run 'cargo fmt' in crates\readstat-wasm\"
     }
     $wasmClippyOutput = cargo clippy 2>&1
     if ($wasmClippyOutput -match "warning:") {
-        Write-Fail "readstat-wasm clippy - warnings found"
+        Write-Fail "readstat-wasm clippy — warnings found"
     } else {
         Write-Pass "readstat-wasm clippy"
     }
     Pop-Location
 } else {
-    Write-Warn "readstat-wasm directory not found - skipping"
+    Write-Warn "readstat-wasm directory not found — skipping"
 }
 
 # 3. Tests
@@ -78,7 +78,7 @@ $testOutput = cargo test --workspace 2>&1
 if ($testOutput -match "test result: ok") {
     Write-Pass "cargo test"
 } else {
-    Write-Fail "cargo test - some tests failed"
+    Write-Fail "cargo test — some tests failed"
 }
 
 # 4. Doc build
@@ -90,14 +90,14 @@ Write-Pass "cargo doc"
 Write-Host "Checking dependencies..."
 $denyPath = Get-Command cargo-deny -ErrorAction SilentlyContinue
 if ($denyPath) {
-    $denyOutput = cargo deny check 2>&1
-    if ($denyOutput -match "error") {
-        Write-Fail "cargo deny - license/security issues found"
-    } else {
+    cargo deny check *>$null
+    if ($LASTEXITCODE -eq 0) {
         Write-Pass "cargo deny"
+    } else {
+        Write-Fail "cargo deny — license/security issues found"
     }
 } else {
-    Write-Warn "cargo-deny not installed - skipping (install with: cargo install cargo-deny)"
+    Write-Warn "cargo-deny not installed — skipping (install with: cargo install cargo-deny)"
 }
 
 # 6. Version consistency
@@ -117,6 +117,14 @@ if ($sysVer -eq $iconvVer) {
     Write-Pass "readstat-sys ($sysVer) and readstat-iconv-sys ($iconvVer) versions match"
 } else {
     Write-Fail "Version mismatch: readstat-sys=$sysVer, readstat-iconv-sys=$iconvVer"
+}
+
+# Check that readstat depends on the current readstat-sys version
+$readstatSysDep = (Select-String -Path "$RootDir\crates\readstat\Cargo.toml" -Pattern 'readstat-sys' | Where-Object { $_.Line -match 'version' } | Select-Object -First 1).Line -replace '.*version\s*=\s*"(.*?)".*', '$1'
+if ($readstatSysDep -eq $sysVer) {
+    Write-Pass "readstat depends on readstat-sys $readstatSysDep (matches)"
+} else {
+    Write-Fail "readstat depends on readstat-sys $readstatSysDep but current is $sysVer"
 }
 
 # 7. CHANGELOG
@@ -143,6 +151,19 @@ foreach ($crate in $publishableCrates) {
     } else {
         Write-Pass "cargo package -p $crate"
     }
+}
+
+# 9. Vendor status
+Write-Host "Checking vendor status..."
+$vendorScript = Join-Path $ScriptDir "vendor.ps1"
+if (Test-Path $vendorScript) {
+    try {
+        & $vendorScript status 2>$null
+    } catch {
+        Write-Warn "Could not determine vendor status"
+    }
+} else {
+    Write-Warn "vendor.ps1 not found — skipping"
 }
 
 # Summary
