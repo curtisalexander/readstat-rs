@@ -48,10 +48,10 @@ fi
 
 # 2. Clippy
 echo "Checking clippy..."
-if cargo clippy --workspace 2>&1 | grep -q "warning:"; then
-    fail "cargo clippy — warnings found"
-else
+if cargo clippy --workspace --all-targets -- -D warnings &>/dev/null; then
     pass "cargo clippy"
+else
+    fail "cargo clippy — warnings or errors found"
 fi
 
 # 2b. readstat-wasm (excluded from workspace — check separately)
@@ -63,10 +63,10 @@ if [ -d "$WASM_DIR" ]; then
     else
         fail "readstat-wasm fmt — run 'cargo fmt' in crates/readstat-wasm/"
     fi
-    if (cd "$WASM_DIR" && cargo clippy) 2>&1 | grep -q "warning:"; then
-        fail "readstat-wasm clippy — warnings found"
-    else
+    if (cd "$WASM_DIR" && cargo clippy -- -D warnings) &>/dev/null; then
         pass "readstat-wasm clippy"
+    else
+        fail "readstat-wasm clippy — warnings or errors found"
     fi
 else
     warn "readstat-wasm directory not found — skipping"
@@ -74,7 +74,7 @@ fi
 
 # 3. Tests
 echo "Running tests..."
-if cargo test --workspace 2>&1 | grep -q "test result: ok"; then
+if cargo test --workspace &>/dev/null; then
     pass "cargo test"
 else
     fail "cargo test — some tests failed"
@@ -82,11 +82,10 @@ fi
 
 # 4. Doc build
 echo "Checking doc build..."
-if cargo doc --workspace --no-deps 2>&1 | grep -qv "warning:.*output filename collision"; then
-    # Filter out the known name collision warning
+if cargo doc --workspace --no-deps &>/dev/null; then
     pass "cargo doc"
 else
-    pass "cargo doc"
+    fail "cargo doc — build failed"
 fi
 
 # 5. cargo-deny (optional)
