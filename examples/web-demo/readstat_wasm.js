@@ -65,7 +65,7 @@ function getImports() {
 function readCString(ptr) {
   const mem = new Uint8Array(memory.buffer);
   let end = ptr;
-  while (mem[end] !== 0) end++;
+  while (end < mem.length && mem[end] !== 0) end++;
   return new TextDecoder().decode(mem.slice(ptr, end));
 }
 
