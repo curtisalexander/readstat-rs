@@ -310,15 +310,21 @@ fn sql_stream_and_write() {
     let temp_dir = std::env::temp_dir();
     let out_path = temp_dir.join("sql_stream_test_output.parquet");
 
+    let write_config = readstat::WriteConfig::new(
+        Some(out_path.clone()),
+        Some(readstat::OutFormat::Parquet),
+        true,
+        None,
+        None,
+    )
+    .unwrap();
+
     readstat::execute_sql_and_write_stream(
         receiver,
         schema,
         "cars",
         "SELECT \"Brand\", \"Model\", \"EngineSize\" FROM cars WHERE \"EngineSize\" > 5.0",
-        &out_path,
-        readstat::OutFormat::Parquet,
-        None,
-        None,
+        &write_config,
     )
     .unwrap();
 

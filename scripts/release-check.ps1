@@ -43,11 +43,11 @@ if ($LASTEXITCODE -eq 0) {
 
 # 2. Clippy
 Write-Host "Checking clippy..."
-$clippyOutput = cargo clippy --workspace 2>&1
-if ($clippyOutput -match "warning:") {
-    Write-Fail "cargo clippy — warnings found"
-} else {
+cargo clippy --workspace --all-targets -- -D warnings *>$null
+if ($LASTEXITCODE -eq 0) {
     Write-Pass "cargo clippy"
+} else {
+    Write-Fail "cargo clippy — warnings or errors found"
 }
 
 # 2b. readstat-wasm (excluded from workspace - check separately)
@@ -61,11 +61,11 @@ if (Test-Path $WasmDir) {
     } else {
         Write-Fail "readstat-wasm fmt — run 'cargo fmt' in crates\readstat-wasm\"
     }
-    $wasmClippyOutput = cargo clippy 2>&1
-    if ($wasmClippyOutput -match "warning:") {
-        Write-Fail "readstat-wasm clippy — warnings found"
-    } else {
+    cargo clippy -- -D warnings *>$null
+    if ($LASTEXITCODE -eq 0) {
         Write-Pass "readstat-wasm clippy"
+    } else {
+        Write-Fail "readstat-wasm clippy — warnings or errors found"
     }
     Pop-Location
 } else {
@@ -74,8 +74,8 @@ if (Test-Path $WasmDir) {
 
 # 3. Tests
 Write-Host "Running tests..."
-$testOutput = cargo test --workspace 2>&1
-if ($testOutput -match "test result: ok") {
+cargo test --workspace *>$null
+if ($LASTEXITCODE -eq 0) {
     Write-Pass "cargo test"
 } else {
     Write-Fail "cargo test — some tests failed"
@@ -83,8 +83,12 @@ if ($testOutput -match "test result: ok") {
 
 # 4. Doc build
 Write-Host "Checking doc build..."
-$docOutput = cargo doc --workspace --no-deps 2>&1
-Write-Pass "cargo doc"
+cargo doc --workspace --no-deps *>$null
+if ($LASTEXITCODE -eq 0) {
+    Write-Pass "cargo doc"
+} else {
+    Write-Fail "cargo doc — build failed"
+}
 
 # 5. cargo-deny (optional)
 Write-Host "Checking dependencies..."

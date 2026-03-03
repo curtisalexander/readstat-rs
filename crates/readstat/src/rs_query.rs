@@ -24,7 +24,13 @@ use std::sync::{Arc, Mutex};
 use crate::err::ReadStatError;
 use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
-use crate::rs_write_config::{OutFormat, ParquetCompression, resolve_parquet_compression};
+use crate::rs_write_config::{OutFormat, ParquetCompression, WriteConfig, resolve_parquet_compression};
+
+/// Channel receiver type for streaming parsed data chunks between threads.
+///
+/// Each message contains the parsed [`ReadStatData`], the source [`ReadStatPath`],
+/// and the chunk index.
+type ChunkReceiver = crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>;
 
 /// Executes a SQL query against in-memory Arrow data.
 ///
@@ -71,13 +77,13 @@ async fn execute_sql_async(
 #[derive(Debug)]
 struct ChannelPartitionStream {
     schema: SchemaRef,
-    receiver: Arc<Mutex<Option<crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>>>>,
+    receiver: Arc<Mutex<Option<ChunkReceiver>>>,
 }
 
 impl ChannelPartitionStream {
     fn new(
         schema: SchemaRef,
-        receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+        receiver: ChunkReceiver,
     ) -> Self {
         Self {
             schema,
@@ -112,7 +118,7 @@ impl PartitionStream for ChannelPartitionStream {
 /// The receiver is consumed directly by DataFusion's query engine via
 /// [`StreamingTable`], and results are collected via `execute_stream()`.
 pub fn execute_sql_stream(
-    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    receiver: ChunkReceiver,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
@@ -122,7 +128,7 @@ pub fn execute_sql_stream(
 }
 
 async fn execute_sql_stream_async(
-    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    receiver: ChunkReceiver,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
@@ -149,15 +155,14 @@ async fn execute_sql_stream_async(
 ///
 /// This combines [`execute_sql_stream`] and [`write_sql_results`] into one
 /// streaming pass for the Data command path.
+///
+/// The output path in `write_config` must be `Some`; returns an error otherwise.
 pub fn execute_sql_and_write_stream(
-    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    receiver: ChunkReceiver,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
-    output_path: &Path,
-    format: OutFormat,
-    compression: Option<ParquetCompression>,
-    compression_level: Option<u32>,
+    write_config: &WriteConfig,
 ) -> Result<(), ReadStatError> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(execute_sql_and_write_stream_async(
@@ -165,23 +170,22 @@ pub fn execute_sql_and_write_stream(
         schema,
         table_name,
         sql,
-        output_path,
-        format,
-        compression,
-        compression_level,
+        write_config,
     ))
 }
 
 async fn execute_sql_and_write_stream_async(
-    receiver: crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
+    receiver: ChunkReceiver,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
-    output_path: &Path,
-    format: OutFormat,
-    compression: Option<ParquetCompression>,
-    compression_level: Option<u32>,
+    write_config: &WriteConfig,
 ) -> Result<(), ReadStatError> {
+    let output_path = write_config
+        .out_path
+        .as_deref()
+        .ok_or_else(|| ReadStatError::Other("Output path is required for SQL write".into()))?;
+
     let ctx = SessionContext::new();
 
     let partition = ChannelPartitionStream::new(schema.clone(), receiver);
@@ -202,9 +206,9 @@ async fn execute_sql_and_write_stream_async(
     write_sql_results(
         &result_batches,
         output_path,
-        format,
-        compression,
-        compression_level,
+        write_config.format,
+        write_config.compression,
+        write_config.compression_level,
     )?;
 
     Ok(())
