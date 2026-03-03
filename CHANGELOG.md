@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.20.0] - 2026-03-03
+
+### Changed
+- Applied clippy nursery lints across `readstat` and `readstat-cli` crates:
+  - `use_self`: replaced explicit type names with `Self` in `ColumnBuilder` impl methods, `From` trait impls, and `std::ptr::from_mut` calls
+  - `option_if_let_else`: simplified `FromPrimitive` match expressions with `unwrap_or()` and `if let Some/else` with `map_or()`
+  - `missing_const_for_fn`: added `const` to `ReadStatBufferCtx::new()` and `ReadStatWriter::new()`
+  - `branches_sharing_code`: hoisted shared `Ok(self)` returns in `ReadStatParser::set_row_limit` and `set_row_offset`
+- Removed unnecessary explicit `drop()` calls in CLI parallel write and sequential write loops
+- Added missing metadata fields to `readstat-wasm` Cargo.toml (`authors`, `description`, `license`, `repository`, `homepage`, `rust-version`) for consistency with published crates
+
+### Fixed
+- bun-demo README: documented all 8 WASM exports (was 5, missing `read_data_parquet`, `read_data_feather`, `free_binary`)
+
 ## [0.19.0] - 2026-02-26
 
 ### Added
