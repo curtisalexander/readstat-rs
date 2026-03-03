@@ -44,7 +44,7 @@ No build tools, no `npm install`, no framework — just static files served over
 
 ## WASM binary
 
-The `readstat_wasm.wasm` file is built from the `readstat-wasm` crate (`crates/readstat-wasm/`). It compiles the ReadStat C library and the Rust `readstat` parsing library to WebAssembly via the `wasm32-unknown-emscripten` target. The binary is ~2.7 MB.
+The `readstat_wasm.wasm` file is built from the `readstat-wasm` crate (`crates/readstat-wasm/`). It compiles the ReadStat C library and the Rust `readstat` parsing library to WebAssembly via the `wasm32-unknown-emscripten` target. The binary is ~9.7 MB.
 
 A pre-built copy is checked in at `crates/readstat-wasm/pkg/readstat_wasm.wasm`.
 

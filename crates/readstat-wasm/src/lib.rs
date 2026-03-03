@@ -106,7 +106,10 @@ pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn free_binary(ptr: *mut u8, len: usize) {
     if !ptr.is_null() {
-        drop(unsafe { Vec::from_raw_parts(ptr, len, len) });
+        // SAFETY: The pointer was produced by `Box::into_raw` on a `Box<[u8]>` of
+        // exactly `len` bytes in `read_data_binary_inner`, so reconstructing the
+        // same `Box<[u8]>` is valid.
+        drop(unsafe { Box::from_raw(slice::from_raw_parts_mut(ptr, len)) });
     }
 }
 
@@ -115,6 +118,8 @@ unsafe fn read_metadata_inner(ptr: *const u8, len: usize, skip_row_count: bool) 
         return std::ptr::null_mut();
     }
 
+    // SAFETY: The caller guarantees `ptr` is valid for `len` bytes (see public fn docs).
+    // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
     let mut md = ReadStatMetadata::new();
@@ -146,6 +151,8 @@ unsafe fn read_data_inner(ptr: *const u8, len: usize, format: &OutputFormat) -> 
         return std::ptr::null_mut();
     }
 
+    // SAFETY: The caller guarantees `ptr` is valid for `len` bytes (see public fn docs).
+    // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
     // First pass: read metadata
@@ -191,6 +198,8 @@ unsafe fn read_data_binary_inner(
         return std::ptr::null_mut();
     }
 
+    // SAFETY: The caller guarantees `ptr` is valid for `len` bytes (see public fn docs).
+    // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
     // First pass: read metadata
@@ -218,10 +227,14 @@ unsafe fn read_data_binary_inner(
     };
 
     match output_bytes {
-        Ok(mut vec) => {
-            let data_ptr = vec.as_mut_ptr();
-            let data_len = vec.len();
-            std::mem::forget(vec);
+        Ok(vec) => {
+            // Convert to a boxed slice so that the allocation size equals the
+            // data length exactly.  `free_binary` reconstructs this `Box<[u8]>`
+            // to deallocate with the correct layout.
+            let boxed = vec.into_boxed_slice();
+            let data_len = boxed.len();
+            let data_ptr = Box::into_raw(boxed) as *mut u8;
+            // SAFETY: `out_len` was checked non-null at the top of this function.
             unsafe { *out_len = data_len };
             data_ptr
         }
