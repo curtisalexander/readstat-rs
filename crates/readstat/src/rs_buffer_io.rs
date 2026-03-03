@@ -35,7 +35,7 @@ impl ReadStatBufferCtx {
     ///
     /// The caller must ensure the byte slice outlives the context and any
     /// parsing operations that use it.
-    pub fn new(bytes: &[u8]) -> Self {
+    pub const fn new(bytes: &[u8]) -> Self {
         Self {
             data: bytes.as_ptr(),
             len: bytes.len(),
@@ -49,7 +49,7 @@ impl ReadStatBufferCtx {
         &mut self,
         parser: ReadStatParser,
     ) -> Result<ReadStatParser, ReadStatError> {
-        let ctx_ptr = std::ptr::from_mut::<ReadStatBufferCtx>(self) as *mut c_void;
+        let ctx_ptr = std::ptr::from_mut::<Self>(self) as *mut c_void;
         parser
             .set_open_handler(Some(buffer_open))
             .and_then(|p| p.set_close_handler(Some(buffer_close)))

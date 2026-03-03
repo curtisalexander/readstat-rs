@@ -577,7 +577,6 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                             .collect::<Result<Vec<_>, _>>()?;
 
                         batch_idx += batch_group.len();
-                        drop(batch_group);
                         all_temp_files.extend(temp_files);
                     }
 
@@ -612,8 +611,6 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                     if i == (pairs_cnt - 1) {
                         wtr.finish(&d, &wc, &input_path)?;
                     }
-
-                    drop(d);
                 }
             }
 

@@ -143,10 +143,10 @@ pub enum CliOutFormat {
 impl From<CliOutFormat> for OutFormat {
     fn from(f: CliOutFormat) -> Self {
         match f {
-            CliOutFormat::Csv => OutFormat::Csv,
-            CliOutFormat::Feather => OutFormat::Feather,
-            CliOutFormat::Ndjson => OutFormat::Ndjson,
-            CliOutFormat::Parquet => OutFormat::Parquet,
+            CliOutFormat::Csv => Self::Csv,
+            CliOutFormat::Feather => Self::Feather,
+            CliOutFormat::Ndjson => Self::Ndjson,
+            CliOutFormat::Parquet => Self::Parquet,
         }
     }
 }
@@ -203,12 +203,12 @@ pub enum CliParquetCompression {
 impl From<CliParquetCompression> for ParquetCompression {
     fn from(c: CliParquetCompression) -> Self {
         match c {
-            CliParquetCompression::Uncompressed => ParquetCompression::Uncompressed,
-            CliParquetCompression::Snappy => ParquetCompression::Snappy,
-            CliParquetCompression::Gzip => ParquetCompression::Gzip,
-            CliParquetCompression::Lz4Raw => ParquetCompression::Lz4Raw,
-            CliParquetCompression::Brotli => ParquetCompression::Brotli,
-            CliParquetCompression::Zstd => ParquetCompression::Zstd,
+            CliParquetCompression::Uncompressed => Self::Uncompressed,
+            CliParquetCompression::Snappy => Self::Snappy,
+            CliParquetCompression::Gzip => Self::Gzip,
+            CliParquetCompression::Lz4Raw => Self::Lz4Raw,
+            CliParquetCompression::Brotli => Self::Brotli,
+            CliParquetCompression::Zstd => Self::Zstd,
         }
     }
 }
