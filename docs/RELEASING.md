@@ -44,7 +44,7 @@ Update version numbers in these files (keep them in sync):
 | `crates/readstat-sys/Cargo.toml` | `readstat-iconv-sys` dependency version |
 
 **Version conventions:**
-- `readstat` and `readstat-cli` share the same version (e.g. `0.19.0`)
+- `readstat` and `readstat-cli` share the same version (e.g. `0.20.0`)
 - `readstat-sys` and `readstat-iconv-sys` share the same version (e.g. `0.3.0`)
 - Bump sys crate versions only when the vendored C library or bindings change
 

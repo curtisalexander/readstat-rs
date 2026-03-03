@@ -215,7 +215,7 @@ Wrote 1081 rows to cars.csv
 
 The `readstat-wasm` crate compiles the ReadStat C library and the Rust `readstat` parsing library to WebAssembly using the `wasm32-unknown-emscripten` target. Emscripten is required because the underlying ReadStat C code needs a C standard library (libc, iconv) — which Emscripten provides for wasm. (Note: zlib is only needed for SPSS zsav support, which is not included in the current wasm build.)
 
-The crate exports five C-compatible functions:
+The crate exports eight C-compatible functions:
 
 | Export | Signature | Purpose |
 |--------|-----------|---------|
@@ -223,7 +223,10 @@ The crate exports five C-compatible functions:
 | `read_metadata_fast` | `(ptr, len) -> *char` | Same, but skips full row count |
 | `read_data` | `(ptr, len) -> *char` | Parse data and return as CSV string |
 | `read_data_ndjson` | `(ptr, len) -> *char` | Parse data and return as NDJSON string |
-| `free_string` | `(ptr)` | Free a string returned by the above |
+| `read_data_parquet` | `(ptr, len, out_len) -> *u8` | Parse data and return as Parquet bytes |
+| `read_data_feather` | `(ptr, len, out_len) -> *u8` | Parse data and return as Feather bytes |
+| `free_string` | `(ptr)` | Free a string returned by the string functions |
+| `free_binary` | `(ptr, len)` | Free binary data returned by parquet/feather |
 
 The data functions perform a two-pass parse over the same byte buffer: first to extract metadata (schema, row count), then to read row values into an Arrow `RecordBatch`, which is serialized to CSV or NDJSON in memory.
 

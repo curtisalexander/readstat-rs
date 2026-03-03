@@ -577,7 +577,8 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                             .collect::<Result<Vec<_>, _>>()?;
 
                         batch_idx += batch_group.len();
-                        drop(batch_group);
+                        // batch_group is implicitly dropped here at the end of the loop body,
+                        // freeing ReadStatData/RecordBatch memory before the next iteration
                         all_temp_files.extend(temp_files);
                     }
 
@@ -606,14 +607,14 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                 // Sequential write mode (default) with BufWriter optimizations
                 let mut wtr = ReadStatWriter::new();
 
+                // d (ReadStatData) is implicitly dropped at each iteration boundary,
+                // preventing accumulation of RecordBatch memory across chunks
                 for (i, (d, wc, pairs_cnt)) in r.iter().enumerate() {
                     wtr.write(&d, &wc)?;
 
                     if i == (pairs_cnt - 1) {
                         wtr.finish(&d, &wc, &input_path)?;
                     }
-
-                    drop(d);
                 }
             }
 

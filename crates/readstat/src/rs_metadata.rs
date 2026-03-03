@@ -170,7 +170,7 @@ impl ReadStatMetadata {
         debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        let ctx = std::ptr::from_mut::<ReadStatMetadata>(self) as *mut c_void;
+        let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {error}");
@@ -211,7 +211,7 @@ impl ReadStatMetadata {
     ) -> Result<(), ReadStatError> {
         let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
 
-        let ctx = std::ptr::from_mut::<ReadStatMetadata>(self) as *mut c_void;
+        let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {error}");

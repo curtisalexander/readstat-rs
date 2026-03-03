@@ -1,7 +1,13 @@
 [package]
 name = "readstat-wasm"
 version = "0.1.0"
+authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
+rust-version = "1.85"
+description = "WebAssembly build of the readstat library for parsing SAS .sas7bdat files in JavaScript"
+homepage = "https://github.com/curtisalexander/readstat-rs"
+license = "MIT"
+repository = "https://github.com/curtisalexander/readstat-rs"
 publish = false
 
 [lib]

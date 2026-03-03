@@ -72,7 +72,7 @@ impl ColumnBuilder {
     /// Panics if `self` is not `ColumnBuilder::Str`.
     pub(crate) fn as_string_mut(&mut self) -> &mut StringBuilder {
         match self {
-            ColumnBuilder::Str(b) => b,
+            Self::Str(b) => b,
             _ => panic!("ColumnBuilder::as_string_mut called on non-string builder"),
         }
     }
@@ -80,36 +80,36 @@ impl ColumnBuilder {
     /// Appends a null value, regardless of the underlying builder type.
     pub(crate) fn append_null(&mut self) {
         match self {
-            ColumnBuilder::Str(b) => b.append_null(),
-            ColumnBuilder::Int16(b) => b.append_null(),
-            ColumnBuilder::Int32(b) => b.append_null(),
-            ColumnBuilder::Float32(b) => b.append_null(),
-            ColumnBuilder::Float64(b) => b.append_null(),
-            ColumnBuilder::Date32(b) => b.append_null(),
-            ColumnBuilder::TimestampSecond(b) => b.append_null(),
-            ColumnBuilder::TimestampMillisecond(b) => b.append_null(),
-            ColumnBuilder::TimestampMicrosecond(b) => b.append_null(),
-            ColumnBuilder::TimestampNanosecond(b) => b.append_null(),
-            ColumnBuilder::Time32Second(b) => b.append_null(),
-            ColumnBuilder::Time64Microsecond(b) => b.append_null(),
+            Self::Str(b) => b.append_null(),
+            Self::Int16(b) => b.append_null(),
+            Self::Int32(b) => b.append_null(),
+            Self::Float32(b) => b.append_null(),
+            Self::Float64(b) => b.append_null(),
+            Self::Date32(b) => b.append_null(),
+            Self::TimestampSecond(b) => b.append_null(),
+            Self::TimestampMillisecond(b) => b.append_null(),
+            Self::TimestampMicrosecond(b) => b.append_null(),
+            Self::TimestampNanosecond(b) => b.append_null(),
+            Self::Time32Second(b) => b.append_null(),
+            Self::Time64Microsecond(b) => b.append_null(),
         }
     }
 
     /// Finishes the builder and returns the completed Arrow array.
     pub(crate) fn finish(&mut self) -> ArrayRef {
         match self {
-            ColumnBuilder::Str(b) => Arc::new(b.finish()),
-            ColumnBuilder::Int16(b) => Arc::new(b.finish()),
-            ColumnBuilder::Int32(b) => Arc::new(b.finish()),
-            ColumnBuilder::Float32(b) => Arc::new(b.finish()),
-            ColumnBuilder::Float64(b) => Arc::new(b.finish()),
-            ColumnBuilder::Date32(b) => Arc::new(b.finish()),
-            ColumnBuilder::TimestampSecond(b) => Arc::new(b.finish()),
-            ColumnBuilder::TimestampMillisecond(b) => Arc::new(b.finish()),
-            ColumnBuilder::TimestampMicrosecond(b) => Arc::new(b.finish()),
-            ColumnBuilder::TimestampNanosecond(b) => Arc::new(b.finish()),
-            ColumnBuilder::Time32Second(b) => Arc::new(b.finish()),
-            ColumnBuilder::Time64Microsecond(b) => Arc::new(b.finish()),
+            Self::Str(b) => Arc::new(b.finish()),
+            Self::Int16(b) => Arc::new(b.finish()),
+            Self::Int32(b) => Arc::new(b.finish()),
+            Self::Float32(b) => Arc::new(b.finish()),
+            Self::Float64(b) => Arc::new(b.finish()),
+            Self::Date32(b) => Arc::new(b.finish()),
+            Self::TimestampSecond(b) => Arc::new(b.finish()),
+            Self::TimestampMillisecond(b) => Arc::new(b.finish()),
+            Self::TimestampMicrosecond(b) => Arc::new(b.finish()),
+            Self::TimestampNanosecond(b) => Arc::new(b.finish()),
+            Self::Time32Second(b) => Arc::new(b.finish()),
+            Self::Time64Microsecond(b) => Arc::new(b.finish()),
         }
     }
 
@@ -120,38 +120,38 @@ impl ColumnBuilder {
     /// For string columns, `storage_width` provides a byte-level capacity hint.
     fn from_metadata(vm: &ReadStatVarMetadata, capacity: usize) -> Self {
         match vm.var_type_class {
-            ReadStatVarTypeClass::String => ColumnBuilder::Str(StringBuilder::with_capacity(
+            ReadStatVarTypeClass::String => Self::Str(StringBuilder::with_capacity(
                 capacity,
                 capacity * vm.storage_width,
             )),
             ReadStatVarTypeClass::Numeric => {
                 match vm.var_format_class {
                     Some(ReadStatVarFormatClass::Date) => {
-                        ColumnBuilder::Date32(Date32Builder::with_capacity(capacity))
+                        Self::Date32(Date32Builder::with_capacity(capacity))
                     }
-                    Some(ReadStatVarFormatClass::DateTime) => ColumnBuilder::TimestampSecond(
+                    Some(ReadStatVarFormatClass::DateTime) => Self::TimestampSecond(
                         TimestampSecondBuilder::with_capacity(capacity),
                     ),
                     Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
-                        ColumnBuilder::TimestampMillisecond(
+                        Self::TimestampMillisecond(
                             TimestampMillisecondBuilder::with_capacity(capacity),
                         )
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
-                        ColumnBuilder::TimestampMicrosecond(
+                        Self::TimestampMicrosecond(
                             TimestampMicrosecondBuilder::with_capacity(capacity),
                         )
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
-                        ColumnBuilder::TimestampNanosecond(
+                        Self::TimestampNanosecond(
                             TimestampNanosecondBuilder::with_capacity(capacity),
                         )
                     }
                     Some(ReadStatVarFormatClass::Time) => {
-                        ColumnBuilder::Time32Second(Time32SecondBuilder::with_capacity(capacity))
+                        Self::Time32Second(Time32SecondBuilder::with_capacity(capacity))
                     }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
-                        ColumnBuilder::Time64Microsecond(Time64MicrosecondBuilder::with_capacity(
+                        Self::Time64Microsecond(Time64MicrosecondBuilder::with_capacity(
                             capacity,
                         ))
                     }
@@ -159,15 +159,15 @@ impl ColumnBuilder {
                         // Plain numeric — dispatch by storage type
                         match vm.var_type {
                             ReadStatVarType::Int8 | ReadStatVarType::Int16 => {
-                                ColumnBuilder::Int16(Int16Builder::with_capacity(capacity))
+                                Self::Int16(Int16Builder::with_capacity(capacity))
                             }
                             ReadStatVarType::Int32 => {
-                                ColumnBuilder::Int32(Int32Builder::with_capacity(capacity))
+                                Self::Int32(Int32Builder::with_capacity(capacity))
                             }
                             ReadStatVarType::Float => {
-                                ColumnBuilder::Float32(Float32Builder::with_capacity(capacity))
+                                Self::Float32(Float32Builder::with_capacity(capacity))
                             }
-                            _ => ColumnBuilder::Float64(Float64Builder::with_capacity(capacity)),
+                            _ => Self::Float64(Float64Builder::with_capacity(capacity)),
                         }
                     }
                 }
@@ -350,7 +350,7 @@ impl ReadStatData {
         }
 
         // initialize context
-        let ctx = std::ptr::from_mut::<ReadStatData>(self) as *mut c_void;
+        let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
 
         // initialize error
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
@@ -374,7 +374,7 @@ impl ReadStatData {
         let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
 
         // initialize context
-        let ctx = std::ptr::from_mut::<ReadStatData>(self) as *mut c_void;
+        let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
 
         // initialize error
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;

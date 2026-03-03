@@ -83,22 +83,16 @@ pub(crate) extern "C" fn handle_metadata(
     .to_string();
 
     #[allow(clippy::useless_conversion)]
-    let compression =
-        match FromPrimitive::from_i32(
-            unsafe { readstat_sys::readstat_get_compression(metadata) } as i32
-        ) {
-            Some(t) => t,
-            None => ReadStatCompress::None,
-        };
+    let compression = FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_get_compression(metadata) } as i32,
+    )
+    .unwrap_or(ReadStatCompress::None);
 
     #[allow(clippy::useless_conversion)]
-    let endianness =
-        match FromPrimitive::from_i32(
-            unsafe { readstat_sys::readstat_get_endianness(metadata) } as i32
-        ) {
-            Some(t) => t,
-            None => ReadStatEndian::None,
-        };
+    let endianness = FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_get_endianness(metadata) } as i32,
+    )
+    .unwrap_or(ReadStatEndian::None);
 
     debug!("row_count is {rc}");
     debug!("var_count is {vc}");
@@ -157,22 +151,16 @@ pub(crate) extern "C" fn handle_variable(
 
     // get variable metadata
     #[allow(clippy::useless_conversion)]
-    let var_type =
-        match FromPrimitive::from_i32(
-            unsafe { readstat_sys::readstat_variable_get_type(variable) } as i32,
-        ) {
-            Some(t) => t,
-            None => ReadStatVarType::Unknown,
-        };
+    let var_type = FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_variable_get_type(variable) } as i32,
+    )
+    .unwrap_or(ReadStatVarType::Unknown);
 
     #[allow(clippy::useless_conversion)]
-    let var_type_class = match FromPrimitive::from_i32(unsafe {
-        readstat_sys::readstat_variable_get_type_class(variable)
-    } as i32)
-    {
-        Some(t) => t,
-        None => ReadStatVarTypeClass::Numeric,
-    };
+    let var_type_class = FromPrimitive::from_i32(
+        unsafe { readstat_sys::readstat_variable_get_type_class(variable) } as i32,
+    )
+    .unwrap_or(ReadStatVarTypeClass::Numeric);
 
     let var_name = unsafe { ptr_to_string(readstat_sys::readstat_variable_get_name(variable)) };
     let var_label = unsafe { ptr_to_string(readstat_sys::readstat_variable_get_label(variable)) };

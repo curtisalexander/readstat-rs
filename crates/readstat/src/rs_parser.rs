@@ -56,10 +56,8 @@ impl ReadStatParser {
             debug!("After setting row limit, error ==> {set_row_limit_error}");
 
             check_c_error(set_row_limit_error as i32)?;
-            Ok(self)
-        } else {
-            Ok(self)
         }
+        Ok(self)
     }
 
     /// Sets the starting row offset for reading. `None` means start from row 0.
@@ -71,10 +69,8 @@ impl ReadStatParser {
             debug!("After setting row offset, error ==> {set_row_offset_error}");
 
             check_c_error(set_row_offset_error as i32)?;
-            Ok(self)
-        } else {
-            Ok(self)
         }
+        Ok(self)
     }
 
     /// Registers the callback invoked for each variable (column) definition.

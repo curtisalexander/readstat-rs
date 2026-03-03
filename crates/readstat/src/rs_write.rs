@@ -117,7 +117,7 @@ pub struct ReadStatWriter {
 impl ReadStatWriter {
     /// Creates a new `ReadStatWriter` with no active writer.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             wtr: None,
             wrote_header: false,
@@ -304,11 +304,10 @@ impl ReadStatWriter {
     ))]
     #[allow(clippy::unused_self)]
     fn print_finish_message(&self, d: &ReadStatData, wc: &WriteConfig, in_path: &std::path::Path) {
-        let rows = if let Some(trp) = &d.total_rows_processed {
-            trp.load(std::sync::atomic::Ordering::SeqCst)
-        } else {
-            0
-        };
+        let rows = d
+            .total_rows_processed
+            .as_ref()
+            .map_or(0, |trp| trp.load(std::sync::atomic::Ordering::SeqCst));
 
         let in_f = in_path
             .file_name()
@@ -650,19 +649,16 @@ impl ReadStatWriter {
         println!("Byte order: {:#?}", md.endianness);
         println!("Variable names:");
         for (k, v) in &md.vars {
-            let format_class = match &v.var_format_class {
-                Some(f) => match f {
-                    ReadStatVarFormatClass::Date => "Date",
-                    ReadStatVarFormatClass::DateTime
-                    | ReadStatVarFormatClass::DateTimeWithMilliseconds
-                    | ReadStatVarFormatClass::DateTimeWithMicroseconds
-                    | ReadStatVarFormatClass::DateTimeWithNanoseconds => "DateTime",
-                    ReadStatVarFormatClass::Time | ReadStatVarFormatClass::TimeWithMicroseconds => {
-                        "Time"
-                    }
-                },
-                None => "",
-            };
+            let format_class = v.var_format_class.as_ref().map_or("", |f| match f {
+                ReadStatVarFormatClass::Date => "Date",
+                ReadStatVarFormatClass::DateTime
+                | ReadStatVarFormatClass::DateTimeWithMilliseconds
+                | ReadStatVarFormatClass::DateTimeWithMicroseconds
+                | ReadStatVarFormatClass::DateTimeWithNanoseconds => "DateTime",
+                ReadStatVarFormatClass::Time | ReadStatVarFormatClass::TimeWithMicroseconds => {
+                    "Time"
+                }
+            });
             let data_type = md.schema.fields[*k as usize].data_type();
             println!(
                 "{k}: {} {{ type class: {:#?}, type: {:#?}, label: {}, format class: {format_class}, format: {}, arrow logical data type: {data_type:#?}, arrow physical data type: {data_type:#?} }}",
