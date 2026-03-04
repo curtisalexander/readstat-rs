@@ -68,7 +68,19 @@ cp "$REPO_ROOT/crates/readstat-cli/README.md"   "$BOOK_SRC/crates/readstat-cli.m
 cp "$REPO_ROOT/crates/readstat-sys/README.md"   "$BOOK_SRC/crates/readstat-sys.md"
 cp "$REPO_ROOT/crates/readstat-iconv-sys/README.md"      "$BOOK_SRC/crates/readstat-iconv-sys.md"
 cp "$REPO_ROOT/crates/readstat-tests/README.md" "$BOOK_SRC/crates/readstat-tests.md"
-cp "$REPO_ROOT/crates/readstat-wasm/README.md"  "$BOOK_SRC/crates/readstat-wasm.md"
+# readstat-wasm: fix relative link to examples/bun-demo for book context
+sed 's|\[bun-demo\](../../examples/bun-demo/)|[bun-demo](../examples/bun-demo.md)|g' \
+    "$REPO_ROOT/crates/readstat-wasm/README.md" > "$BOOK_SRC/crates/readstat-wasm.md"
+
+# Example READMEs
+mkdir -p "$BOOK_SRC/examples"
+cp "$REPO_ROOT/examples/cli-demo/README.md"      "$BOOK_SRC/examples/cli-demo.md"
+cp "$REPO_ROOT/examples/api-demo/README.md"      "$BOOK_SRC/examples/api-demo.md"
+cp "$REPO_ROOT/examples/bun-demo/README.md"      "$BOOK_SRC/examples/bun-demo.md"
+# web-demo: fix relative link to bun-demo for book context
+sed 's|\[bun-demo README\](../bun-demo/README.md)|[bun-demo README](bun-demo.md)|g' \
+    "$REPO_ROOT/examples/web-demo/README.md" > "$BOOK_SRC/examples/web-demo.md"
+cp "$REPO_ROOT/examples/sql-explorer/README.md"  "$BOOK_SRC/examples/sql-explorer.md"
 
 # --------------------------------------------------------------------
 # 2. Build the book
