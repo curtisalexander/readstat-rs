@@ -219,7 +219,7 @@ impl ReadStatMetadata {
         let row_limit = if skip_row_count { Some(1) } else { None };
 
         // Dummy path — custom I/O handlers ignore it
-        let dummy_path = CString::new("").unwrap();
+        let dummy_path = CString::new("").expect("empty string is valid C string");
 
         let error = buffer_ctx
             .configure_parser(
