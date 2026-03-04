@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.20.2] - 2026-03-04
+
+### Changed
+- Bumped `readstat` and `readstat-cli` to 0.20.2 for crates.io release
+- Applied `cargo fmt` to fix formatting drift in `cb.rs`, `rs_data.rs`, and `rs_query.rs`
+- Replaced `CString::new("").unwrap()` with `expect("empty string is valid C string")` in buffer I/O dummy paths for clearer intent
+
 ## [0.20.0] - 2026-03-03
 
 ### Changed

@@ -129,31 +129,29 @@ impl ColumnBuilder {
                     Some(ReadStatVarFormatClass::Date) => {
                         Self::Date32(Date32Builder::with_capacity(capacity))
                     }
-                    Some(ReadStatVarFormatClass::DateTime) => Self::TimestampSecond(
-                        TimestampSecondBuilder::with_capacity(capacity),
-                    ),
+                    Some(ReadStatVarFormatClass::DateTime) => {
+                        Self::TimestampSecond(TimestampSecondBuilder::with_capacity(capacity))
+                    }
                     Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
-                        Self::TimestampMillisecond(
-                            TimestampMillisecondBuilder::with_capacity(capacity),
-                        )
+                        Self::TimestampMillisecond(TimestampMillisecondBuilder::with_capacity(
+                            capacity,
+                        ))
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
-                        Self::TimestampMicrosecond(
-                            TimestampMicrosecondBuilder::with_capacity(capacity),
-                        )
+                        Self::TimestampMicrosecond(TimestampMicrosecondBuilder::with_capacity(
+                            capacity,
+                        ))
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
-                        Self::TimestampNanosecond(
-                            TimestampNanosecondBuilder::with_capacity(capacity),
-                        )
+                        Self::TimestampNanosecond(TimestampNanosecondBuilder::with_capacity(
+                            capacity,
+                        ))
                     }
                     Some(ReadStatVarFormatClass::Time) => {
                         Self::Time32Second(Time32SecondBuilder::with_capacity(capacity))
                     }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
-                        Self::Time64Microsecond(Time64MicrosecondBuilder::with_capacity(
-                            capacity,
-                        ))
+                        Self::Time64Microsecond(Time64MicrosecondBuilder::with_capacity(capacity))
                     }
                     None => {
                         // Plain numeric — dispatch by storage type
@@ -381,7 +379,7 @@ impl ReadStatData {
         debug!("Initially, error ==> {error:#?}");
 
         // Dummy path — custom I/O handlers ignore it
-        let dummy_path = CString::new("").unwrap();
+        let dummy_path = CString::new("").expect("empty string is valid C string");
 
         // setup parser with buffer I/O
         let error = buffer_ctx

@@ -24,7 +24,9 @@ use std::sync::{Arc, Mutex};
 use crate::err::ReadStatError;
 use crate::rs_data::ReadStatData;
 use crate::rs_path::ReadStatPath;
-use crate::rs_write_config::{OutFormat, ParquetCompression, WriteConfig, resolve_parquet_compression};
+use crate::rs_write_config::{
+    OutFormat, ParquetCompression, WriteConfig, resolve_parquet_compression,
+};
 
 /// Channel receiver type for streaming parsed data chunks between threads.
 ///
@@ -81,10 +83,7 @@ struct ChannelPartitionStream {
 }
 
 impl ChannelPartitionStream {
-    fn new(
-        schema: SchemaRef,
-        receiver: ChunkReceiver,
-    ) -> Self {
+    fn new(schema: SchemaRef, receiver: ChunkReceiver) -> Self {
         Self {
             schema,
             receiver: Arc::new(Mutex::new(Some(receiver))),
