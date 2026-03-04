@@ -26,6 +26,14 @@
 - [readstat-tests](crates/readstat-tests.md)
 - [readstat-wasm](crates/readstat-wasm.md)
 
+# Examples
+
+- [CLI Demo](examples/cli-demo.md)
+- [API Demo](examples/api-demo.md)
+- [Bun Demo](examples/bun-demo.md)
+- [Web Demo](examples/web-demo.md)
+- [SQL Explorer](examples/sql-explorer.md)
+
 -----------
 
 [API Documentation (Rustdocs)](rustdocs.md)

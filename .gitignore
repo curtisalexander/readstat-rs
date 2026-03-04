@@ -29,6 +29,7 @@ bun.lock
 /book/src/memory-safety.md
 /book/src/releasing.md
 /book/src/crates/
+/book/src/examples/
 # examples
 __pycache__/
 /examples/api-demo/python-server/readstat_py/target/
