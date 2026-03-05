@@ -73,13 +73,13 @@ For library, API server, and WebAssembly usage, see **[Examples](#bulb-examples)
 Clone the repository (with submodules), install platform-specific developer tools, and run `cargo build`. Platform-specific instructions for Linux, macOS, and Windows are in **[docs/BUILDING.md](docs/BUILDING.md)**.
 
 ## :computer: [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
-- :heavy_check_mark: Linux   &rarr; successfully builds and runs
-    - [glibc](https://www.gnu.org/software/libc/)
-    - [musl](https://www.musl-libc.org/)
-- :heavy_check_mark: macOS   &rarr; successfully builds and runs
-- :heavy_check_mark: Windows &rarr; successfully builds and runs
-    - As of [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5`, able to build using MSVC in lieu of setting up an msys2 environment
-    - [Requires `libclang`](docs/BUILDING.md#windows) in order to build as `libclang` is [required by bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang)
+
+| Platform | Status | C library | Notes |
+|----------|--------|-----------|-------|
+| **Linux** ([glibc](https://www.gnu.org/software/libc/)) | :heavy_check_mark: Builds and runs | System iconv, system zlib | &mdash; |
+| **Linux** ([musl](https://www.musl-libc.org/)) | :heavy_check_mark: Builds and runs | System iconv, system zlib | &mdash; |
+| **macOS** | :heavy_check_mark: Builds and runs | System `libiconv`, system zlib | &mdash; |
+| **Windows** (MSVC) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | [Requires `libclang`](docs/BUILDING.md#windows) for [bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang). MSVC supported since [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5` (no msys2 needed). |
 
 ## :books: Documentation
 
