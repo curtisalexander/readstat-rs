@@ -4,9 +4,9 @@ Raw FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C libr
 
 The `build.rs` script compiles ~49 C source files from the vendored `vendor/ReadStat/` git submodule via the `cc` crate and generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib is handled automatically (see [docs/BUILDING.md](https://github.com/curtisalexander/readstat-rs/blob/main/docs/BUILDING.md) for details).
 
-These bindings expose the **full** ReadStat API, including support for SAS (`.sas7bdat`, `.xpt`), SPSS (`.sav`, `.zsav`, `.por`), and Stata (`.dta`) file formats.
+These bindings expose the **full** ReadStat API &mdash; all 125 functions and all 8 enum types &mdash; including support for **SAS** (`.sas7bdat`, `.xpt`), **SPSS** (`.sav`, `.zsav`, `.por`), and **Stata** (`.dta`) file formats. If you need to work with SPSS or Stata files from Rust, this crate provides the complete FFI surface to do so.
 
-This is a [sys crate](https://kornel.ski/rust-sys-crate) — it exposes raw C types and functions. Use the [`readstat`](https://crates.io/crates/readstat) library crate for a safe, high-level API (currently SAS `.sas7bdat` only).
+This is a [sys crate](https://kornel.ski/rust-sys-crate) — it exposes raw C types and functions. The higher-level [`readstat`](https://crates.io/crates/readstat) library crate provides a safe API but currently only implements support for SAS `.sas7bdat` files.
 
 ## API Coverage
 
