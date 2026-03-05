@@ -1,6 +1,8 @@
 # readstat-cli
 
-Binary crate producing the `readstat` CLI tool for converting SAS binary files (`.sas7bdat`) to other formats. Currently supports **SAS `.sas7bdat` files only** (SPSS and Stata formats are not implemented).
+Binary crate producing the `readstat` CLI tool for converting SAS binary files (`.sas7bdat`) to other formats.
+
+> **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](https://crates.io/crates/readstat-sys) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, this CLI currently only supports **SAS `.sas7bdat` files**. SPSS and Stata formats are not supported.
 
 ## Subcommands
 
