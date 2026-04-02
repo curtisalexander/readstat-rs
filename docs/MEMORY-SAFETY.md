@@ -132,3 +132,6 @@ valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 | ASan | macOS | Full workspace | No (runtime mismatch) | No |
 | ASan | Windows | Full workspace | Not yet (no mismatch — see [future work](#future-work-windows-c-instrumentation)) | No |
 | Valgrind | Linux (manual) | Full | Full | Yes |
+| cargo-fuzz | Linux (CI, weekly) | Full | Full | No |
+
+Fuzz testing exercises the FFI byte-parsing paths with arbitrary/malformed input via [libFuzzer](https://llvm.org/docs/LibFuzzer.html). See [TESTING.md](TESTING.md#fuzz-testing) for details.

@@ -18,6 +18,9 @@ readstat-rs/
 │   ├── readstat-iconv-sys/   # FFI bindings to iconv (Windows only)
 │   ├── readstat-tests/      # Integration test suite
 │   └── readstat-wasm/       # WebAssembly build (excluded from workspace)
+├── fuzz/                   # Fuzz testing (standalone Cargo project, cargo-fuzz)
+│   ├── fuzz_targets/        # 3 libFuzzer targets
+│   └── corpus/              # Seed corpus (14 .sas7bdat files per target)
 ├── examples/
 │   ├── cli-demo/            # CLI conversion demo
 │   ├── api-demo/            # REST API servers (Rust + Python)

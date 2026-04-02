@@ -89,7 +89,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/USAGE.md](docs/USAGE.md) | Full CLI reference and examples |
 | [docs/BUILDING.md](docs/BUILDING.md) | Clone, build, and linking details per platform |
 | [docs/TECHNICAL.md](docs/TECHNICAL.md) | Floating-point precision and date/time handling |
-| [docs/TESTING.md](docs/TESTING.md) | Running tests, dataset table, valgrind |
+| [docs/TESTING.md](docs/TESTING.md) | Running tests, dataset table, fuzz testing, valgrind |
 | [docs/BENCHMARKING.md](docs/BENCHMARKING.md) | Criterion benchmarks, hyperfine, and profiling |
 | [docs/CI-CD.md](docs/CI-CD.md) | GitHub Actions triggers and artifacts |
 | [docs/MEMORY-SAFETY.md](docs/MEMORY-SAFETY.md) | Automated memory-safety CI checks (Valgrind, ASan, Miri, unsafe audit) |

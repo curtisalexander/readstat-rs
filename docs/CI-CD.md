@@ -90,6 +90,18 @@ Repository dispatch event types for API triggers:
 
 :memo: API triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
+## Fuzz Testing (`.github/workflows/fuzz.yml`)
+
+A separate workflow runs [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) (libFuzzer) targets against the `readstat` library's byte-parsing paths.
+
+- **Schedule**: Weekly, Monday 3am UTC
+- **Manual trigger**: `gh workflow run fuzz.yml` or via the Actions UI
+- **Duration**: 30 minutes per target (~90 min total)
+- **Targets**: `fuzz_read_metadata`, `fuzz_read_data`, `fuzz_read_data_filtered`
+- **On crash**: uploads crash artifacts and automatically opens a GitHub issue labeled `bug` + `fuzz`
+
+See [TESTING.md](TESTING.md#fuzz-testing) for local usage and target details.
+
 ## Artifacts
 
 All builds (regardless of trigger method) upload artifacts that can be downloaded from the workflow run page. Artifacts are retained for the default GitHub Actions retention period.
