@@ -90,7 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Miri CI job for detecting undefined behavior in pure-Rust unsafe code
 - AddressSanitizer CI jobs on Linux (with C code instrumentation) and macOS
 - `READSTAT_SANITIZE_ADDRESS` build flag in `readstat-sys` for targeted ASan instrumentation
-- Memory safety documentation (`docs/MEMORY_SAFETY.md`) and mdBook integration
+- Memory safety documentation (`docs/MEMORY-SAFETY.md`) and mdBook integration
 
 ### Changed
 - Restructured workspace: extracted `readstat-cli` binary crate from `readstat` library crate

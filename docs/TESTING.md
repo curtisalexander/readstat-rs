@@ -32,6 +32,40 @@ Formally tested (via integration tests) against the following datasets.  See the
 - [X] `somedata.sas7bdat` &rarr; Used to test Parquet label preservation
 - [X] `somemiss.sas7bdat`
 
+## Fuzz Testing
+
+Fuzz targets live in `fuzz/` (a standalone Cargo project, not a workspace member) and use [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz) (libFuzzer). Requires nightly Rust.
+
+### Targets
+
+| Target | What it exercises |
+|--------|-------------------|
+| `fuzz_read_metadata` | Metadata + variable callbacks, format classification, schema building |
+| `fuzz_read_data` | Full metadata→data pipeline including Arrow conversion |
+| `fuzz_read_data_filtered` | Column filter index mapping, skipped-variable logic (uses `arbitrary`) |
+
+Each target's corpus is seeded with the 14 test `.sas7bdat` files.
+
+### Running locally
+
+```bash
+# Install (one-time)
+cargo install cargo-fuzz
+
+# Run a target indefinitely (Ctrl+C to stop)
+cargo +nightly fuzz run fuzz_read_metadata
+
+# Run for 10 minutes
+cargo +nightly fuzz run fuzz_read_metadata -- -max_total_time=600
+
+# Reproduce a crash
+cargo +nightly fuzz run fuzz_read_metadata fuzz/artifacts/fuzz_read_metadata/<crash-file>
+```
+
+### CI
+
+Fuzz tests run weekly (Monday 3am UTC) via `.github/workflows/fuzz.yml`. Each target runs for 30 minutes. On crash, a GitHub issue is automatically opened.
+
 ## Valgrind
 To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `parse_file_metadata_test`, run the following from within the `readstat` directory.
 

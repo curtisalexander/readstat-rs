@@ -35,5 +35,8 @@ __pycache__/
 /examples/api-demo/python-server/readstat_py/target/
 /examples/api-demo/python-server/uv.lock
 /examples/api-demo/rust-server/target/
+# fuzz
+/fuzz/artifacts/
+/fuzz/target/
 # claude
 .claude/

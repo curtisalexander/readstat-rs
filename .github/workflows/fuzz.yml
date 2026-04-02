@@ -1,0 +1,60 @@
+name: Fuzz Testing
+
+on:
+  schedule:
+    # Monday 3am UTC
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_read_metadata
+          - fuzz_read_data
+          - fuzz_read_data_filtered
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Run fuzzer (${{ matrix.target }})
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=1800
+
+      - name: Upload corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-${{ matrix.target }}
+          path: fuzz/corpus/${{ matrix.target }}/
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashes-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+
+      - name: Open issue on crash
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const target = '${{ matrix.target }}';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Fuzz crash: ${target}`,
+              body: `The fuzzer \`${target}\` found a crash.\n\nSee [workflow run](${runUrl}) for details and crash artifacts.`,
+              labels: ['bug', 'fuzz'],
+            });
