@@ -30,7 +30,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Generate changelog
@@ -102,7 +102,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install toolchain
@@ -118,7 +118,7 @@ jobs:
       - name: Zip
         run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -146,7 +146,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install toolchain
@@ -162,7 +162,7 @@ jobs:
       - name: Zip
         run: tar czvf target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/${{ env.target }}/release ${{ env.PACKAGE_NAME }}
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -191,7 +191,7 @@ jobs:
           fi
         shell: bash
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install toolchain
@@ -202,7 +202,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Cache LLVM and Clang
         id: cache-llvm
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}\llvm
           key: llvm-21.1.8
@@ -220,7 +220,7 @@ jobs:
       - name: Zip
         run: Compress-Archive -Path target\release\${{ env.PACKAGE_NAME }}.exe -DestinationPath target\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip  -CompressionLevel Optimal
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
@@ -248,7 +248,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install toolchain
@@ -262,7 +262,7 @@ jobs:
       - name: Zip
         run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -291,7 +291,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install toolchain
@@ -305,7 +305,7 @@ jobs:
       - name: Zip
         run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -326,7 +326,7 @@ jobs:
       MIRIFLAGS: "-Zmiri-disable-isolation"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install nightly toolchain with Miri
@@ -345,7 +345,7 @@ jobs:
       READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install nightly toolchain
@@ -363,7 +363,7 @@ jobs:
       RUSTFLAGS: "-Zsanitizer=address"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install nightly toolchain
@@ -381,7 +381,7 @@ jobs:
       RUSTFLAGS: "-Zsanitizer=address"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install nightly toolchain
@@ -394,7 +394,7 @@ jobs:
       # The ASAN runtime comes from Visual Studio (MSVC), not from this LLVM install.
       - name: Cache LLVM and Clang
         id: cache-llvm
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}\llvm
           key: llvm-21.1.8
@@ -435,7 +435,7 @@ jobs:
       READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install nightly toolchain
@@ -448,7 +448,7 @@ jobs:
       # The ASAN runtime comes from Visual Studio (MSVC), not from this LLVM install.
       - name: Cache LLVM and Clang
         id: cache-llvm
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}\llvm
           key: llvm-21.1.8

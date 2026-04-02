@@ -14,6 +14,9 @@ struct FuzzInput<'a> {
     selected_columns: Vec<u16>,
 }
 
+// Cap rows to avoid OOM from malformed metadata claiming billions of rows.
+const MAX_ROWS: u32 = 100_000;
+
 fuzz_target!(|input: FuzzInput| {
     let mut md = ReadStatMetadata::new();
     if md.read_metadata_from_bytes(input.data, false).is_err() {
@@ -66,7 +69,7 @@ fuzz_target!(|input: FuzzInput| {
     md.var_count = selected.len() as i32;
     md.schema = Schema::new(filtered_fields);
 
-    let row_count = md.row_count as u32;
+    let row_count = (md.row_count as u32).min(MAX_ROWS);
     let mut d = ReadStatData::new()
         .set_no_progress(true)
         .set_column_filter(Some(Arc::new(filter)), total_var_count)
