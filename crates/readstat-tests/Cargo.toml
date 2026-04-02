@@ -19,6 +19,7 @@ assert_fs = "1.1"
 escargot = "0.5"
 polars = { version = "0.52", features = ["parquet"] }
 predicates = "3"
+proptest = "1"
 readstat = { path = "../readstat" }
 
 [features]

@@ -143,4 +143,50 @@ mod tests {
         let cs = ReadStatPath::path_to_cstring(&path).unwrap();
         assert_eq!(cs.to_str().unwrap(), "/tmp/test.sas7bdat");
     }
+
+    // --- Property-based tests ---
+
+    mod property_tests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// Arbitrary filenames with .sas7bdat extension always pass extension validation.
+            #[test]
+            fn sas7bdat_extension_always_valid(name in "[a-zA-Z0-9_]{1,50}") {
+                let path = PathBuf::from(format!("/tmp/{name}.sas7bdat"));
+                let result = ReadStatPath::validate_in_extension(&path);
+                prop_assert!(result.is_ok(), "Expected Ok for {:?}", path);
+                prop_assert_eq!(result.unwrap(), "sas7bdat");
+            }
+
+            /// Arbitrary filenames with .sas7bcat extension always pass extension validation.
+            #[test]
+            fn sas7bcat_extension_always_valid(name in "[a-zA-Z0-9_]{1,50}") {
+                let path = PathBuf::from(format!("/tmp/{name}.sas7bcat"));
+                let result = ReadStatPath::validate_in_extension(&path);
+                prop_assert!(result.is_ok(), "Expected Ok for {:?}", path);
+                prop_assert_eq!(result.unwrap(), "sas7bcat");
+            }
+
+            /// Non-SAS extensions always fail validation.
+            #[test]
+            fn non_sas_extensions_always_invalid(
+                name in "[a-zA-Z0-9_]{1,50}",
+                ext in "[a-z]{1,10}".prop_filter("not sas", |e| e != "sas7bdat" && e != "sas7bcat")
+            ) {
+                let path = PathBuf::from(format!("/tmp/{name}.{ext}"));
+                let result = ReadStatPath::validate_in_extension(&path);
+                prop_assert!(result.is_err(), "Expected Err for {:?}", path);
+            }
+
+            /// Files with no extension always fail validation.
+            #[test]
+            fn no_extension_always_invalid(name in "[a-zA-Z0-9_]{1,50}") {
+                let path = PathBuf::from(format!("/tmp/{name}"));
+                let result = ReadStatPath::validate_in_extension(&path);
+                prop_assert!(result.is_err(), "Expected Err for {:?}", path);
+            }
+        }
+    }
 }

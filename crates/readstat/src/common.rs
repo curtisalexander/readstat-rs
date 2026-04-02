@@ -174,4 +174,68 @@ mod tests {
         let result = ptr_to_string(ptr);
         assert_eq!(result, "hello\u{FFFD}world");
     }
+
+    // --- Property-based tests ---
+
+    mod property_tests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// First offset is always 0; last offset is always row_count.
+            #[test]
+            fn offsets_start_at_zero_end_at_row_count(
+                row_count in 0u32..100_000,
+                stream_rows in 1u32..50_000
+            ) {
+                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                prop_assert_eq!(*offsets.first().unwrap(), 0);
+                prop_assert_eq!(*offsets.last().unwrap(), row_count);
+            }
+
+            /// Offsets are strictly monotonically increasing (no duplicates, no going backwards).
+            #[test]
+            fn offsets_are_monotonically_increasing(
+                row_count in 1u32..100_000,
+                stream_rows in 1u32..50_000
+            ) {
+                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                for pair in offsets.windows(2) {
+                    prop_assert!(pair[0] < pair[1], "offsets not strictly increasing: {} >= {}", pair[0], pair[1]);
+                }
+            }
+
+            /// Every chunk (window pair) has size <= stream_rows.
+            #[test]
+            fn chunk_sizes_bounded_by_stream_rows(
+                row_count in 1u32..100_000,
+                stream_rows in 1u32..50_000
+            ) {
+                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                for pair in offsets.windows(2) {
+                    let chunk_size = pair[1] - pair[0];
+                    prop_assert!(chunk_size <= stream_rows, "chunk {} > stream_rows {}", chunk_size, stream_rows);
+                }
+            }
+
+            /// The chunks cover all rows: sum of chunk sizes equals row_count.
+            #[test]
+            fn chunks_cover_all_rows(
+                row_count in 0u32..100_000,
+                stream_rows in 1u32..50_000
+            ) {
+                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                let total: u32 = offsets.windows(2).map(|w| w[1] - w[0]).sum();
+                prop_assert_eq!(total, row_count);
+            }
+
+            /// Zero stream_rows is handled without panic (treated as 1).
+            #[test]
+            fn zero_stream_rows_does_not_panic(row_count in 0u32..10_000) {
+                let offsets = build_offsets(row_count, 0).unwrap();
+                prop_assert_eq!(*offsets.first().unwrap(), 0);
+                prop_assert_eq!(*offsets.last().unwrap(), row_count);
+            }
+        }
+    }
 }

@@ -431,4 +431,114 @@ mod tests {
             Some(ReadStatVarFormatClass::Time)
         );
     }
+
+    // --- Property-based tests ---
+
+    mod property_tests {
+        use super::*;
+        use proptest::prelude::*;
+        use proptest::sample;
+
+        proptest! {
+            /// Arbitrary strings never cause a panic.
+            #[test]
+            fn arbitrary_strings_never_panic(s in "\\PC*") {
+                let _ = match_var_format(&s);
+            }
+
+            /// Result is deterministic: same input always produces the same output.
+            #[test]
+            fn result_is_deterministic(s in "\\PC*") {
+                let a = match_var_format(&s);
+                let b = match_var_format(&s);
+                prop_assert_eq!(a, b);
+            }
+
+            /// Case insensitivity: format classification is the same regardless of case.
+            #[test]
+            fn case_insensitive_matching(s in "[A-Za-z0-9.]{1,20}") {
+                let upper = match_var_format(&s.to_uppercase());
+                let lower = match_var_format(&s.to_lowercase());
+                prop_assert_eq!(upper, lower, "case mismatch for '{}'", s);
+            }
+
+            /// Known date prefix + numeric width always classifies as Date.
+            #[test]
+            fn date_prefix_always_matches(
+                prefix in sample::select(vec![
+                    "DATE", "DDMMYY", "MMDDYY", "YYMMDD", "JULIAN", "MONYY",
+                    "YEAR", "MONTH", "DAY", "WEEKDAY", "JULDAY",
+                ]),
+                width in 1u32..30
+            ) {
+                let fmt = format!("{prefix}{width}");
+                prop_assert_eq!(
+                    match_var_format(&fmt),
+                    Some(ReadStatVarFormatClass::Date),
+                    "Expected Date for '{}'", fmt
+                );
+            }
+
+            /// Known time prefix + numeric width always classifies as Time.
+            #[test]
+            fn time_prefix_always_matches(
+                prefix in sample::select(vec![
+                    "TIME", "HHMM", "HOUR", "MMSS", "TOD", "TIMEAMPM",
+                ]),
+                width in 1u32..30
+            ) {
+                let fmt = format!("{prefix}{width}");
+                prop_assert_eq!(
+                    match_var_format(&fmt),
+                    Some(ReadStatVarFormatClass::Time),
+                    "Expected Time for '{}'", fmt
+                );
+            }
+
+            /// DATETIME + width (no decimal) always classifies as DateTime.
+            #[test]
+            fn datetime_prefix_always_matches(width in 1u32..30) {
+                let fmt = format!("DATETIME{width}");
+                prop_assert_eq!(
+                    match_var_format(&fmt),
+                    Some(ReadStatVarFormatClass::DateTime),
+                    "Expected DateTime for '{}'", fmt
+                );
+            }
+
+            /// DATETIME with precision 1-3 → milliseconds, 4-6 → microseconds, 7-9 → nanoseconds.
+            #[test]
+            fn datetime_precision_classifies_correctly(
+                width in 1u32..30,
+                precision in 1u32..=9
+            ) {
+                let fmt = format!("DATETIME{width}.{precision}");
+                let expected = match precision {
+                    1..=3 => ReadStatVarFormatClass::DateTimeWithMilliseconds,
+                    4..=6 => ReadStatVarFormatClass::DateTimeWithMicroseconds,
+                    7..=9 => ReadStatVarFormatClass::DateTimeWithNanoseconds,
+                    _ => unreachable!(),
+                };
+                prop_assert_eq!(
+                    match_var_format(&fmt),
+                    Some(expected),
+                    "Wrong class for '{}'", fmt
+                );
+            }
+
+            /// Numeric-only formats (BEST, COMMA, etc.) never match as temporal.
+            #[test]
+            fn numeric_formats_return_none(
+                prefix in sample::select(vec!["BEST", "COMMA", "DOLLAR", "PERCENT", "F", "E"]),
+                width in 1u32..30
+            ) {
+                let fmt = format!("{prefix}{width}");
+                prop_assert_eq!(
+                    match_var_format(&fmt),
+                    None,
+                    "Expected None for '{}'", fmt
+                );
+            }
+        }
+    }
 }
