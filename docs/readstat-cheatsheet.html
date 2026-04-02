@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>readstat Cheatsheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #f4f5f7;
+    color: #1e293b;
+    line-height: 1.4;
+    font-size: 13px;
+  }
+
+  .page {
+    width: 90%;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 24px 0;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 3px solid #6366f1;
+  }
+  .header-left h1 {
+    font-size: 1.9rem;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    color: #6366f1;
+    line-height: 1;
+  }
+  .header-left h1 span { color: #1e293b; }
+  .header-left .subtitle {
+    font-size: 0.82rem;
+    color: #64748b;
+    margin-top: 3px;
+  }
+  .header-right {
+    text-align: right;
+    font-size: 0.78rem;
+    color: #64748b;
+    line-height: 1.5;
+  }
+  .prefix-badge {
+    display: inline-block;
+    background: #6366f1;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.78rem;
+    padding: 3px 10px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  /* ── Section ── */
+  .section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    position: relative;
+  }
+  .section h2 {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-bottom: 7px;
+    display: inline-block;
+  }
+
+  /* Color themes for sections */
+  .theme-indigo h2  { background: #eef2ff; color: #4338ca; }
+  .theme-violet h2  { background: #f5f3ff; color: #6d28d9; }
+  .theme-teal h2    { background: #f0fdfa; color: #0f766e; }
+  .theme-amber h2   { background: #fffbeb; color: #b45309; }
+  .theme-rose h2    { background: #fff1f2; color: #be123c; }
+  .theme-sky h2     { background: #f0f9ff; color: #0369a1; }
+  .theme-emerald h2 { background: #ecfdf5; color: #047857; }
+
+  .theme-indigo  { border-top: 3px solid #6366f1; }
+  .theme-violet  { border-top: 3px solid #8b5cf6; }
+  .theme-teal    { border-top: 3px solid #14b8a6; }
+  .theme-amber   { border-top: 3px solid #f59e0b; }
+  .theme-rose    { border-top: 3px solid #f43f5e; }
+  .theme-sky     { border-top: 3px solid #0ea5e9; }
+  .theme-emerald { border-top: 3px solid #10b981; }
+
+  /* ── Rows ── */
+  .row {
+    display: flex;
+    align-items: baseline;
+    padding: 2.5px 0;
+    gap: 6px;
+  }
+  .row + .row { border-top: 1px solid #f1f5f9; }
+
+  .row .k {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #4338ca;
+    white-space: nowrap;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+  .row .d {
+    font-size: 0.76rem;
+    color: #64748b;
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .cmd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #334155;
+  }
+
+  .tip {
+    font-size: 0.72rem;
+    color: #64748b;
+    background: #f8fafc;
+    border-radius: 4px;
+    padding: 5px 8px;
+    margin-top: 6px;
+    line-height: 1.4;
+    border-left: 3px solid #e2e8f0;
+  }
+  .tip strong { color: #334155; }
+
+  .wide  { grid-column: span 2; }
+  .full  { grid-column: span 3; }
+
+  /* ── Install Steps ── */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .step {
+    text-align: center;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: #6366f1;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    margin-bottom: 3px;
+  }
+  .step h3 { font-size: 0.76rem; font-weight: 700; color: #1e293b; }
+  .step p  { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+
+  /* ── Sub-heading inside sections ── */
+  .sub-heading {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #334155;
+    margin-top: 6px;
+    margin-bottom: 3px;
+    padding-left: 2px;
+  }
+
+  /* ── Scenario Section ── */
+  .scenario { margin-bottom: 8px; }
+  .scenario:last-child { margin-bottom: 0; }
+  .scenario-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #be123c;
+    margin-bottom: 3px;
+    padding-left: 2px;
+  }
+  .scenario .row .k { color: #be123c; }
+
+  /* ── Print ── */
+  @media print {
+    body { background: #fff; font-size: 12px; }
+    .page { padding: 8px 0; max-width: 100%; }
+    .section { box-shadow: none; border: 1px solid #d1d5db; }
+    .grid { gap: 8px; }
+    .header { margin-bottom: 10px; padding-bottom: 8px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section { break-inside: avoid; }
+  }
+
+  @page {
+    size: landscape;
+    margin: 0.4in;
+  }
+
+  @media (max-width: 800px) {
+    .grid { grid-template-columns: 1fr; }
+    .wide, .full { grid-column: span 1; }
+    .steps { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1><span>readstat</span> <span style="color:#6366f1">Cheatsheet</span></h1>
+      <div class="subtitle">Convert SAS .sas7bdat files to CSV, Feather, NDJSON, or Parquet</div>
+    </div>
+    <div class="header-right">
+      Output: <strong>CSV</strong>, <strong>Feather</strong>, <strong>NDJSON</strong>, <strong>Parquet</strong><br>
+      <span class="prefix-badge">cargo install readstat-cli</span>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- ── Getting Started ── -->
+    <section class="section full theme-indigo">
+      <h2>Getting Started</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Install</h3>
+          <p><span class="cmd">cargo install readstat-cli</span></p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Inspect</h3>
+          <p><span class="cmd">readstat metadata file.sas7bdat</span></p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Preview</h3>
+          <p><span class="cmd">readstat preview file.sas7bdat</span></p>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <h3>Convert</h3>
+          <p><span class="cmd">readstat data file.sas7bdat -o out.parquet -f parquet</span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Metadata ── -->
+    <section class="section theme-violet">
+      <h2>Metadata</h2>
+      <div class="row"><span class="k">readstat metadata FILE</span><span class="d">Display metadata</span></div>
+      <div class="row"><span class="k">--as-json</span><span class="d">Output as JSON</span></div>
+      <div class="row"><span class="k">--skip-row-count</span><span class="d">Skip row count (faster)</span></div>
+      <div class="row"><span class="k">--no-progress</span><span class="d">Hide progress bar</span></div>
+      <div class="tip"><strong>Includes:</strong> row/var counts, table name &amp; label, encoding, format version, bitness, compression, byte order, variable names/types/labels/formats, Arrow types.</div>
+    </section>
+
+    <!-- ── Preview ── -->
+    <section class="section theme-teal">
+      <h2>Preview</h2>
+      <div class="row"><span class="k">readstat preview FILE</span><span class="d">First 10 rows as CSV</span></div>
+      <div class="row"><span class="k">--rows 100</span><span class="d">First N rows</span></div>
+      <div class="row"><span class="k">--columns A,B,C</span><span class="d">Select columns</span></div>
+      <div class="row"><span class="k">--columns-file cols.txt</span><span class="d">Columns from file</span></div>
+      <div class="row"><span class="k">--no-progress</span><span class="d">Hide progress bar</span></div>
+      <div class="tip"><strong>Output:</strong> Always CSV to stdout. Pipe to <span class="cmd">| head</span>, <span class="cmd">| column -t -s,</span>, or redirect to a file.</div>
+    </section>
+
+    <!-- ── Data Conversion ── -->
+    <section class="section theme-amber">
+      <h2>Data Conversion</h2>
+      <div class="row"><span class="k">readstat data FILE -o OUT</span><span class="d">Convert (default: CSV)</span></div>
+      <div class="row"><span class="k">-f csv</span><span class="d">CSV (default)</span></div>
+      <div class="row"><span class="k">-f feather</span><span class="d">Feather / Arrow IPC</span></div>
+      <div class="row"><span class="k">-f ndjson</span><span class="d">Newline-delimited JSON</span></div>
+      <div class="row"><span class="k">-f parquet</span><span class="d">Apache Parquet</span></div>
+      <div class="row"><span class="k">--rows 1000</span><span class="d">Limit rows</span></div>
+      <div class="row"><span class="k">--overwrite</span><span class="d">Overwrite existing output</span></div>
+      <div class="row"><span class="k">--columns A,B,C</span><span class="d">Select columns</span></div>
+      <div class="row"><span class="k">--columns-file cols.txt</span><span class="d">Columns from file</span></div>
+    </section>
+
+    <!-- ── Parquet Options ── -->
+    <section class="section theme-sky">
+      <h2>Parquet Compression</h2>
+      <div class="row"><span class="k">--compression snappy</span><span class="d">Fast, moderate ratio</span></div>
+      <div class="row"><span class="k">--compression zstd</span><span class="d">Best balance</span></div>
+      <div class="row"><span class="k">--compression gzip</span><span class="d">Wide compatibility</span></div>
+      <div class="row"><span class="k">--compression brotli</span><span class="d">High ratio</span></div>
+      <div class="row"><span class="k">--compression lz4-raw</span><span class="d">Fastest decompression</span></div>
+      <div class="row"><span class="k">--compression uncompressed</span><span class="d">No compression</span></div>
+      <div class="row"><span class="k">--compression-level N</span><span class="d">Level (codec-specific)</span></div>
+      <div class="tip"><strong>Example:</strong> <span class="cmd">readstat data f.sas7bdat -o f.parquet -f parquet --compression zstd --compression-level 3</span></div>
+    </section>
+
+    <!-- ── Parallelism ── -->
+    <section class="section theme-emerald">
+      <h2>Parallelism</h2>
+      <div class="row"><span class="k">--parallel</span><span class="d">Read chunks in parallel</span></div>
+      <div class="row"><span class="k">--parallel-write</span><span class="d">Write in parallel (Parquet)</span></div>
+      <div class="row"><span class="k">--parallel-write-buffer-mb N</span><span class="d">Buffer before spill (default 100)</span></div>
+      <div class="tip"><strong>Note:</strong> <span class="cmd">--parallel</span> increases memory (all chunks in memory). <span class="cmd">--parallel-write</span> currently supports Parquet only. Row order is preserved.</div>
+    </section>
+
+    <!-- ── Reader Modes ── -->
+    <section class="section theme-violet">
+      <h2>Reader Modes</h2>
+      <div class="row"><span class="k">--reader stream</span><span class="d">Default &mdash; chunked reads</span></div>
+      <div class="row"><span class="k">--reader mem</span><span class="d">Read all into memory</span></div>
+      <div class="row"><span class="k">--stream-rows 10000</span><span class="d">Chunk size (default 10k)</span></div>
+      <div class="tip"><strong>stream</strong> keeps memory low for large files. <strong>mem</strong> is useful for benchmarking. Lower <span class="cmd">--stream-rows</span> for wide/string-heavy datasets.</div>
+    </section>
+
+    <!-- ── Column Selection ── -->
+    <section class="section theme-teal">
+      <h2>Column Selection</h2>
+      <div class="sub-heading">Discover columns</div>
+      <div class="row"><span class="k">readstat metadata FILE --as-json | jq '.vars | to_entries[] | .value.var_name'</span></div>
+      <div class="sub-heading" style="margin-top:6px">Select inline</div>
+      <div class="row"><span class="k">--columns Brand,Model,EngineSize</span></div>
+      <div class="sub-heading" style="margin-top:6px">Select from file</div>
+      <div class="row"><span class="k">--columns-file columns.txt</span><span class="d"># comments, one per line</span></div>
+      <div class="tip"><strong>Works with:</strong> both <span class="cmd">preview</span> and <span class="cmd">data</span> subcommands.</div>
+    </section>
+
+    <!-- ── Metadata in Output Files ── -->
+    <section class="section theme-rose">
+      <h2>Metadata Preservation</h2>
+      <div class="row"><span class="k">label</span><span class="d">Variable label</span></div>
+      <div class="row"><span class="k">sas_format</span><span class="d">SAS format string</span></div>
+      <div class="row"><span class="k">storage_width</span><span class="d">Storage bytes</span></div>
+      <div class="row"><span class="k">display_width</span><span class="d">Display width hint</span></div>
+      <div class="row"><span class="k">table_label</span><span class="d">File label (schema-level)</span></div>
+      <div class="tip"><strong>Parquet &amp; Feather</strong> preserve SAS metadata as Arrow field metadata. Read with <span class="cmd">pyarrow.parquet.read_schema()</span> or R's <span class="cmd">arrow::read_parquet()</span>.</div>
+    </section>
+
+    <!-- ── Common Workflows ── -->
+    <section class="section wide theme-rose">
+      <h2>Common Workflows</h2>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px 16px;">
+        <div class="scenario">
+          <div class="scenario-title">Quick data exploration</div>
+          <div class="row"><span class="k">readstat metadata data.sas7bdat</span><span class="d">Schema overview</span></div>
+          <div class="row"><span class="k">readstat metadata data.sas7bdat --as-json | jq</span><span class="d">Programmatic metadata</span></div>
+          <div class="row"><span class="k">readstat preview data.sas7bdat --rows 20</span><span class="d">Eyeball sample rows</span></div>
+          <div class="row"><span class="k">readstat preview data.sas7bdat --columns Name,Age</span><span class="d">Subset columns</span></div>
+        </div>
+        <div class="scenario">
+          <div class="scenario-title">Production conversion</div>
+          <div class="row"><span class="k">readstat data big.sas7bdat -o big.parquet -f parquet --compression zstd</span></div>
+          <div class="row"><span class="k">... --parallel --parallel-write</span><span class="d">Max throughput</span></div>
+          <div class="row"><span class="k">... --columns-file keep.txt</span><span class="d">Only needed columns</span></div>
+          <div class="row"><span class="k">... --rows 100000</span><span class="d">Partial extract</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Debug & Help ── -->
+    <section class="section theme-indigo">
+      <h2>Debug &amp; Help</h2>
+      <div class="row"><span class="k">RUST_LOG=debug readstat ...</span><span class="d">Verbose debug output</span></div>
+      <div class="row"><span class="k">readstat --version</span><span class="d">Show version</span></div>
+      <div class="row"><span class="k">readstat --help</span><span class="d">Top-level help</span></div>
+      <div class="row"><span class="k">readstat metadata --help</span><span class="d">Subcommand help</span></div>
+      <div class="tip"><strong>Warning:</strong> <span class="cmd">RUST_LOG=debug</span> prints info for <em>every single value</em> &mdash; extremely verbose with <span class="cmd">preview</span> or <span class="cmd">data</span>!</div>
+    </section>
+
+  </div>
+
+  <!-- Footer -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:2px solid #e2e8f0; font-size:0.72rem; color:#94a3b8;">
+    <span><strong style="color:#6366f1">Input:</strong> SAS <span class="cmd">.sas7bdat</span> &ensp;|&ensp; <strong style="color:#6366f1">Output:</strong> CSV, Feather, NDJSON, Parquet</span>
+    <span>Rust + ReadStat C library &ensp;|&ensp; Arrow v57 &ensp;|&ensp; <a href="https://github.com/curtisalexander/readstat-rs" style="color:#6366f1; text-decoration:none;">github.com/curtisalexander/readstat-rs</a></span>
+  </div>
+
+</div>
+</body>
+</html>
