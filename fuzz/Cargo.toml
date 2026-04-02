@@ -1,0 +1,37 @@
+[package]
+name = "readstat-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.readstat]
+path = "../crates/readstat"
+default-features = false
+
+[dependencies.arrow]
+version = "57"
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_read_metadata"
+path = "fuzz_targets/fuzz_read_metadata.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_read_data"
+path = "fuzz_targets/fuzz_read_data.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_read_data_filtered"
+path = "fuzz_targets/fuzz_read_data_filtered.rs"
+doc = false

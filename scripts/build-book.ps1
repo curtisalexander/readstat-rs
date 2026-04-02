@@ -81,7 +81,7 @@ $docsMap = @{
     "TESTING.md"      = "testing.md"
     "BENCHMARKING.md"   = "benchmarking.md"
     "CI-CD.md"          = "ci-cd.md"
-    "MEMORY_SAFETY.md"  = "memory-safety.md"
+    "MEMORY-SAFETY.md"  = "memory-safety.md"
     "RELEASING.md"      = "releasing.md"
 }
 

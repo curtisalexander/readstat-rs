@@ -92,7 +92,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/TESTING.md](docs/TESTING.md) | Running tests, dataset table, valgrind |
 | [docs/BENCHMARKING.md](docs/BENCHMARKING.md) | Criterion benchmarks, hyperfine, and profiling |
 | [docs/CI-CD.md](docs/CI-CD.md) | GitHub Actions triggers and artifacts |
-| [docs/MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) | Automated memory-safety CI checks (Valgrind, ASan, Miri, unsafe audit) |
+| [docs/MEMORY-SAFETY.md](docs/MEMORY-SAFETY.md) | Automated memory-safety CI checks (Valgrind, ASan, Miri, unsafe audit) |
 | [docs/RELEASING.md](docs/RELEASING.md) | Step-by-step guide for publishing crates to crates.io |
 
 ## :jigsaw: Workspace Crates
