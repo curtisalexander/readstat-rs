@@ -12,6 +12,7 @@ documentation = "https://docs.rs/readstat"
 readme = "README.md"
 keywords = ["sas", "sas7bdat", "arrow", "parquet", "readstat"]
 categories = ["parser-implementations", "science"]
+exclude = ["benches/", "proptest-regressions/"]
 
 [[bench]]
 name = "readstat_benchmarks"

@@ -14,7 +14,7 @@
 /target/
 /crates/readstat-wasm/target/
 # cargo
-Cargo.lock
+# Note: Cargo.lock is committed for reproducible binary builds (readstat-cli)
 # node
 node_modules/
 bun.lockb
