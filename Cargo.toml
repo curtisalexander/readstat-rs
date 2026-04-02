@@ -17,14 +17,14 @@ resolver = "2"
 
 [workspace.dependencies]
 # Arrow ecosystem (keep all Arrow crates at the same major version)
-arrow = { version = "57", features = ["chrono-tz"] }
-arrow-array = "57"
-arrow-cast = "57"
-arrow-csv = "57"
-arrow-ipc = { version = "57", features = ["zstd"] }
-arrow-json = "57"
-arrow-schema = "57"
-parquet = { version = "57", features = ["snap", "zstd", "brotli", "flate2", "lz4"] }
+arrow = { version = "58", features = ["chrono-tz"] }
+arrow-array = "58"
+arrow-cast = "58"
+arrow-csv = "58"
+arrow-ipc = { version = "58", features = ["zstd"] }
+arrow-json = "58"
+arrow-schema = "58"
+parquet = { version = "58", features = ["snap", "zstd", "brotli", "flate2", "lz4"] }
 
 # Shared dependencies
 chrono = { version = "0.4", features = ["serde"] }

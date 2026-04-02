@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0] - 2026-04-01
+
+### Changed
+- **Breaking**: Upgraded Arrow ecosystem from v57 to v58 (arrow, arrow-array, arrow-cast, arrow-csv, arrow-ipc, arrow-json, arrow-schema, parquet)
+- Upgraded DataFusion from v52 to v53
+- Upgraded Criterion from v0.5 to v0.8 (dev dependency)
+- Added dependency update checker script (`scripts/check-updates.sh`, `scripts/check-updates.ps1`) with supply chain quarantine support
+- Added "More Examples" section to CLI cheatsheet with links to web-demo, sql-explorer, api-demo, bun-demo, and cli-demo
+
 ## [0.20.2] - 2026-03-04
 
 ### Changed

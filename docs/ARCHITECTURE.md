@@ -69,7 +69,7 @@ Key public types:
 - `OutFormat` — output format enum (Csv, Feather, Ndjson, Parquet)
 - `ProgressCallback` — trait for receiving progress updates during parsing
 
-Major dependencies: Arrow v57 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
+Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
 ### `readstat-cli` (v0.20.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
