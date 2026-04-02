@@ -8,16 +8,26 @@
     to help prevent supply chain attacks. Uses cargo update --dry-run and
     the crates.io API.
 
+    The -Apply flag runs `cargo update -p <crate>` for each dependency that
+    passes the quarantine check. This updates Cargo.lock within semver-compatible
+    ranges. Major version bumps that require Cargo.toml edits are still manual.
+
 .PARAMETER QuarantineDays
     Minimum age in days a crate version must have before it is considered
     safe to adopt. Default: 7.
 
+.PARAMETER Apply
+    Update safe dependencies in Cargo.lock. Without this flag, the script
+    only prints a report.
+
 .EXAMPLE
     ./scripts/check-updates.ps1
-    ./scripts/check-updates.ps1 -QuarantineDays 3
+    ./scripts/check-updates.ps1 -Apply
+    ./scripts/check-updates.ps1 -QuarantineDays 3 -Apply
 #>
 param(
-    [int]$QuarantineDays = 7
+    [int]$QuarantineDays = 7,
+    [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
@@ -142,4 +152,59 @@ if ($quarantineCount -gt 0) {
     Write-Host ""
 }
 
+# ── Apply mode ───────────────────────────────────────────────────────────────
+if ($Apply) {
+    if ($safeCount -eq 0) {
+        Write-Host "Nothing to apply — all updates are quarantined." -ForegroundColor DarkGray
+        exit 0
+    }
+
+    Write-Host "Applying $safeCount safe update(s) via cargo update…" -ForegroundColor Blue
+    Write-Host ""
+
+    $applied = 0
+    $skipped = 0
+
+    foreach ($r in $results) {
+        if ($r.Status -eq 'quarantine') {
+            Write-Host -NoNewline "  ✖ "
+            Write-Host -NoNewline "Skipping " -ForegroundColor DarkGray
+            Write-Host -NoNewline $r.Name -ForegroundColor Cyan
+            Write-Host " (quarantined)" -ForegroundColor DarkGray
+            $skipped++
+            continue
+        }
+
+        Write-Host -NoNewline "  ↻ Updating "
+        Write-Host -NoNewline $r.Name -ForegroundColor Cyan
+        Write-Host -NoNewline " → "
+        Write-Host -NoNewline $r.Available -ForegroundColor Yellow
+        Write-Host -NoNewline "…"
+
+        try {
+            $updateOutput = cargo update -p $r.Name 2>&1
+            Write-Host " ✔" -ForegroundColor Green
+            $applied++
+        }
+        catch {
+            Write-Host " ✖ failed" -ForegroundColor Red
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Apply complete" -ForegroundColor White
+    Write-Host "  ✔ $applied crate(s) updated in Cargo.lock" -ForegroundColor Green
+    if ($skipped -gt 0) {
+        Write-Host "  ✖ $skipped crate(s) skipped (quarantined)" -ForegroundColor Red
+    }
+    Write-Host ""
+    Write-Host "Note: Only Cargo.lock was updated (semver-compatible range)." -ForegroundColor DarkGray
+    Write-Host "Major version bumps require manual Cargo.toml edits." -ForegroundColor DarkGray
+}
+else {
+    Write-Host "Run with -Apply to update safe dependencies in Cargo.lock." -ForegroundColor DarkGray
+}
+
+# Recommend complementary tools
+Write-Host ""
 Write-Host "Tip: Pair this with 'cargo audit' and 'cargo deny check' for full supply chain coverage." -ForegroundColor DarkGray

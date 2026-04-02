@@ -7,12 +7,25 @@
 # the crates.io API.
 #
 # Usage:
-#   ./scripts/check-updates.sh              # default 7-day quarantine
-#   QUARANTINE_DAYS=3 ./scripts/check-updates.sh
+#   ./scripts/check-updates.sh              # report only (default 7-day quarantine)
+#   ./scripts/check-updates.sh --apply      # update safe deps in Cargo.lock
+#   QUARANTINE_DAYS=3 ./scripts/check-updates.sh --apply
+#
+# The --apply flag runs `cargo update -p <crate>` for each dependency that
+# passes the quarantine check. This updates Cargo.lock within semver-compatible
+# ranges. Major version bumps that require Cargo.toml edits are still manual.
 #
 set -euo pipefail
 
 QUARANTINE_DAYS="${QUARANTINE_DAYS:-7}"
+APPLY=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --apply) APPLY=true ;;
+    *) echo "Unknown argument: $arg"; exit 1 ;;
+  esac
+done
 
 # ── Colors & symbols ──────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -110,6 +123,11 @@ safe_count=0
 quarantine_count=0
 
 # Header
+mode_label="report only"
+if [ "$APPLY" = true ]; then
+  mode_label="apply mode"
+fi
+
 echo -e "${BOLD}┌──────────────────────────────────────────────────────────────────────────────────────────────┐${RESET}"
 echo -e "${BOLD}│  Outdated Dependencies Report                                                  ${DIM}quarantine: ${QUARANTINE_DAYS}d${RESET}${BOLD}  │${RESET}"
 echo -e "${BOLD}├──────────────────────┬───────────────┬───────────────┬──────────────┬─────────┬─────────────┤${RESET}"
@@ -158,5 +176,52 @@ if [ "$quarantine_count" -gt 0 ]; then
   echo ""
 fi
 
+# ── Apply mode ───────────────────────────────────────────────────────────────
+if [ "$APPLY" = true ]; then
+  if [ "$safe_count" -eq 0 ]; then
+    echo -e "${DIM}Nothing to apply — all updates are quarantined.${RESET}"
+    exit 0
+  fi
+
+  echo -e "${BOLD}${BLUE}Applying ${safe_count} safe update(s) via cargo update…${RESET}"
+  echo ""
+
+  applied=0
+  skipped=0
+
+  for i in $(seq 0 $((count - 1))); do
+    name="${NAMES[$i]}"
+    status="${STATUSES[$i]}"
+    avail="${AVAILABLE[$i]}"
+
+    if [ "$status" = "quarantine" ]; then
+      echo -e "  ${RED}${BLOCK}${RESET} ${DIM}Skipping${RESET} ${CYAN}${name}${RESET} ${DIM}(quarantined)${RESET}"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    echo -ne "  ${YELLOW}↻${RESET} Updating ${CYAN}${name}${RESET} → ${YELLOW}${avail}${RESET}…"
+    if cargo update -p "${name}" 2>/dev/null; then
+      echo -e " ${GREEN}${CHECK}${RESET}"
+      applied=$((applied + 1))
+    else
+      echo -e " ${RED}${BLOCK} failed${RESET}"
+    fi
+  done
+
+  echo ""
+  echo -e "${BOLD}Apply complete${RESET}"
+  echo -e "  ${GREEN}${CHECK}${RESET} ${applied} crate(s) updated in Cargo.lock"
+  if [ "$skipped" -gt 0 ]; then
+    echo -e "  ${RED}${BLOCK}${RESET} ${skipped} crate(s) skipped (quarantined)"
+  fi
+  echo ""
+  echo -e "${DIM}Note: Only Cargo.lock was updated (semver-compatible range).${RESET}"
+  echo -e "${DIM}Major version bumps require manual Cargo.toml edits.${RESET}"
+else
+  echo -e "${DIM}Run with ${BOLD}--apply${RESET}${DIM} to update safe dependencies in Cargo.lock.${RESET}"
+fi
+
 # Recommend complementary tools
+echo ""
 echo -e "${DIM}Tip: Pair this with 'cargo audit' and 'cargo deny check' for full supply chain coverage.${RESET}"

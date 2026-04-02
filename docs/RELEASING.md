@@ -30,6 +30,23 @@ cargo publish -p readstat-cli
 
 ## Pre-Release Checklist
 
+### 0. Check for Dependency Updates
+
+```bash
+./scripts/check-updates.sh              # report only (Linux/macOS)
+./scripts/check-updates.sh --apply      # update safe deps in Cargo.lock
+.\scripts\check-updates.ps1             # report only (Windows)
+.\scripts\check-updates.ps1 -Apply      # update safe deps in Cargo.lock
+```
+
+This queries crates.io for outdated dependencies and their publish dates. Updates
+published less than 7 days ago (configurable via `QUARANTINE_DAYS` env var or
+`-QuarantineDays` parameter) are blocked to reduce supply chain risk.
+
+The `--apply` / `-Apply` flag runs `cargo update -p <crate>` for each safe
+dependency, updating Cargo.lock within semver-compatible ranges. Major version
+bumps that require Cargo.toml edits are still manual.
+
 ### 1. Version Bumps
 
 Update version numbers in these files (keep them in sync):
