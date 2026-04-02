@@ -25,7 +25,7 @@ cargo test -p readstat-tests <test_name>
 
 - Rust edition 2024
 - Main branch: `main`, development branch: `dev`
-- Workspace with 5 crates under `crates/` plus `readstat-wasm` (excluded from workspace, built separately with Emscripten)
+- Workspace with 5 crates under `crates/` plus `readstat-wasm` (excluded from workspace, built separately with Emscripten) and `fuzz/` (standalone cargo-fuzz project, requires nightly)
 - `readstat` is a pure library; `readstat-cli` owns the binary
 - FFI crates follow the `*-sys` naming convention with `build.rs` + bindgen
 - Integration tests are in the separate `readstat-tests` crate, not inline
