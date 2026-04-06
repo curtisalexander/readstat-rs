@@ -3,7 +3,7 @@ use libfuzzer_sys::fuzz_target;
 use readstat::{ReadStatData, ReadStatMetadata};
 
 use arbitrary::Arbitrary;
-use arrow::datatypes::Schema;
+use arrow::datatypes::{Field, Schema};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -14,8 +14,9 @@ struct FuzzInput<'a> {
     selected_columns: Vec<u16>,
 }
 
-// Cap rows to avoid OOM from malformed metadata claiming billions of rows.
+// Cap rows and columns to avoid OOM from malformed metadata.
 const MAX_ROWS: u32 = 100_000;
+const MAX_VARS: i32 = 1_000;
 
 fuzz_target!(|input: FuzzInput| {
     let mut md = ReadStatMetadata::new();
@@ -24,7 +25,7 @@ fuzz_target!(|input: FuzzInput| {
     }
 
     let total_var_count = md.var_count;
-    if total_var_count == 0 {
+    if total_var_count == 0 || total_var_count > MAX_VARS {
         return;
     }
 
@@ -60,9 +61,14 @@ fuzz_target!(|input: FuzzInput| {
         })
         .collect();
 
-    let filtered_fields: Vec<_> = selected
+    let filtered_fields: Vec<Field> = selected
         .iter()
-        .filter_map(|&idx| md.schema.fields().get(idx as usize).cloned())
+        .filter_map(|&idx| {
+            md.schema
+                .fields()
+                .get(idx as usize)
+                .map(|f| f.as_ref().clone())
+        })
         .collect();
 
     md.vars = filtered_vars;
