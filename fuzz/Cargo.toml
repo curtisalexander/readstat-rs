@@ -16,7 +16,7 @@ path = "../crates/readstat"
 default-features = false
 
 [dependencies.arrow]
-version = "57"
+version = "58"
 
 [workspace]
 members = ["."]
