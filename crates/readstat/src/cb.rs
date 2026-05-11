@@ -489,8 +489,14 @@ mod tests {
         fn round_f64_bounded_error(v in any::<f64>().prop_filter("finite", |v| v.is_finite())) {
             let rounded = round_decimal_f64(v);
             let error = (v - rounded).abs();
-            // Rounding to 14 decimal places: max error is 0.5e-14
-            prop_assert!(error <= 5e-15 + f64::EPSILON, "error {} too large for input {}", error, v);
+            // Rounding to 14 decimal places gives at most 0.5e-14 = 5e-15 error in
+            // exact arithmetic.  However, the final `int_part + rounded_frac` addition
+            // cannot be more precise than 1 ULP of the result.  For |v| in [32, 64) that
+            // ULP is 2^-47 ≈ 7.1e-15, which exceeds 5e-15 — so the bound must scale
+            // with the magnitude of v.
+            let magnitude_error = v.abs() * f64::EPSILON;
+            prop_assert!(error <= 5e-15 + magnitude_error,
+                "error {} too large for input {} (bound {})", error, v, 5e-15 + magnitude_error);
         }
 
         #[test]

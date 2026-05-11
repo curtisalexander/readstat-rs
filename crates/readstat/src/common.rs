@@ -35,7 +35,7 @@ pub fn build_offsets(row_count: u32, stream_rows: u32) -> Vec<u32> {
 ///
 /// Returns an empty string if the pointer is null. Uses lossy UTF-8 conversion
 /// to handle non-UTF-8 data gracefully.
-pub(crate) fn ptr_to_string(x: *const i8) -> String {
+pub(crate) fn ptr_to_string(x: *const std::os::raw::c_char) -> String {
     if x.is_null() {
         String::new()
     } else {
@@ -152,7 +152,7 @@ mod tests {
         // Build one explicitly so the test is self-contained.
         let mut buf = b"caf\xC3".to_vec();
         buf.push(0); // null terminator
-        let ptr = buf.as_ptr().cast::<i8>();
+        let ptr = buf.as_ptr().cast::<std::os::raw::c_char>();
 
         let result = ptr_to_string(ptr);
         assert_eq!(result, "caf\u{FFFD}");
@@ -163,7 +163,7 @@ mod tests {
         // 0xFF is never valid in UTF-8
         let mut buf = b"hello\xFFworld".to_vec();
         buf.push(0);
-        let ptr = buf.as_ptr().cast::<i8>();
+        let ptr = buf.as_ptr().cast::<std::os::raw::c_char>();
 
         let result = ptr_to_string(ptr);
         assert_eq!(result, "hello\u{FFFD}world");
