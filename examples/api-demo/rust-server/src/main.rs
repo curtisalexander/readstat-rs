@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
     routing::{get, post},
 };
+use readstat::OutFormat;
 use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
@@ -57,7 +58,9 @@ async fn metadata(multipart: Multipart) -> Result<Json<serde_json::Value>, AppEr
     .await
     .unwrap()?;
 
-    Ok(Json(serde_json::to_value(&md).unwrap()))
+    serde_json::to_value(&md)
+        .map(Json)
+        .map_err(|e| AppError(readstat::ReadStatError::Other(e.to_string())))
 }
 
 #[derive(Deserialize)]
@@ -82,7 +85,9 @@ async fn preview(
             .init(md, 0, end);
         d.read_data_from_bytes(&bytes)?;
 
-        let batch = d.batch.as_ref().unwrap();
+        let batch = d.batch.as_ref().ok_or_else(|| {
+            readstat::ReadStatError::Other("parsing produced no data".into())
+        })?;
         readstat::write_batch_to_csv_bytes(batch)
     })
     .await
@@ -100,8 +105,14 @@ async fn data(
     Query(params): Query<DataParams>,
     multipart: Multipart,
 ) -> Result<Response, AppError> {
+    // Validate format before doing any expensive work.
+    let fmt: OutFormat = params
+        .format
+        .unwrap_or_else(|| "csv".into())
+        .parse()
+        .map_err(AppError)?;
+
     let bytes = extract_file_bytes(multipart).await?;
-    let format = params.format.unwrap_or_else(|| "csv".into());
 
     let (output_bytes, content_type, filename) = tokio::task::spawn_blocking(move || {
         let mut md = readstat::ReadStatMetadata::new();
@@ -113,44 +124,43 @@ async fn data(
             .init(md, 0, row_count);
         d.read_data_from_bytes(&bytes)?;
 
-        let batch = d.batch.as_ref().unwrap();
-        match format.as_str() {
-            "csv" => Ok((
+        let batch = d.batch.as_ref().ok_or_else(|| {
+            readstat::ReadStatError::Other("parsing produced no data".into())
+        })?;
+        match fmt {
+            OutFormat::Csv => Ok((
                 readstat::write_batch_to_csv_bytes(batch)?,
                 "text/csv",
                 "data.csv",
             )),
-            "ndjson" => Ok((
+            OutFormat::Ndjson => Ok((
                 readstat::write_batch_to_ndjson_bytes(batch)?,
                 "application/x-ndjson",
                 "data.ndjson",
             )),
-            "parquet" => Ok((
+            OutFormat::Parquet => Ok((
                 readstat::write_batch_to_parquet_bytes(batch)?,
                 "application/octet-stream",
                 "data.parquet",
             )),
-            "feather" => Ok((
+            OutFormat::Feather => Ok((
                 readstat::write_batch_to_feather_bytes(batch)?,
                 "application/octet-stream",
                 "data.feather",
             )),
-            _ => Err(readstat::ReadStatError::Other(format!(
-                "Unknown format '{}'. Use csv, ndjson, parquet, or feather.",
-                format
-            ))),
+            _ => Err(readstat::ReadStatError::Other(
+                "unsupported format".into(),
+            )),
         }
     })
     .await
     .unwrap()?;
 
+    let disposition = format!("attachment; filename=\"{filename}\"");
     Ok((
         [
             (header::CONTENT_TYPE, content_type),
-            (
-                header::CONTENT_DISPOSITION,
-                &format!("attachment; filename=\"{filename}\""),
-            ),
+            (header::CONTENT_DISPOSITION, disposition.as_str()),
         ],
         output_bytes,
     )
