@@ -4,7 +4,21 @@ Demonstrates reading SAS `.sas7bdat` file metadata and data from JavaScript usin
 
 ## Quick start
 
-If you already have Rust, Emscripten SDK, libclang, and Bun installed:
+The pre-built WASM binary is checked into the repository, so only [Bun](https://bun.sh) is needed:
+
+```bash
+cd examples/bun-demo
+bun install
+bun run index.ts
+```
+
+That's it. See [Expected output](#expected-output) below to verify.
+
+> If you want to rebuild the WASM from source (requires Rust + Emscripten), see [Building from source](#building-from-source) below.
+
+## Building from source
+
+Only needed if you want to modify `crates/readstat-wasm/` and rebuild the WASM. Requires Rust, Emscripten SDK, libclang, and Bun.
 
 **macOS / Linux:**
 
@@ -77,7 +91,7 @@ bun install
 bun run index.ts
 ```
 
-## 1. Install dependencies
+## Install dependencies (for building from source)
 
 ### Rust + wasm target
 
@@ -137,7 +151,7 @@ curl -fsSL https://bun.sh/install | bash
 powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
-## 2. Initialize git submodules
+## Initialize git submodules
 
 From the repository root:
 
@@ -145,7 +159,7 @@ From the repository root:
 git submodule update --init --recursive
 ```
 
-## 3. Build the WASM package
+## Build the WASM package
 
 ```bash
 # Make sure Emscripten is activated in your shell (see table above)
@@ -163,7 +177,7 @@ cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
 # copy target\wasm32-unknown-emscripten\release\readstat_wasm.wasm pkg\
 ```
 
-## 4. Run the demo
+## Run the demo
 
 ```bash
 cd examples/bun-demo

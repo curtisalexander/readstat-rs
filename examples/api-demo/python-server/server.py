@@ -38,10 +38,18 @@ async def convert(
 
     if format == "csv":
         content = readstat_py.read_to_csv(data)
-        return Response(content=content, media_type="text/csv")
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="data.csv"'},
+        )
     elif format == "ndjson":
         content = readstat_py.read_to_ndjson(data)
-        return Response(content=content, media_type="application/x-ndjson")
+        return Response(
+            content=content,
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": 'attachment; filename="data.ndjson"'},
+        )
     elif format == "parquet":
         content = readstat_py.read_to_parquet(data)
         return Response(
