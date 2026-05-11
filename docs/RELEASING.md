@@ -7,24 +7,37 @@ Step-by-step guide for publishing readstat-rs crates to crates.io.
 ## Quick Reference
 
 ```bash
-# Run all pre-publish checks
+# 0. Merge the release PR, then pull main
+git checkout main && git pull origin main
+
+# 1. Run all pre-publish checks
 ./scripts/release-check.sh        # Linux/macOS
 .\scripts\release-check.ps1       # Windows
 
-# Switch vendor dirs from submodules to copied files
+# 2. Bump versions (updates Cargo.toml files, ARCHITECTURE.md, creates commit + tag)
+cargo release minor -p readstat -p readstat-cli --dry-run   # preview first
+cargo release minor -p readstat -p readstat-cli             # apply
+
+# 3. Review the bump commit and tag, then push to trigger CI release builds
+git push origin main --follow-tags
+
+# 4. After CI builds the release artifacts, publish to crates.io:
+#    Switch vendor dirs from submodules to copied files
 ./scripts/vendor.sh prepare       # Linux/macOS
 .\scripts\vendor.ps1 prepare      # Windows
 
-# Publish (in dependency order)
+#    Publish (in dependency order)
 cargo publish -p readstat-iconv-sys
 cargo publish -p readstat-sys
 cargo publish -p readstat
 cargo publish -p readstat-cli
 
-# Restore submodules after publishing
+#    Restore submodules after publishing
 ./scripts/vendor.sh restore       # Linux/macOS
 .\scripts\vendor.ps1 restore      # Windows
 ```
+
+> **Install `cargo-release` once:** `cargo install cargo-release`
 
 ---
 
@@ -49,21 +62,26 @@ bumps that require Cargo.toml edits are still manual.
 
 ### 1. Version Bumps
 
-Update version numbers in these files (keep them in sync):
+Use [`cargo-release`](https://github.com/crate-ci/cargo-release) (`cargo install cargo-release`).
+It updates all Cargo.toml version and dependency fields, substitutes the version strings in
+`docs/ARCHITECTURE.md`, and creates a single version-bump commit plus a git tag.
 
-| File | Fields |
-|------|--------|
-| `crates/readstat/Cargo.toml` | `version` |
-| `crates/readstat-cli/Cargo.toml` | `version`, `readstat` dependency version |
-| `crates/readstat-sys/Cargo.toml` | `version` |
-| `crates/readstat-iconv-sys/Cargo.toml` | `version` |
-| `crates/readstat/Cargo.toml` | `readstat-sys` dependency version |
-| `crates/readstat-sys/Cargo.toml` | `readstat-iconv-sys` dependency version |
+```bash
+# Preview what will change (no files are modified)
+cargo release minor -p readstat -p readstat-cli --dry-run
+
+# Apply — updates Cargo.toml files, docs/ARCHITECTURE.md, commits, creates tag
+cargo release minor -p readstat -p readstat-cli
+```
+
+Use `patch` / `minor` / `major` as appropriate. After running, verify the diff looks right,
+then push: `git push origin main --follow-tags`.
 
 **Version conventions:**
-- `readstat` and `readstat-cli` share the same version (e.g. `0.20.0`)
+- `readstat` and `readstat-cli` share the same version (e.g. `0.21.0`) — always bump together
 - `readstat-sys` and `readstat-iconv-sys` share the same version (e.g. `0.3.0`)
-- Bump sys crate versions only when the vendored C library or bindings change
+- Bump sys crates only when the vendored C library or bindings change:
+  `cargo release patch -p readstat-sys -p readstat-iconv-sys`
 
 ### 2. Update CHANGELOG.md
 
@@ -172,17 +190,23 @@ resolution error, wait and retry.
 .\scripts\vendor.ps1 restore      # Windows
 ```
 
-### 2. Create a git tag
+### 2. Push the tag (triggers CI release builds)
+
+`cargo-release` already created the tag locally in step 1 of the Pre-Release Checklist.
+Push it now:
 
 ```bash
-git tag v0.20.0
-git push origin v0.20.0
+git push origin main --follow-tags
 ```
 
-### 3. Create a GitHub release
+The CI pipeline (`main.yml`) detects the tag, builds platform binaries (Linux glibc,
+Linux musl, Linux ARM64, macOS x86, macOS ARM, Windows), and creates a GitHub Release
+with those binaries attached automatically.
 
-Use the GitHub CLI or web UI to create a release from the tag. The CI pipeline
-(`main.yml`) will automatically build platform binaries and attach them.
+### 3. Verify the GitHub release
+
+Check the Actions tab to confirm the release builds completed, then review the
+auto-created GitHub Release on the Releases page.
 
 ### 4. Clean up
 

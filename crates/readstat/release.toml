@@ -1,0 +1,17 @@
+# Per-crate cargo-release config for `readstat`.
+# Inherits workspace defaults from release.toml at the repo root.
+#
+# Substitutes the version strings in ARCHITECTURE.md so the headings
+# stay in sync without manual edits.
+
+[[pre-release-replacements]]
+file = "../../docs/ARCHITECTURE.md"
+search = "### `readstat` \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)"
+replace = "### `readstat` (v{{version}})"
+exactly = 1
+
+[[pre-release-replacements]]
+file = "../../docs/ARCHITECTURE.md"
+search = "### `readstat-cli` \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)"
+replace = "### `readstat-cli` (v{{version}})"
+exactly = 1
