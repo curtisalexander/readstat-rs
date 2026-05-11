@@ -87,7 +87,7 @@ then push: `git push origin main --follow-tags`.
 
 Add an entry for the new version:
 ```markdown
-## [0.20.0] - 2026-XX-XX
+## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 - ...
@@ -190,29 +190,38 @@ resolution error, wait and retry.
 .\scripts\vendor.ps1 restore      # Windows
 ```
 
-### 2. Push the tag (triggers CI release builds)
+### 2. Verify crates.io
 
-`cargo-release` already created the tag locally in step 1 of the Pre-Release Checklist.
-Push it now:
+Each published crate appears on crates.io within a few minutes:
 
-```bash
-git push origin main --follow-tags
-```
+- https://crates.io/crates/readstat
+- https://crates.io/crates/readstat-cli
+- https://crates.io/crates/readstat-sys
+- https://crates.io/crates/readstat-iconv-sys
 
-The CI pipeline (`main.yml`) detects the tag, builds platform binaries (Linux glibc,
-Linux musl, Linux ARM64, macOS x86, macOS ARM, Windows), and creates a GitHub Release
-with those binaries attached automatically.
+### 3. Verify docs.rs
 
-### 3. Verify the GitHub release
+docs.rs automatically builds documentation for every crate published to crates.io —
+no separate action is needed. The build is triggered by the crates.io publish and
+typically completes within 15–30 minutes.
 
-Check the Actions tab to confirm the release builds completed, then review the
-auto-created GitHub Release on the Releases page.
+The `[package.metadata.docs.rs]` section in `crates/readstat/Cargo.toml` instructs
+docs.rs to build with all features enabled and the `docsrs` cfg flag set, which
+causes feature-gated items to show their `#[cfg(feature = "...")]` badges.
 
-### 4. Clean up
+Check build status and browse the rendered docs at:
+
+- https://docs.rs/readstat (build log: https://docs.rs/crate/readstat/latest/builds)
+
+### 4. Verify the GitHub release
+
+The tag push (step 3 of the Pre-Release Checklist above) already triggered CI to build
+platform binaries and create the GitHub Release. Confirm everything looks right on the
+[Releases page](https://github.com/curtisalexander/readstat-rs/releases).
+
+### 5. Clean up
 
 - Remove `vendor-lock.txt` (or commit it for reference)
-- Verify the published crates on [crates.io](https://crates.io)
-- Verify the docs on [docs.rs](https://docs.rs)
 
 ---
 
