@@ -23,6 +23,10 @@ use serde::Serialize;
 /// | `DateTimeWithNanoseconds` | `Timestamp(Nanosecond)` |
 /// | `Time` | `Time32(Second)` |
 /// | `TimeWithMicroseconds` | `Time64(Microsecond)` |
+///
+/// This enum is `#[non_exhaustive]`: new precision levels or format classes
+/// may be added in minor releases.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum ReadStatVarFormatClass {
     /// Date format (e.g. `DATE9`, `MMDDYY10`). Maps to Arrow `Date32`.

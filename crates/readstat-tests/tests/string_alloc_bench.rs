@@ -58,7 +58,7 @@ fn bench_ahs_string_allocation() {
 
     // Phase 2: Read data in streaming chunks
     let stream_rows: u32 = 10_000;
-    let offsets = readstat::build_offsets(md.row_count as u32, stream_rows).unwrap();
+    let offsets = readstat::build_offsets(md.row_count as u32, stream_rows);
     let chunks = offsets.windows(2).count();
 
     let mut total_read = std::time::Duration::ZERO;

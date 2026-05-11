@@ -1,4 +1,7 @@
 [![readstat-rs](https://github.com/curtisalexander/readstat-rs/workflows/readstat-rs/badge.svg)](https://github.com/curtisalexander/readstat-rs/actions)
+[![Crates.io](https://img.shields.io/crates/v/readstat)](https://crates.io/crates/readstat)
+[![docs.rs](https://img.shields.io/docsrs/readstat)](https://docs.rs/readstat)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 # readstat-rs
 Read, inspect, and convert SAS binary (`.sas7bdat`) files &mdash; from [Rust code](crates/readstat/), the [command line](crates/readstat-cli/), or the [browser](crates/readstat-wasm/). Converts to CSV, Parquet, Feather, and NDJSON using Apache Arrow.
@@ -22,6 +25,13 @@ readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parque
 ```
 
 ## :package: CLI Install
+
+### From Cargo
+If you have Rust installed, the easiest way to install is via `cargo`:
+
+```sh
+cargo install readstat-cli
+```
 
 ### Download a Release
 \[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
@@ -82,6 +92,8 @@ Clone the repository (with submodules), install platform-specific developer tool
 | **Windows** (MSVC) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | [Requires `libclang`](docs/BUILDING.md#windows) for [bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang). MSVC supported since [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5` (no msys2 needed). |
 
 ## :books: Documentation
+
+:notebook: **[Online Book (GitHub Pages)](https://curtisalexander.github.io/readstat-rs/)** — full reference including installation, CLI usage, architecture, technical details, and memory safety.
 
 | Document | Description |
 |----------|-------------|

@@ -197,7 +197,7 @@ fn run_preview(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let progress = create_progress(no_progress, total_rows_to_process)?;
 
-    let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
+    let offsets = build_offsets(total_rows_to_process, total_rows_to_stream);
     let offsets_pairs = offsets.windows(2);
 
     let var_count = md.var_count;
@@ -367,7 +367,7 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let progress = create_progress(no_progress, total_rows_to_process)?;
 
-            let offsets = build_offsets(total_rows_to_process, total_rows_to_stream)?;
+            let offsets = build_offsets(total_rows_to_process, total_rows_to_stream);
 
             let use_parallel_writes =
                 parallel && parallel_write && matches!(wc.format, OutFormat::Parquet);

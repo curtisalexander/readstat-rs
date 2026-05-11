@@ -121,7 +121,7 @@ fn parse_scientific_notation_metadata() {
     assert_eq!(md.version, 9);
 
     // bitness
-    assert_eq!(md.is64bit, 1);
+    assert_eq!(md.is_64bit, 1);
 
     // creation time
     assert_eq!(md.creation_time, "2022-01-08 22:09:34");

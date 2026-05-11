@@ -9,6 +9,12 @@ on:
   push:
     tags:
       - "*"
+    # Trigger tests (but not releases) on branch pushes
+    branches: [main, dev]
+
+  # Trigger tests on PRs targeting main or dev
+  pull_request:
+    branches: [main, dev]
 
   # Manual trigger from GitHub Actions UI (build-only, no releases)
   workflow_dispatch:
@@ -23,6 +29,24 @@ on:
     types: [build, test, release]
 
 jobs:
+  # Lightweight CI: tests only, runs on branch pushes and PRs (not on tag releases).
+  ci-test:
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential clang
+      - name: Test
+        run: cargo test --workspace
+
   release-notes:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
@@ -80,13 +104,14 @@ jobs:
             fi
           } > release-notes.md
       - name: Create release with notes
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux-gnu:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     env:
       target: x86_64-unknown-linux-gnu
@@ -123,7 +148,7 @@ jobs:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -131,6 +156,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-linux-musl:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     env:
       target: x86_64-unknown-linux-musl
@@ -167,7 +193,58 @@ jobs:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build-linux-arm:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      target: aarch64-unknown-linux-gnu
+    steps:
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.target }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install cross-compilation tools
+        run: sudo apt-get update -y && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Build
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          cargo build --release --target ${{ env.target }}
+          aarch64-linux-gnu-strip target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}
+      - name: Zip
+        run: tar czvf target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/${{ env.target }}/release ${{ env.PACKAGE_NAME }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
+          path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+      - name: Release
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -175,6 +252,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-win:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: windows-latest
     env:
       target: x86_64-pc-windows-msvc
@@ -225,7 +303,7 @@ jobs:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -233,6 +311,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-macos-x86:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: macos-latest
     env:
       target: x86_64-apple-darwin
@@ -267,7 +346,7 @@ jobs:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -276,6 +355,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-arm:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: macos-latest
     env:
       target: aarch64-apple-darwin
@@ -310,7 +390,7 @@ jobs:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -321,6 +401,7 @@ jobs:
   # --- Memory safety checks ---
 
   miri:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     env:
       MIRIFLAGS: "-Zmiri-disable-isolation"
@@ -339,6 +420,7 @@ jobs:
         run: cargo +nightly miri test -p readstat
 
   asan-linux:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: "-Zsanitizer=address -Clinker=clang"
@@ -358,6 +440,7 @@ jobs:
         run: cargo +nightly test --workspace --lib --tests --bins --target x86_64-unknown-linux-gnu
 
   asan-macos:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: macos-latest
     env:
       RUSTFLAGS: "-Zsanitizer=address"
@@ -376,6 +459,7 @@ jobs:
         run: cargo +nightly test --workspace --lib --tests --bins --target aarch64-apple-darwin
 
   asan-windows:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: windows-latest
     env:
       RUSTFLAGS: "-Zsanitizer=address"
@@ -428,6 +512,7 @@ jobs:
   # instrumentation SHOULD work. Marked continue-on-error because this is
   # experimental — no one has publicly documented this combination working.
   asan-windows-full:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: windows-latest
     continue-on-error: true
     env:

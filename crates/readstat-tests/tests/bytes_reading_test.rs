@@ -56,7 +56,7 @@ fn bytes_cars_metadata_matches_file() {
             file_label: "Written by SAS",
             file_encoding: "WINDOWS-1252",
             version: 9,
-            is64bit: 0,
+            is_64bit: 0,
             creation_time: "2008-09-30 12:55:01",
             modified_time: "2008-09-30 12:55:01",
         },
@@ -164,7 +164,7 @@ fn bytes_streaming_chunks() {
     md.read_metadata_from_bytes(&bytes, false).unwrap();
 
     let total_rows = md.row_count as u32;
-    let offsets = readstat::build_offsets(total_rows, 500).unwrap();
+    let offsets = readstat::build_offsets(total_rows, 500);
     let mut total_read = 0usize;
 
     for w in offsets.windows(2) {

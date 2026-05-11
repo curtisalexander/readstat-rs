@@ -66,7 +66,7 @@ pub(crate) extern "C" fn handle_metadata(
     let file_encoding =
         unsafe { ptr_to_string(readstat_sys::readstat_get_file_encoding(metadata)) };
     let version: c_int = unsafe { readstat_sys::readstat_get_file_format_version(metadata) };
-    let is64bit = unsafe { readstat_sys::readstat_get_file_format_is_64bit(metadata) };
+    let is_64bit = unsafe { readstat_sys::readstat_get_file_format_is_64bit(metadata) };
     let ct = DateTime::from_timestamp(
         unsafe { readstat_sys::readstat_get_creation_time(metadata) },
         0,
@@ -98,7 +98,7 @@ pub(crate) extern "C" fn handle_metadata(
     debug!("file_label is {file_label}");
     debug!("file_encoding is {file_encoding}");
     debug!("version is {version}");
-    debug!("is64bit is {is64bit}");
+    debug!("is_64bit is {is_64bit}");
     debug!("creation_time is {ct}");
     debug!("modified_time is {mt}");
     debug!("compression is {compression:#?}");
@@ -111,7 +111,7 @@ pub(crate) extern "C" fn handle_metadata(
     m.file_label = file_label;
     m.file_encoding = file_encoding;
     m.version = version;
-    m.is64bit = is64bit;
+    m.is_64bit = is_64bit;
     m.creation_time = ct;
     m.modified_time = mt;
     m.compression = compression;

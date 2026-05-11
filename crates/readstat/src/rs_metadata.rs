@@ -44,7 +44,7 @@ pub struct ReadStatMetadata {
     /// SAS file format version number.
     pub version: i32,
     /// Whether the file uses 64-bit format (0 = 32-bit, 1 = 64-bit).
-    pub is64bit: i32,
+    pub is_64bit: i32,
     /// File creation timestamp (formatted as `YYYY-MM-DD HH:MM:SS`).
     pub creation_time: String,
     /// File modification timestamp (formatted as `YYYY-MM-DD HH:MM:SS`).
@@ -76,7 +76,7 @@ impl ReadStatMetadata {
             file_label: String::new(),
             file_encoding: String::new(),
             version: 0,
-            is64bit: 0,
+            is_64bit: 0,
             creation_time: String::new(),
             modified_time: String::new(),
             compression: ReadStatCompress::None,
@@ -361,7 +361,7 @@ impl ReadStatMetadata {
             file_label: self.file_label.clone(),
             file_encoding: self.file_encoding.clone(),
             version: self.version,
-            is64bit: self.is64bit,
+            is_64bit: self.is_64bit,
             creation_time: self.creation_time.clone(),
             modified_time: self.modified_time.clone(),
             compression: self.compression.clone(),

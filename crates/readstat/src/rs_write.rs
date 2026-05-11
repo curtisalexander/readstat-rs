@@ -641,7 +641,7 @@ impl ReadStatWriter {
         println!("Format version: {}", md.version);
         println!(
             "Bitness: {}",
-            if md.is64bit == 0 { "32-bit" } else { "64-bit" }
+            if md.is_64bit == 0 { "32-bit" } else { "64-bit" }
         );
         println!("Creation time: {}", md.creation_time);
         println!("Modified time: {}", md.modified_time);

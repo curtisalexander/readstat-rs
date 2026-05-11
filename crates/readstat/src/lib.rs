@@ -107,7 +107,7 @@
 //! md.read_metadata(&rsp, false)?;
 //!
 //! // Build chunk offsets: [0, 10000, 20000, ..., row_count]
-//! let offsets = build_offsets(md.row_count as u32, 10_000)?;
+//! let offsets = build_offsets(md.row_count as u32, 10_000);
 //! let mut wtr = ReadStatWriter::new();
 //! let pairs = offsets.windows(2);
 //! let pairs_cnt = pairs.len();
@@ -248,6 +248,7 @@
 //! | `ndjson` | NDJSON | Newline-delimited JSON via `arrow-json` |
 //! | `sql` | SQL | Query data with SQL via DataFusion (not enabled by default) |
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
@@ -260,18 +261,23 @@ pub use rs_data::ReadStatData;
 pub use rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata};
 pub use rs_path::ReadStatPath;
 #[cfg(feature = "sql")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
 pub use rs_query::{
     execute_sql, execute_sql_and_write_stream, execute_sql_stream, read_sql_file, write_sql_results,
 };
 pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;
 #[cfg(feature = "csv")]
+#[cfg_attr(docsrs, doc(cfg(feature = "csv")))]
 pub use rs_write::write_batch_to_csv_bytes;
 #[cfg(feature = "feather")]
+#[cfg_attr(docsrs, doc(cfg(feature = "feather")))]
 pub use rs_write::write_batch_to_feather_bytes;
 #[cfg(feature = "ndjson")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ndjson")))]
 pub use rs_write::write_batch_to_ndjson_bytes;
 #[cfg(feature = "parquet")]
+#[cfg_attr(docsrs, doc(cfg(feature = "parquet")))]
 pub use rs_write::write_batch_to_parquet_bytes;
 pub use rs_write_config::{OutFormat, ParquetCompression, WriteConfig};
 
