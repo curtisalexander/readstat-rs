@@ -11,7 +11,7 @@
 use ::predicates::prelude::*;
 use assert_cmd::Command;
 use assert_fs::NamedTempFile;
-use polars::prelude::*;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use readstat::ParquetCompression;
 use std::{fs::File, path::PathBuf, result::Result, sync::OnceLock};
 
@@ -346,12 +346,12 @@ fn cli_data_to_parquet(
     Ok((cmd, tempfile))
 }
 
-fn parquet_to_df(path: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    let pq_file = File::open(path).unwrap();
-
-    let df = ParquetReader::new(pq_file).finish()?;
-
-    Ok(df)
+fn parquet_shape(path: PathBuf) -> Result<(usize, usize), Box<dyn std::error::Error>> {
+    let file = File::open(path)?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+    let num_rows = builder.metadata().file_metadata().num_rows() as usize;
+    let num_cols = builder.schema().fields().len();
+    Ok((num_rows, num_cols))
 }
 
 #[test]
@@ -363,9 +363,8 @@ fn cars_to_parquet() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -387,9 +386,8 @@ fn cars_to_parquet_with_streaming() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -426,9 +424,8 @@ fn cars_to_parquet_overwrite() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -450,9 +447,8 @@ fn cars_to_parquet_with_compression_uncompressed() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -489,9 +485,8 @@ fn cars_to_parquet_with_streaming_with_compression_uncompressed() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -513,9 +508,8 @@ fn cars_to_parquet_with_compression_snappy() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -537,9 +531,8 @@ fn cars_to_parquet_with_streaming_with_compression_snappy() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -576,9 +569,8 @@ fn cars_to_parquet_with_compression_lz4raw() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -600,9 +592,8 @@ fn cars_to_parquet_with_streaming_with_compression_lz4raw() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -639,9 +630,8 @@ fn cars_to_parquet_with_compression_gzip_level_5() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -663,9 +653,8 @@ fn cars_to_parquet_with_streaming_with_compression_gzip_level_5() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -723,9 +712,8 @@ fn cars_to_parquet_with_compression_brotli_level_5() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -747,9 +735,8 @@ fn cars_to_parquet_with_streaming_with_compression_brotli_level_5() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -807,9 +794,8 @@ fn cars_to_parquet_with_compression_zstd_level_5() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -831,9 +817,8 @@ fn cars_to_parquet_with_sreaming_with_compression_zstd_level_5() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -855,9 +840,8 @@ fn cars_to_parquet_with_compression_zstd_level_12() {
             "In total, wrote 1,081 rows from file cars.sas7bdat into cars.parquet",
         ));
 
-        let df = parquet_to_df(tempfile.to_path_buf()).unwrap();
+        let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-        let (height, width) = df.shape();
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
