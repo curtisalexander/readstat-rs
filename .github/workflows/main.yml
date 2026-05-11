@@ -417,7 +417,10 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run Miri on pure-Rust unit tests
-        run: cargo +nightly miri test -p readstat
+        # Scope to ptr_to_string: the only unsafe code (CStr::from_ptr) reachable
+        # by unit tests. FFI callbacks require the C library and can't run under Miri.
+        # Proptest suites are excluded — they're slow under Miri's interpreter.
+        run: cargo +nightly miri test -p readstat -- ptr_to_string
 
   asan-linux:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
