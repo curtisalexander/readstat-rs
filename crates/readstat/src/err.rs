@@ -102,6 +102,11 @@ pub enum ReadStatCError {
 ///
 /// Wraps errors from the `ReadStat` C library, Arrow/Parquet processing,
 /// I/O operations, and other subsystems into a single error enum.
+///
+/// This enum is `#[non_exhaustive]`: new variants may be added in minor
+/// releases without a semver-breaking change. Match with a wildcard arm
+/// (`_ => ...`) to remain forward-compatible.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum ReadStatError {
     /// Error from the `ReadStat` C library.

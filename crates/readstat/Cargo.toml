@@ -14,6 +14,10 @@ keywords = ["sas", "sas7bdat", "arrow", "parquet", "readstat"]
 categories = ["parser-implementations", "science"]
 exclude = ["benches/", "proptest-regressions/"]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [[bench]]
 name = "readstat_benchmarks"
 harness = false

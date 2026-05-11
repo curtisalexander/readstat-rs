@@ -5,27 +5,21 @@
 
 use std::ffi::CStr;
 
-use crate::err::ReadStatError;
-
 /// Computes row offset boundaries for streaming chunk-based processing.
 ///
 /// Given a total `row_count` and `stream_rows` (chunk size), returns a sorted
 /// vector of offsets for use with [`windows(2)`](slice::windows) to form
-/// `[start, end)` pairs.
-///
-/// # Errors
-///
-/// Returns [`ReadStatError`] if offset computation fails.
+/// `[start, end)` pairs. If `stream_rows` is 0, it is treated as 1.
 ///
 /// # Example
 ///
 /// ```
 /// # use readstat::build_offsets;
-/// let offsets = build_offsets(25, 10).unwrap();
+/// let offsets = build_offsets(25, 10);
 /// assert_eq!(offsets, vec![0, 10, 20, 25]);
 /// // Produces pairs: [0,10), [10,20), [20,25)
 /// ```
-pub fn build_offsets(row_count: u32, stream_rows: u32) -> Result<Vec<u32>, ReadStatError> {
+pub fn build_offsets(row_count: u32, stream_rows: u32) -> Vec<u32> {
     let chunks = row_count.div_ceil(stream_rows.max(1));
     let mut offsets = Vec::with_capacity(chunks as usize + 1);
 
@@ -34,7 +28,7 @@ pub fn build_offsets(row_count: u32, stream_rows: u32) -> Result<Vec<u32>, ReadS
     }
     offsets.push(row_count);
 
-    Ok(offsets)
+    offsets
 }
 
 /// Converts a C string pointer to an owned Rust [`String`].
@@ -61,37 +55,37 @@ mod tests {
 
     #[test]
     fn build_offsets_exact_division() {
-        let offsets = build_offsets(30, 10).unwrap();
+        let offsets = build_offsets(30, 10);
         assert_eq!(offsets, vec![0, 10, 20, 30]);
     }
 
     #[test]
     fn build_offsets_non_exact_division() {
-        let offsets = build_offsets(25, 10).unwrap();
+        let offsets = build_offsets(25, 10);
         assert_eq!(offsets, vec![0, 10, 20, 25]);
     }
 
     #[test]
     fn build_offsets_stream_exceeds_row_count() {
-        let offsets = build_offsets(5, 10).unwrap();
+        let offsets = build_offsets(5, 10);
         assert_eq!(offsets, vec![0, 5]);
     }
 
     #[test]
     fn build_offsets_single_row() {
-        let offsets = build_offsets(1, 10).unwrap();
+        let offsets = build_offsets(1, 10);
         assert_eq!(offsets, vec![0, 1]);
     }
 
     #[test]
     fn build_offsets_equal_stream_and_rows() {
-        let offsets = build_offsets(10, 10).unwrap();
+        let offsets = build_offsets(10, 10);
         assert_eq!(offsets, vec![0, 10]);
     }
 
     #[test]
     fn build_offsets_zero_rows() {
-        let offsets = build_offsets(0, 10).unwrap();
+        let offsets = build_offsets(0, 10);
         assert_eq!(offsets, vec![0]);
         // No windows produced for zero rows
         assert_eq!(offsets.windows(2).count(), 0);
@@ -99,21 +93,21 @@ mod tests {
 
     #[test]
     fn build_offsets_windows_produce_valid_pairs() {
-        let offsets = build_offsets(25, 10).unwrap();
+        let offsets = build_offsets(25, 10);
         let pairs: Vec<_> = offsets.windows(2).map(|w| (w[0], w[1])).collect();
         assert_eq!(pairs, vec![(0, 10), (10, 20), (20, 25)]);
     }
 
     #[test]
     fn build_offsets_single_chunk_windows() {
-        let offsets = build_offsets(5, 10).unwrap();
+        let offsets = build_offsets(5, 10);
         let pairs: Vec<_> = offsets.windows(2).map(|w| (w[0], w[1])).collect();
         assert_eq!(pairs, vec![(0, 5)]);
     }
 
     #[test]
     fn build_offsets_large_dataset() {
-        let offsets = build_offsets(100_000, 10_000).unwrap();
+        let offsets = build_offsets(100_000, 10_000);
         assert_eq!(offsets.len(), 11);
         assert_eq!(*offsets.first().unwrap(), 0);
         assert_eq!(*offsets.last().unwrap(), 100_000);
@@ -188,7 +182,7 @@ mod tests {
                 row_count in 0u32..100_000,
                 stream_rows in 1u32..50_000
             ) {
-                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                let offsets = build_offsets(row_count, stream_rows);
                 prop_assert_eq!(*offsets.first().unwrap(), 0);
                 prop_assert_eq!(*offsets.last().unwrap(), row_count);
             }
@@ -199,7 +193,7 @@ mod tests {
                 row_count in 1u32..100_000,
                 stream_rows in 1u32..50_000
             ) {
-                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                let offsets = build_offsets(row_count, stream_rows);
                 for pair in offsets.windows(2) {
                     prop_assert!(pair[0] < pair[1], "offsets not strictly increasing: {} >= {}", pair[0], pair[1]);
                 }
@@ -211,7 +205,7 @@ mod tests {
                 row_count in 1u32..100_000,
                 stream_rows in 1u32..50_000
             ) {
-                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                let offsets = build_offsets(row_count, stream_rows);
                 for pair in offsets.windows(2) {
                     let chunk_size = pair[1] - pair[0];
                     prop_assert!(chunk_size <= stream_rows, "chunk {} > stream_rows {}", chunk_size, stream_rows);
@@ -224,7 +218,7 @@ mod tests {
                 row_count in 0u32..100_000,
                 stream_rows in 1u32..50_000
             ) {
-                let offsets = build_offsets(row_count, stream_rows).unwrap();
+                let offsets = build_offsets(row_count, stream_rows);
                 let total: u32 = offsets.windows(2).map(|w| w[1] - w[0]).sum();
                 prop_assert_eq!(total, row_count);
             }
@@ -232,7 +226,7 @@ mod tests {
             /// Zero stream_rows is handled without panic (treated as 1).
             #[test]
             fn zero_stream_rows_does_not_panic(row_count in 0u32..10_000) {
-                let offsets = build_offsets(row_count, 0).unwrap();
+                let offsets = build_offsets(row_count, 0);
                 prop_assert_eq!(*offsets.first().unwrap(), 0);
                 prop_assert_eq!(*offsets.last().unwrap(), row_count);
             }

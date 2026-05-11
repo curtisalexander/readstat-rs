@@ -17,6 +17,10 @@ use crate::err::ReadStatError;
 /// All variants are always present regardless of enabled features.
 /// Attempting to use a format whose feature is not enabled will
 /// result in a compile-time error in the writer code.
+///
+/// This enum is `#[non_exhaustive]`: new format variants may be added in
+/// minor releases. Match with a wildcard arm to remain forward-compatible.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum OutFormat {
     /// Comma-separated values.
@@ -40,7 +44,34 @@ impl std::fmt::Display for OutFormat {
     }
 }
 
+impl std::str::FromStr for OutFormat {
+    type Err = ReadStatError;
+
+    /// Parses a format name (case-insensitive) into an [`OutFormat`].
+    ///
+    /// Accepted values: `"csv"`, `"feather"`, `"ndjson"`, `"parquet"`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError::Other`] for unrecognized format strings.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "csv" => Ok(Self::Csv),
+            "feather" => Ok(Self::Feather),
+            "ndjson" => Ok(Self::Ndjson),
+            "parquet" => Ok(Self::Parquet),
+            _ => Err(ReadStatError::Other(format!(
+                "Unknown format: {s:?}. Expected one of: csv, feather, ndjson, parquet"
+            ))),
+        }
+    }
+}
+
 /// Parquet compression algorithm.
+///
+/// This enum is `#[non_exhaustive]`: new codec variants may be added in
+/// minor releases. Match with a wildcard arm to remain forward-compatible.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum ParquetCompression {
     /// No compression.

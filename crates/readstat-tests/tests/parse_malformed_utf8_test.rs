@@ -26,7 +26,7 @@ fn parse_malformed_utf8_metadata() {
             file_label: "",
             file_encoding: "UTF-8",
             version: 9,
-            is64bit: 1,
+            is_64bit: 1,
             creation_time: "2026-02-20 23:44:31",
             modified_time: "2026-02-20 23:44:31",
         },

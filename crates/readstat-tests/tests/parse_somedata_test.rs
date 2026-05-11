@@ -26,7 +26,7 @@ fn parse_somedata_metadata() {
             file_label: "",
             file_encoding: "WINDOWS-1252",
             version: 9,
-            is64bit: 0,
+            is_64bit: 0,
             creation_time: "2008-09-30 16:23:56",
             modified_time: "2008-09-30 16:23:56",
         },

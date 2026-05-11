@@ -128,7 +128,7 @@ pub struct ExpectedMetadata<'a> {
     pub file_label: &'a str,
     pub file_encoding: &'a str,
     pub version: c_int,
-    pub is64bit: c_int,
+    pub is_64bit: c_int,
     pub creation_time: &'a str,
     pub modified_time: &'a str,
 }
@@ -141,7 +141,7 @@ pub fn assert_metadata(md: &readstat::ReadStatMetadata, expected: &ExpectedMetad
     assert_eq!(md.file_label, expected.file_label, "file_label");
     assert_eq!(md.file_encoding, expected.file_encoding, "file_encoding");
     assert_eq!(md.version, expected.version, "version");
-    assert_eq!(md.is64bit, expected.is64bit, "is64bit");
+    assert_eq!(md.is_64bit, expected.is_64bit, "is_64bit");
     assert_eq!(md.creation_time, expected.creation_time, "creation_time");
     assert_eq!(md.modified_time, expected.modified_time, "modified_time");
 }

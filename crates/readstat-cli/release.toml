@@ -1,0 +1,5 @@
+# Per-crate cargo-release config for `readstat-cli`.
+# readstat-cli always shares its version with readstat and is released together.
+# The tag is created by readstat's release.toml; suppress a duplicate here.
+
+tag = false

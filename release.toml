@@ -1,0 +1,32 @@
+# cargo-release configuration
+# https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
+#
+# Typical release command (readstat and readstat-cli always share a version):
+#
+#   cargo release minor -p readstat -p readstat-cli --dry-run   # preview
+#   cargo release minor -p readstat -p readstat-cli             # apply
+#
+# Then review the bump commit and tag, then:
+#
+#   git push origin main --follow-tags
+#
+# For sys crates (bump only when C bindings or vendored library changes):
+#
+#   cargo release patch -p readstat-sys -p readstat-iconv-sys
+
+# Don't publish automatically — crates need vendor preparation first.
+# See docs/RELEASING.md for the full manual publish workflow.
+publish = false
+
+# Don't push automatically — review the commit and tag before pushing.
+push = false
+
+# Create a git tag for the release.
+tag = true
+tag-name = "v{{version}}"
+
+# Commit message for the version-bump commit.
+pre-release-commit-message = "Release v{{version}}"
+
+# Combine the version-bump commits for all crates into one commit.
+consolidate-commits = true

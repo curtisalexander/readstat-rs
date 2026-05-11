@@ -45,7 +45,7 @@ Then open `http://localhost:8000` in your browser.
 
 ## WASM Files
 
-The `readstat_wasm.js` and `readstat_wasm.wasm` files are copies from `examples/web-demo/`. If you rebuild the WASM module, copy the updated files here as well.
+The `readstat_wasm.js` and `readstat_wasm.wasm` files are pre-built and checked into the repository — no action is needed to get started. They are copies from `examples/web-demo/`. If you rebuild the WASM module, copy the updated files here as well.
 
 To rebuild from source (requires Emscripten):
 
