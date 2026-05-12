@@ -6,6 +6,7 @@
 
 - [Installation & Building](building.md)
 - [CLI Usage](usage.md)
+- [CLI Cheatsheet](cheatsheet.md)
 
 # Reference
 

@@ -2,6 +2,8 @@
 
 # Usage
 
+> 💡 **Quick reference:** A one-page visual [**CLI Cheatsheet**](readstat-cheatsheet.html) is available for at-a-glance lookup of subcommands, flags, and common workflows.  This page is the full reference and goes deeper on memory, parallelism, and metadata round-trips.
+
 After either [building](BUILDING.md) or [installing](../README.md#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out or json
     - row count
@@ -39,6 +41,20 @@ readstat metadata /some/dir/to/example.sas7bdat --as-json
 ```
 
 The JSON output contains file-level metadata and a `vars` object keyed by variable index.  This makes it straightforward to search for a particular column by piping the output to [`jq`](https://jqlang.github.io/jq/) or Python.
+
+### Skipping the row count
+
+Computing the row count requires traversing the entire file.  If only variable-level metadata is needed (names, types, labels, formats), pass `--skip-row-count` to short-circuit row enumeration:
+
+```sh
+readstat metadata /some/dir/to/example.sas7bdat --skip-row-count
+```
+
+In that mode the reported row count is `0` and parsing returns as soon as the header and variable definitions have been read.
+
+### Suppressing the progress bar
+
+By default `metadata`, `preview`, and `data` render a progress bar while the file is being parsed.  Pass `--no-progress` (available on all three subcommands) to suppress it &mdash; useful in CI logs, when piping output, or when launching `readstat` from another process.
 
 ### Search for a column with `jq`
 
@@ -81,6 +97,12 @@ readstat preview /some/dir/to/example.sas7bdat --rows 100
 - `feather`
 - `ndjson`
 - `parquet`
+
+By default `data` refuses to overwrite an existing output file.  Pass `--overwrite` to replace it:
+
+```sh
+readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --overwrite
+```
 
 ### `csv`
 To write parsed data (as `csv`) to a file, invoke the following (default is to write all parsed data to the specified file).
