@@ -458,7 +458,10 @@ pub(crate) extern "C" fn handle_value(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
+
+    mod property_tests {
+        use super::*;
+        use proptest::prelude::*;
 
     // --- round_decimal_f64 ---
 
@@ -573,4 +576,5 @@ mod tests {
             prop_assert_eq!(sas_secs, back);
         }
     }
+    } // end property_tests
 }

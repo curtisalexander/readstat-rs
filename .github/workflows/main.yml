@@ -417,10 +417,11 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run Miri on pure-Rust unit tests
-        # Scope to ptr_to_string: the only unsafe code (CStr::from_ptr) reachable
-        # by unit tests. FFI callbacks require the C library and can't run under Miri.
-        # Proptest suites are excluded — they're slow under Miri's interpreter.
-        run: cargo +nightly miri test -p readstat -- ptr_to_string
+        # Skip proptest suites: they run 256 cases each and are 100-1000x slower
+        # under Miri's interpreter. All proptest tests live in `property_tests`
+        # submodules. Everything else (ptr_to_string unsafe, build_offsets, err,
+        # rs_path) runs and gives Miri coverage over both unsafe and safe Rust.
+        run: cargo +nightly miri test -p readstat -- --skip property_tests
 
   asan-linux:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
