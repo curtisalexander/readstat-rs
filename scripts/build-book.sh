@@ -89,6 +89,12 @@ cp "$REPO_ROOT/examples/sql-explorer/README.md"  "$BOOK_SRC/examples/sql-explore
 echo "Building mdBook ..."
 mdbook build "$REPO_ROOT/book"
 
+# Copy the standalone cheatsheet HTML into the book output so it is
+# served at /readstat-cheatsheet.html alongside the book pages.
+BOOK_OUT="$REPO_ROOT/target/book"
+echo "Copying CLI cheatsheet into $BOOK_OUT/ ..."
+cp "$REPO_ROOT/docs/readstat-cheatsheet.html" "$BOOK_OUT/readstat-cheatsheet.html"
+
 # --------------------------------------------------------------------
 # 3. Optionally build rustdocs and copy into the book output
 # --------------------------------------------------------------------

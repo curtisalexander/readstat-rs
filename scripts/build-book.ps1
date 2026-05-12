@@ -116,6 +116,13 @@ Write-Host "Building mdBook ..."
 mdbook build (Join-Path $RepoRoot "book")
 if ($LASTEXITCODE -ne 0) { throw "mdbook build failed" }
 
+# Copy the standalone cheatsheet HTML into the book output so it is
+# served at /readstat-cheatsheet.html alongside the book pages.
+$BookOut = Join-Path $RepoRoot "target" "book"
+Write-Host "Copying CLI cheatsheet into $BookOut ..."
+Copy-Item -Force (Join-Path $RepoRoot "docs" "readstat-cheatsheet.html") `
+                 (Join-Path $BookOut "readstat-cheatsheet.html")
+
 # --------------------------------------------------------------------
 # 3. Optionally build rustdocs and copy into the book output
 # --------------------------------------------------------------------

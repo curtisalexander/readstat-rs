@@ -74,7 +74,7 @@ The binary is invoked using subcommands:
 
 Column metadata &mdash; labels, SAS format strings, and storage widths &mdash; is preserved in Parquet and Feather output as Arrow field metadata. See **[docs/TECHNICAL.md](docs/TECHNICAL.md#column-metadata-in-arrow-and-parquet)** for details.
 
-For the full CLI reference &mdash; including column selection, parallelism, memory considerations, SQL queries, reader modes, and debug options &mdash; see **[docs/USAGE.md](docs/USAGE.md)**.
+For a one-page visual overview see the **[CLI Cheatsheet](docs/readstat-cheatsheet.html)** ([rendered](https://curtisalexander.github.io/readstat-rs/readstat-cheatsheet.html)).  For the full CLI reference &mdash; including column selection, parallelism, memory considerations, SQL queries, reader modes, and debug options &mdash; see **[docs/USAGE.md](docs/USAGE.md)**.
 
 For library, API server, and WebAssembly usage, see **[Examples](#bulb-examples)** below.
 
@@ -99,6 +99,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 |----------|-------------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crate layout, key types, and architectural patterns |
 | [docs/USAGE.md](docs/USAGE.md) | Full CLI reference and examples |
+| [docs/readstat-cheatsheet.html](docs/readstat-cheatsheet.html) | One-page printable CLI cheatsheet ([rendered](https://curtisalexander.github.io/readstat-rs/readstat-cheatsheet.html)) |
 | [docs/BUILDING.md](docs/BUILDING.md) | Clone, build, and linking details per platform |
 | [docs/TECHNICAL.md](docs/TECHNICAL.md) | Floating-point precision and date/time handling |
 | [docs/TESTING.md](docs/TESTING.md) | Running tests, dataset table, fuzz testing, valgrind |
