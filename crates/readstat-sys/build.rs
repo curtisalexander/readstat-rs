@@ -133,8 +133,10 @@ fn main() {
     if is_emscripten {
         // Emscripten provides iconv and zlib — no extra link directives needed.
     } else if target.contains("windows-msvc") {
-        // Ensure LIBCLANG_PATH is set so bindgen can find libclang.dll
-        if env::var_os("LIBCLANG_PATH").is_none() {
+        // Ensure LIBCLANG_PATH is set so bindgen can find libclang.dll —
+        // only needed when bindgen actually runs. Default consumer builds
+        // (pre-gen bindings) skip this entirely.
+        if cfg!(feature = "buildtime_bindgen") && env::var_os("LIBCLANG_PATH").is_none() {
             let default = PathBuf::from(r"C:\Program Files\LLVM\lib");
             assert!(
                 default.exists(),
@@ -167,14 +169,36 @@ fn main() {
     println!("cargo:rustc-link-lib=static=readstat");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let pregenerated_bindings = project_dir.join("src").join("bindings.rs");
+
+    // Per-target pre-generated bindings. The C ABI surface differs across
+    // platforms in ways no `libc` re-export can paper over: MSVC emits C
+    // enums as `signed int` while GCC/Clang emit `unsigned int`; Windows
+    // `c_long` is 32 bits vs 64 bits on 64-bit Unix; and union/padding
+    // layout rules differ between the Itanium and Microsoft C++ ABIs.
+    // Each target needs its own bindgen output. Emscripten/wasm32 has no
+    // pre-gen — its sysroot can't be reproduced outside an emsdk install,
+    // so wasm32 consumers must enable `buildtime_bindgen`.
+    let pregen_file = if is_emscripten {
+        None
+    } else if target.contains("windows") {
+        Some("windows.rs")
+    } else if target.contains("apple-darwin") {
+        Some("macos.rs")
+    } else if target.contains("linux") {
+        Some("linux.rs")
+    } else {
+        None
+    };
+    let pregenerated_bindings = pregen_file
+        .map(|name| project_dir.join("src").join("bindings").join(name));
 
     if cfg!(feature = "buildtime_bindgen") {
         // Regeneration path — invoked by maintainers when the vendored
-        // ReadStat C surface changes. Runs bindgen, writes the result to
-        // both OUT_DIR (for the current compile) and `src/bindings.rs` (so
-        // the diff can be committed). Default consumer builds skip this
-        // entire block and use the checked-in `src/bindings.rs` below.
+        // ReadStat C surface changes. Must be run once per supported
+        // target OS to refresh all four checked-in files; the verify CI
+        // workflow does this for Linux/macOS/Windows. Writes the result
+        // to both OUT_DIR (for the current compile) and the target's
+        // pre-gen file (so the diff can be committed).
         #[cfg(feature = "buildtime_bindgen")]
         {
             let mut builder = bindgen::Builder::default()
@@ -193,6 +217,7 @@ fn main() {
                 // (which is itself per-target).
                 .blocklist_type("off_t")
                 .blocklist_type("time_t")
+                .blocklist_type("_off_t")
                 .blocklist_type("__off_t")
                 .blocklist_type("__off64_t")
                 .blocklist_type("__time_t")
@@ -247,20 +272,30 @@ fn main() {
             bindings
                 .write_to_file(out_path.join("bindings.rs"))
                 .expect("Couldn't write bindings to OUT_DIR!");
-            bindings
-                .write_to_file(&pregenerated_bindings)
-                .expect("Couldn't refresh src/bindings.rs!");
+            if let Some(path) = &pregenerated_bindings {
+                bindings
+                    .write_to_file(path)
+                    .expect("Couldn't refresh per-target pre-generated bindings file");
+            }
         }
     } else {
-        // Default path — copy the pre-generated bindings into OUT_DIR so
-        // `src/lib.rs` can `include!` them via `env!("OUT_DIR")` exactly as
-        // before. No bindgen, no libclang at consumer build time.
+        // Default path — copy the target-appropriate pre-generated bindings
+        // into OUT_DIR so `src/lib.rs` can `include!` them via
+        // `env!("OUT_DIR")` exactly as before. No bindgen, no libclang at
+        // consumer build time.
+        let path = pregenerated_bindings.as_ref().unwrap_or_else(|| {
+            panic!(
+                "no pre-generated bindings available for target `{target}`; \
+                 enable `buildtime_bindgen` to generate them at build time"
+            )
+        });
         assert!(
-            pregenerated_bindings.exists(),
-            "src/bindings.rs is missing; run `cargo build -p readstat-sys --features buildtime_bindgen` once to generate it"
+            path.exists(),
+            "{} is missing; run `cargo build -p readstat-sys --features buildtime_bindgen` to regenerate it",
+            path.display()
         );
-        std::fs::copy(&pregenerated_bindings, out_path.join("bindings.rs"))
+        std::fs::copy(path, out_path.join("bindings.rs"))
             .expect("Couldn't copy pre-generated bindings into OUT_DIR");
-        println!("cargo:rerun-if-changed=src/bindings.rs");
+        println!("cargo:rerun-if-changed={}", path.display());
     }
 }

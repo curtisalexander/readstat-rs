@@ -1,9 +1,18 @@
 name: Verify pre-generated bindings
 
-# One-off workflow to confirm the checked-in `crates/readstat-sys/src/bindings.rs`
-# matches what `bindgen` produces on Linux, macOS, and Windows after the libc
-# `off_t` / `time_t` fix. Uploads each platform's regenerated `bindings.rs` as
-# an artifact for side-by-side comparison. Safe to delete once verified.
+# Confirms two things across Linux / macOS / Windows:
+#
+#   1. `consume`: the checked-in `crates/readstat-sys/src/bindings/<os>.rs`
+#      compiles and tests pass with default features (no `buildtime_bindgen`).
+#      This is the load-bearing check — it proves the per-target pre-gen
+#      files match each platform's actual ABI.
+#
+#   2. `regen`: `--features buildtime_bindgen` runs bindgen and reproduces
+#      the corresponding per-target file. Uploads each regenerated file as
+#      an artifact, and diffs it against the checked-in version so any
+#      drift surfaces in the job log.
+#
+# Safe to delete once the per-target pre-gen approach is confirmed.
 
 on:
   push:
@@ -11,11 +20,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  consume:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            file: linux.rs
+          - os: macos-latest
+            file: macos.rs
+          - os: windows-latest
+            file: windows.rs
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Build with default features (consumes pre-gen ${{ matrix.file }})
+        run: cargo build --workspace
+
+      - name: Test
+        run: cargo test --workspace
+
   regen:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            file: linux.rs
+          - os: macos-latest
+            file: macos.rs
+          - os: windows-latest
+            file: windows.rs
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -35,11 +73,11 @@ jobs:
         shell: bash
         run: |
           echo "::group::Diff on ${{ matrix.os }}"
-          git --no-pager diff --no-color crates/readstat-sys/src/bindings.rs || true
+          git --no-pager diff --no-color crates/readstat-sys/src/bindings/${{ matrix.file }} || true
           echo "::endgroup::"
 
       - name: Upload regenerated bindings
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.os }}
-          path: crates/readstat-sys/src/bindings.rs
+          path: crates/readstat-sys/src/bindings/${{ matrix.file }}
