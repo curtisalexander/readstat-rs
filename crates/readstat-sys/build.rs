@@ -1,6 +1,35 @@
 use std::env;
 use std::path::PathBuf;
 
+// Restores derives that bindgen drops when a struct contains a blocklisted
+// external type (here: `off_t` / `time_t`, which we re-export from `libc`).
+// Bindgen can't introspect external types, so it conservatively removes
+// derives it can't prove. These four structs had derives in the original
+// bindgen output; this callback re-emits exactly that set so the public
+// `readstat-sys` API stays identical for direct consumers.
+//
+// `readstat_variable_s` and `readstat_schema_entry_s` intentionally omit
+// `Debug` — they contain by-value fields (e.g. `readstat_missingness_t`)
+// that themselves don't derive `Debug`, so adding it would fail to compile.
+#[cfg(feature = "buildtime_bindgen")]
+#[derive(Debug)]
+struct ForceDerives;
+
+#[cfg(feature = "buildtime_bindgen")]
+impl bindgen::callbacks::ParseCallbacks for ForceDerives {
+    fn add_derives(&self, info: &bindgen::callbacks::DeriveInfo<'_>) -> Vec<String> {
+        match info.name {
+            "readstat_metadata_s" | "readstat_writer_s" => {
+                vec!["Copy".into(), "Clone".into(), "Debug".into()]
+            }
+            "readstat_variable_s" | "readstat_schema_entry_s" => {
+                vec!["Copy".into(), "Clone".into()]
+            }
+            _ => vec![],
+        }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 fn main() {
     let target = env::var("TARGET").unwrap();
@@ -172,6 +201,7 @@ fn main() {
                 .blocklist_type("__darwin_time_t")
                 .blocklist_type("__int64_t")
                 .raw_line("pub use libc::{off_t, time_t};")
+                .parse_callbacks(Box::new(ForceDerives))
                 .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
             if is_emscripten {

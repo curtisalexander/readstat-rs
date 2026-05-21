@@ -248,6 +248,7 @@ const _: () = {
 };
 pub type mr_set_t = mr_set_s;
 #[repr(C)]
+#[derive(Copy, Clone, Debug)]
 pub struct readstat_metadata_s {
     pub row_count: i64,
     pub var_count: i64,
@@ -607,6 +608,7 @@ const _: () = {
 };
 pub type readstat_missingness_t = readstat_missingness_s;
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct readstat_variable_s {
     pub type_: readstat_type_t,
     pub index: ::std::os::raw::c_int,
@@ -664,6 +666,7 @@ const _: () = {
 };
 pub type readstat_variable_t = readstat_variable_s;
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct readstat_schema_entry_s {
     pub row: u32,
     pub col: u32,
@@ -1394,6 +1397,7 @@ pub type readstat_data_writer = ::std::option::Option<
     ) -> isize,
 >;
 #[repr(C)]
+#[derive(Copy, Clone, Debug)]
 pub struct readstat_writer_s {
     pub data_writer: readstat_data_writer,
     pub bytes_written: usize,
