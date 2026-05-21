@@ -137,55 +137,82 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper.h");
     println!("cargo:rustc-link-lib=static=readstat");
 
-    // Generate bindings
-    let mut builder = bindgen::Builder::default()
-        .header("wrapper.h")
-        .allowlist_function("readstat_.*")
-        .allowlist_function("xport_.*")
-        .allowlist_type("readstat_.*")
-        .allowlist_type("xport_.*")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
-
-    if is_emscripten {
-        let emsdk = env::var("EMSDK")
-            .or_else(|_| {
-                // emsdk_env.sh on Windows/Git Bash sometimes fails to export EMSDK
-                // even though it adds the emsdk directories to PATH. Scan PATH for
-                // a directory that looks like an emsdk root (contains the sysroot).
-                let sysroot_suffix = std::path::Path::new("upstream")
-                    .join("emscripten")
-                    .join("cache")
-                    .join("sysroot");
-                env::var("PATH")
-                    .unwrap_or_default()
-                    .split(if cfg!(windows) { ';' } else { ':' })
-                    .find_map(|dir| {
-                        let candidate = std::path::Path::new(dir);
-                        if candidate.join(&sysroot_suffix).is_dir() {
-                            Some(candidate.to_string_lossy().into_owned())
-                        } else {
-                            None
-                        }
-                    })
-                    .ok_or(env::VarError::NotPresent)
-            })
-            .expect("EMSDK must be set for Emscripten builds, or emsdk must be on PATH");
-        builder = builder
-            .clang_arg(format!(
-                "--sysroot={emsdk}/upstream/emscripten/cache/sysroot"
-            ))
-            .clang_arg("-target")
-            .clang_arg("wasm32-unknown-emscripten")
-            // The wasm32 backend defaults to hidden visibility, which causes
-            // bindgen/libclang to silently omit all function declarations.
-            // See: https://github.com/rust-lang/rust-bindgen/issues/1941
-            .clang_arg("-fvisibility=default");
-    }
-
-    let bindings = builder.generate().expect("Unable to generate bindings");
-
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    bindings
-        .write_to_file(out_path.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
+    let pregenerated_bindings = project_dir.join("src").join("bindings.rs");
+
+    if cfg!(feature = "buildtime_bindgen") {
+        // Regeneration path — invoked by maintainers when the vendored
+        // ReadStat C surface changes. Runs bindgen, writes the result to
+        // both OUT_DIR (for the current compile) and `src/bindings.rs` (so
+        // the diff can be committed). Default consumer builds skip this
+        // entire block and use the checked-in `src/bindings.rs` below.
+        #[cfg(feature = "buildtime_bindgen")]
+        {
+            let mut builder = bindgen::Builder::default()
+                .header("wrapper.h")
+                .allowlist_function("readstat_.*")
+                .allowlist_function("xport_.*")
+                .allowlist_type("readstat_.*")
+                .allowlist_type("xport_.*")
+                .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
+
+            if is_emscripten {
+                let emsdk = env::var("EMSDK")
+                    .or_else(|_| {
+                        // emsdk_env.sh on Windows/Git Bash sometimes fails to export EMSDK
+                        // even though it adds the emsdk directories to PATH. Scan PATH for
+                        // a directory that looks like an emsdk root (contains the sysroot).
+                        let sysroot_suffix = std::path::Path::new("upstream")
+                            .join("emscripten")
+                            .join("cache")
+                            .join("sysroot");
+                        env::var("PATH")
+                            .unwrap_or_default()
+                            .split(if cfg!(windows) { ';' } else { ':' })
+                            .find_map(|dir| {
+                                let candidate = std::path::Path::new(dir);
+                                if candidate.join(&sysroot_suffix).is_dir() {
+                                    Some(candidate.to_string_lossy().into_owned())
+                                } else {
+                                    None
+                                }
+                            })
+                            .ok_or(env::VarError::NotPresent)
+                    })
+                    .expect(
+                        "EMSDK must be set for Emscripten builds, or emsdk must be on PATH",
+                    );
+                builder = builder
+                    .clang_arg(format!(
+                        "--sysroot={emsdk}/upstream/emscripten/cache/sysroot"
+                    ))
+                    .clang_arg("-target")
+                    .clang_arg("wasm32-unknown-emscripten")
+                    // The wasm32 backend defaults to hidden visibility, which causes
+                    // bindgen/libclang to silently omit all function declarations.
+                    // See: https://github.com/rust-lang/rust-bindgen/issues/1941
+                    .clang_arg("-fvisibility=default");
+            }
+
+            let bindings = builder.generate().expect("Unable to generate bindings");
+
+            bindings
+                .write_to_file(out_path.join("bindings.rs"))
+                .expect("Couldn't write bindings to OUT_DIR!");
+            bindings
+                .write_to_file(&pregenerated_bindings)
+                .expect("Couldn't refresh src/bindings.rs!");
+        }
+    } else {
+        // Default path — copy the pre-generated bindings into OUT_DIR so
+        // `src/lib.rs` can `include!` them via `env!("OUT_DIR")` exactly as
+        // before. No bindgen, no libclang at consumer build time.
+        assert!(
+            pregenerated_bindings.exists(),
+            "src/bindings.rs is missing; run `cargo build -p readstat-sys --features buildtime_bindgen` once to generate it"
+        );
+        std::fs::copy(&pregenerated_bindings, out_path.join("bindings.rs"))
+            .expect("Couldn't copy pre-generated bindings into OUT_DIR");
+        println!("cargo:rerun-if-changed=src/bindings.rs");
+    }
 }

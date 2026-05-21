@@ -28,8 +28,18 @@ include = [
     "vendor/ReadStat/src/txt/**",
 ]
 
+[features]
+# Default builds consume the pre-generated `src/bindings.rs` checked into the
+# repository — no `libclang` dependency at consumer build time. Enable
+# `buildtime_bindgen` to regenerate `src/bindings.rs` from `wrapper.h`; the
+# build script both writes the freshly-generated bindings to `OUT_DIR` and
+# overwrites `src/bindings.rs` so a maintainer can commit the diff after
+# bumping the vendored ReadStat sources.
+default = []
+buildtime_bindgen = ["dep:bindgen"]
+
 [build-dependencies]
-bindgen = { workspace = true }
+bindgen = { workspace = true, optional = true }
 cc = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
