@@ -154,6 +154,24 @@ fn main() {
                 .allowlist_function("xport_.*")
                 .allowlist_type("readstat_.*")
                 .allowlist_type("xport_.*")
+                // Re-export `off_t` / `time_t` from the `libc` crate instead
+                // of emitting the host OS's libc typedef chain. Without this,
+                // bindings generated on Linux bake in `__off_t = c_long`,
+                // bindings generated on macOS bake in `__darwin_off_t =
+                // __int64_t`, etc. — making the checked-in `bindings.rs`
+                // host-dependent. With this, the file is identical across
+                // hosts and each consumer resolves the types through `libc`
+                // (which is itself per-target).
+                .blocklist_type("off_t")
+                .blocklist_type("time_t")
+                .blocklist_type("__off_t")
+                .blocklist_type("__off64_t")
+                .blocklist_type("__time_t")
+                .blocklist_type("__time64_t")
+                .blocklist_type("__darwin_off_t")
+                .blocklist_type("__darwin_time_t")
+                .blocklist_type("__int64_t")
+                .raw_line("pub use libc::{off_t, time_t};")
                 .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
             if is_emscripten {

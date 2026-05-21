@@ -1,0 +1,45 @@
+name: Verify pre-generated bindings
+
+# One-off workflow to confirm the checked-in `crates/readstat-sys/src/bindings.rs`
+# matches what `bindgen` produces on Linux, macOS, and Windows after the libc
+# `off_t` / `time_t` fix. Uploads each platform's regenerated `bindings.rs` as
+# an artifact for side-by-side comparison. Safe to delete once verified.
+
+on:
+  push:
+    branches: [libc-bindings-and-verify]
+  workflow_dispatch:
+
+jobs:
+  regen:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install LLVM (Windows only — bindgen needs libclang)
+        if: matrix.os == 'windows-latest'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "17"
+
+      - name: Regenerate bindings
+        run: cargo build -p readstat-sys --features buildtime_bindgen
+
+      - name: Show diff vs checked-in
+        shell: bash
+        run: |
+          echo "::group::Diff on ${{ matrix.os }}"
+          git --no-pager diff --no-color crates/readstat-sys/src/bindings.rs || true
+          echo "::endgroup::"
+
+      - name: Upload regenerated bindings
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.os }}
+          path: crates/readstat-sys/src/bindings.rs

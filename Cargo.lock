@@ -3063,6 +3063,7 @@ version = "0.3.0"
 dependencies = [
  "bindgen",
  "cc",
+ "libc",
  "libz-sys",
  "readstat-iconv-sys",
 ]
