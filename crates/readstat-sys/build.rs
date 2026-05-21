@@ -1,35 +1,6 @@
 use std::env;
 use std::path::PathBuf;
 
-// Restores derives that bindgen drops when a struct contains a blocklisted
-// external type (here: `off_t` / `time_t`, which we re-export from `libc`).
-// Bindgen can't introspect external types, so it conservatively removes
-// derives it can't prove. These four structs had derives in the original
-// bindgen output; this callback re-emits exactly that set so the public
-// `readstat-sys` API stays identical for direct consumers.
-//
-// `readstat_variable_s` and `readstat_schema_entry_s` intentionally omit
-// `Debug` — they contain by-value fields (e.g. `readstat_missingness_t`)
-// that themselves don't derive `Debug`, so adding it would fail to compile.
-#[cfg(feature = "buildtime_bindgen")]
-#[derive(Debug)]
-struct ForceDerives;
-
-#[cfg(feature = "buildtime_bindgen")]
-impl bindgen::callbacks::ParseCallbacks for ForceDerives {
-    fn add_derives(&self, info: &bindgen::callbacks::DeriveInfo<'_>) -> Vec<String> {
-        match info.name {
-            "readstat_metadata_s" | "readstat_writer_s" => {
-                vec!["Copy".into(), "Clone".into(), "Debug".into()]
-            }
-            "readstat_variable_s" | "readstat_schema_entry_s" => {
-                vec!["Copy".into(), "Clone".into()]
-            }
-            _ => vec![],
-        }
-    }
-}
-
 #[allow(clippy::too_many_lines)]
 fn main() {
     let target = env::var("TARGET").unwrap();
@@ -171,26 +142,27 @@ fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // Per-target pre-generated bindings. The C ABI surface differs across
-    // platforms in ways no `libc` re-export can paper over: MSVC emits C
-    // enums as `signed int` while GCC/Clang emit `unsigned int`; Windows
-    // `c_long` is 32 bits vs 64 bits on 64-bit Unix; and union/padding
-    // layout rules differ between the Itanium and Microsoft C++ ABIs.
-    // Each target needs its own bindgen output. Emscripten/wasm32 has no
-    // pre-gen — its sysroot can't be reproduced outside an emsdk install,
-    // so wasm32 consumers must enable `buildtime_bindgen`.
-    let pregen_file = if is_emscripten {
+    // platforms in ways that don't generalize: MSVC emits C enums as
+    // `signed int` while GCC/Clang emit `unsigned int`; Windows `c_long`
+    // is 32 bits vs 64 bits on 64-bit Unix; and union/padding layout
+    // rules differ between the Itanium and Microsoft C++ ABIs. Each
+    // (os, arch) combination needs its own bindgen output.
+    //
+    // Emscripten/wasm32 has no pre-gen — its sysroot can't be reproduced
+    // outside an emsdk install — so wasm32 consumers must enable
+    // `buildtime_bindgen`.
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let pregenerated_bindings = if is_emscripten {
         None
-    } else if target.contains("windows") {
-        Some("windows.rs")
-    } else if target.contains("apple-darwin") {
-        Some("macos.rs")
-    } else if target.contains("linux") {
-        Some("linux.rs")
     } else {
-        None
+        Some(
+            project_dir
+                .join("src")
+                .join("bindings")
+                .join(format!("bindings_{target_os}_{target_arch}.rs")),
+        )
     };
-    let pregenerated_bindings = pregen_file
-        .map(|name| project_dir.join("src").join("bindings").join(name));
 
     if cfg!(feature = "buildtime_bindgen") {
         // Regeneration path — invoked by maintainers when the vendored
@@ -207,26 +179,6 @@ fn main() {
                 .allowlist_function("xport_.*")
                 .allowlist_type("readstat_.*")
                 .allowlist_type("xport_.*")
-                // Re-export `off_t` / `time_t` from the `libc` crate instead
-                // of emitting the host OS's libc typedef chain. Without this,
-                // bindings generated on Linux bake in `__off_t = c_long`,
-                // bindings generated on macOS bake in `__darwin_off_t =
-                // __int64_t`, etc. — making the checked-in `bindings.rs`
-                // host-dependent. With this, the file is identical across
-                // hosts and each consumer resolves the types through `libc`
-                // (which is itself per-target).
-                .blocklist_type("off_t")
-                .blocklist_type("time_t")
-                .blocklist_type("_off_t")
-                .blocklist_type("__off_t")
-                .blocklist_type("__off64_t")
-                .blocklist_type("__time_t")
-                .blocklist_type("__time64_t")
-                .blocklist_type("__darwin_off_t")
-                .blocklist_type("__darwin_time_t")
-                .blocklist_type("__int64_t")
-                .raw_line("pub use libc::{off_t, time_t};")
-                .parse_callbacks(Box::new(ForceDerives))
                 .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
             if is_emscripten {
@@ -273,6 +225,10 @@ fn main() {
                 .write_to_file(out_path.join("bindings.rs"))
                 .expect("Couldn't write bindings to OUT_DIR!");
             if let Some(path) = &pregenerated_bindings {
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)
+                        .expect("Couldn't create src/bindings directory");
+                }
                 bindings
                     .write_to_file(path)
                     .expect("Couldn't refresh per-target pre-generated bindings file");

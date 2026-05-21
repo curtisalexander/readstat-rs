@@ -26,11 +26,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            file: linux.rs
+            file: bindings_linux_x86_64.rs
           - os: macos-latest
-            file: macos.rs
+            file: bindings_macos_aarch64.rs
           - os: windows-latest
-            file: windows.rs
+            file: bindings_windows_x86_64.rs
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -49,11 +49,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            file: linux.rs
+            file: bindings_linux_x86_64.rs
           - os: macos-latest
-            file: macos.rs
+            file: bindings_macos_aarch64.rs
           - os: windows-latest
-            file: windows.rs
+            file: bindings_windows_x86_64.rs
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

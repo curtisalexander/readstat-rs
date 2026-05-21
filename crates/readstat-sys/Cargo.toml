@@ -29,27 +29,18 @@ include = [
 ]
 
 [features]
-# Default builds consume the pre-generated `src/bindings.rs` checked into the
-# repository — no `libclang` dependency at consumer build time. Enable
-# `buildtime_bindgen` to regenerate `src/bindings.rs` from `wrapper.h`; the
-# build script both writes the freshly-generated bindings to `OUT_DIR` and
-# overwrites `src/bindings.rs` so a maintainer can commit the diff after
-# bumping the vendored ReadStat sources.
+# Default builds consume the pre-generated per-target bindings file under
+# `src/bindings/` — no `libclang` dependency at consumer build time. Enable
+# `buildtime_bindgen` to regenerate the current target's file from
+# `wrapper.h`; the build script writes the result to both `OUT_DIR` and
+# `src/bindings/bindings_<os>_<arch>.rs` so a maintainer can commit the diff
+# (must be run once per supported target).
 default = []
 buildtime_bindgen = ["dep:bindgen"]
 
 [build-dependencies]
 bindgen = { workspace = true, optional = true }
 cc = { workspace = true }
-
-[dependencies]
-# Provides platform-correct `off_t` / `time_t` for the pre-generated bindings.
-# Bindgen would otherwise resolve these through the host OS's libc typedef
-# chain (e.g. `__off_t = c_long` on Linux vs `__darwin_off_t = __int64_t` on
-# macOS), making the checked-in `bindings.rs` host-dependent. Blocking those
-# types in `build.rs` and re-exporting from `libc` keeps the file identical
-# across hosts and correct on every target at compile time.
-libc = "0.2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libz-sys = "1.1"
