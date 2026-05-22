@@ -22,11 +22,15 @@ on:
   pull_request:
     paths:
       - 'crates/readstat-sys/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
   push:
     branches: [main, dev]
     paths:
       - 'crates/readstat-sys/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
   workflow_dispatch:
 
@@ -80,19 +84,22 @@ jobs:
       - name: Regenerate bindings
         run: cargo build -p readstat-sys --features buildtime_bindgen
 
-      - name: Show diff vs checked-in (informational only)
-        shell: bash
-        run: |
-          echo "::group::Diff on ${{ matrix.os }}"
-          if git --no-pager diff --no-color --exit-code crates/readstat-sys/src/bindings/${{ matrix.file }}; then
-            echo "✅ No drift — checked-in bindings match a fresh regeneration."
-          else
-            echo "⚠️  Bindings drifted. Download the artifact and commit it if intentional."
-          fi
-          echo "::endgroup::"
-
+      # Upload BEFORE the drift check so the artifact is downloadable even
+      # when the diff step fails — that's exactly when the maintainer
+      # needs to grab the freshly-generated file to commit.
       - name: Upload regenerated bindings
         uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.os }}
           path: crates/readstat-sys/src/bindings/${{ matrix.file }}
+
+      - name: Fail if regenerated bindings differ from checked-in
+        shell: bash
+        run: |
+          if git --no-pager diff --no-color --exit-code crates/readstat-sys/src/bindings/${{ matrix.file }}; then
+            echo "::notice::Bindings match a fresh regeneration on ${{ matrix.os }}."
+          else
+            echo "::error::Checked-in bindings/${{ matrix.file }} differ from what bindgen now produces."
+            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
