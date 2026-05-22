@@ -30,7 +30,7 @@ fn parse_hasmissing() {
     ));
     assert!(matches!(m.var_type, readstat::ReadStatVarType::String));
     assert!(m.var_format_class.is_none());
-    assert_eq!(m.var_format, "$");
+    assert_eq!(m.var_format, "$5");
     assert!(matches!(d.schema.fields[0].data_type(), DataType::Utf8));
 
     let batch = d.batch.as_ref().unwrap();
@@ -77,7 +77,7 @@ fn parse_hasmissing_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, "$");
+    assert_eq!(vf, "$5");
     assert!(matches!(adt, DataType::Utf8));
 
     // 1..8 - All numeric Double -> Float64 with no format

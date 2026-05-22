@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- **Breaking**: `var_format` strings now include format width where ReadStat previously returned just the format name. Affects both string formats (`"$"` → `"$5"`) and numeric formats (`"BEST"` → `"BEST12"`). Reflects upstream [ReadStat #361](https://github.com/WizardMac/ReadStat/pull/361) ("Add support for w.d format") and [#364](https://github.com/WizardMac/ReadStat/pull/364) ("Read format_width and format_digits for 32-bit files"). Downstream impact:
+  - Parquet output: column-level `sas_format` metadata values change accordingly. Parquet files written before this release will differ from those written after, even from the same source file.
+  - Code that string-matches `var_format == "$"` (or similar) must be updated to either accept the new width-suffixed form or strip the suffix.
+  - `var_format_class` classification (date/time/datetime detection in `formats.rs`) is unaffected — the regex matcher already handles widths.
+- Bumped vendored `ReadStat` from `05cadd8` to `3add3a5`, picking up a little-endian 64-bit FP collision fix ([#369](https://github.com/WizardMac/ReadStat/pull/369)) and the format-width changes above.
+- `readstat-sys` now ships per-target pre-generated bindings (`crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`) so default consumer builds no longer require `libclang` on any platform. The `bindgen` build dependency is gated behind a new `buildtime_bindgen` feature for maintainers regenerating the bindings.
+- `wasm32-unknown-emscripten` builds must enable `--features readstat-sys/buildtime_bindgen` — the emsdk sysroot can't be reproduced from checked-in bindings.
+
 ## [0.21.0] - 2026-04-01
 
 ### Changed
