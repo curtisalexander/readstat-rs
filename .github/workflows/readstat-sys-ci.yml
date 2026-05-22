@@ -1,22 +1,33 @@
-name: Verify pre-generated bindings
+name: readstat-sys cross-platform CI
 
-# Confirms two things across Linux / macOS / Windows:
+# Runs on every PR (and direct push to main) that touches `readstat-sys`
+# itself, the vendored C sources, or this workflow. Two job matrices:
 #
-#   1. `consume`: the checked-in `crates/readstat-sys/src/bindings/<os>.rs`
-#      compiles and tests pass with default features (no `buildtime_bindgen`).
-#      This is the load-bearing check — it proves the per-target pre-gen
-#      files match each platform's actual ABI.
+#   * `consume`: builds the workspace + runs all tests on
+#     ubuntu/macos/windows using the checked-in per-target pre-gen
+#     bindings. This is the load-bearing check — it proves the
+#     `bindings_<os>_<arch>.rs` files match each platform's actual ABI.
 #
-#   2. `regen`: `--features buildtime_bindgen` runs bindgen and reproduces
-#      the corresponding per-target file. Uploads each regenerated file as
-#      an artifact, and diffs it against the checked-in version so any
-#      drift surfaces in the job log.
+#   * `regen`: runs bindgen via `--features buildtime_bindgen` to
+#     reproduce the corresponding per-target file. Uploads each result
+#     as an artifact and prints a `git diff` so any drift surfaces in
+#     the job log. The diff is informational — a maintainer downloads
+#     the artifacts and commits them when refreshing bindings after a
+#     `wrapper.h` change, `vendor/ReadStat` bump, or `bindgen` upgrade.
 #
-# Safe to delete once the per-target pre-gen approach is confirmed.
+# Manual trigger (`workflow_dispatch`) is supported for cutting fresh
+# bindings on demand without a PR.
 
 on:
+  pull_request:
+    paths:
+      - 'crates/readstat-sys/**'
+      - '.github/workflows/readstat-sys-ci.yml'
   push:
-    branches: [libc-bindings-and-verify]
+    branches: [main, dev]
+    paths:
+      - 'crates/readstat-sys/**'
+      - '.github/workflows/readstat-sys-ci.yml'
   workflow_dispatch:
 
 jobs:
@@ -69,11 +80,15 @@ jobs:
       - name: Regenerate bindings
         run: cargo build -p readstat-sys --features buildtime_bindgen
 
-      - name: Show diff vs checked-in
+      - name: Show diff vs checked-in (informational only)
         shell: bash
         run: |
           echo "::group::Diff on ${{ matrix.os }}"
-          git --no-pager diff --no-color crates/readstat-sys/src/bindings/${{ matrix.file }} || true
+          if git --no-pager diff --no-color --exit-code crates/readstat-sys/src/bindings/${{ matrix.file }}; then
+            echo "✅ No drift — checked-in bindings match a fresh regeneration."
+          else
+            echo "⚠️  Bindings drifted. Download the artifact and commit it if intentional."
+          fi
           echo "::endgroup::"
 
       - name: Upload regenerated bindings
