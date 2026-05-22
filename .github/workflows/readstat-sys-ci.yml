@@ -92,7 +92,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Upload regenerated bindings
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.os }}
           path: crates/readstat-sys/src/bindings/${{ matrix.file }}
