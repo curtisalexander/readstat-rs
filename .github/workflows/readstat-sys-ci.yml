@@ -44,7 +44,7 @@ jobs:
             file: bindings_linux_x86_64.rs
           - os: ubuntu-24.04-arm
             file: bindings_linux_aarch64.rs
-          - os: macos-13
+          - os: macos-15-intel
             file: bindings_macos_x86_64.rs
           - os: macos-latest
             file: bindings_macos_aarch64.rs
@@ -71,7 +71,7 @@ jobs:
             file: bindings_linux_x86_64.rs
           - os: ubuntu-24.04-arm
             file: bindings_linux_aarch64.rs
-          - os: macos-13
+          - os: macos-15-intel
             file: bindings_macos_x86_64.rs
           - os: macos-latest
             file: bindings_macos_aarch64.rs
