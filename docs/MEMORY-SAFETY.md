@@ -52,7 +52,7 @@ Configuration:
 - `RUSTFLAGS="-Zsanitizer=address"` — instruments Rust code only
 - Rust on Windows MSVC uses **Microsoft's ASan runtime** (from Visual Studio), not LLVM's compiler-rt. The compiler passes `/INFERASANLIBS` to the MSVC linker, which auto-discovers the runtime import library at **link time**. See [PR #118521](https://github.com/rust-lang/rust/pull/118521).
 - **Important**: the MSVC ASan runtime DLL (`clang_rt.asan_dynamic-x86_64.dll`) is NOT on PATH by default. The linker finds the import library at build time via `/INFERASANLIBS`, but the DLL loader needs the DLL on PATH at **test runtime**. The CI job uses `vswhere.exe` to locate the DLL directory (e.g., `C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\<ver>\bin\Hostx64\x64\`) and prepends it to PATH.
-- LLVM is installed only for `libclang` (required by bindgen), pinned to the same version as the regular Windows build job. It is **not** used for the ASan runtime.
+- LLVM is **not** installed by the Windows ASan job. Earlier versions installed it to satisfy bindgen's `libclang` requirement, but `readstat-sys` now ships pre-generated bindings so default builds need neither. ASan itself uses Microsoft's runtime, not LLVM's.
 - The ReadStat C library is **not** instrumented on Windows currently. Unlike macOS, there is no runtime mismatch — both Rust and `cl.exe` use the same MSVC ASan runtime. Full C instrumentation is a future improvement (see [Future Work](#future-work-windows-c-instrumentation)).
 - LeakSanitizer is not supported on Windows
 - Doctests excluded for the same reason as Linux

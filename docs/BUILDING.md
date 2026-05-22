@@ -15,7 +15,7 @@ The [ReadStat](https://github.com/WizardMac/ReadStat) repository is included as 
 Install developer tools
 
 ```sh
-sudo apt install build-essential clang
+sudo apt install build-essential
 ```
 
 Build
@@ -44,13 +44,7 @@ cargo build
 **zlib**: Linked via the [libz-sys](https://crates.io/crates/libz-sys) crate, which will use the system-provided zlib that ships with macOS.
 
 ## Windows
-Building on Windows requires [LLVM](https://releases.llvm.org/download.html) and [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) be downloaded and installed.
-
-In addition, the path to `libclang` needs to be set in the environment variable `LIBCLANG_PATH`.  If `LIBCLANG_PATH` is not set, the [readstat-sys build script](../crates/readstat-sys/build.rs) will check the default path `C:\Program Files\LLVM\lib` and fail with instructions if it does not exist.
-
-For details see the following.
-- [Check for `LIBCLANG_PATH`](https://github.com/curtisalexander/readstat-rs/blob/main/crates/readstat-sys/build.rs#L102-L124)
-- [Building in GitHub Actions](https://github.com/curtisalexander/readstat-rs/blob/main/.github/workflows/main.yml#L140-L156)
+Building on Windows requires [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) be installed.
 
 Build
 ```sh
@@ -60,6 +54,18 @@ cargo build
 **iconv**: Compiled from source using the vendored [libiconv-win-build](https://github.com/kiyolee/libiconv-win-build) submodule (located at `crates/readstat-iconv-sys/vendor/libiconv-win-build/`) via the [readstat-iconv-sys](../crates/readstat-iconv-sys/) crate. `readstat-iconv-sys` is a Windows-only dependency (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](../crates/readstat-sys/Cargo.toml)).
 
 **zlib**: Compiled from source via the [libz-sys](https://crates.io/crates/libz-sys) crate (statically linked).
+
+## Regenerating bindings (maintainers only)
+
+Default builds consume pre-generated bindings checked into `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so no `libclang` / LLVM install is required. If you need to regenerate the bindings (e.g. after bumping the vendored ReadStat sources or changing `wrapper.h`), enable the `buildtime_bindgen` feature on `readstat-sys`:
+
+```sh
+cargo build -p readstat-sys --features buildtime_bindgen
+```
+
+This invokes [bindgen](https://rust-lang.github.io/rust-bindgen/), which requires [LLVM / `libclang`](https://rust-lang.github.io/rust-bindgen/requirements.html#clang) to be installed. On Windows specifically, you also need to set `LIBCLANG_PATH` (e.g. `C:\Program Files\LLVM\lib`). The build script writes the regenerated file to both `OUT_DIR` (for the current compile) and `src/bindings/bindings_<os>_<arch>.rs` (so the diff can be committed). Regeneration must be repeated on each supported target OS — the `verify-bindings` workflow can do this for you (`workflow_dispatch` → download artifacts → commit).
+
+`wasm32-unknown-emscripten` builds require `--features buildtime_bindgen` because the emsdk sysroot can't be reproduced from a checked-in file.
 
 ## Linking Summary
 

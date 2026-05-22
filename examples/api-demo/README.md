@@ -11,7 +11,6 @@ Both servers expose the same endpoints and return identical results for the same
 
 **Rust server:**
 - Rust toolchain
-- `libclang` (for readstat-sys bindgen)
 - Git submodules initialized: `git submodule update --init --recursive`
 
 **Python server:**

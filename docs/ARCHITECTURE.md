@@ -86,11 +86,11 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 ### `readstat-sys` (v0.3.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
-`build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate, then generates Rust bindings with `bindgen`. Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
+`build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate. Rust bindings are pre-generated per `(os, arch)` and checked in at `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so default builds need no `libclang` on any platform. Maintainers regenerate via `cargo build -p readstat-sys --features buildtime_bindgen` (requires `libclang`). Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
-| **Windows** (`windows-msvc`) | Static — compiled from vendored `readstat-iconv-sys` submodule | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency; needs `LIBCLANG_PATH` |
+| **Windows** (`windows-msvc`) | Static — compiled from vendored `readstat-iconv-sys` submodule | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency |
 | **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | `libz-sys` (uses system zlib) | iconv linked via `cargo:rustc-link-lib=iconv` |
 | **Linux** (gnu/musl) | Dynamic — system library | `libz-sys` (prefers system, falls back to source) | No explicit iconv link directives; system linker resolves automatically |
 
@@ -137,9 +137,9 @@ Test data lives in `tests/data/*.sas7bdat` (14 datasets). SAS scripts to regener
 ## Build Prerequisites
 
 - Rust (edition 2024)
-- libclang (for bindgen)
 - Git submodules must be initialized (`git submodule update --init --recursive`)
 - On Windows: MSVC toolchain
+- `libclang` is **only** required if regenerating bindings (`--features readstat-sys/buildtime_bindgen`) or building `readstat-wasm`
 
 ## Key Architectural Patterns
 
