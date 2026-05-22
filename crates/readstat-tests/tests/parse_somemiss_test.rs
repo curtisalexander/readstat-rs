@@ -77,7 +77,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 
     // 1 - AGE (String)
@@ -85,7 +85,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$9"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 2 - GENDER (String)
@@ -93,7 +93,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$6"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 3 - RACE (String)
@@ -101,7 +101,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$8"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 4 - INJSITE (String)
@@ -109,7 +109,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$30"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 5 - INJTYPE (String)
@@ -117,7 +117,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$11"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 6 - ISS (Numeric)
@@ -125,7 +125,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 
     // 7 - _ (String)
@@ -133,7 +133,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$1"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 8 - DISPOSITION (String)
@@ -141,7 +141,7 @@ fn parse_somemiss_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$8"));
     assert!(matches!(adt, DataType::Utf8));
 }
 

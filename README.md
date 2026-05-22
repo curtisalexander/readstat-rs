@@ -89,7 +89,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | **Linux** ([glibc](https://www.gnu.org/software/libc/)) | :heavy_check_mark: Builds and runs | System iconv, system zlib | &mdash; |
 | **Linux** ([musl](https://www.musl-libc.org/)) | :heavy_check_mark: Builds and runs | System iconv, system zlib | &mdash; |
 | **macOS** | :heavy_check_mark: Builds and runs | System `libiconv`, system zlib | &mdash; |
-| **Windows** (MSVC) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | [Requires `libclang`](docs/BUILDING.md#windows) for [bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html#clang). MSVC supported since [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5` (no msys2 needed). |
+| **Windows** (MSVC) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | MSVC supported since [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5` (no msys2 needed). Default builds use pre-generated bindings &mdash; no `libclang` install required. |
 
 ## :books: Documentation
 

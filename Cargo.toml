@@ -35,5 +35,10 @@ rayon = "1.11"
 serde = { version = "1", features = ["derive"] }
 
 # Build dependencies
-bindgen = "0.72"
+# Exact pin: bindgen's output format can vary across patch releases,
+# which would silently drift the checked-in per-target bindings files
+# in `crates/readstat-sys/src/bindings/`. Bumping bindgen is intentional
+# and must be paired with regenerating + committing the bindings — the
+# `readstat-sys-ci.yml` workflow enforces this on every PR.
+bindgen = "=0.72.1"
 cc = "1.2"

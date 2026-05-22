@@ -77,7 +77,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 
     // 1 - DateArrived (String)
@@ -85,7 +85,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$10"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 2 - TimeArrive (String)
@@ -93,7 +93,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$10"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 3 - DateLeft (String)
@@ -101,7 +101,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$10"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 4 - TimeLeft (String)
@@ -109,7 +109,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$20"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 5 - Married (Numeric)
@@ -117,7 +117,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 
     // 6 - Single (Numeric)
@@ -125,7 +125,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 
     // 7 - Age (String)
@@ -133,7 +133,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$10"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 8 - Gender (String)
@@ -141,7 +141,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$1"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 9 - Education (Numeric)
@@ -149,7 +149,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 
     // 10 - Race (String)
@@ -157,7 +157,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$3"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 11 - How_Arrived (String)
@@ -165,7 +165,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$11"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 12 - Top_Reason (String)
@@ -173,7 +173,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::String));
     assert!(matches!(vt, readstat::ReadStatVarType::String));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("$"));
+    assert_eq!(vf, String::from("$5"));
     assert!(matches!(adt, DataType::Utf8));
 
     // 13 - Arrival (Numeric)
@@ -181,7 +181,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 
     // 14 - Satisfaction (Numeric)
@@ -189,7 +189,7 @@ fn parse_messydata_metadata() {
     assert!(matches!(vtc, readstat::ReadStatVarTypeClass::Numeric));
     assert!(matches!(vt, readstat::ReadStatVarType::Double));
     assert!(vfc.is_none());
-    assert_eq!(vf, String::from("BEST"));
+    assert_eq!(vf, String::from("BEST12"));
     assert!(matches!(adt, DataType::Float64));
 }
 

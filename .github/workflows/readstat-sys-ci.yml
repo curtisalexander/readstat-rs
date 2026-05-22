@@ -1,0 +1,113 @@
+name: readstat-sys cross-platform CI
+
+# Runs on every PR (and direct push to main) that touches `readstat-sys`
+# itself, the vendored C sources, or this workflow. Two job matrices:
+#
+#   * `consume`: builds the workspace + runs all tests on
+#     ubuntu/macos/windows using the checked-in per-target pre-gen
+#     bindings. This is the load-bearing check — it proves the
+#     `bindings_<os>_<arch>.rs` files match each platform's actual ABI.
+#
+#   * `regen`: runs bindgen via `--features buildtime_bindgen` to
+#     reproduce the corresponding per-target file. Uploads each result
+#     as an artifact and prints a `git diff` so any drift surfaces in
+#     the job log. The diff is informational — a maintainer downloads
+#     the artifacts and commits them when refreshing bindings after a
+#     `wrapper.h` change, `vendor/ReadStat` bump, or `bindgen` upgrade.
+#
+# Manual trigger (`workflow_dispatch`) is supported for cutting fresh
+# bindings on demand without a PR.
+
+on:
+  pull_request:
+    paths:
+      - 'crates/readstat-sys/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/readstat-sys-ci.yml'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'crates/readstat-sys/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/readstat-sys-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  consume:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            file: bindings_linux_x86_64.rs
+          - os: ubuntu-24.04-arm
+            file: bindings_linux_aarch64.rs
+          - os: macos-15-intel
+            file: bindings_macos_x86_64.rs
+          - os: macos-latest
+            file: bindings_macos_aarch64.rs
+          - os: windows-latest
+            file: bindings_windows_x86_64.rs
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Build with default features (consumes pre-gen ${{ matrix.file }})
+        run: cargo build --workspace
+
+      - name: Test
+        run: cargo test --workspace
+
+  regen:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            file: bindings_linux_x86_64.rs
+          - os: ubuntu-24.04-arm
+            file: bindings_linux_aarch64.rs
+          - os: macos-15-intel
+            file: bindings_macos_x86_64.rs
+          - os: macos-latest
+            file: bindings_macos_aarch64.rs
+          - os: windows-latest
+            file: bindings_windows_x86_64.rs
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install LLVM (Windows only — bindgen needs libclang)
+        if: matrix.os == 'windows-latest'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "17"
+
+      - name: Regenerate bindings
+        run: cargo build -p readstat-sys --features buildtime_bindgen
+
+      # Upload BEFORE the drift check so the artifact is downloadable even
+      # when the diff step fails — that's exactly when the maintainer
+      # needs to grab the freshly-generated file to commit.
+      - name: Upload regenerated bindings
+        uses: actions/upload-artifact@v7
+        with:
+          name: bindings-${{ matrix.os }}
+          path: crates/readstat-sys/src/bindings/${{ matrix.file }}
+
+      - name: Fail if regenerated bindings differ from checked-in
+        shell: bash
+        run: |
+          if git --no-pager diff --no-color --exit-code crates/readstat-sys/src/bindings/${{ matrix.file }}; then
+            echo "::notice::Bindings match a fresh regeneration on ${{ matrix.os }}."
+          else
+            echo "::error::Checked-in bindings/${{ matrix.file }} differ from what bindgen now produces."
+            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
