@@ -109,7 +109,8 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/CI-CD.md](docs/CI-CD.md) | GitHub Actions triggers and artifacts |
 | [docs/MEMORY-SAFETY.md](docs/MEMORY-SAFETY.md) | Automated memory-safety CI checks (Valgrind, ASan, Miri, unsafe audit) |
 | [docs/RELEASING.md](docs/RELEASING.md) | Step-by-step guide for publishing crates to crates.io |
-| [scripts/check-updates.sh](scripts/check-updates.sh) | Dependency update checker with supply chain quarantine (`--apply` to update) |
+| [scripts/check-updates.sh](scripts/check-updates.sh) | Crate dependency update checker — supply-chain quarantine, held-back/major reporting, and a `bindgen` advisory (`--apply` to update; `.ps1` for Windows) |
+| [scripts/check-vendor-updates.sh](scripts/check-vendor-updates.sh) | Read-only check for upstream updates to the vendored git submodules (ReadStat, libiconv) — never alters the checkout (`.ps1` for Windows) |
 
 ## :jigsaw: Workspace Crates
 
