@@ -46,6 +46,11 @@ type ChunkReceiver = crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, u
 /// * `schema` - The Arrow schema shared by all batches
 /// * `table_name` - The name used to reference the table in SQL
 /// * `sql` - The SQL query string to execute
+///
+/// # Errors
+///
+/// Returns [`ReadStatError`] if the Tokio runtime cannot be created, the table
+/// cannot be registered, or the query fails to plan or execute.
 pub fn execute_sql(
     batches: Vec<RecordBatch>,
     schema: SchemaRef,
@@ -116,6 +121,11 @@ impl PartitionStream for ChannelPartitionStream {
 ///
 /// The receiver is consumed directly by DataFusion's query engine via
 /// [`StreamingTable`], and results are collected via `execute_stream()`.
+///
+/// # Errors
+///
+/// Returns [`ReadStatError`] if the Tokio runtime cannot be created, the table
+/// cannot be registered, or the query fails to plan or execute.
 pub fn execute_sql_stream(
     receiver: ChunkReceiver,
     schema: SchemaRef,
@@ -156,6 +166,11 @@ async fn execute_sql_stream_async(
 /// streaming pass for the Data command path.
 ///
 /// The output path in `write_config` must be `Some`; returns an error otherwise.
+///
+/// # Errors
+///
+/// Returns [`ReadStatError`] if the output path is missing, the Tokio runtime
+/// cannot be created, the query fails, or writing the results fails.
 pub fn execute_sql_and_write_stream(
     receiver: ChunkReceiver,
     schema: SchemaRef,
@@ -214,6 +229,13 @@ async fn execute_sql_and_write_stream_async(
 }
 
 /// Writes SQL result batches to an output file in the specified format.
+///
+/// Returns `Ok(())` without writing anything if `batches` is empty.
+///
+/// # Errors
+///
+/// Returns [`ReadStatError`] if the output file cannot be created or a write
+/// fails for the chosen format.
 pub fn write_sql_results(
     batches: &[RecordBatch],
     output_path: &Path,
@@ -271,6 +293,11 @@ pub fn write_sql_results(
 }
 
 /// Reads a SQL query from a file path.
+///
+/// # Errors
+///
+/// Returns [`ReadStatError`] if the file cannot be read or contains only
+/// whitespace.
 pub fn read_sql_file(path: &std::path::Path) -> Result<String, ReadStatError> {
     let sql = std::fs::read_to_string(path)?;
     let sql = sql.trim().to_string();

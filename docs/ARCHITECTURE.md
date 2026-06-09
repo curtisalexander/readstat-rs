@@ -32,7 +32,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.22.0) — Library Crate
+### `readstat` (v0.23.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -55,7 +55,7 @@ Key source modules in `crates/readstat/src/`:
 | `progress.rs` | `ProgressCallback` trait for parsing progress reporting |
 | `rs_query.rs` | SQL query execution via DataFusion (feature-gated) |
 | `formats.rs` | SAS format detection (118 date/time/datetime formats, regex-based) |
-| `err.rs` | Error enum (41 variants mapping to C library errors) |
+| `err.rs` | Error enums: `ReadStatError` (14 variants) plus `ReadStatCError` (41 codes mapping the C library's `readstat_error_t`) |
 | `common.rs` | Utility functions |
 | `rs_buffer_io.rs` | Buffer I/O operations |
 
@@ -71,7 +71,7 @@ Key public types:
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.22.0) — CLI Binary
+### `readstat-cli` (v0.23.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -83,7 +83,7 @@ Owns CLI arg parsing, progress bars, colored output, and reader-writer thread or
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
-### `readstat-sys` (v0.3.0) — FFI Bindings
+### `readstat-sys` (v0.4.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate. Rust bindings are pre-generated per `(os, arch)` and checked in at `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so default builds need no `libclang` on any platform. Maintainers regenerate via `cargo build -p readstat-sys --features buildtime_bindgen` (requires `libclang`). Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:

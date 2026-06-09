@@ -1,8 +1,12 @@
 //! Raw FFI bindings to [libiconv](https://www.gnu.org/software/libiconv/) for Windows.
 //!
-//! This crate compiles libiconv from a vendored git submodule on Windows and is a
-//! no-op on other platforms. It exists primarily to support [`readstat-sys`](https://docs.rs/readstat-sys),
+//! This crate compiles vendored libiconv on Windows and is a no-op on other
+//! platforms. It exists primarily to support [`readstat-sys`](https://docs.rs/readstat-sys),
 //! which needs iconv for character encoding conversion in the `ReadStat` C library.
+//!
+//! Rust bindings are pre-generated per target and checked in under
+//! `src/bindings/`, so building requires no `libclang`. Maintainers regenerate
+//! them with `cargo build -p readstat-iconv-sys --features buildtime_bindgen`.
 
 // Auto-generated bindgen code — suppress lints from generated bindings
 #![allow(clippy::pedantic)]

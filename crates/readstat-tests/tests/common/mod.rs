@@ -37,11 +37,7 @@ pub fn setup_and_read(
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }
@@ -59,10 +55,7 @@ pub fn setup_and_read_rows(
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let mut d =
-        readstat::ReadStatData::new()
-            .set_no_progress(true)
-            .init(md.clone(), row_start, row_end);
+    let mut d = readstat::ReadStatData::new().init(md.clone(), row_start, row_end);
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }
@@ -78,11 +71,7 @@ pub fn setup_and_read_skip_row_count(
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, true).unwrap();
-    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }

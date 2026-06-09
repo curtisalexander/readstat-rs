@@ -13,6 +13,7 @@ use std::os::raw::{c_char, c_int, c_void};
 
 use crate::{
     common::ptr_to_string,
+    err::ReadStatError,
     formats,
     rs_data::{ColumnBuilder, ReadStatData},
     rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata},
@@ -241,6 +242,35 @@ pub(crate) fn round_decimal_f32(v: f32) -> f32 {
     (int_part + rounded_frac) as f32
 }
 
+/// Converts an `f64` to `i64`, returning `None` for non-finite or out-of-range
+/// values instead of silently saturating (the behaviour of an `as` cast).
+///
+/// Used by the date/time value arms so that an out-of-range SAS datetime
+/// surfaces as [`ReadStatError::DateOverflow`] rather than a clamped value.
+#[inline]
+#[allow(clippy::cast_possible_truncation)]
+fn checked_f64_to_i64(v: f64) -> Option<i64> {
+    // i64::MAX as f64 rounds up to 2^63, which is not representable as i64, so
+    // use a strict upper bound to keep the subsequent `as` cast exact.
+    if v.is_finite() && v >= i64::MIN as f64 && v < i64::MAX as f64 {
+        Some(v as i64)
+    } else {
+        None
+    }
+}
+
+/// Converts an `f64` to `i32`, returning `None` for non-finite or out-of-range
+/// values instead of silently saturating.
+#[inline]
+#[allow(clippy::cast_possible_truncation)]
+fn checked_f64_to_i32(v: f64) -> Option<i32> {
+    if v.is_finite() && v >= f64::from(i32::MIN) && v < f64::from(i32::MAX) {
+        Some(v as i32)
+    } else {
+        None
+    }
+}
+
 /// FFI callback that extracts a single cell value during row parsing.
 ///
 /// Called for every cell in every row. Appends the value directly into the
@@ -306,6 +336,28 @@ pub(crate) extern "C" fn handle_value(
     // Append value directly into the typed Arrow builder
     let builder = &mut d.builders[col_index as usize];
 
+    // Records a builder/value type mismatch and aborts parsing. This should be
+    // unreachable in practice — the schema and the builders are both derived
+    // from the same variable metadata — but surfacing a clear error is far
+    // safer than silently dropping the cell, which would desync column lengths
+    // and only surface later as an opaque `RecordBatch` length error.
+    macro_rules! type_mismatch_abort {
+        () => {{
+            d.abort_error = Some(ReadStatError::Other(format!(
+                "ReadStat value type did not match the expected Arrow builder for column index {col_index}"
+            )));
+            return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+        }};
+    }
+
+    // Records a date/time conversion overflow and aborts parsing.
+    macro_rules! date_overflow_abort {
+        () => {{
+            d.abort_error = Some(ReadStatError::DateOverflow);
+            return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+        }};
+    }
+
     match value_type {
         readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
         | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
@@ -338,6 +390,8 @@ pub(crate) extern "C" fn handle_value(
                 // Schema maps Int8 → Int16, so widen
                 if let ColumnBuilder::Int16(b) = builder {
                     b.append_value(i16::from(v));
+                } else {
+                    type_mismatch_abort!();
                 }
             }
         }
@@ -349,6 +403,8 @@ pub(crate) extern "C" fn handle_value(
                 debug!("value is {v:#?}");
                 if let ColumnBuilder::Int16(b) = builder {
                     b.append_value(v);
+                } else {
+                    type_mismatch_abort!();
                 }
             }
         }
@@ -360,6 +416,8 @@ pub(crate) extern "C" fn handle_value(
                 debug!("value is {v:#?}");
                 if let ColumnBuilder::Int32(b) = builder {
                     b.append_value(v);
+                } else {
+                    type_mismatch_abort!();
                 }
             }
         }
@@ -373,6 +431,8 @@ pub(crate) extern "C" fn handle_value(
                 debug!("value (after parsing) is {val:#?}");
                 if let ColumnBuilder::Float32(b) = builder {
                     b.append_value(val);
+                } else {
+                    type_mismatch_abort!();
                 }
             }
         }
@@ -391,57 +451,91 @@ pub(crate) extern "C" fn handle_value(
                     None => {
                         if let ColumnBuilder::Float64(b) = builder {
                             b.append_value(val);
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                     Some(ReadStatVarFormatClass::Date) => {
                         if let ColumnBuilder::Date32(b) = builder {
-                            if let Some(shifted) = (val as i32).checked_sub(DAY_SHIFT) {
-                                b.append_value(shifted);
-                            } else {
-                                d.errors.push("Date overflow".to_string());
-                                return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+                            match checked_f64_to_i32(val)
+                                .and_then(|days| days.checked_sub(DAY_SHIFT))
+                            {
+                                Some(shifted) => b.append_value(shifted),
+                                None => date_overflow_abort!(),
                             }
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                     Some(ReadStatVarFormatClass::DateTime) => {
                         if let ColumnBuilder::TimestampSecond(b) = builder {
-                            if let Some(shifted) = (val as i64).checked_sub(SEC_SHIFT) {
-                                b.append_value(shifted);
-                            } else {
-                                d.errors.push("DateTime overflow".to_string());
-                                return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+                            match checked_f64_to_i64(val).and_then(|s| s.checked_sub(SEC_SHIFT)) {
+                                Some(shifted) => b.append_value(shifted),
+                                None => date_overflow_abort!(),
                             }
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
                         if let ColumnBuilder::TimestampMillisecond(b) = builder {
-                            b.append_value(((val - SEC_SHIFT as f64) * 1000.0) as i64);
+                            match checked_f64_to_i64((val - SEC_SHIFT as f64) * 1000.0) {
+                                Some(v) => b.append_value(v),
+                                None => date_overflow_abort!(),
+                            }
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
                         if let ColumnBuilder::TimestampMicrosecond(b) = builder {
-                            b.append_value(((val - SEC_SHIFT as f64) * 1_000_000.0) as i64);
+                            match checked_f64_to_i64((val - SEC_SHIFT as f64) * 1_000_000.0) {
+                                Some(v) => b.append_value(v),
+                                None => date_overflow_abort!(),
+                            }
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
                         if let ColumnBuilder::TimestampNanosecond(b) = builder {
-                            b.append_value(((val - SEC_SHIFT as f64) * 1_000_000_000.0) as i64);
+                            match checked_f64_to_i64((val - SEC_SHIFT as f64) * 1_000_000_000.0) {
+                                Some(v) => b.append_value(v),
+                                None => date_overflow_abort!(),
+                            }
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                     Some(ReadStatVarFormatClass::Time) => {
                         if let ColumnBuilder::Time32Second(b) = builder {
-                            b.append_value(val as i32);
+                            match checked_f64_to_i32(val) {
+                                Some(v) => b.append_value(v),
+                                None => date_overflow_abort!(),
+                            }
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                         if let ColumnBuilder::Time64Microsecond(b) = builder {
-                            b.append_value((val * 1_000_000.0) as i64);
+                            match checked_f64_to_i64(val * 1_000_000.0) {
+                                Some(v) => b.append_value(v),
+                                None => date_overflow_abort!(),
+                            }
+                        } else {
+                            type_mismatch_abort!();
                         }
                     }
                 }
             }
         }
-        _ => unreachable!(),
+        _ => {
+            d.abort_error = Some(ReadStatError::Other(format!(
+                "ReadStat returned an unsupported value type ({value_type}) for column index {col_index}"
+            )));
+            return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+        }
     }
 
     // if row is complete (use total_var_count for boundary detection)
@@ -463,118 +557,118 @@ mod tests {
         use super::*;
         use proptest::prelude::*;
 
-    // --- round_decimal_f64 ---
+        // --- round_decimal_f64 ---
 
-    proptest! {
-        #[test]
-        fn round_f64_is_idempotent(v in any::<f64>()) {
-            let once = round_decimal_f64(v);
-            let twice = round_decimal_f64(once);
-            // Use value equality, not bit equality: rounding tiny negatives
-            // to zero may flip -0.0 → 0.0 (both equal per IEEE 754).
-            prop_assert!((once == twice) || (once.is_nan() && twice.is_nan()),
-                "not idempotent: round({}) = {}, round(round({})) = {}", v, once, v, twice);
+        proptest! {
+            #[test]
+            fn round_f64_is_idempotent(v in any::<f64>()) {
+                let once = round_decimal_f64(v);
+                let twice = round_decimal_f64(once);
+                // Use value equality, not bit equality: rounding tiny negatives
+                // to zero may flip -0.0 → 0.0 (both equal per IEEE 754).
+                prop_assert!((once == twice) || (once.is_nan() && twice.is_nan()),
+                    "not idempotent: round({}) = {}, round(round({})) = {}", v, once, v, twice);
+            }
+
+            #[test]
+            fn round_f64_preserves_sign(v in any::<f64>().prop_filter("finite nonzero", |v| v.is_finite() && *v != 0.0)) {
+                let rounded = round_decimal_f64(v);
+                prop_assert_eq!(v.is_sign_positive(), rounded.is_sign_positive());
+            }
+
+            #[test]
+            fn round_f64_preserves_finiteness(v in any::<f64>()) {
+                let rounded = round_decimal_f64(v);
+                prop_assert_eq!(v.is_finite(), rounded.is_finite());
+            }
+
+            #[test]
+            fn round_f64_bounded_error(v in any::<f64>().prop_filter("finite", |v| v.is_finite())) {
+                let rounded = round_decimal_f64(v);
+                let error = (v - rounded).abs();
+                // Rounding to 14 decimal places gives at most 0.5e-14 = 5e-15 error in
+                // exact arithmetic.  However, the final `int_part + rounded_frac` addition
+                // cannot be more precise than 1 ULP of the result.  For |v| in [32, 64) that
+                // ULP is 2^-47 ≈ 7.1e-15, which exceeds 5e-15 — so the bound must scale
+                // with the magnitude of v.
+                let magnitude_error = v.abs() * f64::EPSILON;
+                prop_assert!(error <= 5e-15 + magnitude_error,
+                    "error {} too large for input {} (bound {})", error, v, 5e-15 + magnitude_error);
+            }
+
+            #[test]
+            fn round_f64_passthrough_nonfinite(v in prop::num::f64::ANY.prop_filter("non-finite", |v| !v.is_finite())) {
+                let rounded = round_decimal_f64(v);
+                prop_assert_eq!(v.to_bits(), rounded.to_bits());
+            }
         }
 
-        #[test]
-        fn round_f64_preserves_sign(v in any::<f64>().prop_filter("finite nonzero", |v| v.is_finite() && *v != 0.0)) {
-            let rounded = round_decimal_f64(v);
-            prop_assert_eq!(v.is_sign_positive(), rounded.is_sign_positive());
+        // --- round_decimal_f32 ---
+
+        proptest! {
+            #[test]
+            fn round_f32_is_idempotent(v in any::<f32>()) {
+                let once = round_decimal_f32(v);
+                let twice = round_decimal_f32(once);
+                // Use value equality, not bit equality: rounding tiny negatives
+                // to zero may flip -0.0 → 0.0 (both equal per IEEE 754).
+                prop_assert!((once == twice) || (once.is_nan() && twice.is_nan()),
+                    "not idempotent: round({}) = {}, round(round({})) = {}", v, once, v, twice);
+            }
+
+            #[test]
+            fn round_f32_preserves_sign(v in any::<f32>().prop_filter("finite nonzero", |v| v.is_finite() && *v != 0.0)) {
+                let rounded = round_decimal_f32(v);
+                prop_assert_eq!(v.is_sign_positive(), rounded.is_sign_positive());
+            }
+
+            #[test]
+            fn round_f32_preserves_finiteness(v in any::<f32>()) {
+                let rounded = round_decimal_f32(v);
+                prop_assert_eq!(v.is_finite(), rounded.is_finite());
+            }
+
+            #[test]
+            fn round_f32_passthrough_nonfinite(v in prop::num::f32::ANY.prop_filter("non-finite", |v| !v.is_finite())) {
+                let rounded = round_decimal_f32(v);
+                prop_assert_eq!(v.to_bits(), rounded.to_bits());
+            }
         }
 
-        #[test]
-        fn round_f64_preserves_finiteness(v in any::<f64>()) {
-            let rounded = round_decimal_f64(v);
-            prop_assert_eq!(v.is_finite(), rounded.is_finite());
+        // --- Epoch shift arithmetic ---
+
+        proptest! {
+            /// Any valid SAS date value (days since 1960-01-01) within the representable
+            /// i32 range should not overflow when shifted to Unix epoch.
+            #[test]
+            fn day_shift_no_overflow(sas_days in (i32::MIN + DAY_SHIFT)..=i32::MAX) {
+                let shifted = sas_days.checked_sub(DAY_SHIFT);
+                prop_assert!(shifted.is_some(), "DAY_SHIFT overflow for sas_days={}", sas_days);
+            }
+
+            /// Any valid SAS datetime value (seconds since 1960-01-01) within the
+            /// representable i64 range should not overflow when shifted to Unix epoch.
+            #[test]
+            fn sec_shift_no_overflow(sas_secs in (i64::MIN + SEC_SHIFT)..=i64::MAX) {
+                let shifted = sas_secs.checked_sub(SEC_SHIFT);
+                prop_assert!(shifted.is_some(), "SEC_SHIFT overflow for sas_secs={}", sas_secs);
+            }
+
+            /// Round-trip: SAS days → Unix days → SAS days
+            #[test]
+            fn day_shift_round_trip(sas_days in (i32::MIN + DAY_SHIFT)..=i32::MAX) {
+                let unix_days = sas_days - DAY_SHIFT;
+                let back = unix_days + DAY_SHIFT;
+                prop_assert_eq!(sas_days, back);
+            }
+
+            /// Round-trip: SAS seconds → Unix seconds → SAS seconds
+            #[test]
+            fn sec_shift_round_trip(sas_secs in (i64::MIN + SEC_SHIFT)..=i64::MAX) {
+                let unix_secs = sas_secs - SEC_SHIFT;
+                let back = unix_secs + SEC_SHIFT;
+                prop_assert_eq!(sas_secs, back);
+            }
         }
-
-        #[test]
-        fn round_f64_bounded_error(v in any::<f64>().prop_filter("finite", |v| v.is_finite())) {
-            let rounded = round_decimal_f64(v);
-            let error = (v - rounded).abs();
-            // Rounding to 14 decimal places gives at most 0.5e-14 = 5e-15 error in
-            // exact arithmetic.  However, the final `int_part + rounded_frac` addition
-            // cannot be more precise than 1 ULP of the result.  For |v| in [32, 64) that
-            // ULP is 2^-47 ≈ 7.1e-15, which exceeds 5e-15 — so the bound must scale
-            // with the magnitude of v.
-            let magnitude_error = v.abs() * f64::EPSILON;
-            prop_assert!(error <= 5e-15 + magnitude_error,
-                "error {} too large for input {} (bound {})", error, v, 5e-15 + magnitude_error);
-        }
-
-        #[test]
-        fn round_f64_passthrough_nonfinite(v in prop::num::f64::ANY.prop_filter("non-finite", |v| !v.is_finite())) {
-            let rounded = round_decimal_f64(v);
-            prop_assert_eq!(v.to_bits(), rounded.to_bits());
-        }
-    }
-
-    // --- round_decimal_f32 ---
-
-    proptest! {
-        #[test]
-        fn round_f32_is_idempotent(v in any::<f32>()) {
-            let once = round_decimal_f32(v);
-            let twice = round_decimal_f32(once);
-            // Use value equality, not bit equality: rounding tiny negatives
-            // to zero may flip -0.0 → 0.0 (both equal per IEEE 754).
-            prop_assert!((once == twice) || (once.is_nan() && twice.is_nan()),
-                "not idempotent: round({}) = {}, round(round({})) = {}", v, once, v, twice);
-        }
-
-        #[test]
-        fn round_f32_preserves_sign(v in any::<f32>().prop_filter("finite nonzero", |v| v.is_finite() && *v != 0.0)) {
-            let rounded = round_decimal_f32(v);
-            prop_assert_eq!(v.is_sign_positive(), rounded.is_sign_positive());
-        }
-
-        #[test]
-        fn round_f32_preserves_finiteness(v in any::<f32>()) {
-            let rounded = round_decimal_f32(v);
-            prop_assert_eq!(v.is_finite(), rounded.is_finite());
-        }
-
-        #[test]
-        fn round_f32_passthrough_nonfinite(v in prop::num::f32::ANY.prop_filter("non-finite", |v| !v.is_finite())) {
-            let rounded = round_decimal_f32(v);
-            prop_assert_eq!(v.to_bits(), rounded.to_bits());
-        }
-    }
-
-    // --- Epoch shift arithmetic ---
-
-    proptest! {
-        /// Any valid SAS date value (days since 1960-01-01) within the representable
-        /// i32 range should not overflow when shifted to Unix epoch.
-        #[test]
-        fn day_shift_no_overflow(sas_days in (i32::MIN + DAY_SHIFT)..=i32::MAX) {
-            let shifted = sas_days.checked_sub(DAY_SHIFT);
-            prop_assert!(shifted.is_some(), "DAY_SHIFT overflow for sas_days={}", sas_days);
-        }
-
-        /// Any valid SAS datetime value (seconds since 1960-01-01) within the
-        /// representable i64 range should not overflow when shifted to Unix epoch.
-        #[test]
-        fn sec_shift_no_overflow(sas_secs in (i64::MIN + SEC_SHIFT)..=i64::MAX) {
-            let shifted = sas_secs.checked_sub(SEC_SHIFT);
-            prop_assert!(shifted.is_some(), "SEC_SHIFT overflow for sas_secs={}", sas_secs);
-        }
-
-        /// Round-trip: SAS days → Unix days → SAS days
-        #[test]
-        fn day_shift_round_trip(sas_days in (i32::MIN + DAY_SHIFT)..=i32::MAX) {
-            let unix_days = sas_days - DAY_SHIFT;
-            let back = unix_days + DAY_SHIFT;
-            prop_assert_eq!(sas_days, back);
-        }
-
-        /// Round-trip: SAS seconds → Unix seconds → SAS seconds
-        #[test]
-        fn sec_shift_round_trip(sas_secs in (i64::MIN + SEC_SHIFT)..=i64::MAX) {
-            let unix_secs = sas_secs - SEC_SHIFT;
-            let back = unix_secs + SEC_SHIFT;
-            prop_assert_eq!(sas_secs, back);
-        }
-    }
     } // end property_tests
 }

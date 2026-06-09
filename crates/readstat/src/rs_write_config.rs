@@ -14,9 +14,10 @@ use crate::err::ReadStatError;
 
 /// Output file format for data conversion.
 ///
-/// All variants are always present regardless of enabled features.
-/// Attempting to use a format whose feature is not enabled will
-/// result in a compile-time error in the writer code.
+/// All variants are always present regardless of which writer features are
+/// enabled. Attempting to *write* a format whose feature is disabled returns a
+/// runtime [`ReadStatError`](crate::ReadStatError) from the writer rather than
+/// failing to compile.
 ///
 /// This enum is `#[non_exhaustive]`: new format variants may be added in
 /// minor releases. Match with a wildcard arm to remain forward-compatible.

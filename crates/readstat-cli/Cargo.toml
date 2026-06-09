@@ -1,17 +1,23 @@
 [package]
 name = "readstat-cli"
 version = "0.23.0"
-authors = ["Curtis Alexander <calex@calex.org>"]
-edition = "2024"
-rust-version = "1.85"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "CLI for converting SAS binary files to other formats"
-homepage = "https://github.com/curtisalexander/readstat-rs"
-license = "MIT"
-repository = "https://github.com/curtisalexander/readstat-rs"
 readme = "README.md"
 documentation = "https://curtisalexander.github.io/readstat-rs/usage.html"
 keywords = ["sas", "sas7bdat", "arrow", "parquet", "readstat"]
 categories = ["command-line-utilities"]
+
+# Keep the crate version cited in docs/ARCHITECTURE.md in sync on release.
+[[package.metadata.release.pre-release-replacements]]
+file = "../../docs/ARCHITECTURE.md"
+search = '### `readstat-cli` \(v[0-9]+\.[0-9]+\.[0-9]+\)'
+replace = "### `readstat-cli` (v{{version}})"
 
 [[bin]]
 name = "readstat"

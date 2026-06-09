@@ -21,6 +21,25 @@
 //!
 //! # Examples
 //!
+//! ## Quick start
+//!
+//! The two convenience functions cover the common case — read metadata, or read
+//! every row into a single Arrow [`RecordBatch`](arrow_array::RecordBatch):
+//!
+//! ```no_run
+//! # fn main() -> Result<(), readstat::ReadStatError> {
+//! let md = readstat::read_metadata("data.sas7bdat")?;
+//! println!("{} rows x {} columns", md.row_count, md.var_count);
+//!
+//! let batch = readstat::read_to_batch("data.sas7bdat")?;
+//! println!("Schema: {:?}", batch.schema());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! For streaming, parallelism, or column filtering, drop down to the
+//! [`ReadStatMetadata`] / [`ReadStatData`] types as shown below.
+//!
 //! ## Inspect file metadata
 //!
 //! Read metadata without loading any row data. Useful for discovering
@@ -30,7 +49,7 @@
 //! use readstat::{ReadStatPath, ReadStatMetadata};
 //!
 //! # fn main() -> Result<(), readstat::ReadStatError> {
-//! let rsp = ReadStatPath::new("data.sas7bdat".into())?;
+//! let rsp = ReadStatPath::new("data.sas7bdat")?;
 //!
 //! let mut md = ReadStatMetadata::new();
 //! md.read_metadata(&rsp, false)?;
@@ -62,7 +81,7 @@
 //! use readstat::{ReadStatPath, ReadStatMetadata, ReadStatData};
 //!
 //! # fn main() -> Result<(), readstat::ReadStatError> {
-//! let rsp = ReadStatPath::new("data.sas7bdat".into())?;
+//! let rsp = ReadStatPath::new("data.sas7bdat")?;
 //!
 //! // Read metadata first
 //! let mut md = ReadStatMetadata::new();
@@ -94,7 +113,7 @@
 //! };
 //!
 //! # fn main() -> Result<(), readstat::ReadStatError> {
-//! let rsp = ReadStatPath::new("data.sas7bdat".into())?;
+//! let rsp = ReadStatPath::new("data.sas7bdat")?;
 //! let wc = WriteConfig::new(
 //!     Some("output.parquet".into()),
 //!     Some(OutFormat::Parquet),
@@ -156,27 +175,21 @@
 //!
 //! ```no_run
 //! use readstat::{ReadStatPath, ReadStatMetadata, ReadStatData};
-//! use std::sync::Arc;
 //!
 //! # fn main() -> Result<(), readstat::ReadStatError> {
-//! let rsp = ReadStatPath::new("data.sas7bdat".into())?;
+//! let rsp = ReadStatPath::new("data.sas7bdat")?;
 //!
 //! let mut md = ReadStatMetadata::new();
 //! md.read_metadata(&rsp, false)?;
 //!
 //! // Select only these columns
 //! let columns = vec!["name".to_string(), "age".to_string()];
-//! let filter = md.resolve_selected_columns(Some(columns))?;
 //!
-//! if let Some(ref mapping) = filter {
-//!     // Apply filter to metadata (updates schema and vars)
-//!     let original_var_count = md.var_count;
-//!     md = md.filter_to_selected_columns(mapping);
-//!
-//!     let row_count = md.row_count as u32;
-//!     let mut d = ReadStatData::new()
-//!         .set_column_filter(Some(Arc::new(mapping.clone())), original_var_count)
-//!         .init(md, 0, row_count);
+//! if let Some(mapping) = md.resolve_selected_columns(Some(columns))? {
+//!     // `init_filtered` applies the filter and initializes in the correct
+//!     // order — pass the *original* metadata; filtering happens internally.
+//!     let row_count = u32::try_from(md.row_count)?;
+//!     let mut d = ReadStatData::new().init_filtered(md, &mapping, 0, row_count);
 //!     d.read_data(&rsp)?;
 //!
 //!     if let Some(batch) = &d.batch {
@@ -205,7 +218,7 @@
 //! use readstat::write_batch_to_csv_bytes;
 //!
 //! # fn main() -> Result<(), readstat::ReadStatError> {
-//! let rsp = ReadStatPath::new("data.sas7bdat".into())?;
+//! let rsp = ReadStatPath::new("data.sas7bdat")?;
 //!
 //! let mut md = ReadStatMetadata::new();
 //! md.read_metadata(&rsp, false)?;
@@ -226,6 +239,11 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Key Functions
+//!
+//! - [`read_metadata`] — Read file/variable metadata in one call
+//! - [`read_to_batch`] — Read an entire file into one Arrow [`RecordBatch`](arrow_array::RecordBatch)
 //!
 //! # Key Types
 //!
@@ -254,6 +272,7 @@
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::return_self_not_must_use)]
 
+pub use api::{read_metadata, read_to_batch};
 pub use common::build_offsets;
 pub use err::{ReadStatCError, ReadStatError};
 pub use progress::ProgressCallback;
@@ -281,6 +300,7 @@ pub use rs_write::write_batch_to_ndjson_bytes;
 pub use rs_write::write_batch_to_parquet_bytes;
 pub use rs_write_config::{OutFormat, ParquetCompression, WriteConfig};
 
+mod api;
 mod cb;
 mod common;
 mod err;

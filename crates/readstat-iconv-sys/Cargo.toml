@@ -1,19 +1,33 @@
 [package]
 name = "readstat-iconv-sys"
 version = "0.3.0"
-authors = ["Curtis Alexander <calex@calex.org>"]
-edition = "2024"
-rust-version = "1.85"
-description = "Windows-only FFI bindings to libiconv for character encoding conversion"
-homepage = "https://github.com/curtisalexander/readstat-rs"
-readme = "README.md"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# NOT inherited: this crate vendors libiconv, so it is LGPL in addition to MIT.
 license = "LGPL-2.1-or-later AND MIT"
-repository = "https://github.com/curtisalexander/readstat-rs"
+repository.workspace = true
+homepage.workspace = true
+description = "Windows-only FFI bindings to libiconv for character encoding conversion"
+readme = "README.md"
 documentation = "https://docs.rs/readstat-iconv-sys"
 keywords = ["iconv", "ffi", "bindings", "windows"]
 categories = ["external-ffi-bindings"]
 links = "iconv"
 build = "build.rs"
+
+# This crate is a no-op on non-Windows targets; docs.rs builds the default
+# Linux target, which documents the crate-level overview without compiling
+# libiconv.
+[package.metadata.docs.rs]
+default-target = "x86_64-unknown-linux-gnu"
+
+# Keep the crate version cited in docs/ARCHITECTURE.md in sync on release.
+[[package.metadata.release.pre-release-replacements]]
+file = "../../docs/ARCHITECTURE.md"
+search = '### `readstat-iconv-sys` \(v[0-9]+\.[0-9]+\.[0-9]+\)'
+replace = "### `readstat-iconv-sys` (v{{version}})"
+
 include = [
     "build.rs",
     "src/**",
@@ -27,6 +41,16 @@ include = [
     "vendor/libiconv-win-build/LICENSE.md",
 ]
 
+[features]
+# Default builds consume the checked-in pre-generated bindings under
+# `src/bindings/` — no `libclang` at consumer build time. Enable
+# `buildtime_bindgen` to regenerate the current target's file from
+# `wrapper.h` (requires `libclang`); the build script writes the result to
+# both `OUT_DIR` and `src/bindings/bindings_windows_<arch>.rs` so a maintainer
+# can commit the diff.
+default = []
+buildtime_bindgen = ["dep:bindgen"]
+
 [build-dependencies]
-bindgen = { workspace = true }
+bindgen = { workspace = true, optional = true }
 cc = { workspace = true }

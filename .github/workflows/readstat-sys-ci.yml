@@ -22,6 +22,7 @@ on:
   pull_request:
     paths:
       - 'crates/readstat-sys/**'
+      - 'crates/readstat-iconv-sys/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
@@ -29,6 +30,7 @@ on:
     branches: [main, dev]
     paths:
       - 'crates/readstat-sys/**'
+      - 'crates/readstat-iconv-sys/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
@@ -109,5 +111,49 @@ jobs:
           else
             echo "::error::Checked-in bindings/${{ matrix.file }} differ from what bindgen now produces."
             echo "::error::Download the 'bindings-${{ matrix.os }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+
+  # readstat-iconv-sys is Windows-only and ships its own checked-in
+  # pre-generated bindings (so consumers need no libclang). This job
+  # regenerates `bindings_windows_x86_64.rs` on a Windows runner, uploads it,
+  # and fails on drift — mirroring the `regen` job above. Use the uploaded
+  # artifact to commit the file when first creating it or after a libiconv /
+  # bindgen change.
+  regen-iconv:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install LLVM (bindgen needs libclang)
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "17"
+
+      - name: Regenerate iconv bindings
+        run: cargo build -p readstat-iconv-sys --features buildtime_bindgen
+
+      - name: Upload regenerated iconv bindings
+        uses: actions/upload-artifact@v7
+        with:
+          name: iconv-bindings-windows
+          path: crates/readstat-iconv-sys/src/bindings/bindings_windows_x86_64.rs
+
+      - name: Fail if regenerated bindings differ from checked-in
+        shell: bash
+        run: |
+          file=crates/readstat-iconv-sys/src/bindings/bindings_windows_x86_64.rs
+          if [ ! -f "$file" ]; then
+            echo "::error::$file does not exist yet."
+            echo "::error::Download the 'iconv-bindings-windows' artifact from this run, copy it into crates/readstat-iconv-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+          if git --no-pager diff --no-color --exit-code "$file"; then
+            echo "::notice::iconv bindings match a fresh regeneration."
+          else
+            echo "::error::Checked-in $file differs from what bindgen now produces."
+            echo "::error::Download the 'iconv-bindings-windows' artifact from this run, copy it into crates/readstat-iconv-sys/src/bindings/, commit, and push."
             exit 1
           fi

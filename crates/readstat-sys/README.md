@@ -1,12 +1,30 @@
 # readstat-sys
 
-Raw FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library, generated with [bindgen](https://rust-lang.github.io/rust-bindgen/).
+Raw FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library.
 
-The `build.rs` script compiles ~49 C source files from the vendored `vendor/ReadStat/` git submodule via the `cc` crate and generates Rust bindings with `bindgen`. Platform-specific linking for iconv and zlib is handled automatically (see [docs/BUILDING.md](https://github.com/curtisalexander/readstat-rs/blob/main/docs/BUILDING.md) for details).
+The `build.rs` script compiles ~49 C source files from the vendored `vendor/ReadStat/` git submodule via the `cc` crate. Platform-specific linking for iconv and zlib is handled automatically (see [docs/BUILDING.md](https://github.com/curtisalexander/readstat-rs/blob/main/docs/BUILDING.md) for details).
 
 These bindings expose the **full** ReadStat API &mdash; all 125 functions and all 8 enum types &mdash; including support for **SAS** (`.sas7bdat`, `.xpt`), **SPSS** (`.sav`, `.zsav`, `.por`), and **Stata** (`.dta`) file formats. If you need to work with SPSS or Stata files from Rust, this crate provides the complete FFI surface to do so.
 
 This is a [sys crate](https://kornel.ski/rust-sys-crate) — it exposes raw C types and functions. The higher-level [`readstat`](https://crates.io/crates/readstat) library crate provides a safe API but currently only implements support for SAS `.sas7bdat` files.
+
+## Vendored ReadStat version
+
+This crate vendors the ReadStat C sources directly into the published package, so consumers do **not** need the git submodule. The current pin is:
+
+- **ReadStat `v1.1.9-50-g3add3a5`** (commit [`3add3a5`](https://github.com/WizardMac/ReadStat/commit/3add3a5eaac6df24d938beffb9148792e362d9ef))
+
+Because the crate ships the C as real files (not a submodule reference), the published version on crates.io is self-contained; the submodule pointer is not visible to downstream consumers, which is why the vendored revision is recorded here.
+
+## Bindings and `libclang`
+
+Rust bindings are **pre-generated per `(os, arch)`** and checked in under `src/bindings/bindings_<os>_<arch>.rs`. The default build simply copies the file matching the current target, so **building this crate requires no `libclang`** on any of the supported targets (Linux `x86_64`/`aarch64`, macOS `x86_64`/`aarch64`, Windows `x86_64`).
+
+Targets without a checked-in bindings file (e.g. `wasm32-unknown-emscripten`) must enable the `buildtime_bindgen` feature, which regenerates bindings from `wrapper.h` at build time and requires `libclang`. Maintainers also use this feature to refresh the checked-in files when the vendored C surface changes:
+
+```bash
+cargo build -p readstat-sys --features buildtime_bindgen
+```
 
 ## API Coverage
 

@@ -27,11 +27,7 @@ fn init_all_types() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
+    let d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
 
     (rsp, md, d)
 }
@@ -412,9 +408,7 @@ fn migration_chunked_processing() {
 
     // Process in two chunks: rows 0-1, then row 2
     // First chunk
-    let mut d1 = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, 2);
+    let mut d1 = readstat::ReadStatData::new().init(md.clone(), 0, 2);
 
     let error = d1.read_data(&rsp);
     assert!(error.is_ok(), "First chunk should read successfully");
@@ -423,9 +417,7 @@ fn migration_chunked_processing() {
     assert_eq!(batch1.num_rows(), 2, "First chunk should have 2 rows");
 
     // Second chunk
-    let mut d2 = readstat::ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 2, 3);
+    let mut d2 = readstat::ReadStatData::new().init(md.clone(), 2, 3);
 
     let error = d2.read_data(&rsp);
     assert!(error.is_ok(), "Second chunk should read successfully");
@@ -458,11 +450,7 @@ fn migration_larger_dataset() {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
 
     let error = d.read_data(&rsp);
     assert!(error.is_ok(), "Should read cars.sas7bdat successfully");

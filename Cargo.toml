@@ -15,6 +15,20 @@ exclude = [
 ]
 resolver = "2"
 
+# Fields shared by the workspace member crates. Inherited per-crate with
+# `<field>.workspace = true`. Note: `license` is hoisted as MIT (the common
+# case) but `readstat-iconv-sys` overrides it with its own
+# `LGPL-2.1-or-later AND MIT` because it vendors libiconv. `description`,
+# `documentation`, `keywords`, and `categories` differ per crate and are not
+# hoisted. The excluded `readstat-wasm` crate does not inherit these.
+[workspace.package]
+authors = ["Curtis Alexander <calex@calex.org>"]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/curtisalexander/readstat-rs"
+homepage = "https://github.com/curtisalexander/readstat-rs"
+
 [workspace.dependencies]
 # Arrow ecosystem (keep all Arrow crates at the same major version)
 arrow = { version = "58", features = ["chrono-tz"] }

@@ -1,19 +1,31 @@
 [package]
 name = "readstat-sys"
 version = "0.4.0"
-authors = ["Curtis Alexander <calex@calex.org>"]
-edition = "2024"
-rust-version = "1.85"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Raw FFI bindings to the ReadStat C library (SAS, SPSS, Stata file formats)"
-homepage = "https://github.com/curtisalexander/readstat-rs"
 readme = "README.md"
-license = "MIT"
-repository = "https://github.com/curtisalexander/readstat-rs"
 documentation = "https://docs.rs/readstat-sys"
 keywords = ["sas", "readstat", "ffi", "bindings"]
 categories = ["external-ffi-bindings"]
 links = "readstat"
 build = "build.rs"
+
+# Build docs on the default Linux target, which ships pre-generated bindings —
+# no libclang required, and avoids docs.rs attempting the Windows target (which
+# would try to compile vendored libiconv).
+[package.metadata.docs.rs]
+default-target = "x86_64-unknown-linux-gnu"
+
+# Keep the crate version cited in docs/ARCHITECTURE.md in sync on release.
+[[package.metadata.release.pre-release-replacements]]
+file = "../../docs/ARCHITECTURE.md"
+search = '### `readstat-sys` \(v[0-9]+\.[0-9]+\.[0-9]+\)'
+replace = "### `readstat-sys` (v{{version}})"
 include = [
     "build.rs",
     "src/**",

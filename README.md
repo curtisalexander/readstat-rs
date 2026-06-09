@@ -15,7 +15,7 @@ The command-line tool is developed in Rust and is only possible due to the follo
 
 The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arrow` crate is used to convert the read `sas7bdat` data into the [Arrow](https://arrow.apache.org/) memory format. Once in the `Arrow` memory format, the data can be written to other file formats.
 
-> :bulb: **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](crates/readstat-sys/) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, the higher-level crates (`readstat`, `readstat-cli`, `readstat-wasm`, `readstat-tests`) currently only implement support for **SAS `.sas7bdat` files**.
+> :bulb: **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](crates/readstat-sys/) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, the higher-level crates (`readstat`, `readstat-cli`, `readstat-wasm`) currently only implement support for **SAS `.sas7bdat` files**.
 
 ## :rocket: CLI Quickstart
 
@@ -81,6 +81,8 @@ For library, API server, and WebAssembly usage, see **[Examples](#bulb-examples)
 ## :hammer_and_wrench: Build from Source
 
 Clone the repository (with submodules), install platform-specific developer tools, and run `cargo build`. Platform-specific instructions for Linux, macOS, and Windows are in **[docs/BUILDING.md](docs/BUILDING.md)**.
+
+> :information_source: **Minimum Supported Rust Version (MSRV): `1.85`** (Rust edition 2024). All published crates set `rust-version = "1.85"`.
 
 ## :computer: [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 

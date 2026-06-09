@@ -4,7 +4,7 @@
 
 > 💡 **Quick reference:** A one-page visual [**CLI Cheatsheet**](readstat-cheatsheet.html) is available for at-a-glance lookup of subcommands, flags, and common workflows.  This page is the full reference and goes deeper on memory, parallelism, and metadata round-trips.
 
-After either [building](BUILDING.md) or [installing](../README.md#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
+After either [building](BUILDING.md) or [installing](../README.md#cli-install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out or json
     - row count
     - variable count

@@ -53,9 +53,7 @@ fn test_parallel_write_parquet_basic() {
 
     let mut temp_files = Vec::new();
     let schema = {
-        let mut d = ReadStatData::new()
-            .set_no_progress(true)
-            .init(md.clone(), 0, chunk_size);
+        let mut d = ReadStatData::new().init(md.clone(), 0, chunk_size);
         d.read_data(&rsp_in).unwrap();
         d.schema.clone()
     };
@@ -65,9 +63,7 @@ fn test_parallel_write_parquet_basic() {
         let start_row = i * chunk_size;
         let end_row = ((i + 1) * chunk_size).min(row_count);
 
-        let mut d = ReadStatData::new()
-            .set_no_progress(true)
-            .init(md.clone(), start_row, end_row);
+        let mut d = ReadStatData::new().init(md.clone(), start_row, end_row);
 
         d.read_data(&rsp_in).unwrap();
 
@@ -124,9 +120,7 @@ fn test_parallel_write_parquet_out_of_order() {
     cleanup_test_output(&output_path);
 
     // Read all data first
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp_in).unwrap();
 
     let batch = d.batch.as_ref().unwrap();
@@ -203,9 +197,7 @@ fn test_parallel_write_parquet_with_compression() {
     cleanup_test_output(&output_path);
 
     // Read data
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {
@@ -269,9 +261,7 @@ fn test_bufwriter_optimization_verification() {
     let output_path = setup_test_output("bufwriter_test.parquet");
     cleanup_test_output(&output_path);
 
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {
@@ -303,9 +293,7 @@ fn test_spooled_tempfile_small_buffer() {
     let output_path = setup_test_output("spooled_small_buffer.parquet");
     cleanup_test_output(&output_path);
 
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {
@@ -346,9 +334,7 @@ fn test_spooled_tempfile_large_buffer() {
     let output_path = setup_test_output("spooled_large_buffer.parquet");
     cleanup_test_output(&output_path);
 
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {

@@ -204,9 +204,7 @@ fn main() {
                             })
                             .ok_or(env::VarError::NotPresent)
                     })
-                    .expect(
-                        "EMSDK must be set for Emscripten builds, or emsdk must be on PATH",
-                    );
+                    .expect("EMSDK must be set for Emscripten builds, or emsdk must be on PATH");
                 builder = builder
                     .clang_arg(format!(
                         "--sysroot={emsdk}/upstream/emscripten/cache/sysroot"

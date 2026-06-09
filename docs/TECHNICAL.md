@@ -43,7 +43,7 @@ The value is split into integer and fractional parts before scaling. This is nec
 - [What Every Computer Scientist Should Know About Floating-Point Arithmetic (Goldberg, 1991)](https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html)
 
 ## Date, Time, and Datetimes
-All 118 SAS date, time, and datetime formats are recognized and parsed appropriately.  For the full list of supported formats, see [sas_date_time_formats.md](../crates/readstat-tests/util/sas_date_time_formats.md).
+All 118+ recognized SAS date, time, and datetime formats are parsed appropriately.  For the full list of supported formats, see [sas_date_time_formats.md](../crates/readstat-tests/util/sas_date_time_formats.md).
 
 :warning: If the format does not match a recognized SAS date, time, or datetime format, or if the value does not have a format applied, then the value will be parsed and read as a numeric value!
 

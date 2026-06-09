@@ -195,28 +195,28 @@ pub struct ReadStatData {
     /// Number of rows to process in this chunk.
     pub chunk_rows_to_process: usize,
     /// Starting row offset for this chunk.
-    pub chunk_row_start: usize,
+    pub(crate) chunk_row_start: usize,
     /// Ending row offset (exclusive) for this chunk.
-    pub chunk_row_end: usize,
+    pub(crate) chunk_row_end: usize,
     /// Number of rows actually processed so far in this chunk.
-    pub chunk_rows_processed: usize,
-    /// Total rows to process across all chunks.
-    pub total_rows_to_process: usize,
+    pub(crate) chunk_rows_processed: usize,
     /// Shared atomic counter of total rows processed across all chunks.
-    pub total_rows_processed: Option<Arc<AtomicUsize>>,
+    pub(crate) total_rows_processed: Option<Arc<AtomicUsize>>,
     /// Optional progress callback for visual feedback during parsing.
-    pub progress: Option<Arc<dyn ProgressCallback>>,
-    /// Whether progress display is disabled.
-    pub no_progress: bool,
-    /// Errors collected during value parsing callbacks.
-    pub errors: Vec<String>,
+    pub(crate) progress: Option<Arc<dyn ProgressCallback>>,
+    /// A typed error raised by a value callback that aborted parsing.
+    ///
+    /// Set by `handle_value` (e.g. on date/time overflow or a builder/value
+    /// type mismatch) and surfaced by the parse routines in preference to the
+    /// generic `USER_ABORT` the C library reports for any callback abort.
+    pub(crate) abort_error: Option<ReadStatError>,
     /// Optional mapping: original var index -> filtered column index.
     /// Wrapped in `Arc` so parallel chunks share the same filter without deep cloning.
-    pub column_filter: Option<Arc<BTreeMap<i32, i32>>>,
+    pub(crate) column_filter: Option<Arc<BTreeMap<i32, i32>>>,
     /// Total variable count in the unfiltered dataset.
     /// Used for row-boundary detection in `handle_value` when filtering is active.
     /// Defaults to `var_count` when no filter is set.
-    pub total_var_count: i32,
+    pub(crate) total_var_count: i32,
 }
 
 impl Default for ReadStatData {
@@ -242,13 +242,11 @@ impl ReadStatData {
             chunk_row_start: 0,
             chunk_row_end: 0,
             // total rows
-            total_rows_to_process: 0,
             total_rows_processed: None,
             // progress
             progress: None,
-            no_progress: false,
             // errors
-            errors: Vec::new(),
+            abort_error: None,
             // column filtering
             column_filter: None,
             total_var_count: 0,
@@ -363,6 +361,11 @@ impl ReadStatData {
             .set_row_offset(Some(self.chunk_row_start.try_into()?))?
             .parse_sas7bdat(ppath, ctx);
 
+        // A value callback may have aborted with a specific, typed error; prefer
+        // it over the generic `USER_ABORT` the C library reports for any abort.
+        if let Some(e) = self.abort_error.take() {
+            return Err(e);
+        }
         check_c_error(error as i32)?;
         Ok(())
     }
@@ -391,6 +394,11 @@ impl ReadStatData {
             )?
             .parse_sas7bdat(dummy_path.as_ptr(), ctx);
 
+        // A value callback may have aborted with a specific, typed error; prefer
+        // it over the generic `USER_ABORT` the C library reports for any abort.
+        if let Some(e) = self.abort_error.take() {
+            return Err(e);
+        }
         check_c_error(error as i32)?;
         Ok(())
     }
@@ -405,6 +413,47 @@ impl ReadStatData {
         self.set_metadata(md)
             .set_chunk_counts(row_start, row_end)
             .allocate_builders()
+    }
+
+    /// Initializes this instance with a column filter applied, in one step.
+    ///
+    /// Combines [`set_column_filter`](ReadStatData::set_column_filter) and
+    /// [`init`](ReadStatData::init) in the correct order so callers cannot
+    /// accidentally invoke them the wrong way around (which would clobber the
+    /// original variable count needed for row-boundary detection).
+    ///
+    /// `md` must be the **original, unfiltered** metadata and `mapping` the
+    /// result of [`ReadStatMetadata::resolve_selected_columns`]. The filtered
+    /// metadata and the original variable count are derived internally.
+    ///
+    /// ```no_run
+    /// use readstat::{ReadStatPath, ReadStatMetadata, ReadStatData};
+    ///
+    /// # fn main() -> Result<(), readstat::ReadStatError> {
+    /// let rsp = ReadStatPath::new("data.sas7bdat")?;
+    /// let mut md = ReadStatMetadata::new();
+    /// md.read_metadata(&rsp, false)?;
+    ///
+    /// if let Some(mapping) = md.resolve_selected_columns(Some(vec!["name".into(), "age".into()]))? {
+    ///     let row_count = u32::try_from(md.row_count)?;
+    ///     let mut d = ReadStatData::new().init_filtered(md, &mapping, 0, row_count);
+    ///     d.read_data(&rsp)?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn init_filtered(
+        self,
+        md: ReadStatMetadata,
+        mapping: &BTreeMap<i32, i32>,
+        row_start: u32,
+        row_end: u32,
+    ) -> Self {
+        let original_var_count = md.var_count;
+        let filtered = md.filter_to_selected_columns(mapping);
+        self.set_column_filter(Some(Arc::new(mapping.clone())), original_var_count)
+            .init(filtered, row_start, row_end)
     }
 
     /// Initializes this instance with pre-shared metadata and chunk boundaries.
@@ -468,24 +517,6 @@ impl ReadStatData {
             vars,
             schema,
             total_var_count,
-            ..self
-        }
-    }
-
-    /// Disables or enables the progress bar display.
-    #[must_use]
-    pub fn set_no_progress(self, no_progress: bool) -> Self {
-        Self {
-            no_progress,
-            ..self
-        }
-    }
-
-    /// Sets the total number of rows to process across all chunks.
-    #[must_use]
-    pub fn set_total_rows_to_process(self, total_rows_to_process: usize) -> Self {
-        Self {
-            total_rows_to_process,
             ..self
         }
     }

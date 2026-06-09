@@ -212,8 +212,6 @@ fn run_preview(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
         let mut d = ReadStatData::new()
             .set_column_filter(column_filter.clone(), original_var_count)
-            .set_no_progress(no_progress)
-            .set_total_rows_to_process(total_rows_to_process as usize)
             .set_total_rows_processed(total_rows_processed.clone())
             .init_shared(
                 var_count,
@@ -425,8 +423,6 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                                             column_filter.clone(),
                                             original_var_count,
                                         )
-                                        .set_no_progress(no_progress)
-                                        .set_total_rows_to_process(total_rows_to_process as usize)
                                         .set_total_rows_processed(total_rows_processed.clone())
                                         .init_shared(
                                             var_count,

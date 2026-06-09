@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- `readstat::read_metadata(path)` and `readstat::read_to_batch(path)` convenience free functions for the common "read a whole file" case.
+- `ReadStatData::init_filtered(md, mapping, start, end)` — a single, order-safe entry point for column-filtered reads (replaces the error-prone `set_column_filter` + `init` two-step in most callers).
+- `Display` impl for `ReadStatCError`, so `ReadStatError::CLibrary(..)` now renders a human-readable message (e.g. `ReadStat C library error: failed to open the file`) instead of the raw variant name.
+- `readstat-iconv-sys` now ships a checked-in, pre-generated Windows bindings file and a `buildtime_bindgen` feature, so Windows consumers no longer need `libclang` (mirrors `readstat-sys`). The CI `regen-iconv` job regenerates and drift-checks the file.
+- `SECURITY.md` with the vulnerability-reporting policy.
+
+### Changed
+- `ReadStatPath::new` now accepts `impl AsRef<Path>` (e.g. `&str`, `String`, `&Path`, `PathBuf`) instead of only `PathBuf`.
+- Date/time/sub-second value conversions now use range-checked `f64`→integer conversions; out-of-range values raise `ReadStatError::DateOverflow` instead of silently saturating.
+- A value/builder type mismatch (previously a silent drop) or an unexpected value type (previously `unreachable!()`) now aborts parsing with a descriptive `ReadStatError` rather than panicking across the FFI boundary or desyncing columns.
+- `release.toml` now keeps the crate versions cited in `docs/ARCHITECTURE.md` in sync on release via `pre-release-replacements`.
+
+### Removed
+- **Breaking**: removed the no-op `ReadStatData::set_no_progress` and `set_total_rows_to_process` builder methods and the unused public `errors` field. Several `ReadStatData` bookkeeping fields were demoted from `pub` to `pub(crate)`.
+
 ## [0.23.0] - 2026-05-21
 
 Bumps `readstat` and `readstat-cli` to 0.23.0; `readstat-sys` to 0.4.0.

@@ -21,9 +21,7 @@ fn read_cars_batches() -> (ReadStatMetadata, Vec<arrow_array::RecordBatch>) {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp).unwrap();
 
     let batch = d.batch.unwrap();
@@ -219,9 +217,7 @@ fn send_cars_via_channel() -> (
 
     let schema = Arc::new(md.schema.clone());
 
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data(&rsp).unwrap();
 
     let (s, r) = crossbeam::channel::bounded(10);

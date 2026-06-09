@@ -365,7 +365,6 @@ fn cars_to_parquet() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -387,7 +386,6 @@ fn cars_to_parquet_with_streaming() {
         ));
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
-
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -426,7 +424,6 @@ fn cars_to_parquet_overwrite() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -448,7 +445,6 @@ fn cars_to_parquet_with_compression_uncompressed() {
         ));
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
-
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -487,7 +483,6 @@ fn cars_to_parquet_with_streaming_with_compression_uncompressed() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -510,7 +505,6 @@ fn cars_to_parquet_with_compression_snappy() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -532,7 +526,6 @@ fn cars_to_parquet_with_streaming_with_compression_snappy() {
         ));
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
-
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -571,7 +564,6 @@ fn cars_to_parquet_with_compression_lz4raw() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -593,7 +585,6 @@ fn cars_to_parquet_with_streaming_with_compression_lz4raw() {
         ));
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
-
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -632,7 +623,6 @@ fn cars_to_parquet_with_compression_gzip_level_5() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -654,7 +644,6 @@ fn cars_to_parquet_with_streaming_with_compression_gzip_level_5() {
         ));
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
-
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -714,7 +703,6 @@ fn cars_to_parquet_with_compression_brotli_level_5() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -736,7 +724,6 @@ fn cars_to_parquet_with_streaming_with_compression_brotli_level_5() {
         ));
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
-
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
@@ -796,7 +783,6 @@ fn cars_to_parquet_with_compression_zstd_level_5() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -819,7 +805,6 @@ fn cars_to_parquet_with_sreaming_with_compression_zstd_level_5() {
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
 
-
         assert_eq!(height, 1081);
         assert_eq!(width, 13);
 
@@ -841,7 +826,6 @@ fn cars_to_parquet_with_compression_zstd_level_12() {
         ));
 
         let (height, width) = parquet_shape(tempfile.to_path_buf()).unwrap();
-
 
         assert_eq!(height, 1081);
         assert_eq!(width, 13);

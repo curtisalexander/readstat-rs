@@ -1,22 +1,31 @@
 [package]
 name = "readstat"
 version = "0.23.0"
-authors = ["Curtis Alexander <calex@calex.org>"]
-edition = "2024"
-rust-version = "1.85"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Read SAS binary files (.sas7bdat) and convert to Arrow, Parquet, CSV, and other formats"
-homepage = "https://github.com/curtisalexander/readstat-rs"
-license = "MIT"
-repository = "https://github.com/curtisalexander/readstat-rs"
 documentation = "https://docs.rs/readstat"
 readme = "README.md"
 keywords = ["sas", "sas7bdat", "arrow", "parquet", "readstat"]
 categories = ["parser-implementations", "science"]
-exclude = ["benches/", "proptest-regressions/"]
+# NOTE: `benches/` is intentionally NOT excluded — the manifest declares a
+# `[[bench]]` target pointing into it, so excluding it would ship a manifest
+# referencing a missing source file.
+exclude = ["proptest-regressions/"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+# Keep the crate version cited in docs/ARCHITECTURE.md in sync on release.
+[[package.metadata.release.pre-release-replacements]]
+file = "../../docs/ARCHITECTURE.md"
+search = '### `readstat` \(v[0-9]+\.[0-9]+\.[0-9]+\)'
+replace = "### `readstat` (v{{version}})"
 
 [[bench]]
 name = "readstat_benchmarks"
