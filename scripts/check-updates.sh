@@ -55,6 +55,13 @@ CHECK='✔'
 WARN='⚠'
 BLOCK='✖'
 
+# Inner width of the report table (must match the column rule below:
+# (20+2)+(13+2)+(13+2)+(12+2)+(7+2)+(11+2) + 5 column joints = 93).
+TABLE_INNER=93
+
+# Repeat a (possibly multi-byte) character $1 times.
+hbar() { local n=$1 ch=$2 out=''; while ((n-- > 0)); do out+="$ch"; done; printf '%s' "$out"; }
+
 # ── Require jq ────────────────────────────────────────────────────────────────
 if ! command -v jq &>/dev/null; then
   echo -e "${RED}${BLOCK} jq is required but not found. Install it with one of:${RESET}"
@@ -196,8 +203,11 @@ safe_count=0
 quarantine_count=0
 
 if [ "$compat_count" -gt 0 ]; then
-  echo -e "${BOLD}┌────────────────────────────────────────────────────────────────────────────────────────────────┐${RESET}"
-  echo -e "${BOLD}│  Held-back COMPATIBLE updates                                                  ${DIM}quarantine: ${QUARANTINE_DAYS}d${RESET}${BOLD}    │${RESET}"
+  tleft="  Held-back COMPATIBLE updates"
+  tright="quarantine: ${QUARANTINE_DAYS}d  "
+  tpad=$(( TABLE_INNER - ${#tleft} - ${#tright} )); (( tpad < 1 )) && tpad=1
+  echo -e "${BOLD}┌$(hbar "$TABLE_INNER" '─')┐${RESET}"
+  echo -e "${BOLD}│${tleft}$(hbar "$tpad" ' ')${DIM}${tright}${RESET}${BOLD}│${RESET}"
   echo -e "${BOLD}├──────────────────────┬───────────────┬───────────────┬──────────────┬─────────┬─────────────┤${RESET}"
   printf  "${BOLD}│ %-20s │ %-13s │ %-13s │ %-12s │ %-7s │ %-11s │${RESET}\n" \
           "Crate" "Current" "Available" "Published" "Age" "Status"
@@ -205,13 +215,16 @@ if [ "$compat_count" -gt 0 ]; then
 
   for i in $(seq 0 $((compat_count - 1))); do
     age_str="${C_AGE[$i]}d"
+    # Plain ASCII status text padded via the format string (color lives OUTSIDE
+    # the %-Ns field, so it never affects column width — glyphs are kept to the
+    # summary lines below to avoid wide-character padding skew).
     if [ "${C_STATUS[$i]}" = "quarantine" ]; then
-      status_str="${RED}${BLOCK} blocked${RESET}"; age_color="${RED}"; quarantine_count=$((quarantine_count + 1))
+      status_text="blocked"; status_color="${RED}"; age_color="${RED}"; quarantine_count=$((quarantine_count + 1))
     else
-      status_str="${GREEN}${CHECK} safe${RESET}"; age_color="${GREEN}"; safe_count=$((safe_count + 1))
+      status_text="safe"; status_color="${GREEN}"; age_color="${GREEN}"; safe_count=$((safe_count + 1))
     fi
-    printf "│ ${CYAN}%-20s${RESET} │ ${DIM}%-13s${RESET} │ ${YELLOW}%-13s${RESET} │ %-12s │ ${age_color}%-7s${RESET} │ %-11b │\n" \
-           "${C_NAMES[$i]}" "${C_CUR[$i]}" "${C_AVAIL[$i]}" "${C_PUB[$i]}" "$age_str" "$status_str"
+    printf "│ ${CYAN}%-20s${RESET} │ ${DIM}%-13s${RESET} │ ${YELLOW}%-13s${RESET} │ %-12s │ ${age_color}%-7s${RESET} │ ${status_color}%-11s${RESET} │\n" \
+           "${C_NAMES[$i]}" "${C_CUR[$i]}" "${C_AVAIL[$i]}" "${C_PUB[$i]}" "$age_str" "$status_text"
   done
   echo -e "${BOLD}└──────────────────────┴───────────────┴───────────────┴──────────────┴─────────┴─────────────┘${RESET}"
   echo ""

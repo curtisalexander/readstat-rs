@@ -158,9 +158,14 @@ $quarantineCount = ($results | Where-Object Status -eq 'quarantine').Count
 
 # ── Report: compatible held-back updates ──────────────────────────────────────
 if ($results.Count -gt 0) {
-    $border = '─' * 96
-    Write-Host "┌${border}┐" -ForegroundColor White
-    Write-Host ("│  Held-back COMPATIBLE updates" + (' ' * 50) + "quarantine: ${QuarantineDays}d    │") -ForegroundColor White
+    # Inner width must match the column rule below:
+    # (20+2)+(13+2)+(13+2)+(12+2)+(7+2)+(11+2) + 5 column joints = 93.
+    $inner = 93
+    $tl = '  Held-back COMPATIBLE updates'
+    $tr = "quarantine: ${QuarantineDays}d  "
+    $sp = $inner - $tl.Length - $tr.Length; if ($sp -lt 1) { $sp = 1 }
+    Write-Host ('┌' + ('─' * $inner) + '┐') -ForegroundColor White
+    Write-Host ('│' + $tl + (' ' * $sp) + $tr + '│') -ForegroundColor White
     Write-Host "├──────────────────────┬───────────────┬───────────────┬──────────────┬─────────┬─────────────┤" -ForegroundColor White
     $header = '│ {0,-20} │ {1,-13} │ {2,-13} │ {3,-12} │ {4,-7} │ {5,-11} │' -f 'Crate', 'Current', 'Available', 'Published', 'Age', 'Status'
     Write-Host $header -ForegroundColor White
@@ -168,8 +173,10 @@ if ($results.Count -gt 0) {
 
     foreach ($r in $results) {
         $ageStr = "$($r.AgeDays)d"
-        if ($r.Status -eq 'quarantine') { $statusStr = '✖ blocked'; $ageColor = 'Red'; $statusColor = 'Red' }
-        else { $statusStr = '✔ safe'; $ageColor = 'Green'; $statusColor = 'Green' }
+        # Plain ASCII status (glyphs kept to the summary lines, matching the
+        # bash script, so column width is never skewed by wide characters).
+        if ($r.Status -eq 'quarantine') { $statusStr = 'blocked'; $ageColor = 'Red'; $statusColor = 'Red' }
+        else { $statusStr = 'safe'; $ageColor = 'Green'; $statusColor = 'Green' }
 
         Write-Host -NoNewline '│ '
         Write-Host -NoNewline ('{0,-20}' -f $r.Name) -ForegroundColor Cyan
