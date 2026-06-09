@@ -225,21 +225,19 @@ if ($bindgenHasUpdate) {
     Write-Host '    crates/readstat-sys/src/bindings/' -ForegroundColor Cyan
     Write-Host '    crates/readstat-iconv-sys/src/bindings/' -ForegroundColor Cyan
     Write-Host '  A bindgen bump can silently change that output, so it must be paired with'
-    Write-Host '  regenerating and committing the bindings. To update it:'
+    Write-Host '  regenerating every target''s bindings. In short:'
     Write-Host ''
-    Write-Host ('    1. Edit the pin in Cargo.toml to:  bindgen = "=' + $bindgenLatest + '"')
-    Write-Host '    2. Regenerate bindings on each supported target — easiest via CI:'
-    Write-Host "       push the change and let the 'readstat-sys cross-platform CI' workflow's"
-    Write-Host "       regen / regen-iconv jobs run, then download each 'bindings-*' artifact."
-    Write-Host '       Locally (current target only): cargo build -p readstat-sys --features buildtime_bindgen'
-    Write-Host '       and cargo build -p readstat-iconv-sys --features buildtime_bindgen (Windows, needs libclang).'
-    Write-Host '    3. Copy the regenerated files into the bindings dirs above and commit them'
-    Write-Host '       alongside the Cargo.toml change.'
-    Write-Host '    4. CI''s drift check (readstat-sys-ci.yml) must pass — it fails if the'
-    Write-Host '       committed bindings differ from a fresh regeneration.'
+    Write-Host ('    Locally  — bump the pin to "=' + $bindgenLatest + '" in Cargo.toml, then regenerate')
+    Write-Host '              your host target and verify it works (needs libclang):'
+    Write-Host '                cargo build -p readstat-sys --features buildtime_bindgen'
+    Write-Host '                cargo test --workspace'
+    Write-Host '              (Windows also: cargo build -p readstat-iconv-sys --features buildtime_bindgen)'
+    Write-Host "    In CI    — push; the 'readstat-sys cross-platform CI' regen/regen-iconv jobs"
+    Write-Host '              regenerate the other targets. Their drift check fails on purpose for'
+    Write-Host '              each stale file; download the uploaded artifacts, commit them, re-push.'
     Write-Host ''
-    Write-Host "  -Apply will NOT touch bindgen; the exact pin also prevents 'cargo update'" -ForegroundColor DarkGray
-    Write-Host '  from moving it. This is intentional.' -ForegroundColor DarkGray
+    Write-Host '  Full step-by-step: docs/CI-CD.md -> "Updating bindgen ... regenerating bindings"'
+    Write-Host "  (-Apply will NOT touch bindgen; the exact pin also blocks 'cargo update'.)" -ForegroundColor DarkGray
     Write-Host ''
 }
 
