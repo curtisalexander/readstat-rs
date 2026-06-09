@@ -42,7 +42,12 @@ BLOCK='✖'
 
 # ── Require jq ────────────────────────────────────────────────────────────────
 if ! command -v jq &>/dev/null; then
-  echo -e "${RED}${BLOCK} jq is required but not found. Install with: brew install jq${RESET}"
+  echo -e "${RED}${BLOCK} jq is required but not found. Install it with one of:${RESET}"
+  echo -e "    macOS:          brew install jq"
+  echo -e "    Debian/Ubuntu:  sudo apt install jq"
+  echo -e "    Fedora:         sudo dnf install jq"
+  echo -e "    Windows:        winget install jqlang.jq   (or use the PowerShell script, which needs no jq)"
+  echo -e "    other:          https://jqlang.github.io/jq/download/"
   exit 1
 fi
 
