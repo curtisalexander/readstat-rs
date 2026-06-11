@@ -64,7 +64,7 @@ ndjson = ["dep:arrow-json"]
 sql = ["dep:datafusion", "dep:tokio", "dep:futures", "csv", "parquet", "feather", "ndjson"]
 
 [dependencies.datafusion]
-version = "53"
+version = "54"
 optional = true
 
 [dependencies.tokio]

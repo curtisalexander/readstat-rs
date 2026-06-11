@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Date/time/sub-second value conversions now use range-checked `f64`→integer conversions; out-of-range values raise `ReadStatError::DateOverflow` instead of silently saturating.
 - A value/builder type mismatch (previously a silent drop) or an unexpected value type (previously `unreachable!()`) now aborts parsing with a descriptive `ReadStatError` rather than panicking across the FFI boundary or desyncing columns.
 - `release.toml` now keeps the crate versions cited in `docs/ARCHITECTURE.md` in sync on release via `pre-release-replacements`.
+- Bumped `datafusion` from 53 to 54 (powers the optional `sql` feature). The Arrow ecosystem is intentionally **held at v58**: `datafusion` 54 requires `arrow ^58`, so adopting `arrow`/`parquet` v59 now would make the `sql` feature uncompilable. The v59 bump is deferred until a `datafusion` release tracks it.
+- Bumped vendored `libiconv-win-build` (the Windows-only `iconv` backing `readstat-iconv-sys`) from `v1.18-p1` to `v1.19`. Source-only change — `build.rs` and the public surface are unaffected; the checked-in Windows bindings are regenerated and drift-checked by CI's `regen-iconv` job.
+- Refreshed semver-compatible dependencies via `scripts/check-updates.sh` (notably `generic-array`, `uuid`, the `wasm-bindgen` family, and `zerocopy`).
 
 ### Removed
 - **Breaking**: removed the no-op `ReadStatData::set_no_progress` and `set_total_rows_to_process` builder methods and the unused public `errors` field. Several `ReadStatData` bookkeeping fields were demoted from `pub` to `pub(crate)`.
