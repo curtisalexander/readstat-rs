@@ -117,7 +117,7 @@ pub struct ExpectedMetadata<'a> {
     pub file_label: &'a str,
     pub file_encoding: &'a str,
     pub version: c_int,
-    pub is_64bit: c_int,
+    pub is_64bit: bool,
     pub creation_time: &'a str,
     pub modified_time: &'a str,
 }

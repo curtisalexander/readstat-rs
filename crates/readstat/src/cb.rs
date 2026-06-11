@@ -112,7 +112,7 @@ pub(crate) extern "C" fn handle_metadata(
     m.file_label = file_label;
     m.file_encoding = file_encoding;
     m.version = version;
-    m.is_64bit = is_64bit;
+    m.is_64bit = is_64bit != 0;
     m.creation_time = ct;
     m.modified_time = mt;
     m.compression = compression;
@@ -204,10 +204,10 @@ pub(crate) const DAY_SHIFT: i32 = 3653;
 /// SAS epoch to Unix epoch offset in seconds.
 pub(crate) const SEC_SHIFT: i64 = 315_619_200;
 
-/// Scale factor for rounding: `10^DECIMAL_PLACES`, computed once.
+/// Scale factor for rounding to 14 decimal places: `10^14`.
 pub(crate) const ROUND_SCALE: f64 = 1e14;
 
-/// Rounds an f64 to [`DECIMAL_PLACES`] decimal places using pure arithmetic.
+/// Rounds an f64 to 14 decimal places using pure arithmetic.
 ///
 /// Eliminates the string formatting roundtrip entirely. For values like 4.6
 /// that can't be exactly represented in IEEE 754, this cleans up trailing
@@ -227,7 +227,7 @@ pub(crate) fn round_decimal_f64(v: f64) -> f64 {
     int_part + rounded_frac
 }
 
-/// Rounds an f32 to [`DECIMAL_PLACES`] decimal places using pure arithmetic.
+/// Rounds an f32 to 14 decimal places using pure arithmetic.
 #[inline]
 #[allow(clippy::cast_possible_truncation)]
 pub(crate) fn round_decimal_f32(v: f32) -> f32 {
@@ -269,6 +269,24 @@ fn checked_f64_to_i32(v: f64) -> Option<i32> {
     } else {
         None
     }
+}
+
+/// Converts a SAS datetime (seconds since 1960-01-01, possibly fractional) to
+/// a Unix-epoch timestamp at the given sub-second `scale` (1e3 for ms, 1e6 for
+/// µs, 1e9 for ns). Rounds rather than truncates: f64 representation error at
+/// SAS-datetime magnitudes (~1.9e9 s) is larger than one sub-second unit, so
+/// truncation would land one unit low about half the time.
+#[inline]
+fn sas_datetime_to_unix_subsec(val: f64, scale: f64) -> Option<i64> {
+    #[allow(clippy::cast_precision_loss)]
+    checked_f64_to_i64(((val - SEC_SHIFT as f64) * scale).round())
+}
+
+/// Converts a SAS time (seconds since midnight, possibly fractional) to
+/// microseconds, rounding rather than truncating.
+#[inline]
+fn sas_time_to_us(val: f64) -> Option<i64> {
+    checked_f64_to_i64((val * 1_000_000.0).round())
 }
 
 /// FFI callback that extracts a single cell value during row parsing.
@@ -333,14 +351,11 @@ pub(crate) extern "C" fn handle_value(
         var_index
     };
 
-    // Append value directly into the typed Arrow builder
-    let builder = &mut d.builders[col_index as usize];
-
-    // Records a builder/value type mismatch and aborts parsing. This should be
-    // unreachable in practice — the schema and the builders are both derived
-    // from the same variable metadata — but surfacing a clear error is far
-    // safer than silently dropping the cell, which would desync column lengths
-    // and only surface later as an opaque `RecordBatch` length error.
+    // Records a builder/value mismatch and aborts parsing gracefully. A panic
+    // here would be an abort: this is an `extern "C"` callback, so unwinding
+    // is not an option. Reachable only if the file's data section disagrees
+    // with the metadata the builders were built from (e.g. the file changed on
+    // disk between the metadata and data parses).
     macro_rules! type_mismatch_abort {
         () => {{
             d.abort_error = Some(ReadStatError::Other(format!(
@@ -349,6 +364,11 @@ pub(crate) extern "C" fn handle_value(
             return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
         }};
     }
+
+    // Append value directly into the typed Arrow builder
+    let Some(builder) = d.builders.get_mut(col_index as usize) else {
+        type_mismatch_abort!();
+    };
 
     // Records a date/time conversion overflow and aborts parsing.
     macro_rules! date_overflow_abort {
@@ -361,7 +381,9 @@ pub(crate) extern "C" fn handle_value(
     match value_type {
         readstat_sys::readstat_type_e_READSTAT_TYPE_STRING
         | readstat_sys::readstat_type_e_READSTAT_TYPE_STRING_REF => {
-            let sb = builder.as_string_mut();
+            let ColumnBuilder::Str(sb) = builder else {
+                type_mismatch_abort!();
+            };
             if is_missing == 1 {
                 sb.append_null();
             } else {
@@ -479,7 +501,7 @@ pub(crate) extern "C" fn handle_value(
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithMilliseconds) => {
                         if let ColumnBuilder::TimestampMillisecond(b) = builder {
-                            match checked_f64_to_i64((val - SEC_SHIFT as f64) * 1000.0) {
+                            match sas_datetime_to_unix_subsec(val, 1e3) {
                                 Some(v) => b.append_value(v),
                                 None => date_overflow_abort!(),
                             }
@@ -489,7 +511,7 @@ pub(crate) extern "C" fn handle_value(
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithMicroseconds) => {
                         if let ColumnBuilder::TimestampMicrosecond(b) = builder {
-                            match checked_f64_to_i64((val - SEC_SHIFT as f64) * 1_000_000.0) {
+                            match sas_datetime_to_unix_subsec(val, 1e6) {
                                 Some(v) => b.append_value(v),
                                 None => date_overflow_abort!(),
                             }
@@ -499,7 +521,7 @@ pub(crate) extern "C" fn handle_value(
                     }
                     Some(ReadStatVarFormatClass::DateTimeWithNanoseconds) => {
                         if let ColumnBuilder::TimestampNanosecond(b) = builder {
-                            match checked_f64_to_i64((val - SEC_SHIFT as f64) * 1_000_000_000.0) {
+                            match sas_datetime_to_unix_subsec(val, 1e9) {
                                 Some(v) => b.append_value(v),
                                 None => date_overflow_abort!(),
                             }
@@ -519,7 +541,7 @@ pub(crate) extern "C" fn handle_value(
                     }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                         if let ColumnBuilder::Time64Microsecond(b) = builder {
-                            match checked_f64_to_i64(val * 1_000_000.0) {
+                            match sas_time_to_us(val) {
                                 Some(v) => b.append_value(v),
                                 None => date_overflow_abort!(),
                             }
@@ -671,4 +693,73 @@ mod tests {
             }
         }
     } // end property_tests
+
+    mod subsecond_conversion {
+        use super::*;
+
+        /// A modern SAS datetime with .123 fractional seconds. The nearest f64
+        /// to `…800.123` lies just below it, so truncation (the old behavior)
+        /// yielded `…122` ms; rounding must yield `…123`.
+        #[test]
+        fn datetime_ms_rounds_instead_of_truncates() {
+            // 2021-01-20 12:30:00.123 as a SAS datetime (seconds since 1960)
+            let sas = 1_926_851_400.123_f64;
+            let ms = sas_datetime_to_unix_subsec(sas, 1e3).unwrap();
+            assert_eq!(ms % 1000, 123, "millisecond component must survive");
+            assert_eq!(ms, (1_926_851_400 - SEC_SHIFT) * 1000 + 123);
+        }
+
+        #[test]
+        fn datetime_us_rounds_instead_of_truncates() {
+            let sas = 1_926_851_400.123_456_f64;
+            let us = sas_datetime_to_unix_subsec(sas, 1e6).unwrap();
+            assert_eq!(us % 1_000_000, 123_456);
+        }
+
+        #[test]
+        fn datetime_ns_rounds_to_f64_precision() {
+            // At ~1.9e9 seconds an f64 holds ~µs precision; the ns conversion
+            // must still round to the nearest representable value rather than
+            // truncate below it.
+            let sas = 1_926_851_400.123_f64;
+            let ns = sas_datetime_to_unix_subsec(sas, 1e9).unwrap();
+            let expected = (1_926_851_400 - SEC_SHIFT) * 1_000_000_000 + 123_000_000;
+            assert!(
+                (ns - expected).abs() <= 1_000,
+                "ns conversion off by more than f64 precision: {ns} vs {expected}"
+            );
+        }
+
+        #[test]
+        fn time_us_rounds_instead_of_truncates() {
+            // 13:45:07.123456 as a SAS time (seconds since midnight)
+            let sas = 49_507.123_456_f64;
+            let us = sas_time_to_us(sas).unwrap();
+            assert_eq!(us, 49_507_123_456);
+        }
+
+        #[test]
+        fn datetime_ms_non_finite_is_none() {
+            assert_eq!(sas_datetime_to_unix_subsec(f64::NAN, 1e3), None);
+            assert_eq!(sas_datetime_to_unix_subsec(f64::INFINITY, 1e9), None);
+        }
+
+        /// Sweep many fractional values: the converted ms component must match
+        /// the decimal fraction exactly for all of them (the old truncation
+        /// failed for roughly half).
+        #[test]
+        fn datetime_ms_exact_across_fractions() {
+            let base = 2_000_000_000_i64; // SAS seconds, year ~2023
+            for frac in 0..1000 {
+                #[allow(clippy::cast_precision_loss)]
+                let sas = base as f64 + f64::from(frac) / 1000.0;
+                let ms = sas_datetime_to_unix_subsec(sas, 1e3).unwrap();
+                assert_eq!(
+                    ms,
+                    (base - SEC_SHIFT) * 1000 + i64::from(frac),
+                    "wrong ms for fraction .{frac:03}"
+                );
+            }
+        }
+    }
 }

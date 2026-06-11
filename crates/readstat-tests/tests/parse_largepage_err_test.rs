@@ -53,7 +53,7 @@ fn parse_largepage_err() {
     assert_eq!(md.version, 9);
 
     // bitness
-    assert_eq!(md.is_64bit, 1);
+    assert!(md.is_64bit);
 
     // creation time
     assert_eq!(md.creation_time, "2021-07-25 22:02:02");

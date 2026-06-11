@@ -63,7 +63,7 @@ fn parse_hasmissing_metadata() {
             file_label: "",
             file_encoding: "WINDOWS-1252",
             version: 9,
-            is_64bit: 0,
+            is_64bit: false,
             creation_time: "2014-11-18 14:44:33",
             modified_time: "2014-11-18 14:44:33",
         },

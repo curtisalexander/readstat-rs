@@ -136,7 +136,8 @@
 //!     d.read_data(&rsp)?;
 //!     wtr.write(&d, &wc)?;
 //!     if i == pairs_cnt - 1 {
-//!         wtr.finish(&d, &wc, &rsp.path)?;
+//!         let rows = wtr.finish(&d, &wc)?;
+//!         println!("wrote {rows} rows");
 //!     }
 //! }
 //! # Ok(())
@@ -265,12 +266,35 @@
 //! | `feather` | Feather | Arrow IPC format via `arrow-ipc` |
 //! | `ndjson` | NDJSON | Newline-delimited JSON via `arrow-json` |
 //! | `sql` | SQL | Query data with SQL via DataFusion (not enabled by default) |
+//!
+//! # Arrow version policy
+//!
+//! This crate exposes Apache Arrow types ([`RecordBatch`](arrow_array::RecordBatch),
+//! [`Schema`](arrow_schema::Schema), …) in its public API. To avoid the
+//! "expected `RecordBatch`, found `RecordBatch`" mismatch that occurs when a
+//! consumer pins a different Arrow version, the [`arrow`], [`arrow_array`], and
+//! [`arrow_schema`] crates are re-exported here — prefer
+//! `readstat::arrow_array::RecordBatch` over a direct Arrow dependency.
+//!
+//! Arrow is currently pinned to the **v58** ecosystem. Because Arrow types
+//! appear in the public API, a major Arrow bump is a breaking change for this
+//! crate and will come with a corresponding semver-major release.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::return_self_not_must_use)]
+
+// Re-export the Arrow ecosystem crates so consumers can name the types that
+// appear in this crate's public API without pinning Arrow themselves. See the
+// "Arrow version policy" section above.
+pub use arrow;
+pub use arrow_array;
+pub use arrow_schema;
+// Re-exported so consumers can construct the channels used by the streaming
+// SQL API ([`ChunkReceiver`](crate::ChunkReceiver)).
+pub use crossbeam;
 
 pub use api::{read_metadata, read_to_batch};
 pub use common::build_offsets;
@@ -282,7 +306,8 @@ pub use rs_path::ReadStatPath;
 #[cfg(feature = "sql")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
 pub use rs_query::{
-    execute_sql, execute_sql_and_write_stream, execute_sql_stream, read_sql_file, write_sql_results,
+    ChunkReceiver, execute_sql, execute_sql_and_write_stream, execute_sql_stream, read_sql_file,
+    write_sql_results,
 };
 pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;

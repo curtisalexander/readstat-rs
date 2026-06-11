@@ -27,7 +27,9 @@
 /// }
 /// ```
 pub trait ProgressCallback: Send + Sync {
-    /// Called to report that `n` additional rows have been processed.
+    /// Called to advance progress by `n` rows. Invoked once per chunk, just
+    /// before that chunk is parsed, so `n` is the number of rows about to be
+    /// processed (the chunk size), not a count of rows already completed.
     fn inc(&self, n: u64);
 
     /// Called when parsing begins for the file at `path`.

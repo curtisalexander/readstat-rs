@@ -77,7 +77,6 @@ fuzz_target!(|input: FuzzInput| {
 
     let row_count = (md.row_count as u32).min(MAX_ROWS);
     let mut d = ReadStatData::new()
-        .set_no_progress(true)
         .set_column_filter(Some(Arc::new(filter)), total_var_count)
         .init(md, 0, row_count);
     let _ = d.read_data_from_bytes(input.data);

@@ -14,6 +14,22 @@ keywords = ["sas", "readstat", "ffi", "bindings"]
 categories = ["external-ffi-bindings"]
 links = "readstat"
 build = "build.rs"
+# What ships in the crates.io package. Must live in [package] — placing it after
+# a [[package.metadata...]] table header silently assigns it to that table.
+include = [
+    "build.rs",
+    "src/**",
+    "wrapper.h",
+    "README.md",
+    "LICENSE",
+    "vendor/ReadStat/LICENSE",
+    "vendor/ReadStat/src/*.c",
+    "vendor/ReadStat/src/*.h",
+    "vendor/ReadStat/src/sas/**",
+    "vendor/ReadStat/src/spss/**",
+    "vendor/ReadStat/src/stata/**",
+    "vendor/ReadStat/src/txt/**",
+]
 
 # Build docs on the default Linux target, which ships pre-generated bindings —
 # no libclang required, and avoids docs.rs attempting the Windows target (which
@@ -26,19 +42,6 @@ default-target = "x86_64-unknown-linux-gnu"
 file = "../../docs/ARCHITECTURE.md"
 search = '### `readstat-sys` \(v[0-9]+\.[0-9]+\.[0-9]+\)'
 replace = "### `readstat-sys` (v{{version}})"
-include = [
-    "build.rs",
-    "src/**",
-    "wrapper.h",
-    "README.md",
-    "vendor/ReadStat/LICENSE",
-    "vendor/ReadStat/src/*.c",
-    "vendor/ReadStat/src/*.h",
-    "vendor/ReadStat/src/sas/**",
-    "vendor/ReadStat/src/spss/**",
-    "vendor/ReadStat/src/stata/**",
-    "vendor/ReadStat/src/txt/**",
-]
 
 [features]
 # Default builds consume the pre-generated per-target bindings file under

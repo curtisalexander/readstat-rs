@@ -30,8 +30,8 @@ Security Advisory issued.
 `readstat-rs` parses **untrusted binary input** (`.sas7bdat` files) through FFI
 bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library.
 Memory-safety is therefore a primary concern. The project runs automated
-memory-safety checks in CI (Valgrind, AddressSanitizer, Miri where applicable,
-and an unsafe-code audit) and maintains a fuzzing harness — see
+memory-safety checks in CI (Miri, and AddressSanitizer on Linux, macOS, and
+Windows) plus a weekly fuzzing harness; Valgrind is run manually. See
 [docs/MEMORY-SAFETY.md](docs/MEMORY-SAFETY.md) and
 [docs/TESTING.md](docs/TESTING.md#fuzz-testing).
 

@@ -24,6 +24,58 @@ const STREAM_ROWS: u32 = 10000;
 /// Also used as the batch size for bounded-batch parallel writes.
 const CHANNEL_CAPACITY: usize = 10;
 
+/// Writes a valid empty output file (header-only CSV, empty Parquet/Feather/
+/// NDJSON) when the input contributed zero rows. Without this, a zero-row
+/// input would produce no output file at all despite a success exit code.
+fn write_empty_output(
+    var_count: i32,
+    vars: Arc<std::collections::BTreeMap<i32, readstat::ReadStatVarMetadata>>,
+    schema: Arc<arrow_schema::Schema>,
+    wc: &WriteConfig,
+    input_path: &std::path::Path,
+) -> Result<(), ReadStatError> {
+    let mut d = ReadStatData::new().init_shared(var_count, vars, schema.clone(), 0, 0);
+    d.batch = Some(arrow_array::RecordBatch::new_empty(schema));
+    let mut wtr = ReadStatWriter::new();
+    wtr.write(&d, wc)?;
+    let rows = wtr.finish(&d, wc)?;
+    print_write_summary(rows, input_path, wc.out_path());
+    Ok(())
+}
+
+/// Prints the "wrote N rows" summary. The library no longer prints this; the
+/// CLI owns all user-facing output.
+fn print_write_summary(rows: usize, in_path: &std::path::Path, out_path: Option<&std::path::Path>) {
+    let in_f = in_path
+        .file_name()
+        .map_or_else(|| "___".to_string(), |f| f.to_string_lossy().to_string());
+    let out_f = out_path
+        .and_then(std::path::Path::file_name)
+        .map_or_else(|| "___".to_string(), |f| f.to_string_lossy().to_string());
+    println!(
+        "In total, wrote {} rows from file {in_f} into {out_f}",
+        format_with_commas(rows)
+    );
+}
+
+/// Formats a number with comma thousands separators (e.g. 1081 -> "1,081").
+fn format_with_commas(n: usize) -> String {
+    let s = n.to_string();
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    if len <= 3 {
+        return s;
+    }
+    let mut result = String::with_capacity(len + len / 3);
+    for (i, &b) in bytes.iter().enumerate() {
+        if i > 0 && (len - i).is_multiple_of(3) {
+            result.push(',');
+        }
+        result.push(b as char);
+    }
+    result
+}
+
 /// Determine stream row count based on reader type.
 fn resolve_stream_rows(reader: Option<Reader>, stream_rows: Option<u32>, total_rows: u32) -> u32 {
     match reader {
@@ -146,7 +198,7 @@ fn run_metadata(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let rsp = ReadStatPath::new(sas_path)?;
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, skip_row_count)?;
-    ReadStatWriter::new().write_metadata(&md, &rsp, as_json)?;
+    println!("{}", ReadStatWriter::metadata_to_string(&md, &rsp, as_json)?);
     Ok(())
 }
 
@@ -334,7 +386,7 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let column_filter = column_filter.map(Arc::new);
 
     // If no output path then only read metadata; otherwise read data
-    match &wc.out_path {
+    match wc.out_path() {
         None => {
             println!(
                 "{}: a value was not provided for the parameter {}, thus displaying metadata only\n",
@@ -344,7 +396,7 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
             let mut md = ReadStatMetadata::new();
             md.read_metadata(&rsp, false)?;
-            ReadStatWriter::new().write_metadata(&md, &rsp, false)?;
+            println!("{}", ReadStatWriter::metadata_to_string(&md, &rsp, false)?);
             Ok(())
         }
         Some(p) => {
@@ -368,16 +420,16 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream);
 
             let use_parallel_writes =
-                parallel && parallel_write && matches!(wc.format, OutFormat::Parquet);
+                parallel && parallel_write && matches!(wc.format(), OutFormat::Parquet);
 
             let input_path = rsp.path.clone();
 
             #[cfg(feature = "parquet")]
-            let out_path_clone = wc.out_path.clone();
+            let out_path_clone = wc.out_path().map(std::path::Path::to_path_buf);
             #[cfg(feature = "parquet")]
-            let compression_clone = wc.compression;
+            let compression_clone = wc.compression();
             #[cfg(feature = "parquet")]
-            let compression_level_clone = wc.compression_level;
+            let compression_level_clone = wc.compression_level();
             #[cfg(feature = "parquet")]
             let buffer_size_bytes = parallel_write_buffer_mb * 1024 * 1024;
 
@@ -390,86 +442,97 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             #[cfg(feature = "sql")]
             let sql_table_name = table_name_from_path(&rsp.path);
             #[cfg(feature = "sql")]
-            let sql_format = wc.format;
+            let sql_format = wc.format();
 
             let (s, r) = bounded(CHANNEL_CAPACITY);
             let progress_thread = progress.clone();
             let wc_thread = wc.clone();
 
-            // Process data in batches (i.e. stream chunks of rows)
+            // Arc handles for the writer side (the originals move into the
+            // reader thread); used to produce a valid empty output file when
+            // the input has zero rows.
+            let vars_writer = vars_shared.clone();
+            let schema_writer = schema_shared.clone();
+
+            // Process data in batches (i.e. stream chunks of rows). Any chunk
+            // error is returned from the thread so it propagates to the exit
+            // code — chunks must never be silently dropped, as that would
+            // corrupt the output.
             let reader_handle = thread::spawn(move || -> Result<(), ReadStatError> {
                 let offsets_pairs: Vec<_> = offsets.windows(2).collect();
                 let pairs_cnt = offsets_pairs.len();
 
-                let num_threads = usize::from(!parallel);
-                let pool = rayon::ThreadPoolBuilder::new()
-                    .num_threads(num_threads)
-                    .build()
-                    .map_err(|e| {
-                        ReadStatError::Other(format!("Failed to build thread pool: {e}"))
-                    })?;
+                let parse_chunk = |w: &[u32]| -> Result<ReadStatData, ReadStatError> {
+                    let row_start = w[0];
+                    let row_end = w[1];
 
-                let results: Vec<Result<(ReadStatData, WriteConfig, usize), ReadStatError>> = pool
-                    .install(|| {
-                        offsets_pairs
-                            .par_iter()
-                            .map(
-                                |w| -> Result<(ReadStatData, WriteConfig, usize), ReadStatError> {
-                                    let row_start = w[0];
-                                    let row_end = w[1];
+                    let mut d = ReadStatData::new()
+                        .set_column_filter(column_filter.clone(), original_var_count)
+                        .set_total_rows_processed(total_rows_processed.clone())
+                        .init_shared(
+                            var_count,
+                            vars_shared.clone(),
+                            schema_shared.clone(),
+                            row_start,
+                            row_end,
+                        );
 
-                                    let mut d = ReadStatData::new()
-                                        .set_column_filter(
-                                            column_filter.clone(),
-                                            original_var_count,
-                                        )
-                                        .set_total_rows_processed(total_rows_processed.clone())
-                                        .init_shared(
-                                            var_count,
-                                            vars_shared.clone(),
-                                            schema_shared.clone(),
-                                            row_start,
-                                            row_end,
-                                        );
-
-                                    if let Some(ref p) = progress_thread {
-                                        d = d.set_progress(p.clone() as Arc<dyn ProgressCallback>);
-                                    }
-
-                                    d.read_data(&rsp)?;
-
-                                    Ok((d, wc_thread.clone(), pairs_cnt))
-                                },
-                            )
-                            .collect()
-                    });
-
-                let mut errors = Vec::new();
-                for result in results {
-                    match result {
-                        Ok(data) => {
-                            if s.send(data).is_err() {
-                                errors.push(ReadStatError::Other(
-                                    "Error when attempting to send read data for writing"
-                                        .to_string(),
-                                ));
-                            }
-                        }
-                        Err(e) => errors.push(e),
+                    if let Some(ref p) = progress_thread {
+                        d = d.set_progress(p.clone() as Arc<dyn ProgressCallback>);
                     }
-                }
 
-                drop(s);
+                    d.read_data(&rsp)?;
 
-                if !errors.is_empty() {
-                    eprintln!("The following errors occurred when processing data:");
-                    for e in &errors {
-                        eprintln!("    Error: {e:#?}");
+                    Ok(d)
+                };
+
+                let send_err = || {
+                    ReadStatError::Other(
+                        "Error when attempting to send read data for writing".to_string(),
+                    )
+                };
+
+                if parallel {
+                    // Parse chunks concurrently on the global rayon pool. This
+                    // buffers all chunks before sending — output order must be
+                    // preserved for the writer, so --parallel trades memory
+                    // for parse speed.
+                    let results: Vec<Result<ReadStatData, ReadStatError>> =
+                        offsets_pairs.par_iter().map(|w| parse_chunk(w)).collect();
+
+                    for result in results {
+                        let d = result?;
+                        s.send((d, wc_thread.clone(), pairs_cnt))
+                            .map_err(|_| send_err())?;
+                    }
+                } else {
+                    // Default streaming mode: parse and send one chunk at a
+                    // time. The bounded channel provides backpressure, so
+                    // memory stays at ~CHANNEL_CAPACITY chunks regardless of
+                    // file size.
+                    for w in &offsets_pairs {
+                        let d = parse_chunk(w)?;
+                        s.send((d, wc_thread.clone(), pairs_cnt))
+                            .map_err(|_| send_err())?;
                     }
                 }
 
                 Ok(())
             });
+
+            // Surfaces the reader thread's result. Must be checked after the
+            // channel drains and BEFORE finalizing output: writing a
+            // Parquet/Feather footer over missing chunks would produce a
+            // silently-corrupt file with exit code 0.
+            let join_reader =
+                |handle: thread::JoinHandle<Result<(), ReadStatError>>| -> Result<(), ReadStatError> {
+                    match handle.join() {
+                        Ok(res) => res,
+                        Err(_) => {
+                            Err(ReadStatError::Other("Reader thread panicked".to_string()))
+                        }
+                    }
+                };
 
             // Write
 
@@ -484,15 +547,16 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                     let query = sql_query
                         .as_ref()
                         .expect("sql_query must be set when has_sql is true");
-                    if let Some(out_path) = &out_path_clone {
-                        let mut all_batches = Vec::new();
-                        for (d, _wc, _) in r.iter() {
-                            if let Some(batch) = d.batch {
-                                all_batches.push(batch);
-                            }
+                    let mut all_batches = Vec::new();
+                    for (d, _wc, _) in r.iter() {
+                        if let Some(batch) = d.batch {
+                            all_batches.push(batch);
                         }
-                        let results =
-                            readstat::execute_sql(all_batches, sql_schema, &sql_table_name, query)?;
+                    }
+                    join_reader(reader_handle)?;
+                    let results =
+                        readstat::execute_sql(all_batches, sql_schema, &sql_table_name, query)?;
+                    if let Some(out_path) = &out_path_clone {
                         readstat::write_sql_results(
                             &results,
                             out_path,
@@ -500,15 +564,6 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                             compression_clone,
                             compression_level_clone,
                         )?;
-                    } else {
-                        let mut all_batches = Vec::new();
-                        for (d, _wc, _) in r.iter() {
-                            if let Some(batch) = d.batch {
-                                all_batches.push(batch);
-                            }
-                        }
-                        let _results =
-                            readstat::execute_sql(all_batches, sql_schema, &sql_table_name, query)?;
                     }
                 }
             } else if use_parallel_writes {
@@ -578,10 +633,20 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                         all_temp_files.extend(temp_files);
                     }
 
+                    // Check the reader result before producing final output.
+                    join_reader(reader_handle)?;
+
                     // Merge all temp files into final output
-                    if !all_temp_files.is_empty()
-                        && let Some(out_path) = &out_path_clone
-                    {
+                    if all_temp_files.is_empty() {
+                        // Zero rows: still produce a valid (empty) Parquet file.
+                        write_empty_output(
+                            var_count,
+                            vars_writer,
+                            schema_writer,
+                            &wc,
+                            &input_path,
+                        )?;
+                    } else if let Some(out_path) = &out_path_clone {
                         ReadStatWriter::merge_parquet_files(
                             &all_temp_files,
                             out_path,
@@ -603,27 +668,38 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                 // Sequential write mode (default) with BufWriter optimizations
                 let mut wtr = ReadStatWriter::new();
 
-                // d (ReadStatData) is implicitly dropped at each iteration boundary,
-                // preventing accumulation of RecordBatch memory across chunks
-                for (i, (d, wc, pairs_cnt)) in r.iter().enumerate() {
+                // Each chunk replaces `last`, dropping the previous chunk's
+                // RecordBatch memory; `last` is kept so `finish` can report
+                // the row total after the channel drains.
+                let mut last: Option<(ReadStatData, WriteConfig)> = None;
+                for (d, wc, _pairs_cnt) in r.iter() {
                     wtr.write(&d, &wc)?;
+                    last = Some((d, wc));
+                }
 
-                    if i == (pairs_cnt - 1) {
-                        wtr.finish(&d, &wc, &input_path)?;
+                // Check the reader result before finalizing the output file.
+                join_reader(reader_handle)?;
+
+                match last {
+                    Some((d, wc)) => {
+                        let rows = wtr.finish(&d, &wc)?;
+                        print_write_summary(rows, &input_path, wc.out_path());
+                    }
+                    None => {
+                        // Zero rows: still produce a valid header-only/empty file.
+                        write_empty_output(
+                            var_count,
+                            vars_writer,
+                            schema_writer,
+                            &wc,
+                            &input_path,
+                        )?;
                     }
                 }
             }
 
             if let Some(p) = progress {
                 p.pb.finish_with_message("Done");
-            }
-
-            match reader_handle.join() {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => return Err(e),
-                Err(_) => {
-                    return Err(ReadStatError::Other("Reader thread panicked".to_string()));
-                }
             }
 
             Ok(())

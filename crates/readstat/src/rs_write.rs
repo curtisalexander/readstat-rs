@@ -105,6 +105,16 @@ pub(crate) enum ReadStatWriterFormat {
 /// on the first call to [`write`](ReadStatWriter::write) and finalized via
 /// [`finish`](ReadStatWriter::finish).
 #[derive(Default)]
+// With no format features enabled the fields are written but never read.
+#[cfg_attr(
+    not(any(
+        feature = "csv",
+        feature = "parquet",
+        feature = "feather",
+        feature = "ndjson"
+    )),
+    allow(dead_code)
+)]
 pub struct ReadStatWriter {
     /// The format-specific writer, created on first write.
     pub(crate) wtr: Option<ReadStatWriterFormat>,
@@ -152,6 +162,7 @@ impl ReadStatWriter {
     ///
     /// Returns an error if compression configuration is invalid, writing fails,
     /// or the output file cannot be created.
+    #[doc(hidden)] // CLI parallel-write orchestration internal; not a stable API.
     #[cfg(feature = "parquet")]
     pub fn write_batch_to_parquet(
         batch: &RecordBatch,
@@ -197,6 +208,7 @@ impl ReadStatWriter {
     ///
     /// Returns an error if any temp file cannot be read, the output file cannot
     /// be created, or writing fails.
+    #[doc(hidden)] // CLI parallel-write orchestration internal; not a stable API.
     #[cfg(feature = "parquet")]
     pub fn merge_parquet_files(
         temp_files: &[PathBuf],
@@ -250,43 +262,41 @@ impl ReadStatWriter {
         crate::rs_write_config::resolve_parquet_compression(compression, compression_level)
     }
 
-    /// Finalizes the writer, flushing any remaining data and printing a summary.
+    /// Finalizes the writer, flushing and closing the underlying format writer.
     ///
-    /// `in_path` is used for display messages showing the source file name.
+    /// Returns the total number of rows written, as tracked by the shared
+    /// counter on `d`. The library does not print anything — the caller (e.g.
+    /// the CLI) is responsible for any user-facing summary output.
     ///
     /// # Errors
     ///
     /// Returns an error if the underlying writer fails to flush or close,
     /// or if the output format is not enabled.
     #[allow(unused_variables)]
-    pub fn finish(
-        &mut self,
-        d: &ReadStatData,
-        wc: &WriteConfig,
-        in_path: &std::path::Path,
-    ) -> Result<(), ReadStatError> {
+    pub fn finish(&mut self, d: &ReadStatData, wc: &WriteConfig) -> Result<usize, ReadStatError> {
         match wc.format {
             #[cfg(feature = "csv")]
             OutFormat::Csv => {
-                self.print_finish_message(d, wc, in_path);
-                Ok(())
+                // Explicitly flush: relying on BufWriter's Drop would silently
+                // discard I/O errors (e.g. disk full), reporting success over
+                // a truncated file.
+                self.flush_buffered()?;
+                Ok(rows_written(d))
             }
             #[cfg(feature = "feather")]
             OutFormat::Feather => {
                 self.finish_feather()?;
-                self.print_finish_message(d, wc, in_path);
-                Ok(())
+                Ok(rows_written(d))
             }
             #[cfg(feature = "ndjson")]
             OutFormat::Ndjson => {
-                self.print_finish_message(d, wc, in_path);
-                Ok(())
+                self.flush_buffered()?;
+                Ok(rows_written(d))
             }
             #[cfg(feature = "parquet")]
             OutFormat::Parquet => {
                 self.finish_parquet()?;
-                self.print_finish_message(d, wc, in_path);
-                Ok(())
+                Ok(rows_written(d))
             }
             #[allow(unreachable_patterns)]
             _ => Err(ReadStatError::Other(format!(
@@ -296,31 +306,21 @@ impl ReadStatWriter {
         }
     }
 
-    #[cfg(any(
-        feature = "csv",
-        feature = "feather",
-        feature = "ndjson",
-        feature = "parquet"
-    ))]
-    #[allow(clippy::unused_self)]
-    fn print_finish_message(&self, d: &ReadStatData, wc: &WriteConfig, in_path: &std::path::Path) {
-        let rows = d
-            .total_rows_processed
-            .as_ref()
-            .map_or(0, |trp| trp.load(std::sync::atomic::Ordering::SeqCst));
-
-        let in_f = in_path
-            .file_name()
-            .map_or_else(|| "___".to_string(), |f| f.to_string_lossy().to_string());
-
-        let out_f = wc
-            .out_path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map_or_else(|| "___".to_string(), |f| f.to_string_lossy().to_string());
-
-        let rows_formatted = format_with_commas(rows);
-        println!("In total, wrote {rows_formatted} rows from file {in_f} into {out_f}");
+    /// Flushes the buffered file writer for formats (CSV, NDJSON) whose
+    /// underlying [`BufWriter`] would otherwise flush silently in `Drop`.
+    #[cfg(any(feature = "csv", feature = "ndjson"))]
+    fn flush_buffered(&mut self) -> Result<(), ReadStatError> {
+        use std::io::Write;
+        match &mut self.wtr {
+            #[cfg(feature = "csv")]
+            Some(ReadStatWriterFormat::Csv(f)) => f.flush()?,
+            #[cfg(feature = "csv")]
+            Some(ReadStatWriterFormat::CsvStdout(f)) => f.flush()?,
+            #[cfg(feature = "ndjson")]
+            Some(ReadStatWriterFormat::Ndjson(f)) => f.flush()?,
+            _ => {}
+        }
+        Ok(())
     }
 
     #[cfg(feature = "feather")]
@@ -589,65 +589,62 @@ impl ReadStatWriter {
         Ok(())
     }
 
-    /// Writes metadata to stdout (pretty-printed) or as JSON.
+    /// Formats file and variable metadata for display, as either pretty text
+    /// (when `as_json` is false) or pretty-printed JSON.
+    ///
+    /// The library does not print — the caller is responsible for emitting the
+    /// returned string.
     ///
     /// # Errors
     ///
     /// Returns an error if JSON serialization fails.
-    pub fn write_metadata(
-        &self,
+    pub fn metadata_to_string(
         md: &ReadStatMetadata,
         rsp: &ReadStatPath,
         as_json: bool,
-    ) -> Result<(), ReadStatError> {
+    ) -> Result<String, ReadStatError> {
         if as_json {
-            self.write_metadata_to_json(md)
+            Self::metadata_to_json(md)
         } else {
-            self.write_metadata_to_stdout(md, rsp)
+            Ok(Self::format_metadata(md, rsp))
         }
     }
 
-    /// Serializes metadata as pretty-printed JSON and writes to stdout.
+    /// Serializes metadata as pretty-printed JSON.
     ///
     /// # Errors
     ///
     /// Returns an error if JSON serialization fails.
-    pub fn write_metadata_to_json(&self, md: &ReadStatMetadata) -> Result<(), ReadStatError> {
-        let s = serde_json::to_string_pretty(md)?;
-        println!("{s}");
-        Ok(())
+    pub fn metadata_to_json(md: &ReadStatMetadata) -> Result<String, ReadStatError> {
+        Ok(serde_json::to_string_pretty(md)?)
     }
 
-    /// Writes metadata to stdout in a human-readable format.
-    ///
-    /// # Errors
-    ///
-    /// This method currently always succeeds but returns `Result` for
-    /// consistency with other writer methods.
-    #[allow(clippy::cast_sign_loss, clippy::unnecessary_wraps)]
-    pub fn write_metadata_to_stdout(
-        &self,
-        md: &ReadStatMetadata,
-        rsp: &ReadStatPath,
-    ) -> Result<(), ReadStatError> {
+    /// Formats metadata as a human-readable, multi-line string.
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
+    pub fn format_metadata(md: &ReadStatMetadata, rsp: &ReadStatPath) -> String {
         use crate::rs_var::ReadStatVarFormatClass;
+        use std::fmt::Write as _;
 
-        println!("Metadata for the file {}\n", rsp.path.to_string_lossy());
-        println!("Row count: {}", md.row_count);
-        println!("Variable count: {}", md.var_count);
-        println!("Table name: {}", md.table_name);
-        println!("Table label: {}", md.file_label);
-        println!("File encoding: {}", md.file_encoding);
-        println!("Format version: {}", md.version);
-        println!(
+        let mut out = String::new();
+        // Writing to a String is infallible; the `let _ =` discards the Result.
+        let _ = writeln!(out, "Metadata for the file {}\n", rsp.path.to_string_lossy());
+        let _ = writeln!(out, "Row count: {}", md.row_count);
+        let _ = writeln!(out, "Variable count: {}", md.var_count);
+        let _ = writeln!(out, "Table name: {}", md.table_name);
+        let _ = writeln!(out, "Table label: {}", md.file_label);
+        let _ = writeln!(out, "File encoding: {}", md.file_encoding);
+        let _ = writeln!(out, "Format version: {}", md.version);
+        let _ = writeln!(
+            out,
             "Bitness: {}",
-            if md.is_64bit == 0 { "32-bit" } else { "64-bit" }
+            if md.is_64bit { "64-bit" } else { "32-bit" }
         );
-        println!("Creation time: {}", md.creation_time);
-        println!("Modified time: {}", md.modified_time);
-        println!("Compression: {:#?}", md.compression);
-        println!("Byte order: {:#?}", md.endianness);
-        println!("Variable names:");
+        let _ = writeln!(out, "Creation time: {}", md.creation_time);
+        let _ = writeln!(out, "Modified time: {}", md.modified_time);
+        let _ = writeln!(out, "Compression: {:#?}", md.compression);
+        let _ = writeln!(out, "Byte order: {:#?}", md.endianness);
+        let _ = writeln!(out, "Variable names:");
         for (k, v) in &md.vars {
             let format_class = v.var_format_class.as_ref().map_or("", |f| match f {
                 ReadStatVarFormatClass::Date => "Date",
@@ -660,14 +657,28 @@ impl ReadStatWriter {
                 }
             });
             let data_type = md.schema.fields[*k as usize].data_type();
-            println!(
-                "{k}: {} {{ type class: {:#?}, type: {:#?}, label: {}, format class: {format_class}, format: {}, arrow logical data type: {data_type:#?}, arrow physical data type: {data_type:#?} }}",
+            let _ = writeln!(
+                out,
+                "{k}: {} {{ type class: {:#?}, type: {:#?}, label: {}, format class: {format_class}, format: {}, arrow data type: {data_type:#?} }}",
                 v.var_name, v.var_type_class, v.var_type, v.var_label, v.var_format,
             );
         }
 
-        Ok(())
+        out
     }
+}
+
+/// Total rows written so far, as tracked by the shared row counter on `d`.
+#[cfg(any(
+    feature = "csv",
+    feature = "feather",
+    feature = "ndjson",
+    feature = "parquet"
+))]
+fn rows_written(d: &ReadStatData) -> usize {
+    d.total_rows_processed
+        .as_ref()
+        .map_or(0, |trp| trp.load(std::sync::atomic::Ordering::SeqCst))
 }
 
 /// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to CSV bytes (with header).
@@ -733,30 +744,6 @@ pub fn write_batch_to_feather_bytes(
     writer.write(batch)?;
     writer.finish()?;
     Ok(buf)
-}
-
-/// Formats a number with comma thousands separators (e.g. 1081 -> "1,081").
-#[cfg(any(
-    feature = "csv",
-    feature = "feather",
-    feature = "ndjson",
-    feature = "parquet"
-))]
-fn format_with_commas(n: usize) -> String {
-    let s = n.to_string();
-    let bytes = s.as_bytes();
-    let len = bytes.len();
-    if len <= 3 {
-        return s;
-    }
-    let mut result = String::with_capacity(len + len / 3);
-    for (i, &b) in bytes.iter().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
-            result.push(',');
-        }
-        result.push(b as char);
-    }
-    result
 }
 
 #[cfg(test)]

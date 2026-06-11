@@ -152,12 +152,7 @@ fn bench_write_csv(c: &mut Criterion) {
             let wc = setup_write_config(&temp_dir, readstat::OutFormat::Csv);
             let mut wtr = ReadStatWriter::new();
             wtr.write(black_box(&d), black_box(&wc)).unwrap();
-            wtr.finish(
-                black_box(&d),
-                black_box(&wc),
-                black_box(rsp_in.path.as_path()),
-            )
-            .unwrap();
+            wtr.finish(black_box(&d), black_box(&wc)).unwrap();
         });
     });
 
@@ -207,12 +202,7 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
 
                     let mut wtr = ReadStatWriter::new();
                     wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(
-                        black_box(&d),
-                        black_box(&wc),
-                        black_box(rsp_in.path.as_path()),
-                    )
-                    .unwrap();
+                    wtr.finish(black_box(&d), black_box(&wc)).unwrap();
                 });
             },
         );
@@ -297,12 +287,7 @@ fn bench_write_formats(c: &mut Criterion) {
                     let wc = setup_write_config(&temp_dir, *fmt);
                     let mut wtr = ReadStatWriter::new();
                     wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(
-                        black_box(&d),
-                        black_box(&wc),
-                        black_box(rsp_in.path.as_path()),
-                    )
-                    .unwrap();
+                    wtr.finish(black_box(&d), black_box(&wc)).unwrap();
                 });
             },
         );
@@ -337,12 +322,7 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
                 let wc = setup_write_config(&temp_dir, *fmt);
                 let mut wtr = ReadStatWriter::new();
                 wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                wtr.finish(
-                    black_box(&d),
-                    black_box(&wc),
-                    black_box(rsp_in.path.as_path()),
-                )
-                .unwrap();
+                wtr.finish(black_box(&d), black_box(&wc)).unwrap();
             });
         });
     }

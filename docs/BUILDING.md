@@ -4,7 +4,7 @@
 
 ## Minimum Supported Rust Version (MSRV)
 
-All published crates require **Rust `1.85`** or newer (Rust edition 2024), as declared by `rust-version = "1.85"` in each crate's `Cargo.toml`.
+All published crates require **Rust `1.88`** or newer (let-chains; Rust edition 2024), as declared by `rust-version = "1.88"` in each crate's `Cargo.toml`.
 
 ## Clone
 Ensure submodules are also cloned.

@@ -15,6 +15,21 @@ keywords = ["iconv", "ffi", "bindings", "windows"]
 categories = ["external-ffi-bindings"]
 links = "iconv"
 build = "build.rs"
+# What ships in the crates.io package. Must live in [package] — placing it after
+# a [[package.metadata...]] table header silently assigns it to that table.
+include = [
+    "build.rs",
+    "src/**",
+    "wrapper.h",
+    "README.md",
+    "LICENSE",
+    "vendor/libiconv-win-build/include/**",
+    "vendor/libiconv-win-build/lib/**",
+    "vendor/libiconv-win-build/libcharset/**",
+    "vendor/libiconv-win-build/srclib/**",
+    "vendor/libiconv-win-build/COPYING*",
+    "vendor/libiconv-win-build/LICENSE.md",
+]
 
 # This crate is a no-op on non-Windows targets; docs.rs builds the default
 # Linux target, which documents the crate-level overview without compiling
@@ -27,19 +42,6 @@ default-target = "x86_64-unknown-linux-gnu"
 file = "../../docs/ARCHITECTURE.md"
 search = '### `readstat-iconv-sys` \(v[0-9]+\.[0-9]+\.[0-9]+\)'
 replace = "### `readstat-iconv-sys` (v{{version}})"
-
-include = [
-    "build.rs",
-    "src/**",
-    "wrapper.h",
-    "README.md",
-    "vendor/libiconv-win-build/include/**",
-    "vendor/libiconv-win-build/lib/**",
-    "vendor/libiconv-win-build/libcharset/**",
-    "vendor/libiconv-win-build/srclib/**",
-    "vendor/libiconv-win-build/COPYING*",
-    "vendor/libiconv-win-build/LICENSE.md",
-]
 
 [features]
 # Default builds consume the checked-in pre-generated bindings under

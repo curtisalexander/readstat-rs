@@ -48,7 +48,7 @@ fn parse_intel_metadata() {
     assert_eq!(md.version, 9);
 
     // bitness
-    assert_eq!(md.is_64bit, 0);
+    assert!(!md.is_64bit);
 
     // creation time
     assert_eq!(md.creation_time, "2014-12-01 17:08:31");

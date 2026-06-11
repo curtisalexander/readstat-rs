@@ -48,7 +48,7 @@ fn parse_somemiss_metadata() {
     assert_eq!(md.version, 9);
 
     // bitness
-    assert_eq!(md.is_64bit, 0);
+    assert!(!md.is_64bit);
 
     // creation time
     assert_eq!(md.creation_time, "2014-10-11 23:11:27");

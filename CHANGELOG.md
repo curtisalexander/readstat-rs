@@ -36,6 +36,24 @@ Bumps `readstat` and `readstat-cli` to 0.23.0; `readstat-sys` to 0.4.0.
 - `wasm32-unknown-emscripten` builds must enable `--features readstat-sys/buildtime_bindgen` — the emsdk sysroot can't be reproduced from checked-in bindings.
 - Dropped LLVM install steps from the Windows `build-win`, `asan-windows`, and `asan-windows-full` jobs in CI now that default builds no longer need `libclang`. The MSVC ASAN runtime continues to be sourced from Visual Studio.
 
+## [0.22.0] - 2026-05-12
+
+Pre-release crates.io polish: API cleanup, documentation, and CI hardening.
+
+### Added
+- `cargo-release` configuration and an updated `RELEASING.md` workflow for publishing crates in dependency order
+- `MAX_VARS` cap in the parser to guard against crafted files claiming an unbounded variable count
+
+### Changed
+- Pre-release API and documentation cleanup across the `readstat` and `readstat-cli` crates
+- Restored full unit-test coverage under Miri, skipping only the proptest suites (which are 100–1000× slower under the interpreter)
+- api-demo: hardened the Rust/Axum server (format validation, error handling, response-header lifetime) and aligned the Python server response shape
+
+### Fixed
+- Fuzz crashes surfaced by the byte-parsing targets
+- ARM64 Linux build: use `c_char` instead of `i8` in `ptr_to_string`
+- ASan CI build failure caused by the transitive `ethnum` dependency (dropped the unused `polars` dev dependency)
+
 ## [0.21.0] - 2026-04-01
 
 ### Changed
@@ -51,6 +69,15 @@ Bumps `readstat` and `readstat-cli` to 0.23.0; `readstat-sys` to 0.4.0.
 - Bumped `readstat` and `readstat-cli` to 0.20.2 for crates.io release
 - Applied `cargo fmt` to fix formatting drift in `cb.rs`, `rs_data.rs`, and `rs_query.rs`
 - Replaced `CString::new("").unwrap()` with `expect("empty string is valid C string")` in buffer I/O dummy paths for clearer intent
+
+## [0.20.1] - 2026-03-03
+
+Pre-publish cleanup ahead of the first crates.io release.
+
+### Fixed
+- Undefined behavior in the WASM `free_binary` export
+- Added bounds-checking to the C-string read path (`readCString`)
+- Documentation corrections
 
 ## [0.20.0] - 2026-03-03
 

@@ -82,7 +82,7 @@ For library, API server, and WebAssembly usage, see **[Examples](#bulb-examples)
 
 Clone the repository (with submodules), install platform-specific developer tools, and run `cargo build`. Platform-specific instructions for Linux, macOS, and Windows are in **[docs/BUILDING.md](docs/BUILDING.md)**.
 
-> :information_source: **Minimum Supported Rust Version (MSRV): `1.85`** (Rust edition 2024). All published crates set `rust-version = "1.85"`.
+> :information_source: **Minimum Supported Rust Version (MSRV): `1.88`** (let-chains; Rust edition 2024). All published crates set `rust-version = "1.88"`.
 
 ## :computer: [Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
 
@@ -107,7 +107,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/TESTING.md](docs/TESTING.md) | Running tests, dataset table, fuzz testing, valgrind |
 | [docs/BENCHMARKING.md](docs/BENCHMARKING.md) | Criterion benchmarks, hyperfine, and profiling |
 | [docs/CI-CD.md](docs/CI-CD.md) | GitHub Actions triggers and artifacts |
-| [docs/MEMORY-SAFETY.md](docs/MEMORY-SAFETY.md) | Automated memory-safety CI checks (Valgrind, ASan, Miri, unsafe audit) |
+| [docs/MEMORY-SAFETY.md](docs/MEMORY-SAFETY.md) | Automated memory-safety CI checks (Miri, AddressSanitizer on Linux/macOS/Windows, weekly fuzzing; Valgrind run manually) |
 | [docs/RELEASING.md](docs/RELEASING.md) | Step-by-step guide for publishing crates to crates.io |
 | [scripts/check-updates.sh](scripts/check-updates.sh) | Crate dependency update checker — supply-chain quarantine, held-back/major reporting, and a `bindgen` advisory (`--apply` to update; `.ps1` for Windows) |
 | [scripts/check-vendor-updates.sh](scripts/check-vendor-updates.sh) | Read-only check for upstream updates to the vendored git submodules (ReadStat, libiconv) — never alters the checkout (`.ps1` for Windows) |
@@ -120,7 +120,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [`readstat-cli`](crates/readstat-cli/) | `crates/readstat-cli/` | Binary crate producing the `readstat` CLI tool (arg parsing, progress bars, orchestration). |
 | [`readstat-sys`](crates/readstat-sys/) | `crates/readstat-sys/` | Raw FFI bindings to the full ReadStat C library (SAS, SPSS, Stata) via bindgen. |
 | [`readstat-iconv-sys`](crates/readstat-iconv-sys/) | `crates/readstat-iconv-sys/` | Windows-only FFI bindings to libiconv for character encoding conversion. |
-| [`readstat-tests`](crates/readstat-tests/) | `crates/readstat-tests/` | Integration test suite (29 modules, 14 datasets). |
+| [`readstat-tests`](crates/readstat-tests/) | `crates/readstat-tests/` | Integration test suite (30 modules, 14 datasets). |
 | [`readstat-wasm`](crates/readstat-wasm/) | `crates/readstat-wasm/` | WebAssembly build for browser/JS usage (excluded from workspace, built with Emscripten). |
 
 For full architectural details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -138,6 +138,18 @@ The [`examples/`](examples/) directory contains runnable demos showing different
 | [`sql-explorer`](examples/sql-explorer/) | Browser-based SQL explorer — upload a `.sas7bdat` file and query it interactively with SQL via AlaSQL |
 
 To use `readstat` as a library in your own Rust project, add the [`readstat`](crates/readstat/) crate as a dependency.
+
+## :balance_scale: License
+
+`readstat-rs` is licensed under the [MIT License](LICENSE).
+
+> :warning: **Windows builds statically link LGPL libiconv.** On Windows the
+> `readstat-iconv-sys` crate compiles and statically links the vendored
+> [libiconv](https://www.gnu.org/software/libiconv/), which is
+> `LGPL-2.1-or-later`. The Windows binary as a whole is therefore
+> `LGPL-2.1-or-later AND MIT`; distributors of Windows binaries are subject to
+> the LGPL §6 relinking obligation. Linux and macOS builds use the system
+> iconv and are unaffected (MIT only).
 
 ## :link: Resources
 The following have been **_incredibly_** helpful while developing!

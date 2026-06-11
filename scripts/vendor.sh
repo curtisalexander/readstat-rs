@@ -61,7 +61,9 @@ copy_readstat_files() {
     local src="$READSTAT_VENDOR"
     local tmp="$ROOT_DIR/.vendor-tmp-readstat"
 
-    echo "Copying ReadStat vendor files..."
+    # Progress goes to stderr — stdout is captured by the caller and must
+    # contain only the temp path.
+    echo "Copying ReadStat vendor files..." >&2
     rm -rf "$tmp"
     mkdir -p "$tmp"
 
@@ -80,7 +82,7 @@ copy_readstat_files() {
         fi
     done
 
-    echo "  Copied $(find "$tmp" -type f | wc -l) files"
+    echo "  Copied $(find "$tmp" -type f | wc -l) files" >&2
     echo "$tmp"
 }
 
@@ -88,7 +90,9 @@ copy_iconv_files() {
     local src="$ICONV_VENDOR"
     local tmp="$ROOT_DIR/.vendor-tmp-iconv"
 
-    echo "Copying libiconv vendor files..."
+    # Progress goes to stderr — stdout is captured by the caller and must
+    # contain only the temp path.
+    echo "Copying libiconv vendor files..." >&2
     rm -rf "$tmp"
     mkdir -p "$tmp"
 
@@ -103,7 +107,7 @@ copy_iconv_files() {
     cp "$src"/COPYING* "$tmp/" 2>/dev/null || true
     cp "$src/LICENSE.md" "$tmp/" 2>/dev/null || true
 
-    echo "  Copied $(find "$tmp" -type f | wc -l) files"
+    echo "  Copied $(find "$tmp" -type f | wc -l) files" >&2
     echo "$tmp"
 }
 
@@ -125,6 +129,12 @@ do_prepare() {
     readstat_tmp=$(copy_readstat_files)
     local iconv_tmp
     iconv_tmp=$(copy_iconv_files)
+
+    # Refuse to delete anything unless both temp copies verifiably exist.
+    if [ ! -f "$readstat_tmp/src/readstat.h" ] || [ ! -d "$iconv_tmp/lib" ]; then
+        echo "Error: vendor copy failed (readstat_tmp=$readstat_tmp, iconv_tmp=$iconv_tmp); aborting before removing submodules" >&2
+        exit 1
+    fi
 
     # Deinit submodules (removes the checkout but keeps .gitmodules)
     echo "Deinitializing submodules..."

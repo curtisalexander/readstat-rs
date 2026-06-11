@@ -24,7 +24,7 @@ resolver = "2"
 [workspace.package]
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/curtisalexander/readstat-rs"
 homepage = "https://github.com/curtisalexander/readstat-rs"

@@ -4,6 +4,8 @@
 //! enum variants. [`ReadStatError`] is the main error type, wrapping C library errors
 //! alongside Arrow, Parquet, I/O, and other failure modes.
 
+use std::path::PathBuf;
+
 use num_derive::FromPrimitive;
 
 /// Error codes returned by the `ReadStat` C library.
@@ -11,7 +13,12 @@ use num_derive::FromPrimitive;
 /// Each variant maps directly to a `readstat_error_t` value. A value of
 /// [`READSTAT_OK`](ReadStatCError::READSTAT_OK) indicates success; all other
 /// variants represent specific failure conditions.
-#[derive(Debug, FromPrimitive)]
+///
+/// This enum is `#[non_exhaustive]`: the C library adds new error codes over
+/// time, so new variants may appear in minor releases. Match with a wildcard
+/// arm (`_ => ...`) to remain forward-compatible.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 #[allow(non_camel_case_types)]
 pub enum ReadStatCError {
     /// Operation completed successfully.
@@ -181,6 +188,8 @@ impl std::fmt::Display for ReadStatCError {
     }
 }
 
+impl std::error::Error for ReadStatCError {}
+
 /// The main error type for the readstat crate.
 ///
 /// Wraps errors from the `ReadStat` C library, Arrow/Parquet processing,
@@ -247,6 +256,42 @@ pub enum ReadStatError {
         /// All available column names in the dataset.
         available: Vec<String>,
     },
+
+    /// The input file does not exist.
+    #[error("File {} does not exist!", .0.display())]
+    FileNotFound(PathBuf),
+
+    /// The input file has a missing or unsupported extension.
+    ///
+    /// Only `.sas7bdat` files are supported as input.
+    #[error("File {} does not have the expected .sas7bdat extension!", .0.display())]
+    UnsupportedInputExtension(PathBuf),
+
+    /// The output file path has a missing or mismatched extension for the
+    /// chosen [`OutFormat`](crate::OutFormat).
+    #[error("File {} does not have the expected .{expected} extension!", .path.display())]
+    OutputExtensionMismatch {
+        /// The output path whose extension did not match.
+        path: PathBuf,
+        /// The extension expected for the configured output format.
+        expected: String,
+    },
+
+    /// The output file already exists and overwrite was not requested.
+    #[error("Output file {} already exists! Set overwrite = true to replace it.", .0.display())]
+    OutputFileExists(PathBuf),
+
+    /// The parent directory of the output path does not exist.
+    #[error("The parent directory of the output path {} does not exist", .0.display())]
+    OutputParentMissing(PathBuf),
+
+    /// The format string is not a recognized output format.
+    #[error("Unknown format: {0:?}. Expected one of: csv, feather, ndjson, parquet")]
+    UnknownFormat(String),
+
+    /// The SQL file was empty.
+    #[error("SQL file {} is empty", .0.display())]
+    EmptySqlFile(PathBuf),
 
     /// Error from the DataFusion SQL engine.
     #[cfg(feature = "sql")]

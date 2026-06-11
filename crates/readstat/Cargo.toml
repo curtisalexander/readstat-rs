@@ -61,7 +61,9 @@ csv = ["dep:arrow-csv"]
 parquet = ["dep:parquet", "dep:tempfile"]
 feather = ["dep:arrow-ipc"]
 ndjson = ["dep:arrow-json"]
-sql = ["dep:datafusion", "dep:tokio", "dep:futures"]
+# `sql` writes query results in any output format, so it requires all four
+# format writers (rs_query.rs uses arrow-csv/ipc/json and parquet directly).
+sql = ["dep:datafusion", "dep:tokio", "dep:futures", "csv", "parquet", "feather", "ndjson"]
 
 [dependencies.datafusion]
 version = "53"

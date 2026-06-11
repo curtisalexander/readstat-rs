@@ -33,6 +33,14 @@ use crate::{
     rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
 
+/// Upper bound on the row capacity pre-allocated for Arrow builders.
+///
+/// The claimed row count comes from an untrusted file header, so the up-front
+/// allocation is capped here; builders grow on demand past this for honest
+/// files. 1,000,000 rows is far beyond the default 10k streaming chunk while
+/// keeping the worst-case empty-builder reservation bounded.
+const MAX_PREALLOC_ROWS: usize = 1_000_000;
+
 /// A typed Arrow array builder for a single column.
 ///
 /// Each variant wraps the corresponding Arrow builder, pre-sized with capacity
@@ -66,17 +74,6 @@ pub(crate) enum ColumnBuilder {
 }
 
 impl ColumnBuilder {
-    /// Returns a mutable reference to the inner [`StringBuilder`].
-    ///
-    /// # Panics
-    /// Panics if `self` is not `ColumnBuilder::Str`.
-    pub(crate) fn as_string_mut(&mut self) -> &mut StringBuilder {
-        match self {
-            Self::Str(b) => b,
-            _ => panic!("ColumnBuilder::as_string_mut called on non-string builder"),
-        }
-    }
-
     /// Appends a null value, regardless of the underlying builder type.
     pub(crate) fn append_null(&mut self) {
         match self {
@@ -122,7 +119,9 @@ impl ColumnBuilder {
         match vm.var_type_class {
             ReadStatVarTypeClass::String => Self::Str(StringBuilder::with_capacity(
                 capacity,
-                capacity * vm.storage_width,
+                // saturating_mul: storage_width is an untrusted file-header
+                // field, so guard the byte hint against usize overflow.
+                capacity.saturating_mul(vm.storage_width),
             )),
             ReadStatVarTypeClass::Numeric => {
                 match vm.var_format_class {
@@ -257,9 +256,15 @@ impl ReadStatData {
     ///
     /// Each builder's type is determined by the variable metadata. String builders
     /// are additionally pre-sized with `storage_width * chunk_rows` bytes.
+    ///
+    /// The capacity hint is clamped to [`MAX_PREALLOC_ROWS`] because both the row
+    /// count and per-string `storage_width` originate from untrusted file headers;
+    /// a crafted file claiming billions of rows would otherwise trigger a multi-GB
+    /// up-front allocation (or a multiply overflow) before a single row is parsed.
+    /// Builders grow on demand, so clamping costs honest files nothing.
     #[must_use]
     pub fn allocate_builders(self) -> Self {
-        let capacity = self.chunk_rows_to_process;
+        let capacity = self.chunk_rows_to_process.min(MAX_PREALLOC_ROWS);
         let builders: Vec<ColumnBuilder> = self
             .vars
             .values()
@@ -488,7 +493,10 @@ impl ReadStatData {
 
     #[allow(clippy::cast_possible_truncation)]
     fn set_chunk_counts(self, row_start: u32, row_end: u32) -> Self {
-        let chunk_rows_to_process = (row_end - row_start) as usize;
+        // saturating_sub: guard against a caller passing row_end < row_start,
+        // which would underflow-panic in debug and wrap to ~4 billion in
+        // release (then feed an enormous builder pre-allocation).
+        let chunk_rows_to_process = row_end.saturating_sub(row_start) as usize;
         let chunk_row_start = row_start as usize;
         let chunk_row_end = row_end as usize;
         let chunk_rows_processed = 0_usize;

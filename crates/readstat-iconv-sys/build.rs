@@ -12,15 +12,18 @@
 //! written to both `OUT_DIR` and the checked-in path so a maintainer can commit
 //! the diff. The CI `regen` job runs this on a Windows runner.
 
-#[cfg(windows)]
 fn main() {
     use std::env;
     use std::fs;
     use std::path::PathBuf;
 
-    // Emscripten provides its own iconv — skip the Windows vendor build
+    // Gate on the *target* OS, not the host: a build script is compiled for the
+    // host, so `#[cfg(windows)]` would mis-handle cross-compilation (building a
+    // Windows target from Linux/macOS, or vice versa). libiconv is only linked
+    // when the target is Windows; every other target (including Emscripten,
+    // which supplies its own iconv) is a no-op.
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os == "emscripten" {
+    if target_os != "windows" {
         return;
     }
 
@@ -110,7 +113,3 @@ fn main() {
         println!("cargo:rerun-if-changed={}", pregenerated.display());
     }
 }
-
-// no-op for non-Windows as not needed
-#[cfg(not(windows))]
-fn main() {}

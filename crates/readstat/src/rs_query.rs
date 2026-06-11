@@ -31,8 +31,9 @@ use crate::rs_write_config::{
 /// Channel receiver type for streaming parsed data chunks between threads.
 ///
 /// Each message contains the parsed [`ReadStatData`], the source [`ReadStatPath`],
-/// and the chunk index.
-type ChunkReceiver = crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>;
+/// and the chunk index. Construct the matching sender/receiver pair with the
+/// re-exported [`crossbeam`](crate::crossbeam) channel functions.
+pub type ChunkReceiver = crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>;
 
 /// Executes a SQL query against in-memory Arrow data.
 ///
@@ -73,7 +74,15 @@ async fn execute_sql_async(
     ctx.register_table(table_name, Arc::new(table))?;
 
     let df = ctx.sql(sql).await?;
+    let result_schema = Arc::new(df.schema().as_arrow().clone());
     let results = df.collect().await?;
+
+    // A query may legitimately return zero rows (e.g. `WHERE 1=0`). Return a
+    // single empty batch carrying the result schema so downstream writers can
+    // still produce a valid (header-only) output file.
+    if results.is_empty() {
+        return Ok(vec![RecordBatch::new_empty(result_schema)]);
+    }
 
     Ok(results)
 }
@@ -302,7 +311,7 @@ pub fn read_sql_file(path: &std::path::Path) -> Result<String, ReadStatError> {
     let sql = std::fs::read_to_string(path)?;
     let sql = sql.trim().to_string();
     if sql.is_empty() {
-        return Err(ReadStatError::Other("SQL file is empty".to_string()));
+        return Err(ReadStatError::EmptySqlFile(path.to_path_buf()));
     }
     Ok(sql)
 }
