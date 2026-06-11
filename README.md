@@ -8,6 +8,10 @@ Read, inspect, and convert SAS binary (`.sas7bdat`) files &mdash; from [Rust cod
 
 > The original use case was a command-line tool for converting SAS files, but the project has since expanded into a workspace of crates that can be used as a Rust library, a CLI, or compiled to WebAssembly for browser and JavaScript runtimes.
 
+![readstat CLI demo](docs/demo.gif)
+
+> :clapper: The demo above is generated from [`scripts/demo.sh`](scripts/demo.sh) and recorded with [`scripts/record-demo.sh`](scripts/record-demo.sh).
+
 ## :key: Dependencies
 The command-line tool is developed in Rust and is only possible due to the following _**excellent**_ projects:
 - The [ReadStat](https://github.com/WizardMac/ReadStat) C library developed by [Evan Miller](https://www.evanmiller.org)

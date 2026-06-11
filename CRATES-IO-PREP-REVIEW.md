@@ -696,7 +696,40 @@ Pre-publish checklist once the above lands:
 
 ## 7. Demo script (for README ascii-screencast)
 
-**Status:** ☐ not started
+**Status:** ✅ done (2026-06-11). Landed:
+- **`scripts/demo.sh`** — 7-beat tour of the CLI over the bundled
+  `cars.sas7bdat`: metadata (human + JSON), preview, column projection
+  (`Brand,Model,EngineSize,Cylinders,CityMPG,HwyMPG` — 2 text + 4 numeric),
+  zstd Parquet (+ `ls -lh`), NDJSON, and a SQL leaderboard beat gated behind
+  `DEMO_SQL=1`. Self-paced via `DEMO_SPEED` (typewriter pauses; `0` = instant
+  for a CI smoke test). Resolves the binary to `target/release/readstat` else a
+  `cargo run` fallback; runs in a temp dir with RAII cleanup. SQL identifiers
+  are double-quoted (DataFusion lowercases bare identifiers; columns are
+  case-sensitive). Verified end-to-end at `DEMO_SPEED=0 DEMO_SQL=1`, exit 0.
+- **Recording stack chosen: vhs → animated GIF.** `docs/demo.tape` is the vhs
+  script (1200×800, Catppuccin Mocha, lets `demo.sh` drive pacing).
+  `scripts/record-demo.sh` is the canonical, reproducible path: vhs renders raw
+  (50fps), ffmpeg downsamples to 20fps with a flat 64-color no-dither palette
+  (terminal output compresses far better without dithering), gifsicle does a
+  final `--lossy=40 -O3` pass → **`docs/demo.gif` ≈ 1.9 MB** (down from 3.9 MB
+  raw). Tools: `brew install vhs gifsicle` (vhs pulls in ffmpeg + ttyd).
+  The one-off "could not open ttyd … ERR_CONNECTION_REFUSED" seen on the very
+  first vhs invocation was investigated and is a benign cold-start race (vhs
+  navigates its headless browser to a short-lived ttyd before its listener is
+  ready). Ruled out as recurring: vhs binds an **ephemeral port that differs
+  every run** (no fixed-port collision / CI-parallel hazard), cleans up ttyd
+  (no strays), isn't gated by quarantine/Gatekeeper or the firewall (disabled;
+  loopback anyway), and doesn't download a browser. Did not recur in 15
+  consecutive runs. `record-demo.sh` now retries the vhs step up to 3× (each
+  attempt gets a fresh port) so the race is invisible.
+- **README** embeds `docs/demo.gif` right after the intro, with a pointer to
+  the two scripts.
+- Open questions from the original notes settled: columns chosen (above);
+  typewriter handled by vhs/`DEMO_SPEED` (no hand-rolled char-by-char needed);
+  artifact committed as GIF (chosen over animated SVG for reliable GitHub
+  inline rendering). `DEMO_SQL=1` SQL beat included as previously decided.
+
+Original notes (for reference):
 
 **Goal:** a short, self-contained script that reads one bundled test file and shows
 off a few headline CLI features — *not* exhaustive. Primary purpose is to be recorded
