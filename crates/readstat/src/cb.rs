@@ -286,10 +286,24 @@ fn sas_datetime_to_unix_subsec(val: f64, scale: f64) -> Option<i64> {
 }
 
 /// Converts a SAS time (seconds since midnight, possibly fractional) to
+/// milliseconds, rounding rather than truncating.
+#[inline]
+fn sas_time_to_ms(val: f64) -> Option<i32> {
+    checked_f64_to_i32((val * 1_000.0).round())
+}
+
+/// Converts a SAS time (seconds since midnight, possibly fractional) to
 /// microseconds, rounding rather than truncating.
 #[inline]
 fn sas_time_to_us(val: f64) -> Option<i64> {
     checked_f64_to_i64((val * 1_000_000.0).round())
+}
+
+/// Converts a SAS time (seconds since midnight, possibly fractional) to
+/// nanoseconds, rounding rather than truncating.
+#[inline]
+fn sas_time_to_ns(val: f64) -> Option<i64> {
+    checked_f64_to_i64((val * 1_000_000_000.0).round())
 }
 
 /// FFI callback that extracts a single cell value during row parsing.
@@ -542,9 +556,29 @@ pub(crate) extern "C" fn handle_value(
                             type_mismatch_abort!();
                         }
                     }
+                    Some(ReadStatVarFormatClass::TimeWithMilliseconds) => {
+                        if let ColumnBuilder::Time32Millisecond(b) = builder {
+                            match sas_time_to_ms(val) {
+                                Some(v) => b.append_value(v),
+                                None => date_overflow_abort!(),
+                            }
+                        } else {
+                            type_mismatch_abort!();
+                        }
+                    }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                         if let ColumnBuilder::Time64Microsecond(b) = builder {
                             match sas_time_to_us(val) {
+                                Some(v) => b.append_value(v),
+                                None => date_overflow_abort!(),
+                            }
+                        } else {
+                            type_mismatch_abort!();
+                        }
+                    }
+                    Some(ReadStatVarFormatClass::TimeWithNanoseconds) => {
+                        if let ColumnBuilder::Time64Nanosecond(b) = builder {
+                            match sas_time_to_ns(val) {
                                 Some(v) => b.append_value(v),
                                 None => date_overflow_abort!(),
                             }
@@ -739,6 +773,32 @@ mod tests {
             let sas = 49_507.123_456_f64;
             let us = sas_time_to_us(sas).unwrap();
             assert_eq!(us, 49_507_123_456);
+        }
+
+        #[test]
+        fn time_ms_rounds_instead_of_truncates() {
+            // 13:45:07.123 as a SAS time (seconds since midnight)
+            let sas = 49_507.123_f64;
+            let ms = sas_time_to_ms(sas).unwrap();
+            assert_eq!(ms, 49_507_123);
+        }
+
+        #[test]
+        fn time_ns_rounds_instead_of_truncates() {
+            // 13:45:07.123456789 as a SAS time (seconds since midnight). f64 holds
+            // ~ns precision at this magnitude, so allow a tiny tolerance.
+            let sas = 49_507.123_456_789_f64;
+            let ns = sas_time_to_ns(sas).unwrap();
+            assert!(
+                (ns - 49_507_123_456_789).abs() <= 1_000,
+                "ns time conversion off by more than f64 precision: {ns}"
+            );
+        }
+
+        #[test]
+        fn time_ms_non_finite_is_none() {
+            assert_eq!(sas_time_to_ms(f64::NAN), None);
+            assert_eq!(sas_time_to_ns(f64::INFINITY), None);
         }
 
         #[test]

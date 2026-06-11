@@ -396,10 +396,11 @@ impl ReadStatWriter {
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &wc.out_path {
-            let f = self.open_output(p)?;
-
-            // setup writer with BufWriter for better performance
+            // Open the file only on the first batch; later batches reuse the
+            // open writer. Opening (and immediately dropping) the handle on
+            // every batch was wasted syscalls.
             if !self.wrote_start {
+                let f = self.open_output(p)?;
                 self.wtr = Some(ReadStatWriterFormat::Csv(BufWriter::new(f)));
             }
 
@@ -433,10 +434,9 @@ impl ReadStatWriter {
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &wc.out_path {
-            let f = self.open_output(p)?;
-
-            // setup writer with BufWriter for better performance
+            // Open the file only on the first batch (see write_data_to_csv).
             if !self.wrote_start {
+                let f = self.open_output(p)?;
                 let wtr = IpcFileWriter::try_new(BufWriter::new(f), &d.schema)?;
                 self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
             }
@@ -470,10 +470,9 @@ impl ReadStatWriter {
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &wc.out_path {
-            let f = self.open_output(p)?;
-
-            // setup writer with BufWriter for better performance
+            // Open the file only on the first batch (see write_data_to_csv).
             if !self.wrote_start {
+                let f = self.open_output(p)?;
                 self.wtr = Some(ReadStatWriterFormat::Ndjson(BufWriter::new(f)));
             }
 
@@ -508,10 +507,10 @@ impl ReadStatWriter {
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
         if let Some(p) = &wc.out_path {
-            let f = self.open_output(p)?;
-
-            // setup writer
+            // setup writer — open the file only on the first batch (see
+            // write_data_to_csv).
             if !self.wrote_start {
+                let f = self.open_output(p)?;
                 let compression_codec =
                     Self::resolve_compression(wc.compression, wc.compression_level)?;
 
@@ -580,9 +579,17 @@ impl ReadStatWriter {
     #[cfg(feature = "csv")]
     #[allow(clippy::unnecessary_wraps)]
     fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), ReadStatError> {
-        let vars: Vec<String> = d.vars.values().map(|m| m.var_name.clone()).collect();
+        // CSV-escape each name so the header stays well-formed and column-aligned
+        // with the (already-escaped) data rows. Variable names may legally contain
+        // commas or quotes under SAS `VALIDVARNAME=ANY`.
+        let header = d
+            .vars
+            .values()
+            .map(|m| csv_escape_field(&m.var_name))
+            .collect::<Vec<_>>()
+            .join(",");
 
-        println!("{}", vars.join(","));
+        println!("{header}");
 
         self.wrote_header = true;
 
@@ -652,9 +659,10 @@ impl ReadStatWriter {
                 | ReadStatVarFormatClass::DateTimeWithMilliseconds
                 | ReadStatVarFormatClass::DateTimeWithMicroseconds
                 | ReadStatVarFormatClass::DateTimeWithNanoseconds => "DateTime",
-                ReadStatVarFormatClass::Time | ReadStatVarFormatClass::TimeWithMicroseconds => {
-                    "Time"
-                }
+                ReadStatVarFormatClass::Time
+                | ReadStatVarFormatClass::TimeWithMilliseconds
+                | ReadStatVarFormatClass::TimeWithMicroseconds
+                | ReadStatVarFormatClass::TimeWithNanoseconds => "Time",
             });
             let data_type = md.schema.fields[*k as usize].data_type();
             let _ = writeln!(
@@ -679,6 +687,17 @@ fn rows_written(d: &ReadStatData) -> usize {
     d.total_rows_processed
         .as_ref()
         .map_or(0, |trp| trp.load(std::sync::atomic::Ordering::SeqCst))
+}
+
+/// Escapes a single CSV field per RFC 4180: if it contains a comma, double
+/// quote, CR, or LF, wrap it in double quotes and double any interior quotes.
+#[cfg(feature = "csv")]
+fn csv_escape_field(field: &str) -> String {
+    if field.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
 }
 
 /// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to CSV bytes (with header).
@@ -830,5 +849,21 @@ mod tests {
         assert!(wtr.wtr.is_none());
         assert!(!wtr.wrote_header);
         assert!(!wtr.wrote_start);
+    }
+
+    // --- csv_escape_field ---
+
+    #[cfg(feature = "csv")]
+    #[test]
+    fn csv_escape_field_cases() {
+        // Plain names pass through untouched.
+        assert_eq!(csv_escape_field("Brand"), "Brand");
+        // A comma forces quoting.
+        assert_eq!(csv_escape_field("a,b"), "\"a,b\"");
+        // Interior quotes are doubled and the field is wrapped.
+        assert_eq!(csv_escape_field("a\"b"), "\"a\"\"b\"");
+        // Newlines/CR force quoting too.
+        assert_eq!(csv_escape_field("a\nb"), "\"a\nb\"");
+        assert_eq!(csv_escape_field("a\rb"), "\"a\rb\"");
     }
 }

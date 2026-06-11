@@ -26,9 +26,17 @@ static RE_DATETIME_WITH_MICRO: LazyLock<Regex> =
 static RE_DATETIME_WITH_MILLI: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?xi)^DATETIME[0-9]{1,2}\.[1-3]$").unwrap());
 
+// TIME with nanosecond precision (TIMEw.d where d=7-9)
+static RE_TIME_WITH_NANO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?xi)^TIME[0-9]{1,2}\.[7-9]$").unwrap());
+
 // TIME with microsecond precision (TIMEw.d where d=4-6)
 static RE_TIME_WITH_MICRO: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?xi)^TIME[0-9]{1,2}\.[4-6]$").unwrap());
+
+// TIME with millisecond precision (TIMEw.d where d=1-3)
+static RE_TIME_WITH_MILLI: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?xi)^TIME[0-9]{1,2}\.[1-3]$").unwrap());
 
 // All time formats - checked before datetime to catch NLDATMTM and NLDATMTZ
 // Suffix allows letter width/decimal (W, WD) and/or numeric width/decimal (8, 8.2)
@@ -143,8 +151,12 @@ pub(crate) fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
         Some(ReadStatVarFormatClass::DateTimeWithMicroseconds)
     } else if RE_DATETIME_WITH_MILLI.is_match(v) {
         Some(ReadStatVarFormatClass::DateTimeWithMilliseconds)
+    } else if RE_TIME_WITH_NANO.is_match(v) {
+        Some(ReadStatVarFormatClass::TimeWithNanoseconds)
     } else if RE_TIME_WITH_MICRO.is_match(v) {
         Some(ReadStatVarFormatClass::TimeWithMicroseconds)
+    } else if RE_TIME_WITH_MILLI.is_match(v) {
+        Some(ReadStatVarFormatClass::TimeWithMilliseconds)
     } else if RE_TIME.is_match(v) {
         Some(ReadStatVarFormatClass::Time)
     } else if RE_DATETIME.is_match(v) {
@@ -318,18 +330,30 @@ mod tests {
 
     #[test]
     fn time_precision_formats() {
-        assert_eq!(
-            match_var_format("TIME15.6"),
-            Some(ReadStatVarFormatClass::TimeWithMicroseconds)
-        );
-        assert_eq!(
-            match_var_format("TIME15.4"),
-            Some(ReadStatVarFormatClass::TimeWithMicroseconds)
-        );
-        assert_eq!(
-            match_var_format("TIME15.5"),
-            Some(ReadStatVarFormatClass::TimeWithMicroseconds)
-        );
+        // .1-3 → milliseconds
+        for fmt in ["TIME15.1", "TIME15.2", "TIME15.3"] {
+            assert_eq!(
+                match_var_format(fmt),
+                Some(ReadStatVarFormatClass::TimeWithMilliseconds),
+                "Expected milliseconds for {fmt}"
+            );
+        }
+        // .4-6 → microseconds
+        for fmt in ["TIME15.4", "TIME15.5", "TIME15.6"] {
+            assert_eq!(
+                match_var_format(fmt),
+                Some(ReadStatVarFormatClass::TimeWithMicroseconds),
+                "Expected microseconds for {fmt}"
+            );
+        }
+        // .7-9 → nanoseconds
+        for fmt in ["TIME15.7", "TIME15.8", "TIME15.9"] {
+            assert_eq!(
+                match_var_format(fmt),
+                Some(ReadStatVarFormatClass::TimeWithNanoseconds),
+                "Expected nanoseconds for {fmt}"
+            );
+        }
         // Without precision decimal, should be plain Time
         assert_eq!(
             match_var_format("TIME15"),
@@ -517,6 +541,26 @@ mod tests {
                     1..=3 => ReadStatVarFormatClass::DateTimeWithMilliseconds,
                     4..=6 => ReadStatVarFormatClass::DateTimeWithMicroseconds,
                     7..=9 => ReadStatVarFormatClass::DateTimeWithNanoseconds,
+                    _ => unreachable!(),
+                };
+                prop_assert_eq!(
+                    match_var_format(&fmt),
+                    Some(expected),
+                    "Wrong class for '{}'", fmt
+                );
+            }
+
+            /// TIME with precision 1-3 → milliseconds, 4-6 → microseconds, 7-9 → nanoseconds.
+            #[test]
+            fn time_precision_classifies_correctly(
+                width in 1u32..30,
+                precision in 1u32..=9
+            ) {
+                let fmt = format!("TIME{width}.{precision}");
+                let expected = match precision {
+                    1..=3 => ReadStatVarFormatClass::TimeWithMilliseconds,
+                    4..=6 => ReadStatVarFormatClass::TimeWithMicroseconds,
+                    7..=9 => ReadStatVarFormatClass::TimeWithNanoseconds,
                     _ => unreachable!(),
                 };
                 prop_assert_eq!(

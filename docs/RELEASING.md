@@ -161,12 +161,18 @@ cargo package --list -p readstat-iconv-sys --allow-dirty
 Crates must be published in dependency order. Wait for each crate to appear on
 the crates.io index before publishing the next one.
 
-```bash
-# 1. No crate dependencies
-cargo publish -p readstat-iconv-sys
+After `vendor.sh prepare`, the vendored C sources are copied in as regular
+(uncommitted) files and the submodules are deinitialized, so the working tree is
+dirty. The two `*-sys` crates bundle those files, so their publishes need
+`--allow-dirty`. (`readstat` and `readstat-cli` don't carry vendored files, so
+they publish clean.)
 
-# 2. Depends on readstat-iconv-sys (Windows only)
-cargo publish -p readstat-sys
+```bash
+# 1. No crate dependencies (carries vendored libiconv → --allow-dirty)
+cargo publish -p readstat-iconv-sys --allow-dirty
+
+# 2. Depends on readstat-iconv-sys (carries vendored ReadStat → --allow-dirty)
+cargo publish -p readstat-sys --allow-dirty
 
 # 3. Depends on readstat-sys
 cargo publish -p readstat

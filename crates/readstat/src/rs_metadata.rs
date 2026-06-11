@@ -114,8 +114,14 @@ impl ReadStatMetadata {
                             DataType::Timestamp(TimeUnit::Nanosecond, None)
                         }
                         Some(ReadStatVarFormatClass::Time) => DataType::Time32(TimeUnit::Second),
+                        Some(ReadStatVarFormatClass::TimeWithMilliseconds) => {
+                            DataType::Time32(TimeUnit::Millisecond)
+                        }
                         Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                             DataType::Time64(TimeUnit::Microsecond)
+                        }
+                        Some(ReadStatVarFormatClass::TimeWithNanoseconds) => {
+                            DataType::Time64(TimeUnit::Nanosecond)
                         }
                         None => DataType::Float64,
                     },
@@ -177,7 +183,7 @@ impl ReadStatMetadata {
 
         let row_limit = if skip_row_count { Some(1) } else { None };
 
-        let error = ReadStatParser::new()
+        let error = ReadStatParser::new()?
             .set_metadata_handler(Some(handle_metadata))?
             .set_variable_handler(Some(handle_variable))?
             .set_row_limit(row_limit)?
@@ -223,7 +229,7 @@ impl ReadStatMetadata {
 
         let error = buffer_ctx
             .configure_parser(
-                ReadStatParser::new()
+                ReadStatParser::new()?
                     .set_metadata_handler(Some(handle_metadata))?
                     .set_variable_handler(Some(handle_variable))?
                     .set_row_limit(row_limit)?,

@@ -22,10 +22,20 @@ use serde::Serialize;
 /// | `DateTimeWithMicroseconds` | `Timestamp(Microsecond)` |
 /// | `DateTimeWithNanoseconds` | `Timestamp(Nanosecond)` |
 /// | `Time` | `Time32(Second)` |
+/// | `TimeWithMilliseconds` | `Time32(Millisecond)` |
 /// | `TimeWithMicroseconds` | `Time64(Microsecond)` |
+/// | `TimeWithNanoseconds` | `Time64(Nanosecond)` |
 ///
 /// This enum is `#[non_exhaustive]`: new precision levels or format classes
 /// may be added in minor releases.
+///
+/// # Time range note
+///
+/// SAS `TIME` values are stored as seconds since midnight, but SAS treats them
+/// as durations and permits values that are negative or exceed 86 399 s (one
+/// day). Such values are written into the Arrow `Time32`/`Time64` columns as-is,
+/// without clamping — so a column may legally hold a time-of-day outside the
+/// `[0, 86400)` range that consumers of Arrow time types might assume.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum ReadStatVarFormatClass {
@@ -41,8 +51,12 @@ pub enum ReadStatVarFormatClass {
     DateTimeWithNanoseconds,
     /// Time format with second precision (e.g. `TIME8`).
     Time,
+    /// Time format with millisecond precision (e.g. `TIME15.3`).
+    TimeWithMilliseconds,
     /// Time format with microsecond precision (e.g. `TIME15.6`).
     TimeWithMicroseconds,
+    /// Time format with nanosecond precision (e.g. `TIME15.9`).
+    TimeWithNanoseconds,
 }
 
 /// The storage type of a SAS variable, as reported by the `ReadStat` C library.

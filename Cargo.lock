@@ -3047,6 +3047,7 @@ dependencies = [
  "path_abs",
  "rayon",
  "readstat",
+ "tempfile",
 ]
 
 [[package]]

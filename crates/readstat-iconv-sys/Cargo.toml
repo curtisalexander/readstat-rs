@@ -37,11 +37,7 @@ include = [
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 
-# Keep the crate version cited in docs/ARCHITECTURE.md in sync on release.
-[[package.metadata.release.pre-release-replacements]]
-file = "../../docs/ARCHITECTURE.md"
-search = '### `readstat-iconv-sys` \(v[0-9]+\.[0-9]+\.[0-9]+\)'
-replace = "### `readstat-iconv-sys` (v{{version}})"
+# Release-time version-string replacements live in `release.toml`.
 
 [features]
 # Default builds consume the checked-in pre-generated bindings under

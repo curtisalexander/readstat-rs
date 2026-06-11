@@ -10,8 +10,9 @@ use arrow_array::{
     ArrayRef, RecordBatch,
     builder::{
         Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, StringBuilder,
-        Time32SecondBuilder, Time64MicrosecondBuilder, TimestampMicrosecondBuilder,
-        TimestampMillisecondBuilder, TimestampNanosecondBuilder, TimestampSecondBuilder,
+        Time32MillisecondBuilder, Time32SecondBuilder, Time64MicrosecondBuilder,
+        Time64NanosecondBuilder, TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
+        TimestampNanosecondBuilder, TimestampSecondBuilder,
     },
 };
 use log::debug;
@@ -69,8 +70,12 @@ pub(crate) enum ColumnBuilder {
     TimestampNanosecond(TimestampNanosecondBuilder),
     /// Time of day with second precision.
     Time32Second(Time32SecondBuilder),
+    /// Time of day with millisecond precision.
+    Time32Millisecond(Time32MillisecondBuilder),
     /// Time of day with microsecond precision.
     Time64Microsecond(Time64MicrosecondBuilder),
+    /// Time of day with nanosecond precision.
+    Time64Nanosecond(Time64NanosecondBuilder),
 }
 
 impl ColumnBuilder {
@@ -88,7 +93,9 @@ impl ColumnBuilder {
             Self::TimestampMicrosecond(b) => b.append_null(),
             Self::TimestampNanosecond(b) => b.append_null(),
             Self::Time32Second(b) => b.append_null(),
+            Self::Time32Millisecond(b) => b.append_null(),
             Self::Time64Microsecond(b) => b.append_null(),
+            Self::Time64Nanosecond(b) => b.append_null(),
         }
     }
 
@@ -106,7 +113,9 @@ impl ColumnBuilder {
             Self::TimestampMicrosecond(b) => Arc::new(b.finish()),
             Self::TimestampNanosecond(b) => Arc::new(b.finish()),
             Self::Time32Second(b) => Arc::new(b.finish()),
+            Self::Time32Millisecond(b) => Arc::new(b.finish()),
             Self::Time64Microsecond(b) => Arc::new(b.finish()),
+            Self::Time64Nanosecond(b) => Arc::new(b.finish()),
         }
     }
 
@@ -149,8 +158,14 @@ impl ColumnBuilder {
                     Some(ReadStatVarFormatClass::Time) => {
                         Self::Time32Second(Time32SecondBuilder::with_capacity(capacity))
                     }
+                    Some(ReadStatVarFormatClass::TimeWithMilliseconds) => {
+                        Self::Time32Millisecond(Time32MillisecondBuilder::with_capacity(capacity))
+                    }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                         Self::Time64Microsecond(Time64MicrosecondBuilder::with_capacity(capacity))
+                    }
+                    Some(ReadStatVarFormatClass::TimeWithNanoseconds) => {
+                        Self::Time64Nanosecond(Time64NanosecondBuilder::with_capacity(capacity))
                     }
                     None => {
                         // Plain numeric — dispatch by storage type
@@ -344,12 +359,6 @@ impl ReadStatData {
         debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        // Notify progress callback
-        if let Some(progress) = &self.progress {
-            progress.inc(self.chunk_rows_to_process as u64);
-            progress.parsing_started(&rsp.path.to_string_lossy());
-        }
-
         // initialize context
         let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
 
@@ -359,7 +368,7 @@ impl ReadStatData {
 
         // setup parser
         // once call parse_sas7bdat, iteration begins
-        let error = ReadStatParser::new()
+        let error = ReadStatParser::new()?
             // do not set metadata handler nor variable handler as already processed
             .set_value_handler(Some(cb::handle_value))?
             .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
@@ -372,6 +381,15 @@ impl ReadStatData {
             return Err(e);
         }
         check_c_error(error as i32)?;
+
+        // Advance the progress bar by the rows just parsed. Doing this *after*
+        // the chunk completes (rather than before) keeps the displayed position
+        // in step with work actually done — under `--parallel` a pre-parse
+        // increment made the bar jump straight to 100%.
+        if let Some(progress) = &self.progress {
+            progress.inc(self.chunk_rows_to_process as u64);
+        }
+
         Ok(())
     }
 
@@ -392,7 +410,7 @@ impl ReadStatData {
         // setup parser with buffer I/O
         let error = buffer_ctx
             .configure_parser(
-                ReadStatParser::new()
+                ReadStatParser::new()?
                     .set_value_handler(Some(cb::handle_value))?
                     .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
                     .set_row_offset(Some(self.chunk_row_start.try_into()?))?,

@@ -452,8 +452,10 @@ Wrong:
 
 ## 5. Robustness / polish (medium)
 
-**Status:** 🔄 in progress (2026-06-10 — batch 1: low-risk, mechanical fixes
-landed and verified; structural items deferred for joint review).
+**Status:** ✅ done (batch 1: 2026-06-10, low-risk mechanical fixes; batch 2:
+2026-06-11, structural/judgment items — full detail below. `cargo clippy
+--workspace --all-targets --all-features` clean and `cargo test --workspace
+--all-features` green after both batches).
 
 Batch 1 — done (clippy `--all-features` clean; `cargo test --workspace` green;
 CLI behaviors smoke-tested):
@@ -485,24 +487,76 @@ CLI behaviors smoke-tested):
   not "informational"); drift check switched to `git status --porcelain` so a
   brand-new untracked bindings file no longer slips through `git diff --exit-code`.
 
-Deferred to batch 2 (structural / judgment — review together):
-- `ReadStatParser::new` NULL check (needs `new() -> Result`, touches callers).
-- `ReadStatBufferCtx` lifetime param + `PhantomData`.
-- `TIMEw.1-3` millisecond tier (needs cb.rs Time wiring + tests).
-- Parallel-write temp files → `tempfile::Builder` + RAII cleanup.
-- Progress bar `parsing_started`/`inc` ordering.
-- Keep `open_output` file handle open across batches.
-- Stdout CSV header escaping.
-- `ChannelPartitionStream::execute` double-execution → `DataFusionError`.
-- `data --sql` without `--output` silently ignores SQL; dead else-branch; fold
-  CLI onto the streaming SQL APIs (overlaps §2.4 SQL-streaming note).
-- "will be overwritten!" warning is invisible under env_logger's default filter.
-- SAS `TIME` range note; `LIBCLANG_PATH` host/target; windows-gnu bindings note;
-  ci-test OS-matrix gap; cosmetic duplicate link directives.
-- Release tooling: RELEASING.md `--allow-dirty`; dedup `pre-release-replacements`;
-  per-line `tag-name` to avoid sys/lib tag collisions.
-- `buildtime_bindgen` src/ write is already feature-gated (opt-in) — treat as
-  resolved unless a registry-checksum concern remains.
+Batch 2 — done (2026-06-11; `cargo clippy --workspace --all-targets
+--all-features` clean; `cargo test --workspace --all-features` fully green;
+parallel-write / sql-no-output / metadata-only paths smoke-tested):
+- **`ReadStatParser::new() -> Result`**: NULL check on `readstat_parser_init`
+  → `CLibrary(READSTAT_ERROR_MALLOC)` instead of storing a null pointer a
+  later handler-set call would deref in C. All four call sites (`rs_metadata`
+  ×2, `rs_data` ×2) take `?`.
+- **`ReadStatBufferCtx<'a>` lifetime + `PhantomData<&'a [u8]>`**: the borrow
+  checker now enforces the documented "buffer outlives the context" contract.
+  Zero-sized marker, so the `#[repr(C)]` layout seen from C is unchanged.
+- **`TIMEw.1-3` (ms) and `.7-9` (ns) tiers**: added
+  `TimeWithMilliseconds` → `Time32(Millisecond)` and `TimeWithNanoseconds` →
+  `Time64(Nanosecond)` to mirror DATETIME. New regexes, enum variants (the
+  enum is `#[non_exhaustive]`, so additive), schema mapping, `ColumnBuilder`
+  variants, cb.rs value arms (`sas_time_to_ms`/`_ns`, rounding not truncating),
+  and the metadata-display arm. Unit tests for the format classifier (incl. a
+  1-9 precision property sweep) and the conversion helpers.
+- **Parallel-write temp files → `tempfile`**: staged in a uniquely-named
+  `TempDir` (RAII) beside the output, so concurrent runs no longer collide on
+  `.readstat_temp_*.parquet` and leftovers are removed even on early `?`
+  return. `tempfile` added to `readstat-cli` gated on the `parquet` feature.
+  Verified the staging dir is gone after a run.
+- **Progress bar ordering**: `inc` moved to *after* each chunk parses (no more
+  `--parallel` jumping to 100%); per-chunk `parsing_started` removed from the
+  library and called exactly once by the CLI before the reader thread starts.
+  The bar template now carries an animated spinner *and* the `{pos}/{len}` row
+  bar (the old code swapped the bar out for a message-only spinner, so the bar
+  never showed). Trait doc updated.
+- **`open_output` once**: the per-batch `open_output(p)?` (which opened and
+  immediately dropped a handle on every batch after the first) moved inside the
+  `!wrote_start` guard in all four writers.
+- **Stdout CSV header escaping**: header names now RFC-4180-escaped via a
+  `csv_escape_field` helper (+ unit test), so names with commas/quotes/newlines
+  (legal under `VALIDVARNAME=ANY`) stay column-aligned with the data rows.
+- **`data --sql` without `--output`** now errors ("--sql/--sql-file requires
+  --output …", exit 1) instead of silently taking the metadata-only branch.
+- **`ChannelPartitionStream::execute`** returns a `DataFusionError` stream on a
+  second execution (e.g. self-joins) instead of `panic!`-ing inside the
+  execution operator; single-execution limit documented on both public
+  streaming functions.
+- **Invisible warnings**: CLI `env_logger` now defaults to the `warn` level
+  (still `RUST_LOG`-overridable), so library `warn!`s like "file will be
+  overwritten!" surface. (`--compression-level`-without-`--compression` was
+  already handled by clap `requires` in batch 1.)
+- **SAS `TIME` range note**: documented on `ReadStatVarFormatClass` that SAS
+  times are durations and may fall outside `[0, 86400)`.
+- **`LIBCLANG_PATH` host/target**: the Windows default-path assert now gates on
+  the *host* being Windows (the default is a Windows path), not the target, so
+  cross-compiling to windows-msvc from Linux/macOS no longer trips it.
+- **windows-gnu bindings**: the pre-gen path now rejects `*-pc-windows-gnu`
+  with a clear message (the lone Windows pre-gen file is MSVC-ABI; enum
+  signedness differs) — steering to `buildtime_bindgen`. build.rs "four" →
+  "five" pre-gen files comment corrected.
+- **Release tooling**: RELEASING.md documents `--allow-dirty` for the two
+  `*-sys` publishes (dirty tree after `vendor.sh prepare`); all
+  `pre-release-replacements` consolidated into `release.toml` files (removed
+  the duplicates from all four `Cargo.toml`s); the `*-sys` crates gained
+  `release.toml`s with namespaced `tag-name`s
+  (`readstat-sys-v{{version}}` / `readstat-iconv-sys-v{{version}}`) so their
+  tags can't collide with `readstat`'s `v{{version}}` as versions diverge.
+
+Batch 2 — deliberately not changed (judgment):
+- **`buildtime_bindgen` src/ write**: only runs under the opt-in feature; a
+  default registry consumer never writes to `src/`, so no checksum concern.
+  Resolved, no change.
+- **ci-test OS matrix gap** (ubuntu-only `ci-test`): a CI cost/time tradeoff,
+  not a code defect — left for a separate CI decision.
+- **Cosmetic duplicate link directive** (`rustc-link-lib=static=readstat` that
+  `cc.compile` already emits): harmless (cargo dedups); left as-is rather than
+  risk a link change for zero functional gain.
 
 Original notes below.
 
@@ -637,3 +691,50 @@ Pre-publish checklist once the above lands:
 - Fixed `vendor.sh prepare` → `cargo publish --dry-run` per crate in dependency order
 - Re-run fuzz corpora against the fixed targets
 - Stamp CHANGELOG (0.24.0 / sys 0.5.0), backfill 0.22.0 / 0.20.1 entries
+
+---
+
+## 7. Demo script (for README ascii-screencast)
+
+**Status:** ☐ not started
+
+**Goal:** a short, self-contained script that reads one bundled test file and shows
+off a few headline CLI features — *not* exhaustive. Primary purpose is to be recorded
+as an asciinema/ascii screencast (e.g. via `agg` → SVG/GIF) and embedded near the top
+of the root `README.md` so a visitor instantly sees what the tool does.
+
+**Proposed shape:**
+- Location: `scripts/demo.sh` (POSIX `sh`/`bash`, `set -eu`).
+- Drive the *release* binary if present (`target/release/readstat`), else fall back to
+  `cargo run -q -p readstat-cli --`. Resolve once into a `$READSTAT` variable so the
+  recorded commands read cleanly.
+- Input file: `crates/readstat-tests/tests/data/cars.sas7bdat` (1,081 rows × 13 cols —
+  string + numeric columns, recognizable domain). Copy to a temp/working dir so output
+  artifacts don't dirty the tree; clean up on exit.
+- "Typewriter" feel for the screencast: a small `run()` helper that echoes the prompt +
+  command (optionally with a brief pause), then executes it. Keep pauses configurable
+  via an env var (e.g. `DEMO_SPEED`) so recording vs. CI-smoke runs differ.
+
+**Features to demonstrate (≈5–6 beats, in order):**
+1. `metadata cars.sas7bdat` — human-readable file + variable metadata.
+2. `metadata cars.sas7bdat --as-json | head` (or piped to `jq`) — machine-readable
+   metadata.
+3. `preview cars.sas7bdat --rows 5` — quick look at the data as CSV.
+4. `preview cars.sas7bdat --columns Brand,Model,... --rows 5` — column projection.
+5. `data cars.sas7bdat -o cars.parquet -f parquet --compression zstd --overwrite` —
+   convert to a compressed columnar format (show the "wrote N rows" summary; maybe
+   `ls -lh` the result to show size).
+6. (optional) `data cars.sas7bdat -o out.ndjson -f ndjson --rows 3 --overwrite` then
+   `cat` — show another output format.
+- SQL is feature-gated. **Decision:** include a SQL beat but gate it behind a
+  `DEMO_SQL=1` check that assumes a `--features sql` build, so the default demo stays
+  runnable from a plain `cargo install readstat-cli`. e.g.
+  `data cars.sas7bdat --sql "SELECT Brand, AVG(MPG_City) ... GROUP BY Brand" -o ...`.
+
+**Open questions to settle when we build it** (see chat): exact column list for beat 4,
+plain-`sh` vs. fancy typewriter, and whether to also commit a recorded artifact
+(`docs/demo.svg`/`.gif`) + the `agg`/`asciinema` recipe. (SQL beat: decided — include,
+gated behind `DEMO_SQL=1`.)
+
+**Double duty:** a non-interactive mode (no pauses) can run in CI as a CLI smoke test
+of the happy path across metadata/preview/data/formats.

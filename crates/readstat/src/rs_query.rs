@@ -111,12 +111,21 @@ impl PartitionStream for ChannelPartitionStream {
     }
 
     fn execute(&self, _ctx: Arc<datafusion::execution::TaskContext>) -> SendableRecordBatchStream {
-        let receiver = self
-            .receiver
-            .lock()
-            .unwrap()
-            .take()
-            .expect("ChannelPartitionStream::execute called more than once");
+        // The receiver is moved out on first execute, so this partition can be
+        // consumed exactly once. Some query plans (notably self-joins) execute a
+        // partition more than once; rather than panic inside the execution
+        // operator — which would abort the whole process — surface a recoverable
+        // query error so the caller gets an `Err` from the query instead.
+        let Some(receiver) = self.receiver.lock().unwrap_or_else(|e| e.into_inner()).take() else {
+            let err = datafusion::error::DataFusionError::Execution(
+                "ChannelPartitionStream can only be executed once; this query plan reads the \
+                 streaming input more than once (e.g. a self-join). Re-run with the \
+                 non-streaming SQL path (execute_sql), which buffers the data."
+                    .to_string(),
+            );
+            let stream = futures::stream::once(async move { Err(err) });
+            return Box::pin(RecordBatchStreamAdapter::new(self.schema.clone(), stream));
+        };
 
         let stream =
             futures::stream::iter(receiver.into_iter().filter_map(|(d, _, _)| d.batch).map(Ok));
@@ -130,6 +139,13 @@ impl PartitionStream for ChannelPartitionStream {
 ///
 /// The receiver is consumed directly by DataFusion's query engine via
 /// [`StreamingTable`], and results are collected via `execute_stream()`.
+///
+/// # Single-execution limit
+///
+/// The streaming input is consumed exactly once. Query plans that read the
+/// table more than once (e.g. a self-join on the streamed table) will fail with
+/// a DataFusion execution error. Use [`execute_sql`] (which buffers the data)
+/// for such queries.
 ///
 /// # Errors
 ///
@@ -175,6 +191,12 @@ async fn execute_sql_stream_async(
 /// streaming pass for the Data command path.
 ///
 /// The output path in `write_config` must be `Some`; returns an error otherwise.
+///
+/// # Single-execution limit
+///
+/// As with [`execute_sql_stream`], the streaming input is consumed exactly once;
+/// query plans that read the table more than once (e.g. a self-join) fail with a
+/// DataFusion execution error. Use the non-streaming path for those.
 ///
 /// # Errors
 ///

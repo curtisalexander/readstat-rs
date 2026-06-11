@@ -95,11 +95,10 @@ impl ProgressCallback for IndicatifProgress {
     }
 
     fn parsing_started(&self, path: &str) {
-        if let Ok(style) =
-            ProgressStyle::default_spinner().template("[{spinner:.green} {elapsed_precise}] {msg}")
-        {
-            self.pb.set_style(style);
-        }
+        // Keep the {pos}/{len} row bar (configured in `create_progress`) and
+        // just animate its spinner for liveness while a chunk is parsing — the
+        // previous implementation swapped in a message-only spinner, so the row
+        // bar never appeared. Set the message to the file being parsed.
         self.pb
             .set_message(format!("Parsing sas7bdat data from file {path}"));
         self.pb
@@ -118,7 +117,9 @@ fn create_progress(
     let pb = ProgressBar::new(u64::from(total_rows));
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}")
+            .template(
+                "[{spinner:.green} {elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} rows {msg}",
+            )
             .map_err(|e| ReadStatError::Other(format!("Progress bar template error: {e}")))?
             .progress_chars("##-"),
     );
@@ -171,7 +172,10 @@ fn table_name_from_path(path: &std::path::Path) -> String {
 /// This is the main entry point for the CLI binary, dispatching to the
 /// `metadata`, `preview`, or `data` subcommand.
 pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
-    env_logger::init();
+    // Default to showing warnings (e.g. "file will be overwritten") rather than
+    // env_logger's stock `error`-only filter, under which library `warn!`s were
+    // invisible. `RUST_LOG` still overrides this.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
     match rs.command {
         cmd @ ReadStatCliCommands::Metadata { .. } => run_metadata(cmd),
@@ -256,6 +260,11 @@ fn run_preview(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let var_count = md.var_count;
     let vars_shared = Arc::new(md.vars);
     let schema_shared = Arc::new(md.schema);
+
+    // Signal "parsing started" once (the library no longer does this per-chunk).
+    if let Some(ref p) = progress {
+        p.parsing_started(&rsp.path.to_string_lossy());
+    }
 
     // Read all chunks into batches
     let mut all_batches: Vec<arrow_array::RecordBatch> = Vec::new();
@@ -389,6 +398,17 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     // If no output path then only read metadata; otherwise read data
     match wc.out_path() {
         None => {
+            // A SQL query with no destination would be silently discarded —
+            // surface it as an error rather than quietly falling through to the
+            // metadata-only display.
+            #[cfg(feature = "sql")]
+            if sql_query.is_some() {
+                return Err(ReadStatError::Other(
+                    "--sql/--sql-file requires --output: the query result needs a destination file"
+                        .to_string(),
+                ));
+            }
+
             println!(
                 "{}: a value was not provided for the parameter {}, thus displaying metadata only\n",
                 "Warning".bright_yellow(),
@@ -454,6 +474,13 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             // the input has zero rows.
             let vars_writer = vars_shared.clone();
             let schema_writer = schema_shared.clone();
+
+            // Signal "parsing started" exactly once (the library no longer does
+            // this per-chunk). Must happen before `rsp` moves into the reader
+            // thread below.
+            if let Some(ref p) = progress {
+                p.parsing_started(&rsp.path.to_string_lossy());
+            }
 
             // Process data in batches (i.e. stream chunks of rows). Any chunk
             // error is returned from the thread so it propagates to the exit
@@ -581,6 +608,16 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                         ));
                     };
 
+                    // Stage temp files inside a uniquely-named RAII directory
+                    // alongside the output. The random suffix prevents two
+                    // concurrent runs in the same directory from clobbering each
+                    // other's temp files, and `TempDir`'s Drop removes the
+                    // directory (and any leftover temp files) even if we bail out
+                    // early via `?` before the merge.
+                    let staging = tempfile::Builder::new()
+                        .prefix(".readstat-parquet-")
+                        .tempdir_in(&temp_dir)?;
+
                     let mut all_temp_files: Vec<PathBuf> = Vec::new();
                     let mut schema: Option<Arc<arrow_schema::Schema>> = None;
                     let mut batch_idx: usize = 0;
@@ -610,8 +647,9 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                             .par_iter()
                             .enumerate()
                             .map(|(i, (d, _wc, _))| -> Result<PathBuf, ReadStatError> {
-                                let temp_file = temp_dir
-                                    .join(format!(".readstat_temp_{}.parquet", batch_idx + i));
+                                let temp_file = staging
+                                    .path()
+                                    .join(format!("part_{}.parquet", batch_idx + i));
 
                                 if let Some(batch) = &d.batch {
                                     ReadStatWriter::write_batch_to_parquet(
