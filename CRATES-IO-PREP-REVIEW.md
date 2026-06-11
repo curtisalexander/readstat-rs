@@ -452,6 +452,60 @@ Wrong:
 
 ## 5. Robustness / polish (medium)
 
+**Status:** 🔄 in progress (2026-06-10 — batch 1: low-risk, mechanical fixes
+landed and verified; structural items deferred for joint review).
+
+Batch 1 — done (clippy `--all-features` clean; `cargo test --workspace` green;
+CLI behaviors smoke-tested):
+- **Output extension check** now case-insensitive (`eq_ignore_ascii_case`) —
+  `out.CSV` accepted.
+- **Runtime exit code** 2 → 1 in `main.rs` (clap keeps 2 for usage errors;
+  verified runtime + file-not-found both exit 1).
+- **Empty `--columns-file`** now errors (new `ReadStatError::EmptyColumnsFile`)
+  instead of silently selecting all columns — verified message + exit 1.
+- **`--stream-rows`** gets `value_parser!(u32).range(1..)` (0 now a clap error,
+  exit 2) — kills the degenerate offsets ladder.
+- **`--compression-level`** gains clap `requires = "compression"` (was an
+  invisible `log::warn`) — verified exit 2 when passed alone.
+- **`metadata --no-progress`** dead flag removed (cli.rs + run.rs destructure).
+- **`--parallel-write` help text** corrected: Parquet-only, order preserved.
+- **`buffer_seek`** uses checked arithmetic (no debug-build overflow panic
+  inside `extern "C"`; overflow now fails the seek with -1).
+- **`checked_f64_to_i32`** upper bound `<` → `<=` (i32::MAX is exactly
+  representable as f64; strict bound wrongly rejected it).
+- **Build scripts**: submodule sentinel `assert!` in both `*-sys/build.rs`
+  (file-existence check, still passes on crates.io); added
+  `rerun-if-changed=vendor/ReadStat/src` + `rerun-if-env-changed=READSTAT_SANITIZE_ADDRESS`
+  (readstat-sys) and the libiconv equivalents.
+- **`release-check.sh`** packaging check now tests the exit code directly
+  (was a fail-open grep for "warning: aborting").
+- **`check-updates.sh` + `.ps1`** quarantine now fails closed: an unverifiable
+  publish date → age `-1` sentinel → quarantined (was `999` → "safe"), shown as `?`.
+- **`readstat-sys-ci.yml`**: header comment corrected (the regen diff is fatal,
+  not "informational"); drift check switched to `git status --porcelain` so a
+  brand-new untracked bindings file no longer slips through `git diff --exit-code`.
+
+Deferred to batch 2 (structural / judgment — review together):
+- `ReadStatParser::new` NULL check (needs `new() -> Result`, touches callers).
+- `ReadStatBufferCtx` lifetime param + `PhantomData`.
+- `TIMEw.1-3` millisecond tier (needs cb.rs Time wiring + tests).
+- Parallel-write temp files → `tempfile::Builder` + RAII cleanup.
+- Progress bar `parsing_started`/`inc` ordering.
+- Keep `open_output` file handle open across batches.
+- Stdout CSV header escaping.
+- `ChannelPartitionStream::execute` double-execution → `DataFusionError`.
+- `data --sql` without `--output` silently ignores SQL; dead else-branch; fold
+  CLI onto the streaming SQL APIs (overlaps §2.4 SQL-streaming note).
+- "will be overwritten!" warning is invisible under env_logger's default filter.
+- SAS `TIME` range note; `LIBCLANG_PATH` host/target; windows-gnu bindings note;
+  ci-test OS-matrix gap; cosmetic duplicate link directives.
+- Release tooling: RELEASING.md `--allow-dirty`; dedup `pre-release-replacements`;
+  per-line `tag-name` to avoid sys/lib tag collisions.
+- `buildtime_bindgen` src/ write is already feature-gated (opt-in) — treat as
+  resolved unless a registry-checksum concern remains.
+
+Original notes below.
+
 CLI & library behavior:
 - `TIMEw.1-3` (and `.7-9`) formats silently discard fractional seconds
   (`formats.rs:30-31, 146-149` — only `.4-6` map to microseconds), inconsistent with

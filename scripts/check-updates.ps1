@@ -142,7 +142,9 @@ if ($compat.Count -gt 0) {
             $ageDays = [math]::Floor(($now - $createdAt).TotalDays)
         }
         catch {
-            $pubDate = 'unknown'; $ageDays = 999
+            # Fail closed: an unverifiable publish date is treated as freshly
+            # published (quarantined), never as old-and-safe. -1 is the sentinel.
+            $pubDate = 'unknown'; $ageDays = -1
         }
         $status = if ($ageDays -lt $QuarantineDays) { 'quarantine' } else { 'ok' }
         $results.Add([PSCustomObject]@{
@@ -172,7 +174,7 @@ if ($results.Count -gt 0) {
     Write-Host "├──────────────────────┼───────────────┼───────────────┼──────────────┼─────────┼─────────────┤" -ForegroundColor White
 
     foreach ($r in $results) {
-        $ageStr = "$($r.AgeDays)d"
+        $ageStr = if ($r.AgeDays -lt 0) { '?' } else { "$($r.AgeDays)d" }
         # Plain ASCII status (glyphs kept to the summary lines, matching the
         # bash script, so column width is never skewed by wide characters).
         if ($r.Status -eq 'quarantine') { $statusStr = 'blocked'; $ageColor = 'Red'; $statusColor = 'Red' }

@@ -228,7 +228,7 @@ impl WriteConfig {
         format: OutFormat,
     ) -> Result<Option<PathBuf>, ReadStatError> {
         match path.extension().and_then(|e| e.to_str()) {
-            Some(e) if e == format.to_string() => Ok(Some(path.to_owned())),
+            Some(e) if e.eq_ignore_ascii_case(&format.to_string()) => Ok(Some(path.to_owned())),
             _ => Err(ReadStatError::OutputExtensionMismatch {
                 path: path.to_owned(),
                 expected: format.to_string(),

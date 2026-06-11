@@ -78,10 +78,24 @@ unsafe extern "C" fn buffer_seek(
 ) -> readstat_sys::readstat_off_t {
     let ctx = unsafe { &mut *(io_ctx as *mut ReadStatBufferCtx) };
 
+    // Use checked addition: `offset` is attacker-influenced, so an unchecked
+    // `i64 + i64` could overflow (a debug build would panic inside this
+    // `extern "C"` boundary, which aborts the process). On overflow, fail the
+    // seek the same way an out-of-range position does.
     let newpos: i64 = match whence {
         readstat_sys::readstat_io_flags_e_READSTAT_SEEK_SET => offset,
-        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_CUR => ctx.pos as i64 + offset,
-        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_END => ctx.len as i64 + offset,
+        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_CUR => {
+            match i64::try_from(ctx.pos).ok().and_then(|p| p.checked_add(offset)) {
+                Some(n) => n,
+                None => return -1,
+            }
+        }
+        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_END => {
+            match i64::try_from(ctx.len).ok().and_then(|l| l.checked_add(offset)) {
+                Some(n) => n,
+                None => return -1,
+            }
+        }
         _ => return -1,
     };
 

@@ -99,7 +99,9 @@ ver_gt() {
 }
 
 # Fetch the most recent stable publish date (YYYY-MM-DD) for a crate@version.
-# Echoes "date|age_days"; "unknown|999" on failure.
+# Echoes "date|age_days"; "unknown|-1" on failure. The negative age is a
+# fail-closed sentinel: a crate whose publish date we couldn't verify is treated
+# as freshly published (quarantined), never as old-and-safe.
 fetch_pub_date() {
   local crate="$1" version="$2" now resp created pub_date pub_ts age
   now=$(date +%s)
@@ -116,7 +118,7 @@ fetch_pub_date() {
     age=$(( (now - pub_ts) / 86400 ))
     echo "${pub_date}|${age}"
   else
-    echo "unknown|999"
+    echo "unknown|-1"
   fi
 }
 
@@ -214,7 +216,8 @@ if [ "$compat_count" -gt 0 ]; then
   echo -e "${BOLD}├──────────────────────┼───────────────┼───────────────┼──────────────┼─────────┼─────────────┤${RESET}"
 
   for i in $(seq 0 $((compat_count - 1))); do
-    age_str="${C_AGE[$i]}d"
+    # A negative age is the fail-closed sentinel for an unverifiable publish date.
+    if [ "${C_AGE[$i]}" -lt 0 ]; then age_str="?"; else age_str="${C_AGE[$i]}d"; fi
     # Plain ASCII status text padded via the format string (color lives OUTSIDE
     # the %-Ns field, so it never affects column width — glyphs are kept to the
     # summary lines below to avoid wide-character padding skew).

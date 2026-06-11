@@ -293,6 +293,10 @@ pub enum ReadStatError {
     #[error("SQL file {} is empty", .0.display())]
     EmptySqlFile(PathBuf),
 
+    /// The columns file contained no column names (only blanks/comments).
+    #[error("Columns file {} contains no column names", .0.display())]
+    EmptyColumnsFile(PathBuf),
+
     /// Error from the DataFusion SQL engine.
     #[cfg(feature = "sql")]
     #[error("{0}")]

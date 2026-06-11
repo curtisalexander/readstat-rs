@@ -133,7 +133,9 @@ fn resolve_columns(
     if let Some(path) = columns_file {
         let names = ReadStatMetadata::parse_columns_file(&path)?;
         if names.is_empty() {
-            Ok(None)
+            // An empty columns file is almost certainly a mistake; selecting ALL
+            // columns silently would mask it. Surface it as an error instead.
+            Err(ReadStatError::EmptyColumnsFile(path))
         } else {
             Ok(Some(names))
         }
@@ -183,7 +185,6 @@ fn run_metadata(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let ReadStatCliCommands::Metadata {
         input: in_path,
         as_json,
-        no_progress: _,
         skip_row_count,
     } = cmd
     else {

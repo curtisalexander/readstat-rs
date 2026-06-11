@@ -14,6 +14,17 @@ fn main() {
     let stata = src.join("stata");
     let txt = src.join("txt");
 
+    // Fail early with a clear message if the vendored ReadStat sources are
+    // missing (typically a `git clone` without `--recursive`). The published
+    // crate bundles these files, so this check still passes for crates.io
+    // consumers — it only guards the source-checkout path.
+    assert!(
+        src.join("CKHashTable.c").exists(),
+        "Vendored ReadStat sources not found under {}.\n\
+         Run `git submodule update --init --recursive` to fetch them.",
+        src.display()
+    );
+
     let mut cc = cc::Build::new();
 
     // Core ReadStat files (always needed)
@@ -137,6 +148,12 @@ fn main() {
     cc.compile("readstat");
 
     println!("cargo:rerun-if-changed=wrapper.h");
+    // Emitting any rerun-if-changed directive disables cargo's default
+    // whole-package change tracking, so watch the vendored C sources explicitly
+    // — otherwise editing them (or bumping the submodule) won't trigger a
+    // rebuild. Also watch the sanitizer env var, which toggles the C cflags.
+    println!("cargo:rerun-if-changed=vendor/ReadStat/src");
+    println!("cargo:rerun-if-env-changed=READSTAT_SANITIZE_ADDRESS");
     println!("cargo:rustc-link-lib=static=readstat");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());

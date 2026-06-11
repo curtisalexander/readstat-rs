@@ -145,10 +145,14 @@ fi
 echo "Checking package contents..."
 PUBLISHABLE_CRATES=("readstat-iconv-sys" "readstat-sys" "readstat" "readstat-cli")
 for crate in "${PUBLISHABLE_CRATES[@]}"; do
-    if cargo package -p "$crate" --allow-dirty 2>&1 | grep -q "warning: aborting"; then
-        fail "cargo package -p $crate"
-    else
+    # Test the exit code directly. Grepping stdout/stderr for a fixed string
+    # (e.g. "warning: aborting") fails open — modern cargo doesn't print it, and
+    # a pipe would mask cargo's exit status anyway. `cargo package` exits
+    # nonzero when packaging actually fails.
+    if cargo package -p "$crate" --allow-dirty >/dev/null 2>&1; then
         pass "cargo package -p $crate"
+    else
+        fail "cargo package -p $crate"
     fi
 done
 

@@ -10,10 +10,10 @@ name: readstat-sys cross-platform CI
 #
 #   * `regen`: runs bindgen via `--features buildtime_bindgen` to
 #     reproduce the corresponding per-target file. Uploads each result
-#     as an artifact and prints a `git diff` so any drift surfaces in
-#     the job log. The diff is informational — a maintainer downloads
-#     the artifacts and commits them when refreshing bindings after a
-#     `wrapper.h` change, `vendor/ReadStat` bump, or `bindgen` upgrade.
+#     as an artifact and **fails the job** if the regenerated file differs
+#     from (or is missing relative to) the checked-in bindings. On failure a
+#     maintainer downloads the artifacts and commits them to refresh bindings
+#     after a `wrapper.h` change, `vendor/ReadStat` bump, or `bindgen` upgrade.
 #
 # Manual trigger (`workflow_dispatch`) is supported for cutting fresh
 # bindings on demand without a PR.
@@ -106,10 +106,14 @@ jobs:
       - name: Fail if regenerated bindings differ from checked-in
         shell: bash
         run: |
-          if git --no-pager diff --no-color --exit-code crates/readstat-sys/src/bindings/${{ matrix.file }}; then
+          # `git status --porcelain` catches both modifications to a tracked
+          # file AND a brand-new untracked bindings file (which `git diff
+          # --exit-code` would silently pass).
+          path="crates/readstat-sys/src/bindings/${{ matrix.file }}"
+          if [ -z "$(git status --porcelain -- "$path")" ]; then
             echo "::notice::Bindings match a fresh regeneration on ${{ matrix.os }}."
           else
-            echo "::error::Checked-in bindings/${{ matrix.file }} differ from what bindgen now produces."
+            echo "::error::Checked-in bindings/${{ matrix.file }} differ from (or are missing relative to) what bindgen now produces."
             echo "::error::Download the 'bindings-${{ matrix.os }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
             exit 1
           fi

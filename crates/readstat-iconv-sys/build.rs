@@ -35,6 +35,16 @@ fn main() {
     let libcharset = root.join("libcharset").join("lib");
     let srclib = root.join("srclib");
 
+    // Fail early with a clear message if the vendored libiconv sources are
+    // missing (typically a `git clone` without `--recursive`). The published
+    // crate bundles these files, so this only guards the source-checkout path.
+    assert!(
+        lib.join("iconv.c").exists(),
+        "Vendored libiconv sources not found under {}.\n\
+         Run `git submodule update --init --recursive` to fetch them.",
+        root.display()
+    );
+
     cc::Build::new()
         .file(libcharset.join("localcharset.c"))
         .file(lib.join("iconv.c"))
@@ -45,6 +55,10 @@ fn main() {
         .compile("iconv");
 
     println!("cargo:rerun-if-changed=wrapper.h");
+    // Emitting any rerun-if-changed directive disables cargo's default
+    // whole-package tracking, so watch the vendored libiconv sources explicitly.
+    println!("cargo:rerun-if-changed=vendor/libiconv-win-build/lib");
+    println!("cargo:rerun-if-changed=vendor/libiconv-win-build/libcharset");
     println!("cargo:rustc-link-lib=static=iconv");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());

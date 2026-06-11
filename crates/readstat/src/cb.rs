@@ -264,7 +264,10 @@ fn checked_f64_to_i64(v: f64) -> Option<i64> {
 #[inline]
 #[allow(clippy::cast_possible_truncation)]
 fn checked_f64_to_i32(v: f64) -> Option<i32> {
-    if v.is_finite() && v >= f64::from(i32::MIN) && v < f64::from(i32::MAX) {
+    // Unlike i64::MAX, i32::MAX (2^31 - 1) is exactly representable as f64, so an
+    // inclusive upper bound is correct here — a strict `<` would wrongly reject
+    // exactly i32::MAX. The `as` cast is exact across the full inclusive range.
+    if v.is_finite() && v >= f64::from(i32::MIN) && v <= f64::from(i32::MAX) {
         Some(v as i32)
     } else {
         None
