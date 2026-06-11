@@ -245,8 +245,15 @@ if [ "$major_count" -gt 0 ]; then
   echo ""
   echo -e "${DIM}  These cross a semver-incompatible boundary. To take one, bump its version${RESET}"
   echo -e "${DIM}  requirement in the relevant Cargo.toml (e.g. \`foo = \"54\"\`), then \`cargo build\`${RESET}"
-  echo -e "${DIM}  and run the test suite — APIs may have changed. For the Arrow/Parquet and${RESET}"
-  echo -e "${DIM}  DataFusion crates, bump the whole set together (see CLAUDE.md).${RESET}"
+  echo -e "${DIM}  and run the test suite — APIs may have changed.${RESET}"
+  echo -e "${DIM}  ${RESET}"
+  echo -e "${YELLOW}  Arrow/Parquet are pinned to DataFusion: each datafusion release requires one${RESET}"
+  echo -e "${YELLOW}  arrow major. Do NOT bump arrow/parquet ahead of a datafusion release that${RESET}"
+  echo -e "${YELLOW}  supports the new major — cargo will silently pull TWO arrow majors and the${RESET}"
+  echo -e "${YELLOW}  \`sql\` feature breaks. Verify first, then bump the whole set together:${RESET}"
+  echo -e "${DIM}    curl -s https://crates.io/api/v1/crates/datafusion/<ver>/dependencies \\\\${RESET}"
+  echo -e "${DIM}      | jq -r '.dependencies[] | select(.crate_id==\"arrow\") | .req'${RESET}"
+  echo -e "${DIM}  The 'Arrow/DataFusion lockstep' check below (and CI) enforces this.${RESET}"
   echo ""
 fi
 
@@ -315,6 +322,12 @@ if [ "$APPLY" = true ]; then
 else
   echo -e "${DIM}Run with ${BOLD}--apply${RESET}${DIM} to pull safe compatible updates into Cargo.lock.${RESET}"
 fi
+
+# ── Arrow/DataFusion lockstep integrity check ─────────────────────────────────
+# Catches an arrow/parquet major split in the (possibly just-updated) lockfile.
+echo ""
+echo -e "${BOLD}${BLUE}Arrow/DataFusion lockstep integrity:${RESET}"
+"$SCRIPT_DIR/check-arrow-lockstep.sh" || true
 
 # Recommend complementary tools
 echo ""
