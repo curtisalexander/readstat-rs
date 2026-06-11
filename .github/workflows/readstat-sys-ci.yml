@@ -106,14 +106,28 @@ jobs:
       - name: Fail if regenerated bindings differ from checked-in
         shell: bash
         run: |
-          # `git status --porcelain` catches both modifications to a tracked
-          # file AND a brand-new untracked bindings file (which `git diff
-          # --exit-code` would silently pass).
           path="crates/readstat-sys/src/bindings/${{ matrix.file }}"
-          if [ -z "$(git status --porcelain -- "$path")" ]; then
+          # Existence + tracked checks catch a brand-new bindings file (e.g. a
+          # freshly added target) that a plain content diff would silently pass.
+          if [ ! -f "$path" ]; then
+            echo "::error::$path does not exist after regeneration."
+            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+          if ! git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+            echo "::error::$path is untracked — commit the generated bindings."
+            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+          # Compare with `git diff` (NOT `git status --porcelain`): it applies
+          # the `.gitattributes` `*.rs text eol=lf` clean filter, so a pure
+          # CRLF-vs-LF difference — bindgen/rustfmt emits CRLF on the Windows
+          # runner — is not mistaken for real ABI drift. Real content changes
+          # still fail. (git normalizes the artifact's CRLF to LF on commit.)
+          if git --no-pager diff --no-color --exit-code -- "$path"; then
             echo "::notice::Bindings match a fresh regeneration on ${{ matrix.os }}."
           else
-            echo "::error::Checked-in bindings/${{ matrix.file }} differ from (or are missing relative to) what bindgen now produces."
+            echo "::error::Checked-in bindings/${{ matrix.file }} differ from what bindgen now produces."
             echo "::error::Download the 'bindings-${{ matrix.os }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
             exit 1
           fi
