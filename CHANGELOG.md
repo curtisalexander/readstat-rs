@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-06-13
+
+Bumps `readstat` and `readstat-cli` to 0.24.0; `readstat-sys` to 0.4.1; `readstat-iconv-sys` to 0.3.1.
+
 ### Added
 - `readstat::read_metadata(path)` and `readstat::read_to_batch(path)` convenience free functions for the common "read a whole file" case.
 - `ReadStatData::init_filtered(md, mapping, start, end)` — a single, order-safe entry point for column-filtered reads (replaces the error-prone `set_column_filter` + `init` two-step in most callers).
