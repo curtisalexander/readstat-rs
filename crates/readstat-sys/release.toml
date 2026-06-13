@@ -1,0 +1,14 @@
+# Per-crate cargo-release config for `readstat-sys`.
+# Inherits workspace defaults from release.toml at the repo root.
+#
+# Namespace the tag so it can't collide with `readstat`'s `v{{version}}` tags:
+# the crates are versioned independently, so `readstat` will eventually pass
+# through a version that `readstat-sys` already tagged (and vice versa).
+tag-name = "readstat-sys-v{{version}}"
+
+# Keep the crate version cited in docs/ARCHITECTURE.md in sync on release.
+[[pre-release-replacements]]
+file = "../../docs/ARCHITECTURE.md"
+search = "### `readstat-sys` \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)"
+replace = "### `readstat-sys` (v{{version}})"
+exactly = 1

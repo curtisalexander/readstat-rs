@@ -31,11 +31,7 @@ fn setup_and_read_from_bytes(
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata_from_bytes(&bytes, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     d.read_data_from_bytes(&bytes).unwrap();
 
     (md, d)
@@ -56,7 +52,7 @@ fn bytes_cars_metadata_matches_file() {
             file_label: "Written by SAS",
             file_encoding: "WINDOWS-1252",
             version: 9,
-            is_64bit: 0,
+            is_64bit: false,
             creation_time: "2008-09-30 12:55:01",
             modified_time: "2008-09-30 12:55:01",
         },
@@ -168,10 +164,7 @@ fn bytes_streaming_chunks() {
     let mut total_read = 0usize;
 
     for w in offsets.windows(2) {
-        let mut d =
-            readstat::ReadStatData::new()
-                .set_no_progress(true)
-                .init(md.clone(), w[0], w[1]);
+        let mut d = readstat::ReadStatData::new().init(md.clone(), w[0], w[1]);
         d.read_data_from_bytes(&bytes).unwrap();
         let batch = d.batch.as_ref().unwrap();
         total_read += batch.num_rows();

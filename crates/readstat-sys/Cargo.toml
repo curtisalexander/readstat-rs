@@ -1,24 +1,27 @@
 [package]
 name = "readstat-sys"
 version = "0.4.0"
-authors = ["Curtis Alexander <calex@calex.org>"]
-edition = "2024"
-rust-version = "1.85"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Raw FFI bindings to the ReadStat C library (SAS, SPSS, Stata file formats)"
-homepage = "https://github.com/curtisalexander/readstat-rs"
 readme = "README.md"
-license = "MIT"
-repository = "https://github.com/curtisalexander/readstat-rs"
 documentation = "https://docs.rs/readstat-sys"
 keywords = ["sas", "readstat", "ffi", "bindings"]
 categories = ["external-ffi-bindings"]
 links = "readstat"
 build = "build.rs"
+# What ships in the crates.io package. Must live in [package] — placing it after
+# a [[package.metadata...]] table header silently assigns it to that table.
 include = [
     "build.rs",
     "src/**",
     "wrapper.h",
     "README.md",
+    "LICENSE",
     "vendor/ReadStat/LICENSE",
     "vendor/ReadStat/src/*.c",
     "vendor/ReadStat/src/*.h",
@@ -27,6 +30,14 @@ include = [
     "vendor/ReadStat/src/stata/**",
     "vendor/ReadStat/src/txt/**",
 ]
+
+# Build docs on the default Linux target, which ships pre-generated bindings —
+# no libclang required, and avoids docs.rs attempting the Windows target (which
+# would try to compile vendored libiconv).
+[package.metadata.docs.rs]
+default-target = "x86_64-unknown-linux-gnu"
+
+# Release-time version-string replacements live in `release.toml`.
 
 [features]
 # Default builds consume the pre-generated per-target bindings file under

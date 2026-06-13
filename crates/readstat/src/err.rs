@@ -4,6 +4,8 @@
 //! enum variants. [`ReadStatError`] is the main error type, wrapping C library errors
 //! alongside Arrow, Parquet, I/O, and other failure modes.
 
+use std::path::PathBuf;
+
 use num_derive::FromPrimitive;
 
 /// Error codes returned by the `ReadStat` C library.
@@ -11,7 +13,12 @@ use num_derive::FromPrimitive;
 /// Each variant maps directly to a `readstat_error_t` value. A value of
 /// [`READSTAT_OK`](ReadStatCError::READSTAT_OK) indicates success; all other
 /// variants represent specific failure conditions.
-#[derive(Debug, FromPrimitive)]
+///
+/// This enum is `#[non_exhaustive]`: the C library adds new error codes over
+/// time, so new variants may appear in minor releases. Match with a wildcard
+/// arm (`_ => ...`) to remain forward-compatible.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 #[allow(non_camel_case_types)]
 pub enum ReadStatCError {
     /// Operation completed successfully.
@@ -98,6 +105,91 @@ pub enum ReadStatCError {
     READSTAT_ERROR_BAD_MR_STRING = 40,
 }
 
+impl std::fmt::Display for ReadStatCError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = match self {
+            Self::READSTAT_OK => "operation completed successfully",
+            Self::READSTAT_ERROR_OPEN => "failed to open the file",
+            Self::READSTAT_ERROR_READ => "failed to read from the file",
+            Self::READSTAT_ERROR_MALLOC => "memory allocation failure",
+            Self::READSTAT_ERROR_USER_ABORT => "user-initiated abort via callback return value",
+            Self::READSTAT_ERROR_PARSE => "general parse error in the file structure",
+            Self::READSTAT_ERROR_UNSUPPORTED_COMPRESSION => {
+                "file uses an unsupported compression method"
+            }
+            Self::READSTAT_ERROR_UNSUPPORTED_CHARSET => "file uses an unsupported character set",
+            Self::READSTAT_ERROR_COLUMN_COUNT_MISMATCH => {
+                "column count in header does not match actual columns"
+            }
+            Self::READSTAT_ERROR_ROW_COUNT_MISMATCH => {
+                "row count in header does not match actual rows"
+            }
+            Self::READSTAT_ERROR_ROW_WIDTH_MISMATCH => {
+                "row width in header does not match actual width"
+            }
+            Self::READSTAT_ERROR_BAD_FORMAT_STRING => "invalid or unrecognized format string",
+            Self::READSTAT_ERROR_VALUE_TYPE_MISMATCH => "value type does not match expected type",
+            Self::READSTAT_ERROR_WRITE => "failed to write output",
+            Self::READSTAT_ERROR_WRITER_NOT_INITIALIZED => {
+                "writer was not properly initialized before use"
+            }
+            Self::READSTAT_ERROR_SEEK => "failed to seek within the file",
+            Self::READSTAT_ERROR_CONVERT => "character encoding conversion failed",
+            Self::READSTAT_ERROR_CONVERT_BAD_STRING => {
+                "conversion failed due to invalid string data"
+            }
+            Self::READSTAT_ERROR_CONVERT_SHORT_STRING => "string is too short for conversion",
+            Self::READSTAT_ERROR_CONVERT_LONG_STRING => "string is too long for conversion",
+            Self::READSTAT_ERROR_NUMERIC_VALUE_IS_OUT_OF_RANGE => {
+                "numeric value is outside the representable range"
+            }
+            Self::READSTAT_ERROR_TAGGED_VALUE_IS_OUT_OF_RANGE => {
+                "tagged missing value is outside the valid range"
+            }
+            Self::READSTAT_ERROR_STRING_VALUE_IS_TOO_LONG => {
+                "string value exceeds the maximum allowed length"
+            }
+            Self::READSTAT_ERROR_TAGGED_VALUES_NOT_SUPPORTED => {
+                "tagged missing values are not supported by this format"
+            }
+            Self::READSTAT_ERROR_UNSUPPORTED_FILE_FORMAT_VERSION => {
+                "file format version is not supported"
+            }
+            Self::READSTAT_ERROR_NAME_BEGINS_WITH_ILLEGAL_CHARACTER => {
+                "variable name begins with an illegal character"
+            }
+            Self::READSTAT_ERROR_NAME_CONTAINS_ILLEGAL_CHARACTER => {
+                "variable name contains an illegal character"
+            }
+            Self::READSTAT_ERROR_NAME_IS_RESERVED_WORD => "variable name is a reserved word",
+            Self::READSTAT_ERROR_NAME_IS_TOO_LONG => {
+                "variable name exceeds the maximum allowed length"
+            }
+            Self::READSTAT_ERROR_BAD_TIMESTAMP_STRING => "timestamp string could not be parsed",
+            Self::READSTAT_ERROR_BAD_FREQUENCY_WEIGHT => "invalid frequency weight specification",
+            Self::READSTAT_ERROR_TOO_MANY_MISSING_VALUE_DEFINITIONS => {
+                "too many missing value definitions for a variable"
+            }
+            Self::READSTAT_ERROR_NOTE_IS_TOO_LONG => "note text exceeds the maximum allowed length",
+            Self::READSTAT_ERROR_STRING_REFS_NOT_SUPPORTED => {
+                "string references are not supported by this format"
+            }
+            Self::READSTAT_ERROR_STRING_REF_IS_REQUIRED => {
+                "a string reference is required but was not provided"
+            }
+            Self::READSTAT_ERROR_ROW_IS_TOO_WIDE_FOR_PAGE => "row is too wide for a single page",
+            Self::READSTAT_ERROR_TOO_FEW_COLUMNS => "file has too few columns",
+            Self::READSTAT_ERROR_TOO_MANY_COLUMNS => "file has too many columns",
+            Self::READSTAT_ERROR_NAME_IS_ZERO_LENGTH => "variable name is empty (zero length)",
+            Self::READSTAT_ERROR_BAD_TIMESTAMP_VALUE => "timestamp value is invalid",
+            Self::READSTAT_ERROR_BAD_MR_STRING => "invalid multiple response (MR) set string",
+        };
+        f.write_str(msg)
+    }
+}
+
+impl std::error::Error for ReadStatCError {}
+
 /// The main error type for the readstat crate.
 ///
 /// Wraps errors from the `ReadStat` C library, Arrow/Parquet processing,
@@ -110,7 +202,7 @@ pub enum ReadStatCError {
 #[derive(Debug, thiserror::Error)]
 pub enum ReadStatError {
     /// Error from the `ReadStat` C library.
-    #[error("ReadStat C library error: {0:?}")]
+    #[error("ReadStat C library error: {0}")]
     CLibrary(ReadStatCError),
 
     /// Unrecognized C error code not mapped to [`ReadStatCError`].
@@ -164,6 +256,46 @@ pub enum ReadStatError {
         /// All available column names in the dataset.
         available: Vec<String>,
     },
+
+    /// The input file does not exist.
+    #[error("File {} does not exist!", .0.display())]
+    FileNotFound(PathBuf),
+
+    /// The input file has a missing or unsupported extension.
+    ///
+    /// Only `.sas7bdat` files are supported as input.
+    #[error("File {} does not have the expected .sas7bdat extension!", .0.display())]
+    UnsupportedInputExtension(PathBuf),
+
+    /// The output file path has a missing or mismatched extension for the
+    /// chosen [`OutFormat`](crate::OutFormat).
+    #[error("File {} does not have the expected .{expected} extension!", .path.display())]
+    OutputExtensionMismatch {
+        /// The output path whose extension did not match.
+        path: PathBuf,
+        /// The extension expected for the configured output format.
+        expected: String,
+    },
+
+    /// The output file already exists and overwrite was not requested.
+    #[error("Output file {} already exists! Set overwrite = true to replace it.", .0.display())]
+    OutputFileExists(PathBuf),
+
+    /// The parent directory of the output path does not exist.
+    #[error("The parent directory of the output path {} does not exist", .0.display())]
+    OutputParentMissing(PathBuf),
+
+    /// The format string is not a recognized output format.
+    #[error("Unknown format: {0:?}. Expected one of: csv, feather, ndjson, parquet")]
+    UnknownFormat(String),
+
+    /// The SQL file was empty.
+    #[error("SQL file {} is empty", .0.display())]
+    EmptySqlFile(PathBuf),
+
+    /// The columns file contained no column names (only blanks/comments).
+    #[error("Columns file {} contains no column names", .0.display())]
+    EmptyColumnsFile(PathBuf),
 
     /// Error from the DataFusion SQL engine.
     #[cfg(feature = "sql")]
@@ -246,6 +378,25 @@ mod tests {
 
         let err = ReadStatError::UnknownCError(99);
         assert_eq!(format!("{err}"), "Unknown C error code: 99");
+    }
+
+    #[test]
+    fn clibrary_display_uses_human_message() {
+        // CLibrary errors should surface the human-readable description, not the
+        // raw Debug variant name.
+        let err = check_c_error(1).unwrap_err(); // READSTAT_ERROR_OPEN
+        let msg = format!("{err}");
+        assert_eq!(msg, "ReadStat C library error: failed to open the file");
+        assert!(!msg.contains("READSTAT_ERROR_OPEN"));
+    }
+
+    #[test]
+    fn cerror_display_all_variants_nonempty() {
+        use num_traits::FromPrimitive;
+        for code in 0..=40 {
+            let e: ReadStatCError = FromPrimitive::from_i32(code).unwrap();
+            assert!(!format!("{e}").is_empty(), "empty Display for code {code}");
+        }
     }
 
     #[test]

@@ -13,6 +13,7 @@
     clippy::ptr_as_ptr
 )]
 
+use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::ptr;
 
@@ -23,23 +24,31 @@ use crate::rs_parser::ReadStatParser;
 ///
 /// Wraps a borrowed byte slice and tracks the current read position.
 /// Passed as the `io_ctx` pointer to all I/O handler callbacks.
+///
+/// The `'a` lifetime ties the context to the borrowed byte slice so the
+/// compiler enforces that the buffer outlives the context (and therefore any
+/// parse driven through it). The trailing `PhantomData` carries that lifetime
+/// without changing the C-visible layout — it is zero-sized, so the `#[repr(C)]`
+/// field order seen from C (`data`, `len`, `pos`) is unaffected.
 #[repr(C)]
-pub struct ReadStatBufferCtx {
+pub struct ReadStatBufferCtx<'a> {
     data: *const u8,
     len: usize,
     pos: usize,
+    _marker: PhantomData<&'a [u8]>,
 }
 
-impl ReadStatBufferCtx {
+impl<'a> ReadStatBufferCtx<'a> {
     /// Creates a new buffer context from a byte slice.
     ///
-    /// The caller must ensure the byte slice outlives the context and any
-    /// parsing operations that use it.
-    pub const fn new(bytes: &[u8]) -> Self {
+    /// The returned context borrows `bytes`; the borrow checker guarantees the
+    /// slice outlives the context and any parsing operations that use it.
+    pub const fn new(bytes: &'a [u8]) -> Self {
         Self {
             data: bytes.as_ptr(),
             len: bytes.len(),
             pos: 0,
+            _marker: PhantomData,
         }
     }
 
@@ -76,12 +85,26 @@ unsafe extern "C" fn buffer_seek(
     whence: readstat_sys::readstat_io_flags_t,
     io_ctx: *mut c_void,
 ) -> readstat_sys::readstat_off_t {
-    let ctx = unsafe { &mut *(io_ctx as *mut ReadStatBufferCtx) };
+    let ctx = unsafe { &mut *(io_ctx as *mut ReadStatBufferCtx<'_>) };
 
+    // Use checked addition: `offset` is attacker-influenced, so an unchecked
+    // `i64 + i64` could overflow (a debug build would panic inside this
+    // `extern "C"` boundary, which aborts the process). On overflow, fail the
+    // seek the same way an out-of-range position does.
     let newpos: i64 = match whence {
         readstat_sys::readstat_io_flags_e_READSTAT_SEEK_SET => offset,
-        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_CUR => ctx.pos as i64 + offset,
-        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_END => ctx.len as i64 + offset,
+        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_CUR => {
+            match i64::try_from(ctx.pos).ok().and_then(|p| p.checked_add(offset)) {
+                Some(n) => n,
+                None => return -1,
+            }
+        }
+        readstat_sys::readstat_io_flags_e_READSTAT_SEEK_END => {
+            match i64::try_from(ctx.len).ok().and_then(|l| l.checked_add(offset)) {
+                Some(n) => n,
+                None => return -1,
+            }
+        }
         _ => return -1,
     };
 
@@ -95,7 +118,7 @@ unsafe extern "C" fn buffer_seek(
 
 /// Read handler that copies bytes from the buffer into the caller's buffer.
 unsafe extern "C" fn buffer_read(buf: *mut c_void, nbytes: usize, io_ctx: *mut c_void) -> isize {
-    let ctx = unsafe { &mut *(io_ctx as *mut ReadStatBufferCtx) };
+    let ctx = unsafe { &mut *(io_ctx as *mut ReadStatBufferCtx<'_>) };
     let bytes_left = ctx.len.saturating_sub(ctx.pos);
 
     let to_copy = if nbytes <= bytes_left {
@@ -124,7 +147,7 @@ unsafe extern "C" fn buffer_update(
         return readstat_sys::readstat_error_e_READSTAT_OK;
     };
 
-    let ctx = unsafe { &*(io_ctx as *mut ReadStatBufferCtx) };
+    let ctx = unsafe { &*(io_ctx as *mut ReadStatBufferCtx<'_>) };
     let progress = if ctx.len > 0 {
         ctx.pos as f64 / ctx.len as f64
     } else {

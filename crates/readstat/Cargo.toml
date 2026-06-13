@@ -1,22 +1,29 @@
 [package]
 name = "readstat"
 version = "0.23.0"
-authors = ["Curtis Alexander <calex@calex.org>"]
-edition = "2024"
-rust-version = "1.85"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Read SAS binary files (.sas7bdat) and convert to Arrow, Parquet, CSV, and other formats"
-homepage = "https://github.com/curtisalexander/readstat-rs"
-license = "MIT"
-repository = "https://github.com/curtisalexander/readstat-rs"
 documentation = "https://docs.rs/readstat"
 readme = "README.md"
 keywords = ["sas", "sas7bdat", "arrow", "parquet", "readstat"]
 categories = ["parser-implementations", "science"]
-exclude = ["benches/", "proptest-regressions/"]
+# NOTE: `benches/` is intentionally NOT excluded — the manifest declares a
+# `[[bench]]` target pointing into it, so excluding it would ship a manifest
+# referencing a missing source file.
+exclude = ["proptest-regressions/"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+# Release-time version-string replacements live in `release.toml` (single
+# source of truth); `readstat/release.toml` updates both the `readstat` and
+# `readstat-cli` ARCHITECTURE.md headings.
 
 [[bench]]
 name = "readstat_benchmarks"
@@ -52,10 +59,12 @@ csv = ["dep:arrow-csv"]
 parquet = ["dep:parquet", "dep:tempfile"]
 feather = ["dep:arrow-ipc"]
 ndjson = ["dep:arrow-json"]
-sql = ["dep:datafusion", "dep:tokio", "dep:futures"]
+# `sql` writes query results in any output format, so it requires all four
+# format writers (rs_query.rs uses arrow-csv/ipc/json and parquet directly).
+sql = ["dep:datafusion", "dep:tokio", "dep:futures", "csv", "parquet", "feather", "ndjson"]
 
 [dependencies.datafusion]
-version = "53"
+version = "54"
 optional = true
 
 [dependencies.tokio]

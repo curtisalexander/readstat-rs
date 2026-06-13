@@ -10,7 +10,9 @@ use std::{
 
 use crate::err::ReadStatError;
 
-const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
+// Only data files are parseable. SAS catalog files (`.sas7bcat`) are rejected
+// up front rather than failing later with an opaque C library error.
+const IN_EXTENSIONS: &[&str] = &["sas7bdat"];
 
 /// Validated file path for SAS file input.
 ///
@@ -20,27 +22,26 @@ const IN_EXTENSIONS: &[&str] = &["sas7bdat", "sas7bcat"];
 pub struct ReadStatPath {
     /// Absolute path to the input `.sas7bdat` file.
     pub path: PathBuf,
-    /// File extension of the input file (e.g. `"sas7bdat"`).
-    pub extension: String,
-    /// Input path as a C-compatible string for FFI.
-    pub cstring_path: CString,
+    /// Input path as a C-compatible string for FFI. Internal plumbing.
+    pub(crate) cstring_path: CString,
 }
 
 impl ReadStatPath {
     /// Creates a new `ReadStatPath` after validating the input path.
     ///
+    /// Accepts anything that references a [`Path`] (`&str`, [`String`],
+    /// `&Path`, [`PathBuf`], …).
+    ///
     /// # Errors
     ///
     /// Returns [`ReadStatError`] if the path does not exist or has an invalid extension.
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn new(path: PathBuf) -> Result<Self, ReadStatError> {
-        let p = Self::validate_path(&path)?;
-        let ext = Self::validate_in_extension(&p)?;
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ReadStatError> {
+        let p = Self::validate_path(path.as_ref())?;
+        Self::validate_in_extension(&p)?;
         let csp = Self::path_to_cstring(&p)?;
 
         Ok(Self {
             path: p,
-            extension: ext,
             cstring_path: csp,
         })
     }
@@ -64,24 +65,10 @@ impl ReadStatPath {
     }
 
     fn validate_in_extension(path: &Path) -> Result<String, ReadStatError> {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .map(std::borrow::ToOwned::to_owned)
-            .map_or(
-                Err(ReadStatError::Other(format!(
-                    "File {} does not have an extension!",
-                    path.to_string_lossy()
-                ))),
-                |e|
-                    if IN_EXTENSIONS.iter().any(|&ext| ext == e) {
-                        Ok(e)
-                    } else {
-                        Err(ReadStatError::Other(format!(
-                            "Expecting extension sas7bdat or sas7bcat.\nFile {} does not have expected extension!",
-                            path.to_string_lossy()
-                        )))
-                    }
-            )
+        match path.extension().and_then(|e| e.to_str()) {
+            Some(e) if IN_EXTENSIONS.contains(&e) => Ok(e.to_owned()),
+            _ => Err(ReadStatError::UnsupportedInputExtension(path.to_owned())),
+        }
     }
 
     fn validate_path(path: &Path) -> Result<PathBuf, ReadStatError> {
@@ -91,10 +78,7 @@ impl ReadStatPath {
         if abs_path.exists() {
             Ok(abs_path)
         } else {
-            Err(ReadStatError::Other(format!(
-                "File {} does not exist!",
-                abs_path.to_string_lossy()
-            )))
+            Err(ReadStatError::FileNotFound(abs_path))
         }
     }
 }
@@ -115,12 +99,10 @@ mod tests {
     }
 
     #[test]
-    fn valid_sas7bcat_extension() {
+    fn sas7bcat_extension_rejected() {
+        // Catalog files are not parseable and are rejected up front.
         let path = Path::new("/some/file.sas7bcat");
-        assert_eq!(
-            ReadStatPath::validate_in_extension(path).unwrap(),
-            "sas7bcat"
-        );
+        assert!(ReadStatPath::validate_in_extension(path).is_err());
     }
 
     #[test]
@@ -160,13 +142,13 @@ mod tests {
                 prop_assert_eq!(result.unwrap(), "sas7bdat");
             }
 
-            /// Arbitrary filenames with .sas7bcat extension always pass extension validation.
+            /// Arbitrary filenames with .sas7bcat extension are always rejected
+            /// (catalog files are not parseable).
             #[test]
-            fn sas7bcat_extension_always_valid(name in "[a-zA-Z0-9_]{1,50}") {
+            fn sas7bcat_extension_always_invalid(name in "[a-zA-Z0-9_]{1,50}") {
                 let path = PathBuf::from(format!("/tmp/{name}.sas7bcat"));
                 let result = ReadStatPath::validate_in_extension(&path);
-                prop_assert!(result.is_ok(), "Expected Ok for {:?}", path);
-                prop_assert_eq!(result.unwrap(), "sas7bcat");
+                prop_assert!(result.is_err(), "Expected Err for {:?}", path);
             }
 
             /// Non-SAS extensions always fail validation.

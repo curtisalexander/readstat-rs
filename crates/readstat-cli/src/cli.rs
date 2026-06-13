@@ -27,9 +27,6 @@ pub enum ReadStatCliCommands {
         /// Display sas7bdat metadata as json
         #[arg(action, long)]
         as_json: bool,
-        /// Do not display progress bar
-        #[arg(action, long)]
-        no_progress: bool,
         /// Skip calculating row count{n}If only interested in variable metadata speeds up parsing
         #[arg(action, long)]
         skip_row_count: bool,
@@ -46,7 +43,7 @@ pub enum ReadStatCliCommands {
         #[arg(value_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
         /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
-        #[arg(long, value_parser)]
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
         stream_rows: Option<u32>,
         /// Do not display progress bar
         #[arg(action, long)]
@@ -87,7 +84,7 @@ pub enum ReadStatCliCommands {
         #[arg(ignore_case = true, long, value_enum, value_parser)]
         reader: Option<Reader>,
         /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
-        #[arg(long, value_parser)]
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
         stream_rows: Option<u32>,
         /// Do not display progress bar
         #[arg(action, long)]
@@ -95,7 +92,7 @@ pub enum ReadStatCliCommands {
         /// Convert sas7bdat data in parallel
         #[arg(action, long)]
         parallel: bool,
-        /// Write output data in parallel{n}Only effective when parallel is enabled{n}May write batches out of order for Parquet/Feather
+        /// Write Parquet output in parallel{n}Parquet only — ignored for other formats{n}Only effective when --parallel is also enabled{n}Output row order is preserved
         #[arg(action, long)]
         parallel_write: bool,
         /// Memory buffer size in MB before spilling to disk during parallel writes{n}Defaults to 100 MB{n}Only effective when parallel-write is enabled
@@ -105,7 +102,7 @@ pub enum ReadStatCliCommands {
         #[arg(long, value_enum, value_parser)]
         compression: Option<CliParquetCompression>,
         /// Parquet compression level (if applicable)
-        #[arg(long, value_parser = clap::value_parser!(u32).range(0..=22))]
+        #[arg(long, value_parser = clap::value_parser!(u32).range(0..=22), requires = "compression")]
         compression_level: Option<u32>,
         /// Comma-separated list of column names to include in output
         #[arg(long, value_delimiter = ',', num_args = 1..)]

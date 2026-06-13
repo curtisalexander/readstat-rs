@@ -4,7 +4,7 @@
 
 > 💡 **Quick reference:** A one-page visual [**CLI Cheatsheet**](readstat-cheatsheet.html) is available for at-a-glance lookup of subcommands, flags, and common workflows.  This page is the full reference and goes deeper on memory, parallelism, and metadata round-trips.
 
-After either [building](BUILDING.md) or [installing](../README.md#install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
+After either [building](BUILDING.md) or [installing](../README.md#package-cli-install), the binary is invoked using [subcommands](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html#subcommands).  Currently, the following subcommands have been implemented:
 - `metadata` &rarr; writes the following to standard out or json
     - row count
     - variable count
@@ -335,9 +335,25 @@ Parallel Write (--parallel --parallel-write)
  Backpressure: preserved -- reader blocks while a batch group is being written
 ```
 
-### SQL Queries (`--sql`)
+### SQL Queries (`--sql` / `--sql-file`)
 
-:warning: **`--sql`** (feature-gated): SQL queries require the full dataset to be materialized in memory via DataFusion's `MemTable` before query execution.  For large files this may result in significant memory usage.  Queries that filter rows (e.g. `SELECT ... WHERE ...`) will reduce the _output_ size but the _input_ must still be fully loaded.
+:warning: **`--sql` is feature-gated.** SQL support is **not** enabled by default. The binary published via `cargo install readstat-cli` does **not** include it; to get `--sql`/`--sql-file`, install with the feature explicitly:
+
+```sh
+cargo install readstat-cli --features sql
+```
+
+Provide the query inline with `--sql "SELECT ..."`, or point at a file containing the query with `--sql-file path/to/query.sql`. The table name is the input file stem (e.g. `cars` for `cars.sas7bdat`). `--sql` and `--sql-file` are mutually exclusive with each other and with `--columns`/`--columns-file`.
+
+```sh
+# inline query
+readstat data cars.sas7bdat --output out.parquet --sql "SELECT make, mpg FROM cars WHERE mpg > 30"
+
+# query from a file
+readstat data cars.sas7bdat --output out.parquet --sql-file query.sql
+```
+
+SQL queries require the full dataset to be materialized in memory via DataFusion's `MemTable` before query execution.  For large files this may result in significant memory usage.  Queries that filter rows (e.g. `SELECT ... WHERE ...`) will reduce the _output_ size but the _input_ must still be fully loaded.
 
 ```
 SQL Query Mode (--sql "SELECT ...")

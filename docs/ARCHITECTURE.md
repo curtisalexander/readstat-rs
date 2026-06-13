@@ -32,7 +32,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.22.0) — Library Crate
+### `readstat` (v0.23.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -55,14 +55,13 @@ Key source modules in `crates/readstat/src/`:
 | `progress.rs` | `ProgressCallback` trait for parsing progress reporting |
 | `rs_query.rs` | SQL query execution via DataFusion (feature-gated) |
 | `formats.rs` | SAS format detection (118 date/time/datetime formats, regex-based) |
-| `err.rs` | Error enum (41 variants mapping to C library errors) |
+| `err.rs` | Error enums: `ReadStatError` (14 variants) plus `ReadStatCError` (41 codes mapping the C library's `readstat_error_t`) |
 | `common.rs` | Utility functions |
 | `rs_buffer_io.rs` | Buffer I/O operations |
 
 Key public types:
-- `ReadStatData` — coordinates FFI parsing, accumulates values directly into typed Arrow builders, produces Arrow RecordBatch
+- `ReadStatData` — coordinates FFI parsing, accumulates values directly into typed Arrow builders, produces Arrow RecordBatch. Internally it uses `ColumnBuilder` (a `pub(crate)` enum wrapping 12 typed Arrow builders — `StringBuilder`, `Float64Builder`, `Date32Builder`, etc.) to append values during FFI callbacks with zero intermediate allocation.
 - `ReadStatMetadata` — file-level metadata (row/var counts, encoding, compression, schema)
-- `ColumnBuilder` — enum wrapping 12 typed Arrow builders (StringBuilder, Float64Builder, Date32Builder, etc.); values are appended during FFI callbacks with zero intermediate allocation
 - `ReadStatWriter` — writes output in requested format
 - `ReadStatPath` — validated input file path
 - `WriteConfig` — output configuration (path, format, compression)
@@ -71,7 +70,7 @@ Key public types:
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.22.0) — CLI Binary
+### `readstat-cli` (v0.23.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -83,7 +82,7 @@ Owns CLI arg parsing, progress bars, colored output, and reader-writer thread or
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
-### `readstat-sys` (v0.3.0) — FFI Bindings
+### `readstat-sys` (v0.4.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate. Rust bindings are pre-generated per `(os, arch)` and checked in at `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so default builds need no `libclang` on any platform. Maintainers regenerate via `cargo build -p readstat-sys --features buildtime_bindgen` (requires `libclang`). Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
@@ -113,7 +112,7 @@ Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_nd
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-29 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, malformed UTF-8, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
+30 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, malformed UTF-8, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
 
 Test data lives in `tests/data/*.sas7bdat` (14 datasets). SAS scripts to regenerate test data are in `util/`.
 

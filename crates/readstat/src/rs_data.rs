@@ -10,8 +10,9 @@ use arrow_array::{
     ArrayRef, RecordBatch,
     builder::{
         Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, StringBuilder,
-        Time32SecondBuilder, Time64MicrosecondBuilder, TimestampMicrosecondBuilder,
-        TimestampMillisecondBuilder, TimestampNanosecondBuilder, TimestampSecondBuilder,
+        Time32MillisecondBuilder, Time32SecondBuilder, Time64MicrosecondBuilder,
+        Time64NanosecondBuilder, TimestampMicrosecondBuilder, TimestampMillisecondBuilder,
+        TimestampNanosecondBuilder, TimestampSecondBuilder,
     },
 };
 use log::debug;
@@ -32,6 +33,14 @@ use crate::{
     rs_path::ReadStatPath,
     rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
+
+/// Upper bound on the row capacity pre-allocated for Arrow builders.
+///
+/// The claimed row count comes from an untrusted file header, so the up-front
+/// allocation is capped here; builders grow on demand past this for honest
+/// files. 1,000,000 rows is far beyond the default 10k streaming chunk while
+/// keeping the worst-case empty-builder reservation bounded.
+const MAX_PREALLOC_ROWS: usize = 1_000_000;
 
 /// A typed Arrow array builder for a single column.
 ///
@@ -61,22 +70,15 @@ pub(crate) enum ColumnBuilder {
     TimestampNanosecond(TimestampNanosecondBuilder),
     /// Time of day with second precision.
     Time32Second(Time32SecondBuilder),
+    /// Time of day with millisecond precision.
+    Time32Millisecond(Time32MillisecondBuilder),
     /// Time of day with microsecond precision.
     Time64Microsecond(Time64MicrosecondBuilder),
+    /// Time of day with nanosecond precision.
+    Time64Nanosecond(Time64NanosecondBuilder),
 }
 
 impl ColumnBuilder {
-    /// Returns a mutable reference to the inner [`StringBuilder`].
-    ///
-    /// # Panics
-    /// Panics if `self` is not `ColumnBuilder::Str`.
-    pub(crate) fn as_string_mut(&mut self) -> &mut StringBuilder {
-        match self {
-            Self::Str(b) => b,
-            _ => panic!("ColumnBuilder::as_string_mut called on non-string builder"),
-        }
-    }
-
     /// Appends a null value, regardless of the underlying builder type.
     pub(crate) fn append_null(&mut self) {
         match self {
@@ -91,7 +93,9 @@ impl ColumnBuilder {
             Self::TimestampMicrosecond(b) => b.append_null(),
             Self::TimestampNanosecond(b) => b.append_null(),
             Self::Time32Second(b) => b.append_null(),
+            Self::Time32Millisecond(b) => b.append_null(),
             Self::Time64Microsecond(b) => b.append_null(),
+            Self::Time64Nanosecond(b) => b.append_null(),
         }
     }
 
@@ -109,7 +113,9 @@ impl ColumnBuilder {
             Self::TimestampMicrosecond(b) => Arc::new(b.finish()),
             Self::TimestampNanosecond(b) => Arc::new(b.finish()),
             Self::Time32Second(b) => Arc::new(b.finish()),
+            Self::Time32Millisecond(b) => Arc::new(b.finish()),
             Self::Time64Microsecond(b) => Arc::new(b.finish()),
+            Self::Time64Nanosecond(b) => Arc::new(b.finish()),
         }
     }
 
@@ -122,7 +128,9 @@ impl ColumnBuilder {
         match vm.var_type_class {
             ReadStatVarTypeClass::String => Self::Str(StringBuilder::with_capacity(
                 capacity,
-                capacity * vm.storage_width,
+                // saturating_mul: storage_width is an untrusted file-header
+                // field, so guard the byte hint against usize overflow.
+                capacity.saturating_mul(vm.storage_width),
             )),
             ReadStatVarTypeClass::Numeric => {
                 match vm.var_format_class {
@@ -150,8 +158,14 @@ impl ColumnBuilder {
                     Some(ReadStatVarFormatClass::Time) => {
                         Self::Time32Second(Time32SecondBuilder::with_capacity(capacity))
                     }
+                    Some(ReadStatVarFormatClass::TimeWithMilliseconds) => {
+                        Self::Time32Millisecond(Time32MillisecondBuilder::with_capacity(capacity))
+                    }
                     Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                         Self::Time64Microsecond(Time64MicrosecondBuilder::with_capacity(capacity))
+                    }
+                    Some(ReadStatVarFormatClass::TimeWithNanoseconds) => {
+                        Self::Time64Nanosecond(Time64NanosecondBuilder::with_capacity(capacity))
                     }
                     None => {
                         // Plain numeric — dispatch by storage type
@@ -195,28 +209,28 @@ pub struct ReadStatData {
     /// Number of rows to process in this chunk.
     pub chunk_rows_to_process: usize,
     /// Starting row offset for this chunk.
-    pub chunk_row_start: usize,
+    pub(crate) chunk_row_start: usize,
     /// Ending row offset (exclusive) for this chunk.
-    pub chunk_row_end: usize,
+    pub(crate) chunk_row_end: usize,
     /// Number of rows actually processed so far in this chunk.
-    pub chunk_rows_processed: usize,
-    /// Total rows to process across all chunks.
-    pub total_rows_to_process: usize,
+    pub(crate) chunk_rows_processed: usize,
     /// Shared atomic counter of total rows processed across all chunks.
-    pub total_rows_processed: Option<Arc<AtomicUsize>>,
+    pub(crate) total_rows_processed: Option<Arc<AtomicUsize>>,
     /// Optional progress callback for visual feedback during parsing.
-    pub progress: Option<Arc<dyn ProgressCallback>>,
-    /// Whether progress display is disabled.
-    pub no_progress: bool,
-    /// Errors collected during value parsing callbacks.
-    pub errors: Vec<String>,
+    pub(crate) progress: Option<Arc<dyn ProgressCallback>>,
+    /// A typed error raised by a value callback that aborted parsing.
+    ///
+    /// Set by `handle_value` (e.g. on date/time overflow or a builder/value
+    /// type mismatch) and surfaced by the parse routines in preference to the
+    /// generic `USER_ABORT` the C library reports for any callback abort.
+    pub(crate) abort_error: Option<ReadStatError>,
     /// Optional mapping: original var index -> filtered column index.
     /// Wrapped in `Arc` so parallel chunks share the same filter without deep cloning.
-    pub column_filter: Option<Arc<BTreeMap<i32, i32>>>,
+    pub(crate) column_filter: Option<Arc<BTreeMap<i32, i32>>>,
     /// Total variable count in the unfiltered dataset.
     /// Used for row-boundary detection in `handle_value` when filtering is active.
     /// Defaults to `var_count` when no filter is set.
-    pub total_var_count: i32,
+    pub(crate) total_var_count: i32,
 }
 
 impl Default for ReadStatData {
@@ -242,13 +256,11 @@ impl ReadStatData {
             chunk_row_start: 0,
             chunk_row_end: 0,
             // total rows
-            total_rows_to_process: 0,
             total_rows_processed: None,
             // progress
             progress: None,
-            no_progress: false,
             // errors
-            errors: Vec::new(),
+            abort_error: None,
             // column filtering
             column_filter: None,
             total_var_count: 0,
@@ -259,9 +271,15 @@ impl ReadStatData {
     ///
     /// Each builder's type is determined by the variable metadata. String builders
     /// are additionally pre-sized with `storage_width * chunk_rows` bytes.
+    ///
+    /// The capacity hint is clamped to [`MAX_PREALLOC_ROWS`] because both the row
+    /// count and per-string `storage_width` originate from untrusted file headers;
+    /// a crafted file claiming billions of rows would otherwise trigger a multi-GB
+    /// up-front allocation (or a multiply overflow) before a single row is parsed.
+    /// Builders grow on demand, so clamping costs honest files nothing.
     #[must_use]
     pub fn allocate_builders(self) -> Self {
-        let capacity = self.chunk_rows_to_process;
+        let capacity = self.chunk_rows_to_process.min(MAX_PREALLOC_ROWS);
         let builders: Vec<ColumnBuilder> = self
             .vars
             .values()
@@ -285,6 +303,24 @@ impl ReadStatData {
         self.batch = Some(RecordBatch::try_new(self.schema.clone(), arrays)?);
 
         Ok(())
+    }
+
+    /// Records that a value was observed for `var_index` during parsing.
+    ///
+    /// When `var_index` is the dataset's final variable, the cell marks the end
+    /// of a row, so the per-chunk and shared row counters are advanced. Boundary
+    /// detection uses `total_var_count` (the *unfiltered* variable count) so it
+    /// stays correct even when a column filter skips trailing columns.
+    ///
+    /// Called from the value callback for both stored and filter-skipped cells,
+    /// keeping row-boundary accounting in a single place.
+    pub(crate) fn note_value(&mut self, var_index: i32) {
+        if var_index == self.total_var_count - 1 {
+            self.chunk_rows_processed += 1;
+            if let Some(trp) = &self.total_rows_processed {
+                trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
     }
 
     /// Parses row data from the file and converts it to an Arrow [`RecordBatch`].
@@ -341,12 +377,6 @@ impl ReadStatData {
         debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        // Notify progress callback
-        if let Some(progress) = &self.progress {
-            progress.inc(self.chunk_rows_to_process as u64);
-            progress.parsing_started(&rsp.path.to_string_lossy());
-        }
-
         // initialize context
         let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
 
@@ -356,14 +386,28 @@ impl ReadStatData {
 
         // setup parser
         // once call parse_sas7bdat, iteration begins
-        let error = ReadStatParser::new()
+        let error = ReadStatParser::new()?
             // do not set metadata handler nor variable handler as already processed
             .set_value_handler(Some(cb::handle_value))?
             .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
             .set_row_offset(Some(self.chunk_row_start.try_into()?))?
             .parse_sas7bdat(ppath, ctx);
 
+        // A value callback may have aborted with a specific, typed error; prefer
+        // it over the generic `USER_ABORT` the C library reports for any abort.
+        if let Some(e) = self.abort_error.take() {
+            return Err(e);
+        }
         check_c_error(error as i32)?;
+
+        // Advance the progress bar by the rows just parsed. Doing this *after*
+        // the chunk completes (rather than before) keeps the displayed position
+        // in step with work actually done — under `--parallel` a pre-parse
+        // increment made the bar jump straight to 100%.
+        if let Some(progress) = &self.progress {
+            progress.inc(self.chunk_rows_to_process as u64);
+        }
+
         Ok(())
     }
 
@@ -384,13 +428,18 @@ impl ReadStatData {
         // setup parser with buffer I/O
         let error = buffer_ctx
             .configure_parser(
-                ReadStatParser::new()
+                ReadStatParser::new()?
                     .set_value_handler(Some(cb::handle_value))?
                     .set_row_limit(Some(self.chunk_rows_to_process.try_into()?))?
                     .set_row_offset(Some(self.chunk_row_start.try_into()?))?,
             )?
             .parse_sas7bdat(dummy_path.as_ptr(), ctx);
 
+        // A value callback may have aborted with a specific, typed error; prefer
+        // it over the generic `USER_ABORT` the C library reports for any abort.
+        if let Some(e) = self.abort_error.take() {
+            return Err(e);
+        }
         check_c_error(error as i32)?;
         Ok(())
     }
@@ -405,6 +454,47 @@ impl ReadStatData {
         self.set_metadata(md)
             .set_chunk_counts(row_start, row_end)
             .allocate_builders()
+    }
+
+    /// Initializes this instance with a column filter applied, in one step.
+    ///
+    /// Combines [`set_column_filter`](ReadStatData::set_column_filter) and
+    /// [`init`](ReadStatData::init) in the correct order so callers cannot
+    /// accidentally invoke them the wrong way around (which would clobber the
+    /// original variable count needed for row-boundary detection).
+    ///
+    /// `md` must be the **original, unfiltered** metadata and `mapping` the
+    /// result of [`ReadStatMetadata::resolve_selected_columns`]. The filtered
+    /// metadata and the original variable count are derived internally.
+    ///
+    /// ```no_run
+    /// use readstat::{ReadStatPath, ReadStatMetadata, ReadStatData};
+    ///
+    /// # fn main() -> Result<(), readstat::ReadStatError> {
+    /// let rsp = ReadStatPath::new("data.sas7bdat")?;
+    /// let mut md = ReadStatMetadata::new();
+    /// md.read_metadata(&rsp, false)?;
+    ///
+    /// if let Some(mapping) = md.resolve_selected_columns(Some(vec!["name".into(), "age".into()]))? {
+    ///     let row_count = u32::try_from(md.row_count)?;
+    ///     let mut d = ReadStatData::new().init_filtered(md, &mapping, 0, row_count);
+    ///     d.read_data(&rsp)?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn init_filtered(
+        self,
+        md: ReadStatMetadata,
+        mapping: &BTreeMap<i32, i32>,
+        row_start: u32,
+        row_end: u32,
+    ) -> Self {
+        let original_var_count = md.var_count;
+        let filtered = md.filter_to_selected_columns(mapping);
+        self.set_column_filter(Some(Arc::new(mapping.clone())), original_var_count)
+            .init(filtered, row_start, row_end)
     }
 
     /// Initializes this instance with pre-shared metadata and chunk boundaries.
@@ -439,7 +529,10 @@ impl ReadStatData {
 
     #[allow(clippy::cast_possible_truncation)]
     fn set_chunk_counts(self, row_start: u32, row_end: u32) -> Self {
-        let chunk_rows_to_process = (row_end - row_start) as usize;
+        // saturating_sub: guard against a caller passing row_end < row_start,
+        // which would underflow-panic in debug and wrap to ~4 billion in
+        // release (then feed an enormous builder pre-allocation).
+        let chunk_rows_to_process = row_end.saturating_sub(row_start) as usize;
         let chunk_row_start = row_start as usize;
         let chunk_row_end = row_end as usize;
         let chunk_rows_processed = 0_usize;
@@ -468,24 +561,6 @@ impl ReadStatData {
             vars,
             schema,
             total_var_count,
-            ..self
-        }
-    }
-
-    /// Disables or enables the progress bar display.
-    #[must_use]
-    pub fn set_no_progress(self, no_progress: bool) -> Self {
-        Self {
-            no_progress,
-            ..self
-        }
-    }
-
-    /// Sets the total number of rows to process across all chunks.
-    #[must_use]
-    pub fn set_total_rows_to_process(self, total_rows_to_process: usize) -> Self {
-        Self {
-            total_rows_to_process,
             ..self
         }
     }

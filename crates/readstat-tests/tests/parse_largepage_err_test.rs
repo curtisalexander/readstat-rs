@@ -22,11 +22,7 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
 
     // parse sas7bdat
     // read the entire dataset
-    let d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
+    let d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
 
     (rsp, md, d)
 }
@@ -57,7 +53,7 @@ fn parse_largepage_err() {
     assert_eq!(md.version, 9);
 
     // bitness
-    assert_eq!(md.is_64bit, 1);
+    assert!(md.is_64bit);
 
     // creation time
     assert_eq!(md.creation_time, "2021-07-25 22:02:02");

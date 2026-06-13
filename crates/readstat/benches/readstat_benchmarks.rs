@@ -1,6 +1,7 @@
 #![allow(clippy::cast_sign_loss, clippy::cast_lossless)]
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter, WriteConfig};
+use std::hint::black_box;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -62,9 +63,7 @@ fn bench_read_data_single_chunk(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::from_parameter(filename), filename, |b, _| {
             b.iter(|| {
-                let mut d = ReadStatData::new()
-                    .set_no_progress(true)
-                    .init(md.clone(), 0, rows);
+                let mut d = ReadStatData::new().init(md.clone(), 0, rows);
                 d.read_data(black_box(&rsp)).unwrap();
                 black_box(d)
             });
@@ -93,11 +92,7 @@ fn bench_read_data_chunked(c: &mut Criterion) {
                     let mut total_read = 0;
                     while total_read < total_rows {
                         let end = std::cmp::min(total_read + chunk_size, total_rows);
-                        let mut d = ReadStatData::new().set_no_progress(true).init(
-                            md.clone(),
-                            total_read,
-                            end,
-                        );
+                        let mut d = ReadStatData::new().init(md.clone(), total_read, end);
                         d.read_data(black_box(&rsp)).unwrap();
                         black_box(&d);
                         total_read = end;
@@ -119,9 +114,7 @@ fn bench_arrow_conversion(c: &mut Criterion) {
     let rows = md.row_count as u32;
 
     // Pre-read the data
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, rows);
+    let mut d = ReadStatData::new().init(md.clone(), 0, rows);
     d.read_data(&rsp).unwrap();
 
     group.throughput(Throughput::Elements(rows as u64));
@@ -129,9 +122,7 @@ fn bench_arrow_conversion(c: &mut Criterion) {
         b.iter(|| {
             // The conversion happens in read_data, but we're measuring
             // the overhead of the entire read + conversion pipeline
-            let mut d = ReadStatData::new()
-                .set_no_progress(true)
-                .init(md.clone(), 0, rows);
+            let mut d = ReadStatData::new().init(md.clone(), 0, rows);
             d.read_data(black_box(&rsp)).unwrap();
             let has_batch = d.batch.is_some();
             black_box(has_batch)
@@ -152,9 +143,7 @@ fn bench_write_csv(c: &mut Criterion) {
     let rows = md.row_count as u32;
 
     // Pre-read the data
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, rows);
+    let mut d = ReadStatData::new().init(md.clone(), 0, rows);
     d.read_data(&rsp_in).unwrap();
 
     group.throughput(Throughput::Elements(rows as u64));
@@ -163,12 +152,7 @@ fn bench_write_csv(c: &mut Criterion) {
             let wc = setup_write_config(&temp_dir, readstat::OutFormat::Csv);
             let mut wtr = ReadStatWriter::new();
             wtr.write(black_box(&d), black_box(&wc)).unwrap();
-            wtr.finish(
-                black_box(&d),
-                black_box(&wc),
-                black_box(rsp_in.path.as_path()),
-            )
-            .unwrap();
+            wtr.finish(black_box(&d), black_box(&wc)).unwrap();
         });
     });
 
@@ -186,9 +170,7 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
     let rows = md.row_count as u32;
 
     // Pre-read the data
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, rows);
+    let mut d = ReadStatData::new().init(md.clone(), 0, rows);
     d.read_data(&rsp_in).unwrap();
 
     group.throughput(Throughput::Elements(rows as u64));
@@ -220,12 +202,7 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
 
                     let mut wtr = ReadStatWriter::new();
                     wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(
-                        black_box(&d),
-                        black_box(&wc),
-                        black_box(rsp_in.path.as_path()),
-                    )
-                    .unwrap();
+                    wtr.finish(black_box(&d), black_box(&wc)).unwrap();
                 });
             },
         );
@@ -245,9 +222,7 @@ fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
     let rows = md.row_count as u32;
 
     // Pre-read the data
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, rows);
+    let mut d = ReadStatData::new().init(md.clone(), 0, rows);
     d.read_data(&rsp_in).unwrap();
 
     group.throughput(Throughput::Elements(rows as u64));
@@ -293,9 +268,7 @@ fn bench_write_formats(c: &mut Criterion) {
     let rows = md.row_count as u32;
 
     // Pre-read the data
-    let mut d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, rows);
+    let mut d = ReadStatData::new().init(md.clone(), 0, rows);
     d.read_data(&rsp_in).unwrap();
 
     group.throughput(Throughput::Elements(rows as u64));
@@ -314,12 +287,7 @@ fn bench_write_formats(c: &mut Criterion) {
                     let wc = setup_write_config(&temp_dir, *fmt);
                     let mut wtr = ReadStatWriter::new();
                     wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(
-                        black_box(&d),
-                        black_box(&wc),
-                        black_box(rsp_in.path.as_path()),
-                    )
-                    .unwrap();
+                    wtr.finish(black_box(&d), black_box(&wc)).unwrap();
                 });
             },
         );
@@ -347,21 +315,14 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("format", format.0), &format.1, |b, fmt| {
             b.iter(|| {
                 // Read
-                let mut d = ReadStatData::new()
-                    .set_no_progress(true)
-                    .init(md.clone(), 0, rows);
+                let mut d = ReadStatData::new().init(md.clone(), 0, rows);
                 d.read_data(black_box(&rsp_in)).unwrap();
 
                 // Write
                 let wc = setup_write_config(&temp_dir, *fmt);
                 let mut wtr = ReadStatWriter::new();
                 wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                wtr.finish(
-                    black_box(&d),
-                    black_box(&wc),
-                    black_box(rsp_in.path.as_path()),
-                )
-                .unwrap();
+                wtr.finish(black_box(&d), black_box(&wc)).unwrap();
             });
         });
     }
@@ -438,9 +399,7 @@ fn bench_io_read_data(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("file", filename), filename, |b, _| {
             b.iter(|| {
-                let mut d = ReadStatData::new()
-                    .set_no_progress(true)
-                    .init(md.clone(), 0, rows);
+                let mut d = ReadStatData::new().init(md.clone(), 0, rows);
                 d.read_data(black_box(&rsp)).unwrap();
                 black_box(d)
             });
@@ -448,9 +407,7 @@ fn bench_io_read_data(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("mmap", filename), filename, |b, _| {
             b.iter(|| {
-                let mut d = ReadStatData::new()
-                    .set_no_progress(true)
-                    .init(md.clone(), 0, rows);
+                let mut d = ReadStatData::new().init(md.clone(), 0, rows);
                 d.read_data_from_mmap(black_box(&path)).unwrap();
                 black_box(d)
             });
@@ -462,9 +419,7 @@ fn bench_io_read_data(c: &mut Criterion) {
             filename,
             |b, _| {
                 b.iter(|| {
-                    let mut d = ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), 0, rows);
+                    let mut d = ReadStatData::new().init(md.clone(), 0, rows);
                     d.read_data_from_bytes(black_box(&bytes)).unwrap();
                     black_box(d)
                 });
@@ -493,10 +448,7 @@ fn bench_io_chunked(c: &mut Criterion) {
             let mut total_read = 0;
             while total_read < total_rows {
                 let end = std::cmp::min(total_read + chunk_size, total_rows);
-                let mut d =
-                    ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), total_read, end);
+                let mut d = ReadStatData::new().init(md.clone(), total_read, end);
                 d.read_data(black_box(&rsp)).unwrap();
                 black_box(&d);
                 total_read = end;
@@ -509,10 +461,7 @@ fn bench_io_chunked(c: &mut Criterion) {
             let mut total_read = 0;
             while total_read < total_rows {
                 let end = std::cmp::min(total_read + chunk_size, total_rows);
-                let mut d =
-                    ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), total_read, end);
+                let mut d = ReadStatData::new().init(md.clone(), total_read, end);
                 d.read_data_from_mmap(black_box(&path)).unwrap();
                 black_box(&d);
                 total_read = end;
@@ -526,10 +475,7 @@ fn bench_io_chunked(c: &mut Criterion) {
             let mut total_read = 0;
             while total_read < total_rows {
                 let end = std::cmp::min(total_read + chunk_size, total_rows);
-                let mut d =
-                    ReadStatData::new()
-                        .set_no_progress(true)
-                        .init(md.clone(), total_read, end);
+                let mut d = ReadStatData::new().init(md.clone(), total_read, end);
                 d.read_data_from_bytes(black_box(&bytes)).unwrap();
                 black_box(&d);
                 total_read = end;

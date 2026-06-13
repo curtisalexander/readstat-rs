@@ -67,8 +67,8 @@ cargo +nightly fuzz run fuzz_read_metadata fuzz/artifacts/fuzz_read_metadata/<cr
 Fuzz tests run weekly (Monday 3am UTC) via `.github/workflows/fuzz.yml`. Each target runs for 30 minutes. On crash, a GitHub issue is automatically opened.
 
 ## Valgrind
-To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `parse_file_metadata_test`, run the following from within the `readstat` directory.
+To ensure no memory leaks, [valgrind](https://valgrind.org/) may be utilized.  For example, to ensure no memory leaks for the test `parse_cars_md_test`, run the following from the repository root.
 
 ```
-valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
+valgrind ./target/debug/deps/parse_cars_md_test-<hash>
 ```

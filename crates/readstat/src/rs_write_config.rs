@@ -14,9 +14,10 @@ use crate::err::ReadStatError;
 
 /// Output file format for data conversion.
 ///
-/// All variants are always present regardless of enabled features.
-/// Attempting to use a format whose feature is not enabled will
-/// result in a compile-time error in the writer code.
+/// All variants are always present regardless of which writer features are
+/// enabled. Attempting to *write* a format whose feature is disabled returns a
+/// runtime [`ReadStatError`](crate::ReadStatError) from the writer rather than
+/// failing to compile.
 ///
 /// This enum is `#[non_exhaustive]`: new format variants may be added in
 /// minor releases. Match with a wildcard arm to remain forward-compatible.
@@ -53,16 +54,14 @@ impl std::str::FromStr for OutFormat {
     ///
     /// # Errors
     ///
-    /// Returns [`ReadStatError::Other`] for unrecognized format strings.
+    /// Returns [`ReadStatError::UnknownFormat`] for unrecognized format strings.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "csv" => Ok(Self::Csv),
             "feather" => Ok(Self::Feather),
             "ndjson" => Ok(Self::Ndjson),
             "parquet" => Ok(Self::Parquet),
-            _ => Err(ReadStatError::Other(format!(
-                "Unknown format: {s:?}. Expected one of: csv, feather, ndjson, parquet"
-            ))),
+            _ => Err(ReadStatError::UnknownFormat(s.to_string())),
         }
     }
 }
@@ -72,7 +71,7 @@ impl std::str::FromStr for OutFormat {
 /// This enum is `#[non_exhaustive]`: new codec variants may be added in
 /// minor releases. Match with a wildcard arm to remain forward-compatible.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ParquetCompression {
     /// No compression.
     Uncompressed,
@@ -101,23 +100,51 @@ impl std::fmt::Display for ParquetCompression {
     }
 }
 
+impl std::str::FromStr for ParquetCompression {
+    type Err = ReadStatError;
+
+    /// Parses a codec name (case-insensitive) into a [`ParquetCompression`].
+    ///
+    /// Accepted values: `"uncompressed"`, `"snappy"`, `"gzip"`, `"lz4-raw"`
+    /// (or `"lz4raw"`), `"brotli"`, `"zstd"`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError::UnknownFormat`] for unrecognized codec names.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "uncompressed" => Ok(Self::Uncompressed),
+            "snappy" => Ok(Self::Snappy),
+            "gzip" => Ok(Self::Gzip),
+            "lz4-raw" | "lz4raw" => Ok(Self::Lz4Raw),
+            "brotli" => Ok(Self::Brotli),
+            "zstd" => Ok(Self::Zstd),
+            _ => Err(ReadStatError::UnknownFormat(s.to_string())),
+        }
+    }
+}
+
 /// Output configuration for writing Arrow data.
 ///
 /// Captures the output file path, format, compression settings, and overwrite
 /// behavior. Created separately from [`ReadStatPath`](crate::ReadStatPath),
 /// which handles only input path validation.
+///
+/// Fields are private and validated by [`new`](WriteConfig::new); read them via
+/// the accessor methods. This prevents constructing a config that bypasses path,
+/// extension, and compression-level validation.
 #[derive(Debug, Clone)]
 pub struct WriteConfig {
     /// Optional output file path.
-    pub out_path: Option<PathBuf>,
+    pub(crate) out_path: Option<PathBuf>,
     /// Output format (defaults to CSV).
-    pub format: OutFormat,
+    pub(crate) format: OutFormat,
     /// Whether to overwrite an existing output file.
-    pub overwrite: bool,
+    pub(crate) overwrite: bool,
     /// Optional Parquet compression algorithm.
-    pub compression: Option<ParquetCompression>,
+    pub(crate) compression: Option<ParquetCompression>,
     /// Optional Parquet compression level.
-    pub compression_level: Option<u32>,
+    pub(crate) compression_level: Option<u32>,
 }
 
 impl WriteConfig {
@@ -161,6 +188,36 @@ impl WriteConfig {
         })
     }
 
+    /// The validated output path, or `None` to write CSV to stdout.
+    #[must_use]
+    pub fn out_path(&self) -> Option<&Path> {
+        self.out_path.as_deref()
+    }
+
+    /// The output format.
+    #[must_use]
+    pub const fn format(&self) -> OutFormat {
+        self.format
+    }
+
+    /// Whether an existing output file may be overwritten.
+    #[must_use]
+    pub const fn overwrite(&self) -> bool {
+        self.overwrite
+    }
+
+    /// The configured Parquet compression codec, if any.
+    #[must_use]
+    pub const fn compression(&self) -> Option<ParquetCompression> {
+        self.compression
+    }
+
+    /// The configured Parquet compression level, if any.
+    #[must_use]
+    pub const fn compression_level(&self) -> Option<u32> {
+        self.compression_level
+    }
+
     fn validate_format(format: Option<OutFormat>) -> OutFormat {
         format.unwrap_or(OutFormat::Csv)
     }
@@ -170,28 +227,13 @@ impl WriteConfig {
         path: &Path,
         format: OutFormat,
     ) -> Result<Option<PathBuf>, ReadStatError> {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .map(std::borrow::ToOwned::to_owned)
-            .map_or(
-                Err(ReadStatError::Other(format!(
-                    "File {} does not have an extension! Expecting extension {}.",
-                    path.to_string_lossy(),
-                    format
-                ))),
-                |e| {
-                    if e == format.to_string() {
-                        Ok(Some(path.to_owned()))
-                    } else {
-                        Err(ReadStatError::Other(format!(
-                            "Expecting extension {}. Instead, file {} has extension {}.",
-                            format,
-                            path.to_string_lossy(),
-                            e
-                        )))
-                    }
-                },
-            )
+        match path.extension().and_then(|e| e.to_str()) {
+            Some(e) if e.eq_ignore_ascii_case(&format.to_string()) => Ok(Some(path.to_owned())),
+            _ => Err(ReadStatError::OutputExtensionMismatch {
+                path: path.to_owned(),
+                expected: format.to_string(),
+            }),
+        }
     }
 
     /// Validates the output path exists and handles overwrite logic.
@@ -206,10 +248,7 @@ impl WriteConfig {
                     .map_err(|e| ReadStatError::Other(format!("Failed to resolve path: {e}")))?;
 
                 match abs_path.parent() {
-                    None => Err(ReadStatError::Other(format!(
-                        "The parent directory of the value of the parameter --output ({}) does not exist",
-                        abs_path.to_string_lossy()
-                    ))),
+                    None => Err(ReadStatError::OutputParentMissing(abs_path.clone())),
                     Some(parent) => {
                         if parent.exists() {
                             if abs_path.exists() {
@@ -220,19 +259,13 @@ impl WriteConfig {
                                     );
                                     Ok(Some(abs_path))
                                 } else {
-                                    Err(ReadStatError::Other(format!(
-                                        "The output file - {} - already exists! To overwrite the file, utilize the --overwrite parameter",
-                                        abs_path.to_string_lossy()
-                                    )))
+                                    Err(ReadStatError::OutputFileExists(abs_path))
                                 }
                             } else {
                                 Ok(Some(abs_path))
                             }
                         } else {
-                            Err(ReadStatError::Other(format!(
-                                "The parent directory of the value of the parameter --output ({}) does not exist",
-                                parent.to_string_lossy()
-                            )))
+                            Err(ReadStatError::OutputParentMissing(parent.to_path_buf()))
                         }
                     }
                 }

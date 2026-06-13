@@ -38,6 +38,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
+      - name: Check Arrow/DataFusion lockstep
+        run: ./scripts/check-arrow-lockstep.sh
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Rust dependencies
@@ -322,20 +324,23 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
+        # macos-latest is an arm64 runner; build with an explicit --target so
+        # the x86_64 artifact is actually an x86_64 binary (a bare
+        # `cargo build` would cross-label an arm64 binary as x86_64).
+        run: cargo build --release --target ${{ env.target }} && strip target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}
       - name: Zip
-        run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
+        run: tar czvf target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/${{ env.target }}/release ${{ env.PACKAGE_NAME }}
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
-          path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+          path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+            target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -366,20 +371,22 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --release && strip target/release/${{ env.PACKAGE_NAME }}
+        # Explicit --target keeps the output path consistent with the x86 job
+        # and is robust to the runner's host arch.
+        run: cargo build --release --target ${{ env.target }} && strip target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}
       - name: Zip
-        run: tar czvf target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/release ${{ env.PACKAGE_NAME }}
+        run: tar czvf target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz --directory=target/${{ env.target }}/release ${{ env.PACKAGE_NAME }}
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
-          path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+          path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
+            target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -36,19 +36,68 @@ replace_emoji() {
         -e 's/:books:/📚/g' \
         -e 's/:jigsaw:/🧩/g' \
         -e 's/:link:/🔗/g' \
+        -e 's/:balance_scale:/⚖️/g' \
         -e 's/:memo:/📝/g' \
         -e 's/:warning:/⚠️/g'
 }
 
-# Strip "[< Back to README](...)" nav lines and replace emoji
+# Rewrite inter-doc Markdown links to the book's flat, lowercased filenames.
+#
+# Canonical docs link to each other with their GitHub paths (e.g.
+# `docs/BUILDING.md`, `../README.md`, `crates/readstat/`), but inside the book
+# every page is a single lowercased file at book/src/ (docs), book/src/crates/,
+# or book/src/examples/. Without this rewrite the published site 404s on every
+# cross-link. Portable sed only (no GNU `\L`), so mappings are explicit.
+rewrite_links() {
+    sed \
+        -e 's#](\.\./README\.md#](introduction.md#g' \
+        -e 's#](README\.md#](introduction.md#g' \
+        -e 's#](docs/BUILDING\.md#](building.md#g' \
+        -e 's#](BUILDING\.md#](building.md#g' \
+        -e 's#](docs/USAGE\.md#](usage.md#g' \
+        -e 's#](USAGE\.md#](usage.md#g' \
+        -e 's#](docs/ARCHITECTURE\.md#](architecture.md#g' \
+        -e 's#](ARCHITECTURE\.md#](architecture.md#g' \
+        -e 's#](docs/TECHNICAL\.md#](technical.md#g' \
+        -e 's#](TECHNICAL\.md#](technical.md#g' \
+        -e 's#](docs/TESTING\.md#](testing.md#g' \
+        -e 's#](TESTING\.md#](testing.md#g' \
+        -e 's#](docs/BENCHMARKING\.md#](benchmarking.md#g' \
+        -e 's#](BENCHMARKING\.md#](benchmarking.md#g' \
+        -e 's#](docs/CI-CD\.md#](ci-cd.md#g' \
+        -e 's#](CI-CD\.md#](ci-cd.md#g' \
+        -e 's#](docs/MEMORY-SAFETY\.md#](memory-safety.md#g' \
+        -e 's#](MEMORY-SAFETY\.md#](memory-safety.md#g' \
+        -e 's#](docs/RELEASING\.md#](releasing.md#g' \
+        -e 's#](RELEASING\.md#](releasing.md#g' \
+        -e 's#](\.\./crates/readstat-iconv-sys/#](crates/readstat-iconv-sys.md#g' \
+        -e 's#](\.\./crates/readstat-cli/#](crates/readstat-cli.md#g' \
+        -e 's#](\.\./crates/readstat-sys/#](crates/readstat-sys.md#g' \
+        -e 's#](\.\./crates/readstat-tests/#](crates/readstat-tests.md#g' \
+        -e 's#](\.\./crates/readstat-wasm/#](crates/readstat-wasm.md#g' \
+        -e 's#](\.\./crates/readstat/#](crates/readstat.md#g' \
+        -e 's#](crates/readstat-iconv-sys/#](crates/readstat-iconv-sys.md#g' \
+        -e 's#](crates/readstat-cli/#](crates/readstat-cli.md#g' \
+        -e 's#](crates/readstat-sys/#](crates/readstat-sys.md#g' \
+        -e 's#](crates/readstat-tests/#](crates/readstat-tests.md#g' \
+        -e 's#](crates/readstat-wasm/#](crates/readstat-wasm.md#g' \
+        -e 's#](crates/readstat/#](crates/readstat.md#g' \
+        -e 's#](examples/cli-demo/#](examples/cli-demo.md#g' \
+        -e 's#](examples/api-demo/#](examples/api-demo.md#g' \
+        -e 's#](examples/bun-demo/#](examples/bun-demo.md#g' \
+        -e 's#](examples/web-demo/#](examples/web-demo.md#g' \
+        -e 's#](examples/sql-explorer/#](examples/sql-explorer.md#g'
+}
+
+# Strip "[< Back to README](...)" nav lines, replace emoji, rewrite links
 patch_doc() {
-    sed '/^\[< Back to README\]/d' "$1" | replace_emoji
+    sed '/^\[< Back to README\]/d' "$1" | replace_emoji | rewrite_links
 }
 
 echo "Copying docs into book/src/ ..."
 
-# Introduction from root README (strip the CI badge line, replace emoji)
-sed '1{/^\[!\[readstat-rs\]/d;}' "$REPO_ROOT/README.md" | replace_emoji > "$BOOK_SRC/introduction.md"
+# Introduction from root README (strip the CI badge line, replace emoji, rewrite links)
+sed '1{/^\[!\[readstat-rs\]/d;}' "$REPO_ROOT/README.md" | replace_emoji | rewrite_links > "$BOOK_SRC/introduction.md"
 
 # docs/ files
 patch_doc "$REPO_ROOT/docs/BUILDING.md"     > "$BOOK_SRC/building.md"
@@ -61,7 +110,7 @@ patch_doc "$REPO_ROOT/docs/CI-CD.md"           > "$BOOK_SRC/ci-cd.md"
 patch_doc "$REPO_ROOT/docs/MEMORY-SAFETY.md"   > "$BOOK_SRC/memory-safety.md"
 patch_doc "$REPO_ROOT/docs/RELEASING.md"       > "$BOOK_SRC/releasing.md"
 
-# Crate READMEs
+# Crate READMEs (copied as-is; they use absolute GitHub URLs for cross-links)
 mkdir -p "$BOOK_SRC/crates"
 cp "$REPO_ROOT/crates/readstat/README.md"       "$BOOK_SRC/crates/readstat.md"
 cp "$REPO_ROOT/crates/readstat-cli/README.md"   "$BOOK_SRC/crates/readstat-cli.md"

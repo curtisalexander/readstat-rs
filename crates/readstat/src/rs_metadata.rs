@@ -43,8 +43,8 @@ pub struct ReadStatMetadata {
     pub file_encoding: String,
     /// SAS file format version number.
     pub version: i32,
-    /// Whether the file uses 64-bit format (0 = 32-bit, 1 = 64-bit).
-    pub is_64bit: i32,
+    /// Whether the file uses the 64-bit format (`true`) or 32-bit (`false`).
+    pub is_64bit: bool,
     /// File creation timestamp (formatted as `YYYY-MM-DD HH:MM:SS`).
     pub creation_time: String,
     /// File modification timestamp (formatted as `YYYY-MM-DD HH:MM:SS`).
@@ -76,7 +76,7 @@ impl ReadStatMetadata {
             file_label: String::new(),
             file_encoding: String::new(),
             version: 0,
-            is_64bit: 0,
+            is_64bit: false,
             creation_time: String::new(),
             modified_time: String::new(),
             compression: ReadStatCompress::None,
@@ -114,8 +114,14 @@ impl ReadStatMetadata {
                             DataType::Timestamp(TimeUnit::Nanosecond, None)
                         }
                         Some(ReadStatVarFormatClass::Time) => DataType::Time32(TimeUnit::Second),
+                        Some(ReadStatVarFormatClass::TimeWithMilliseconds) => {
+                            DataType::Time32(TimeUnit::Millisecond)
+                        }
                         Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
                             DataType::Time64(TimeUnit::Microsecond)
+                        }
+                        Some(ReadStatVarFormatClass::TimeWithNanoseconds) => {
+                            DataType::Time64(TimeUnit::Nanosecond)
                         }
                         None => DataType::Float64,
                     },
@@ -177,7 +183,7 @@ impl ReadStatMetadata {
 
         let row_limit = if skip_row_count { Some(1) } else { None };
 
-        let error = ReadStatParser::new()
+        let error = ReadStatParser::new()?
             .set_metadata_handler(Some(handle_metadata))?
             .set_variable_handler(Some(handle_variable))?
             .set_row_limit(row_limit)?
@@ -223,7 +229,7 @@ impl ReadStatMetadata {
 
         let error = buffer_ctx
             .configure_parser(
-                ReadStatParser::new()
+                ReadStatParser::new()?
                     .set_metadata_handler(Some(handle_metadata))?
                     .set_variable_handler(Some(handle_variable))?
                     .set_row_limit(row_limit)?,
@@ -375,6 +381,10 @@ impl ReadStatMetadata {
 }
 
 /// Compression method used in a `.sas7bdat` file.
+///
+/// This enum is `#[non_exhaustive]`: it mirrors a C library enum that may gain
+/// variants. Match with a wildcard arm to remain forward-compatible.
+#[non_exhaustive]
 #[derive(Clone, Debug, Default, FromPrimitive, Serialize)]
 #[allow(clippy::cast_possible_wrap)]
 pub enum ReadStatCompress {
@@ -388,6 +398,10 @@ pub enum ReadStatCompress {
 }
 
 /// Byte order (endianness) of a `.sas7bdat` file.
+///
+/// This enum is `#[non_exhaustive]`: it mirrors a C library enum that may gain
+/// variants. Match with a wildcard arm to remain forward-compatible.
+#[non_exhaustive]
 #[derive(Clone, Debug, Default, FromPrimitive, Serialize)]
 #[allow(clippy::cast_possible_wrap)]
 pub enum ReadStatEndian {

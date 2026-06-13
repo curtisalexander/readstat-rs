@@ -14,7 +14,7 @@
 use log::debug;
 use std::os::raw::{c_char, c_long, c_void};
 
-use crate::err::{ReadStatError, check_c_error};
+use crate::err::{ReadStatCError, ReadStatError, check_c_error};
 
 /// Safe RAII wrapper around the `ReadStat` C parser (`readstat_parser_t`).
 ///
@@ -26,11 +26,23 @@ pub(crate) struct ReadStatParser {
 
 impl ReadStatParser {
     /// Allocates and initializes a new `ReadStat` C parser.
-    pub(crate) fn new() -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReadStatError::CLibrary`] with
+    /// [`READSTAT_ERROR_MALLOC`](ReadStatCError::READSTAT_ERROR_MALLOC) if the C
+    /// library fails to allocate the parser (`readstat_parser_init` returns NULL).
+    /// Calling a handler-set method on a NULL parser would dereference it inside C
+    /// and segfault, so the failure is surfaced here instead.
+    pub(crate) fn new() -> Result<Self, ReadStatError> {
         let parser: *mut readstat_sys::readstat_parser_t =
             unsafe { readstat_sys::readstat_parser_init() };
 
-        Self { parser }
+        if parser.is_null() {
+            return Err(ReadStatError::CLibrary(ReadStatCError::READSTAT_ERROR_MALLOC));
+        }
+
+        Ok(Self { parser })
     }
 
     /// Registers the callback invoked when file-level metadata is parsed.

@@ -9,11 +9,10 @@ This document provides a comprehensive guide to performance benchmarking in read
 ## Quick Start
 
 ```bash
-# Run all benchmarks
-cd crates/readstat
-cargo bench
+# Run all benchmarks (from the repository root)
+cargo bench -p readstat
 
-# View HTML reports
+# View HTML reports (Criterion writes to the workspace-root target/)
 open target/criterion/report/index.html
 ```
 
@@ -419,11 +418,11 @@ Other, future, benchmarking may be performed now that [channels and threads](htt
 ## Profiling with Flamegraphs
 Profiling performed with [cargo flamegraph](https://github.com/flamegraph-rs/flamegraph).
 
-To run, execute the following from within the `readstat` directory.
+The `readstat` binary lives in the `readstat-cli` crate, so target it with `-p readstat-cli`. Run the following from the repository root.
 ```sh
-cargo flamegraph --bin readstat -- data tests/data/_ahs2019n.sas7bdat --output tests/data/_ahs2019n.csv
+cargo flamegraph -p readstat-cli --bin readstat -- data crates/readstat-tests/tests/data/_ahs2019n.sas7bdat --output crates/readstat-tests/tests/data/_ahs2019n.csv
 ```
 
-Flamegraph is written to `readstat/flamegraph.svg`.
+Flamegraph is written to `flamegraph.svg` in the directory you run the command from (the repository root).
 
 :memo: Have yet to utilize flamegraphs in order to improve performance.

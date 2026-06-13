@@ -18,9 +18,7 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     let rsp = common::setup_path("intel.sas7bdat").unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let d = ReadStatData::new()
-        .set_no_progress(true)
-        .init(md.clone(), 0, md.row_count as u32);
+    let d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
     (rsp, md, d)
 }
 
@@ -50,7 +48,7 @@ fn parse_intel_metadata() {
     assert_eq!(md.version, 9);
 
     // bitness
-    assert_eq!(md.is_64bit, 0);
+    assert!(!md.is_64bit);
 
     // creation time
     assert_eq!(md.creation_time, "2014-12-01 17:08:31");

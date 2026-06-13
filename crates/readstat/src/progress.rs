@@ -27,9 +27,15 @@
 /// }
 /// ```
 pub trait ProgressCallback: Send + Sync {
-    /// Called to report that `n` additional rows have been processed.
+    /// Called to advance progress by `n` rows. Invoked once per chunk, just
+    /// after that chunk finishes parsing, so `n` counts rows already completed
+    /// (the chunk size) — the displayed position stays in step with work done.
     fn inc(&self, n: u64);
 
-    /// Called when parsing begins for the file at `path`.
+    /// Called once when parsing begins for the file at `path`.
+    ///
+    /// Implementations should be idempotent: the contract is a single
+    /// "parsing started" notification per parse, but callers may invoke it
+    /// more than once (e.g. the CLI guards against this internally).
     fn parsing_started(&self, path: &str);
 }

@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- `readstat::read_metadata(path)` and `readstat::read_to_batch(path)` convenience free functions for the common "read a whole file" case.
+- `ReadStatData::init_filtered(md, mapping, start, end)` — a single, order-safe entry point for column-filtered reads (replaces the error-prone `set_column_filter` + `init` two-step in most callers).
+- `Display` impl for `ReadStatCError`, so `ReadStatError::CLibrary(..)` now renders a human-readable message (e.g. `ReadStat C library error: failed to open the file`) instead of the raw variant name.
+- `readstat-iconv-sys` now ships a checked-in, pre-generated Windows bindings file and a `buildtime_bindgen` feature, so Windows consumers no longer need `libclang` (mirrors `readstat-sys`). The CI `regen-iconv` job regenerates and drift-checks the file.
+- `SECURITY.md` with the vulnerability-reporting policy.
+
+### Changed
+- `ReadStatPath::new` now accepts `impl AsRef<Path>` (e.g. `&str`, `String`, `&Path`, `PathBuf`) instead of only `PathBuf`.
+- Date/time/sub-second value conversions now use range-checked `f64`→integer conversions; out-of-range values raise `ReadStatError::DateOverflow` instead of silently saturating.
+- A value/builder type mismatch (previously a silent drop) or an unexpected value type (previously `unreachable!()`) now aborts parsing with a descriptive `ReadStatError` rather than panicking across the FFI boundary or desyncing columns.
+- `release.toml` now keeps the crate versions cited in `docs/ARCHITECTURE.md` in sync on release via `pre-release-replacements`.
+- Bumped `datafusion` from 53 to 54 (powers the optional `sql` feature). The Arrow ecosystem is intentionally **held at v58**: `datafusion` 54 requires `arrow ^58`, so adopting `arrow`/`parquet` v59 now would make the `sql` feature uncompilable. The v59 bump is deferred until a `datafusion` release tracks it.
+- Bumped vendored `libiconv-win-build` (the Windows-only `iconv` backing `readstat-iconv-sys`) from `v1.18-p1` to `v1.19`. Source-only change — `build.rs` and the public surface are unaffected; the checked-in Windows bindings are regenerated and drift-checked by CI's `regen-iconv` job.
+- Refreshed semver-compatible dependencies via `scripts/check-updates.sh` (notably `generic-array`, `uuid`, the `wasm-bindgen` family, and `zerocopy`).
+
+### Removed
+- **Breaking**: removed the no-op `ReadStatData::set_no_progress` and `set_total_rows_to_process` builder methods and the unused public `errors` field. Several `ReadStatData` bookkeeping fields were demoted from `pub` to `pub(crate)`.
+
 ## [0.23.0] - 2026-05-21
 
 Bumps `readstat` and `readstat-cli` to 0.23.0; `readstat-sys` to 0.4.0.
@@ -17,6 +38,24 @@ Bumps `readstat` and `readstat-cli` to 0.23.0; `readstat-sys` to 0.4.0.
 - `readstat-sys` now ships per-target pre-generated bindings (`crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`) so default consumer builds no longer require `libclang` on any platform. The `bindgen` build dependency is gated behind a new `buildtime_bindgen` feature for maintainers regenerating the bindings.
 - `wasm32-unknown-emscripten` builds must enable `--features readstat-sys/buildtime_bindgen` — the emsdk sysroot can't be reproduced from checked-in bindings.
 - Dropped LLVM install steps from the Windows `build-win`, `asan-windows`, and `asan-windows-full` jobs in CI now that default builds no longer need `libclang`. The MSVC ASAN runtime continues to be sourced from Visual Studio.
+
+## [0.22.0] - 2026-05-12
+
+Pre-release crates.io polish: API cleanup, documentation, and CI hardening.
+
+### Added
+- `cargo-release` configuration and an updated `RELEASING.md` workflow for publishing crates in dependency order
+- `MAX_VARS` cap in the parser to guard against crafted files claiming an unbounded variable count
+
+### Changed
+- Pre-release API and documentation cleanup across the `readstat` and `readstat-cli` crates
+- Restored full unit-test coverage under Miri, skipping only the proptest suites (which are 100–1000× slower under the interpreter)
+- api-demo: hardened the Rust/Axum server (format validation, error handling, response-header lifetime) and aligned the Python server response shape
+
+### Fixed
+- Fuzz crashes surfaced by the byte-parsing targets
+- ARM64 Linux build: use `c_char` instead of `i8` in `ptr_to_string`
+- ASan CI build failure caused by the transitive `ethnum` dependency (dropped the unused `polars` dev dependency)
 
 ## [0.21.0] - 2026-04-01
 
@@ -33,6 +72,15 @@ Bumps `readstat` and `readstat-cli` to 0.23.0; `readstat-sys` to 0.4.0.
 - Bumped `readstat` and `readstat-cli` to 0.20.2 for crates.io release
 - Applied `cargo fmt` to fix formatting drift in `cb.rs`, `rs_data.rs`, and `rs_query.rs`
 - Replaced `CString::new("").unwrap()` with `expect("empty string is valid C string")` in buffer I/O dummy paths for clearer intent
+
+## [0.20.1] - 2026-03-03
+
+Pre-publish cleanup ahead of the first crates.io release.
+
+### Fixed
+- Undefined behavior in the WASM `free_binary` export
+- Added bounds-checking to the C-string read path (`readCString`)
+- Documentation corrections
 
 ## [0.20.0] - 2026-03-03
 

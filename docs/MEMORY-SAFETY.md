@@ -2,11 +2,11 @@
 
 # Memory Safety
 
-This project contains unsafe Rust code (FFI callbacks, pointer casts, memory-mapped I/O) and links against the vendored ReadStat C library. Four automated CI checks guard against memory errors.
+This project contains unsafe Rust code (FFI callbacks, pointer casts, memory-mapped I/O) and links against the vendored ReadStat C library. Five automated CI checks guard against memory errors (the fifth is experimental and `continue-on-error`).
 
 ## CI Jobs
 
-All four jobs run on every workflow dispatch and tag push, in parallel with the build jobs. Any memory error fails the job with a nonzero exit code.
+All five jobs run on every workflow dispatch and tag push, in parallel with the build jobs. Any memory error fails the job with a nonzero exit code — except the experimental `asan-windows-full` job, which is marked `continue-on-error` and does not block the workflow.
 
 ### Miri (Rust undefined behavior)
 
@@ -53,9 +53,16 @@ Configuration:
 - Rust on Windows MSVC uses **Microsoft's ASan runtime** (from Visual Studio), not LLVM's compiler-rt. The compiler passes `/INFERASANLIBS` to the MSVC linker, which auto-discovers the runtime import library at **link time**. See [PR #118521](https://github.com/rust-lang/rust/pull/118521).
 - **Important**: the MSVC ASan runtime DLL (`clang_rt.asan_dynamic-x86_64.dll`) is NOT on PATH by default. The linker finds the import library at build time via `/INFERASANLIBS`, but the DLL loader needs the DLL on PATH at **test runtime**. The CI job uses `vswhere.exe` to locate the DLL directory (e.g., `C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\<ver>\bin\Hostx64\x64\`) and prepends it to PATH.
 - LLVM is **not** installed by the Windows ASan job. Earlier versions installed it to satisfy bindgen's `libclang` requirement, but `readstat-sys` now ships pre-generated bindings so default builds need neither. ASan itself uses Microsoft's runtime, not LLVM's.
-- The ReadStat C library is **not** instrumented on Windows currently. Unlike macOS, there is no runtime mismatch — both Rust and `cl.exe` use the same MSVC ASan runtime. Full C instrumentation is a future improvement (see [Future Work](#future-work-windows-c-instrumentation)).
+- This default job instruments **Rust only**. Unlike macOS, there is no runtime mismatch — both Rust and `cl.exe` use the same MSVC ASan runtime — so full C instrumentation is also exercised by a separate experimental job (below).
 - LeakSanitizer is not supported on Windows
 - Doctests excluded for the same reason as Linux
+
+### AddressSanitizer — Windows (full C + Rust, experimental)
+
+- **Job**: `asan-windows-full` — marked `continue-on-error`, so a failure does not block the workflow
+- **Platform**: Windows (x86_64, MSVC toolchain)
+- **Scope**: Full workspace, with the ReadStat C library **also** instrumented (`READSTAT_SANITIZE_ADDRESS=1` → `/fsanitize=address`)
+- **Why experimental**: full Rust + C ASan on Windows MSVC *should* work since both use the same MSVC ASan runtime, but the combination is not widely documented as working — hence `continue-on-error` while it is validated. Once stable it would match Linux's full C + Rust coverage (see [Future Work](#future-work-windows-c-instrumentation)).
 
 ## How `READSTAT_SANITIZE_ADDRESS` Works
 
@@ -65,7 +72,7 @@ The flags are platform-specific:
 - **Linux/macOS**: `-fsanitize=address -fno-omit-frame-pointer` (GCC/Clang syntax)
 - **Windows MSVC**: `/fsanitize=address` (MSVC syntax)
 
-Currently only the Linux CI job sets `READSTAT_SANITIZE_ADDRESS=1` because it is the only platform where C instrumentation has been validated.
+The Linux CI job sets `READSTAT_SANITIZE_ADDRESS=1` (validated, blocking) and the experimental `asan-windows-full` job sets it too (`continue-on-error` while being validated). macOS does not, because of the runtime mismatch described below.
 
 ## ASan Runtime Mismatch (macOS)
 
@@ -88,8 +95,11 @@ Since Rust and MSVC share the same ASan runtime on Windows, enabling `READSTAT_S
 ### Miri
 ```bash
 rustup +nightly component add miri
-MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test -p readstat
+MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test -p readstat -- --skip property_tests
 ```
+
+> `--skip property_tests` matches CI: the proptest suites run 256 cases each and
+> are 100–1000× slower under Miri's interpreter. Everything else runs.
 
 ### ASan on Linux
 ```bash
@@ -120,7 +130,7 @@ For manual checks with full C library coverage, [valgrind](https://valgrind.org/
 
 ```bash
 cargo test -p readstat-tests --no-run
-valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
+valgrind ./target/debug/deps/parse_cars_md_test-<hash>
 ```
 
 ## Coverage Summary
@@ -130,7 +140,7 @@ valgrind ./target/debug/deps/parse_file_metadata_test-<hash>
 | Miri | Linux | Unit tests only | No (FFI excluded) | No |
 | ASan | Linux | Full workspace | Yes (instrumented) | Yes |
 | ASan | macOS | Full workspace | No (runtime mismatch) | No |
-| ASan | Windows | Full workspace | Not yet (no mismatch — see [future work](#future-work-windows-c-instrumentation)) | No |
+| ASan | Windows | Full workspace | Experimental (`asan-windows-full`, `continue-on-error` — see [future work](#future-work-windows-c-instrumentation)) | No |
 | Valgrind | Linux (manual) | Full | Full | Yes |
 | cargo-fuzz | Linux (CI, weekly) | Full | Full | No |
 

@@ -68,11 +68,7 @@ fn bench_ahs_string_allocation() {
         let (row_start, row_end) = (window[0], window[1]);
         let chunk_rows = (row_end - row_start) as usize;
 
-        let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
-            md.clone(),
-            row_start,
-            row_end,
-        );
+        let mut d = readstat::ReadStatData::new().init(md.clone(), row_start, row_end);
 
         let t1 = Instant::now();
         d.read_data(&rsp).unwrap();
@@ -120,11 +116,7 @@ fn bench_cars_string_allocation() {
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new().set_no_progress(true).init(
-        md.clone(),
-        0,
-        md.row_count as u32,
-    );
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
 
     let t1 = Instant::now();
     d.read_data(&rsp).unwrap();

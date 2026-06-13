@@ -28,7 +28,7 @@ fn parse_all_types_metadata() {
             file_label: "",
             file_encoding: "UTF-8",
             version: 9,
-            is_64bit: 1,
+            is_64bit: true,
             creation_time: "2026-02-18 02:32:45",
             modified_time: "2026-02-18 02:32:45",
         },

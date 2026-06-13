@@ -31,7 +31,6 @@ fn read_cars_with_columns(
 
     let mut d = ReadStatData::new()
         .set_column_filter(column_filter.map(Arc::new), original_var_count)
-        .set_no_progress(true)
         .init(md.clone(), 0, md.row_count as u32);
 
     d.read_data(&rsp)?;
@@ -183,7 +182,6 @@ fn column_select_with_streaming() {
     // Read first 10 rows
     let mut d1 = ReadStatData::new()
         .set_column_filter(column_filter.clone(), original_var_count)
-        .set_no_progress(true)
         .init(filtered_md.clone(), 0, 10);
     d1.read_data(&rsp).unwrap();
 
@@ -196,7 +194,6 @@ fn column_select_with_streaming() {
     // Read next 10 rows
     let mut d2 = ReadStatData::new()
         .set_column_filter(column_filter, original_var_count)
-        .set_no_progress(true)
         .init(filtered_md, 10, 20);
     d2.read_data(&rsp).unwrap();
 

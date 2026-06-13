@@ -27,7 +27,7 @@ fn parse_cars_metadata() {
             file_label: "Written by SAS",
             file_encoding: "WINDOWS-1252",
             version: 9,
-            is_64bit: 0,
+            is_64bit: false,
             creation_time: "2008-09-30 12:55:01",
             modified_time: "2008-09-30 12:55:01",
         },

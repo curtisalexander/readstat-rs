@@ -10,10 +10,10 @@ name: readstat-sys cross-platform CI
 #
 #   * `regen`: runs bindgen via `--features buildtime_bindgen` to
 #     reproduce the corresponding per-target file. Uploads each result
-#     as an artifact and prints a `git diff` so any drift surfaces in
-#     the job log. The diff is informational — a maintainer downloads
-#     the artifacts and commits them when refreshing bindings after a
-#     `wrapper.h` change, `vendor/ReadStat` bump, or `bindgen` upgrade.
+#     as an artifact and **fails the job** if the regenerated file differs
+#     from (or is missing relative to) the checked-in bindings. On failure a
+#     maintainer downloads the artifacts and commits them to refresh bindings
+#     after a `wrapper.h` change, `vendor/ReadStat` bump, or `bindgen` upgrade.
 #
 # Manual trigger (`workflow_dispatch`) is supported for cutting fresh
 # bindings on demand without a PR.
@@ -22,6 +22,7 @@ on:
   pull_request:
     paths:
       - 'crates/readstat-sys/**'
+      - 'crates/readstat-iconv-sys/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
@@ -29,6 +30,7 @@ on:
     branches: [main, dev]
     paths:
       - 'crates/readstat-sys/**'
+      - 'crates/readstat-iconv-sys/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
@@ -104,10 +106,72 @@ jobs:
       - name: Fail if regenerated bindings differ from checked-in
         shell: bash
         run: |
-          if git --no-pager diff --no-color --exit-code crates/readstat-sys/src/bindings/${{ matrix.file }}; then
+          path="crates/readstat-sys/src/bindings/${{ matrix.file }}"
+          # Existence + tracked checks catch a brand-new bindings file (e.g. a
+          # freshly added target) that a plain content diff would silently pass.
+          if [ ! -f "$path" ]; then
+            echo "::error::$path does not exist after regeneration."
+            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+          if ! git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+            echo "::error::$path is untracked — commit the generated bindings."
+            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+          # Compare with `git diff` (NOT `git status --porcelain`): it applies
+          # the `.gitattributes` `*.rs text eol=lf` clean filter, so a pure
+          # CRLF-vs-LF difference — bindgen/rustfmt emits CRLF on the Windows
+          # runner — is not mistaken for real ABI drift. Real content changes
+          # still fail. (git normalizes the artifact's CRLF to LF on commit.)
+          if git --no-pager diff --no-color --exit-code -- "$path"; then
             echo "::notice::Bindings match a fresh regeneration on ${{ matrix.os }}."
           else
             echo "::error::Checked-in bindings/${{ matrix.file }} differ from what bindgen now produces."
             echo "::error::Download the 'bindings-${{ matrix.os }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+
+  # readstat-iconv-sys is Windows-only and ships its own checked-in
+  # pre-generated bindings (so consumers need no libclang). This job
+  # regenerates `bindings_windows_x86_64.rs` on a Windows runner, uploads it,
+  # and fails on drift — mirroring the `regen` job above. Use the uploaded
+  # artifact to commit the file when first creating it or after a libiconv /
+  # bindgen change.
+  regen-iconv:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install LLVM (bindgen needs libclang)
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "17"
+
+      - name: Regenerate iconv bindings
+        run: cargo build -p readstat-iconv-sys --features buildtime_bindgen
+
+      - name: Upload regenerated iconv bindings
+        uses: actions/upload-artifact@v7
+        with:
+          name: iconv-bindings-windows
+          path: crates/readstat-iconv-sys/src/bindings/bindings_windows_x86_64.rs
+
+      - name: Fail if regenerated bindings differ from checked-in
+        shell: bash
+        run: |
+          file=crates/readstat-iconv-sys/src/bindings/bindings_windows_x86_64.rs
+          if [ ! -f "$file" ]; then
+            echo "::error::$file does not exist yet."
+            echo "::error::Download the 'iconv-bindings-windows' artifact from this run, copy it into crates/readstat-iconv-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+          if git --no-pager diff --no-color --exit-code "$file"; then
+            echo "::notice::iconv bindings match a fresh regeneration."
+          else
+            echo "::error::Checked-in $file differs from what bindgen now produces."
+            echo "::error::Download the 'iconv-bindings-windows' artifact from this run, copy it into crates/readstat-iconv-sys/src/bindings/, commit, and push."
             exit 1
           fi
