@@ -305,6 +305,24 @@ impl ReadStatData {
         Ok(())
     }
 
+    /// Records that a value was observed for `var_index` during parsing.
+    ///
+    /// When `var_index` is the dataset's final variable, the cell marks the end
+    /// of a row, so the per-chunk and shared row counters are advanced. Boundary
+    /// detection uses `total_var_count` (the *unfiltered* variable count) so it
+    /// stays correct even when a column filter skips trailing columns.
+    ///
+    /// Called from the value callback for both stored and filter-skipped cells,
+    /// keeping row-boundary accounting in a single place.
+    pub(crate) fn note_value(&mut self, var_index: i32) {
+        if var_index == self.total_var_count - 1 {
+            self.chunk_rows_processed += 1;
+            if let Some(trp) = &self.total_rows_processed {
+                trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+
     /// Parses row data from the file and converts it to an Arrow [`RecordBatch`].
     ///
     /// # Errors

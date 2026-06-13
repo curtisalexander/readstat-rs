@@ -350,22 +350,19 @@ pub(crate) extern "C" fn handle_value(
     debug!("value_type is {value_type:#?}");
     debug!("is_missing is {is_missing}");
 
-    // Determine the column index for storage, applying column filter if active
-    let col_index = if let Some(ref filter) = d.column_filter {
-        if let Some(&mapped) = filter.get(&var_index) {
-            mapped
-        } else {
-            // This variable is not selected; skip it but still check row boundary
-            if var_index == (d.total_var_count - 1) {
-                d.chunk_rows_processed += 1;
-                if let Some(trp) = &d.total_rows_processed {
-                    trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                }
-            }
-            return ReadStatHandler::READSTAT_HANDLER_OK as c_int;
-        }
-    } else {
-        var_index
+    // Map the original variable index to its column in the (possibly filtered)
+    // builders. With a column filter active, an unselected variable maps to
+    // `None` and is skipped below.
+    let col_index = match &d.column_filter {
+        Some(filter) => filter.get(&var_index).copied(),
+        None => Some(var_index),
+    };
+
+    let Some(col_index) = col_index else {
+        // Unselected column: skip the value, but still advance the row counter
+        // when this is the row's final variable so row boundaries stay correct.
+        d.note_value(var_index);
+        return ReadStatHandler::READSTAT_HANDLER_OK as c_int;
     };
 
     // Records a builder/value mismatch and aborts parsing gracefully. A panic
@@ -597,13 +594,8 @@ pub(crate) extern "C" fn handle_value(
         }
     }
 
-    // if row is complete (use total_var_count for boundary detection)
-    if var_index == (d.total_var_count - 1) {
-        d.chunk_rows_processed += 1;
-        if let Some(trp) = &d.total_rows_processed {
-            trp.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
+    // Advance the row counter when this was the row's final variable.
+    d.note_value(var_index);
 
     ReadStatHandler::READSTAT_HANDLER_OK as c_int
 }
