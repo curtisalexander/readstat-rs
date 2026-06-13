@@ -97,7 +97,7 @@ Header include paths are propagated between crates using Cargo's `links` key:
 - `readstat-iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`
 - `libz-sys` sets `cargo:include=...` which becomes `DEP_Z_INCLUDE` in `readstat-sys`
 
-### `readstat-iconv-sys` (v0.3.0) — iconv FFI (Windows)
+### `readstat-iconv-sys` (v0.3.1) — iconv FFI (Windows)
 **Path**: `crates/readstat-iconv-sys/`
 
 Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-win-build/` git submodule using the `cc` crate, producing a static library. On non-Windows platforms the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
