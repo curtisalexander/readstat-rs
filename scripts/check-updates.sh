@@ -8,7 +8,10 @@
 #      quarantine check and applied by --apply.
 #   2. MAJOR updates — a newer semver-INCOMPATIBLE version is available. These
 #      are reported but NEVER applied automatically: bumping them requires
-#      editing the version requirement in Cargo.toml by hand.
+#      editing the version requirement in Cargo.toml by hand. When arrow,
+#      parquet, or datafusion is among them, the script queries crates.io to
+#      resolve which arrow major the latest datafusion requires and prints a
+#      verdict on whether the set can move together yet — no manual curl needed.
 #   3. A dedicated `bindgen` advisory. bindgen is exact-pinned ("=x.y.z") because
 #      its output drives the checked-in per-target FFI bindings; this script
 #      reports a newer bindgen if one exists and prints exactly how to take it.
@@ -54,6 +57,9 @@ RESET='\033[0m'
 CHECK='✔'
 WARN='⚠'
 BLOCK='✖'
+
+# Shared crates.io User-Agent (crates.io asks API clients to identify themselves).
+CRATES_UA="readstat-rs-check-updates (https://github.com/curtisalexander/readstat-rs)"
 
 # Inner width of the report table (must match the column rule below:
 # (20+2)+(13+2)+(13+2)+(12+2)+(7+2)+(11+2) + 5 column joints = 93).
@@ -105,7 +111,7 @@ ver_gt() {
 fetch_pub_date() {
   local crate="$1" version="$2" now resp created pub_date pub_ts age
   now=$(date +%s)
-  resp=$(curl -sS -H "User-Agent: readstat-rs-check-updates (https://github.com/curtisalexander/readstat-rs)" \
+  resp=$(curl -sS -H "User-Agent: $CRATES_UA" \
     "https://crates.io/api/v1/crates/${crate}/${version}" 2>/dev/null || echo '{}')
   created=$(echo "$resp" | jq -r '.version.created_at // empty' 2>/dev/null || true)
   if [ -n "$created" ]; then
@@ -120,6 +126,27 @@ fetch_pub_date() {
   else
     echo "unknown|-1"
   fi
+}
+
+# Latest stable version of a crate per crates.io (e.g. "54.0.0"). "" on failure.
+crates_max_stable() {
+  local crate="$1" resp
+  resp=$(curl -sS -H "User-Agent: $CRATES_UA" \
+    "https://crates.io/api/v1/crates/${crate}" 2>/dev/null || echo '{}')
+  echo "$resp" | jq -r '.crate.max_stable_version // .crate.max_version // empty' 2>/dev/null || true
+}
+
+# The arrow MAJOR a given (concrete) datafusion version requires, per crates.io.
+# This is the lookup the old "run this curl yourself" note asked for, inlined.
+# Echoes the bare major (e.g. "58"); "" on failure. The dependencies endpoint
+# needs a concrete version (e.g. "54.0.0"), not a bare major.
+datafusion_arrow_major() {
+  local dfver="$1" resp req
+  resp=$(curl -sS -H "User-Agent: $CRATES_UA" \
+    "https://crates.io/api/v1/crates/datafusion/${dfver}/dependencies" 2>/dev/null || echo '{}')
+  req=$(echo "$resp" | jq -r '.dependencies[]? | select(.crate_id=="arrow") | .req' 2>/dev/null | head -n1)
+  # req looks like "^58.3.0", "58", or ">=58.0.0, <59" — take the first integer.
+  echo "$req" | grep -oE '[0-9]+' | head -n1
 }
 
 # ── Gather candidates from cargo ──────────────────────────────────────────────
@@ -170,7 +197,7 @@ BINDGEN_PIN=$(grep -E '^[[:space:]]*bindgen[[:space:]]*=[[:space:]]*"=' Cargo.to
   | sed -E 's/.*"=([0-9][0-9A-Za-z.+-]*)".*/\1/' | head -n1)
 BINDGEN_LATEST=""
 if [ -n "$BINDGEN_PIN" ]; then
-  bresp=$(curl -sS -H "User-Agent: readstat-rs-check-updates (https://github.com/curtisalexander/readstat-rs)" \
+  bresp=$(curl -sS -H "User-Agent: $CRATES_UA" \
     "https://crates.io/api/v1/crates/bindgen" 2>/dev/null || echo '{}')
   BINDGEN_LATEST=$(echo "$bresp" | jq -r '.crate.max_stable_version // .crate.max_version // empty' 2>/dev/null || true)
   # Prefer whichever is newer: what cargo saw vs crates.io max-stable.
@@ -246,15 +273,57 @@ if [ "$major_count" -gt 0 ]; then
   echo -e "${DIM}  These cross a semver-incompatible boundary. To take one, bump its version${RESET}"
   echo -e "${DIM}  requirement in the relevant Cargo.toml (e.g. \`foo = \"54\"\`), then \`cargo build\`${RESET}"
   echo -e "${DIM}  and run the test suite — APIs may have changed.${RESET}"
-  echo -e "${DIM}  ${RESET}"
-  echo -e "${YELLOW}  Arrow/Parquet are pinned to DataFusion: each datafusion release requires one${RESET}"
-  echo -e "${YELLOW}  arrow major. Do NOT bump arrow/parquet ahead of a datafusion release that${RESET}"
-  echo -e "${YELLOW}  supports the new major — cargo will silently pull TWO arrow majors and the${RESET}"
-  echo -e "${YELLOW}  \`sql\` feature breaks. Verify first, then bump the whole set together:${RESET}"
-  echo -e "${DIM}    curl -s https://crates.io/api/v1/crates/datafusion/<ver>/dependencies \\\\${RESET}"
-  echo -e "${DIM}      | jq -r '.dependencies[] | select(.crate_id==\"arrow\") | .req'${RESET}"
-  echo -e "${DIM}  The 'Arrow/DataFusion lockstep' check below (and CI) enforces this.${RESET}"
   echo ""
+
+  # Arrow/Parquet are pinned to DataFusion: each datafusion release requires one
+  # arrow major. Bumping arrow/parquet ahead of a datafusion release that
+  # supports the new major silently pulls TWO arrow majors and breaks the `sql`
+  # feature. When any of arrow/parquet/datafusion is among the majors above, do
+  # the crates.io lookup automatically (the note used to ask you to curl by hand)
+  # and print a verdict on whether they can move together yet.
+  arrow_target=""        # arrow major we'd be moving to, if pending
+  df_pending=false
+  for i in $(seq 0 $((major_count - 1))); do
+    case "${M_NAMES[$i]}" in
+      arrow|parquet) arrow_target="${M_AVAIL[$i]%%.*}" ;;
+      datafusion)    df_pending=true ;;
+    esac
+  done
+
+  if [ -n "$arrow_target" ] || [ "$df_pending" = true ]; then
+    echo -e "${YELLOW}  Arrow/Parquet move in lockstep with DataFusion. Resolving compatibility${RESET}"
+    echo -e "${YELLOW}  live from crates.io…${RESET}"
+    df_latest=$(crates_max_stable datafusion)
+    df_latest_arrow=""
+    [ -n "$df_latest" ] && df_latest_arrow=$(datafusion_arrow_major "$df_latest")
+    # If only datafusion has a pending major, the arrow major it pulls in IS the
+    # de-facto target the rest of the set must match.
+    [ -z "$arrow_target" ] && arrow_target="$df_latest_arrow"
+
+    if [ -n "$df_latest" ] && [ -n "$df_latest_arrow" ]; then
+      echo -e "    latest datafusion ${BOLD}${df_latest}${RESET} requires arrow major ${BOLD}${df_latest_arrow}${RESET}"
+      [ -n "$arrow_target" ] && echo -e "    arrow/parquet target major ${BOLD}${arrow_target}${RESET}"
+      echo ""
+      if [ -n "$arrow_target" ] && [ "$df_latest_arrow" = "$arrow_target" ]; then
+        echo -e "  ${GREEN}${CHECK} datafusion ${df_latest} supports arrow ${arrow_target} — bump the whole set together:${RESET}"
+        echo -e "${DIM}      arrow/parquet → ${arrow_target} in Cargo.toml [workspace.dependencies]${RESET}"
+        echo -e "${DIM}      datafusion    → ${df_latest} in crates/readstat/Cargo.toml${RESET}"
+      elif [ -n "$arrow_target" ] && [ "$df_latest_arrow" -lt "$arrow_target" ] 2>/dev/null; then
+        echo -e "  ${RED}${BLOCK} No published datafusion release supports arrow ${arrow_target} yet${RESET}"
+        echo -e "${YELLOW}      (latest datafusion ${df_latest} still requires arrow ${df_latest_arrow}).${RESET}"
+        echo -e "${YELLOW}      Hold arrow/parquet at ${df_latest_arrow} until a datafusion release adds it.${RESET}"
+      else
+        echo -e "  ${YELLOW}${WARN} latest datafusion ${df_latest} needs arrow ${df_latest_arrow}; review before bumping.${RESET}"
+      fi
+    else
+      echo -e "  ${YELLOW}${WARN} Could not resolve datafusion's arrow requirement from crates.io.${RESET}"
+      echo -e "${DIM}      Check manually:${RESET}"
+      echo -e "${DIM}      curl -s https://crates.io/api/v1/crates/datafusion/<ver>/dependencies \\\\${RESET}"
+      echo -e "${DIM}        | jq -r '.dependencies[] | select(.crate_id==\"arrow\") | .req'${RESET}"
+    fi
+    echo -e "${DIM}  The 'Arrow/DataFusion lockstep' check below (and CI) enforces this.${RESET}"
+    echo ""
+  fi
 fi
 
 # ── Report: bindgen advisory ──────────────────────────────────────────────────

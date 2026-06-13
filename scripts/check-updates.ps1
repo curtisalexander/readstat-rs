@@ -10,7 +10,10 @@
          the quarantine check and applied by -Apply.
       2. MAJOR updates — a newer semver-INCOMPATIBLE version is available. These
          are reported but NEVER applied automatically: bumping them requires
-         editing the version requirement in Cargo.toml by hand.
+         editing the version requirement in Cargo.toml by hand. When arrow,
+         parquet, or datafusion is among them, the script queries crates.io to
+         resolve which arrow major the latest datafusion requires and prints a
+         verdict on whether the set can move together yet.
       3. A dedicated `bindgen` advisory. bindgen is exact-pinned ("=x.y.z")
          because its output drives the checked-in per-target FFI bindings; this
          script reports a newer bindgen if one exists and prints how to take it.
@@ -74,6 +77,30 @@ function Test-CaretCompatible([string]$cur, [string]$avail) {
 }
 
 $Headers = @{ 'User-Agent' = 'readstat-rs-check-updates (https://github.com/curtisalexander/readstat-rs)' }
+
+# Latest stable version of a crate per crates.io (e.g. "54.0.0"); $null on failure.
+function Get-CratesMaxStable([string]$Crate) {
+    try {
+        $resp = Invoke-RestMethod -Uri "https://crates.io/api/v1/crates/$Crate" -Headers $Headers -TimeoutSec 10
+        if ($resp.crate.max_stable_version) { return $resp.crate.max_stable_version }
+        return $resp.crate.max_version
+    }
+    catch { return $null }
+}
+
+# The arrow MAJOR a given (concrete) datafusion version requires, per crates.io.
+# This is the lookup the old "see CLAUDE.md / curl it yourself" note implied,
+# inlined. Returns the bare major as [int]; $null on failure. The dependencies
+# endpoint needs a concrete version (e.g. "54.0.0"), not a bare major.
+function Get-DataFusionArrowMajor([string]$DfVersion) {
+    try {
+        $resp = Invoke-RestMethod -Uri "https://crates.io/api/v1/crates/datafusion/$DfVersion/dependencies" -Headers $Headers -TimeoutSec 10
+        $req = ($resp.dependencies | Where-Object { $_.crate_id -eq 'arrow' } | Select-Object -First 1).req
+        if ($req -and ($req -match '(\d+)')) { return [int]$Matches[1] }
+        return $null
+    }
+    catch { return $null }
+}
 
 # ── Gather candidates from cargo ──────────────────────────────────────────────
 Write-Host "`nChecking for outdated dependencies…" -ForegroundColor Blue
@@ -213,9 +240,54 @@ if ($major.Count -gt 0) {
     Write-Host ""
     Write-Host '  These cross a semver-incompatible boundary. To take one, bump its version' -ForegroundColor DarkGray
     Write-Host '  requirement in the relevant Cargo.toml (e.g. foo = "54"), then run cargo build' -ForegroundColor DarkGray
-    Write-Host '  and run the test suite — APIs may have changed. For the Arrow/Parquet and' -ForegroundColor DarkGray
-    Write-Host '  DataFusion crates, bump the whole set together (see CLAUDE.md).' -ForegroundColor DarkGray
+    Write-Host '  and run the test suite — APIs may have changed.' -ForegroundColor DarkGray
     Write-Host ""
+
+    # Arrow/Parquet move in lockstep with DataFusion: each datafusion release
+    # requires one arrow major. Bumping arrow/parquet ahead of a datafusion
+    # release that supports the new major silently pulls TWO arrow majors and
+    # breaks the `sql` feature. When any of arrow/parquet/datafusion is among the
+    # majors above, resolve compatibility from crates.io and print a verdict.
+    $arrowTarget = $null
+    $dfPending = $false
+    foreach ($m in $major) {
+        if ($m.Name -in @('arrow', 'parquet')) { $arrowTarget = [int]((Convert-VerParts $m.Available)[0]) }
+        elseif ($m.Name -eq 'datafusion') { $dfPending = $true }
+    }
+
+    if ($null -ne $arrowTarget -or $dfPending) {
+        Write-Host '  Arrow/Parquet move in lockstep with DataFusion. Resolving compatibility' -ForegroundColor Yellow
+        Write-Host '  live from crates.io…' -ForegroundColor Yellow
+        $dfLatest = Get-CratesMaxStable 'datafusion'
+        $dfLatestArrow = if ($dfLatest) { Get-DataFusionArrowMajor $dfLatest } else { $null }
+        # If only datafusion has a pending major, the arrow major it pulls in IS
+        # the de-facto target the rest of the set must match.
+        if ($null -eq $arrowTarget) { $arrowTarget = $dfLatestArrow }
+
+        if ($dfLatest -and $null -ne $dfLatestArrow) {
+            Write-Host "    latest datafusion $dfLatest requires arrow major $dfLatestArrow"
+            if ($null -ne $arrowTarget) { Write-Host "    arrow/parquet target major $arrowTarget" }
+            Write-Host ""
+            if ($null -ne $arrowTarget -and $dfLatestArrow -eq $arrowTarget) {
+                Write-Host "  ✔ datafusion $dfLatest supports arrow $arrowTarget — bump the whole set together:" -ForegroundColor Green
+                Write-Host "      arrow/parquet → $arrowTarget in Cargo.toml [workspace.dependencies]" -ForegroundColor DarkGray
+                Write-Host "      datafusion    → $dfLatest in crates/readstat/Cargo.toml" -ForegroundColor DarkGray
+            }
+            elseif ($null -ne $arrowTarget -and $dfLatestArrow -lt $arrowTarget) {
+                Write-Host "  ✖ No published datafusion release supports arrow $arrowTarget yet" -ForegroundColor Red
+                Write-Host "      (latest datafusion $dfLatest still requires arrow $dfLatestArrow)." -ForegroundColor Yellow
+                Write-Host "      Hold arrow/parquet at $dfLatestArrow until a datafusion release adds it." -ForegroundColor Yellow
+            }
+            else {
+                Write-Host "  ⚠ latest datafusion $dfLatest needs arrow $dfLatestArrow; review before bumping." -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Host '  ⚠ Could not resolve datafusion''s arrow requirement from crates.io.' -ForegroundColor Yellow
+        }
+        Write-Host "  The 'Arrow/DataFusion lockstep' check (scripts/check-arrow-lockstep, and CI) enforces this." -ForegroundColor DarkGray
+        Write-Host ""
+    }
 }
 
 # ── Report: bindgen advisory ──────────────────────────────────────────────────
