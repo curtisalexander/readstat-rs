@@ -11,6 +11,8 @@
 # Reference
 
 - [Architecture](architecture.md)
+- [Visual Guide](visual-guide.md)
+- [Improvement Roadmap](improvement-roadmap.md)
 - [Technical Details](technical.md)
 - [Testing](testing.md)
 - [Memory Safety](memory-safety.md)

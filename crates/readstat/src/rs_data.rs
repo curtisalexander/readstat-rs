@@ -272,7 +272,7 @@ impl ReadStatData {
     /// Each builder's type is determined by the variable metadata. String builders
     /// are additionally pre-sized with `storage_width * chunk_rows` bytes.
     ///
-    /// The capacity hint is clamped to [`MAX_PREALLOC_ROWS`] because both the row
+    /// The capacity hint is clamped to `MAX_PREALLOC_ROWS` because both the row
     /// count and per-string `storage_width` originate from untrusted file headers;
     /// a crafted file claiming billions of rows would otherwise trigger a multi-GB
     /// up-front allocation (or a multiply overflow) before a single row is parsed.
@@ -329,8 +329,11 @@ impl ReadStatData {
     ///
     /// Returns [`ReadStatError`] if FFI parsing or Arrow conversion fails.
     pub fn read_data(&mut self, rsp: &ReadStatPath) -> Result<(), ReadStatError> {
-        // parse data and if successful then convert cols into a record batch
-        self.parse_data(rsp)?;
+        // A zero-row chunk should produce an empty RecordBatch. Do not call into
+        // ReadStat with row_limit = 0: C APIs often use 0 to mean "unlimited".
+        if self.chunk_rows_to_process != 0 {
+            self.parse_data(rsp)?;
+        }
         self.cols_to_batch()?;
         Ok(())
     }
@@ -344,7 +347,11 @@ impl ReadStatData {
     ///
     /// Returns [`ReadStatError`] if FFI parsing or Arrow conversion fails.
     pub fn read_data_from_bytes(&mut self, bytes: &[u8]) -> Result<(), ReadStatError> {
-        self.parse_data_from_bytes(bytes)?;
+        // A zero-row chunk should produce an empty RecordBatch. Do not call into
+        // ReadStat with row_limit = 0: C APIs often use 0 to mean "unlimited".
+        if self.chunk_rows_to_process != 0 {
+            self.parse_data_from_bytes(bytes)?;
+        }
         self.cols_to_batch()?;
         Ok(())
     }

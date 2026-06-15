@@ -18,6 +18,21 @@ fn main() -> Result<(), readstat::ReadStatError> {
 }
 ```
 
+Or project columns / preview row ranges without dropping to the low-level API:
+
+```rust,no_run
+fn main() -> Result<(), readstat::ReadStatError> {
+    let batch = readstat::read_to_batch_with_options(
+        "data.sas7bdat",
+        readstat::ReadOptions::new()
+            .columns(["name", "age"])
+            .row_count(100),
+    )?;
+    println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
+    Ok(())
+}
+```
+
 Or read just the file/variable metadata, without loading any rows:
 
 ```rust,no_run
@@ -28,7 +43,7 @@ fn main() -> Result<(), readstat::ReadStatError> {
 }
 ```
 
-For streaming large files in chunks, parallel reads, and column filtering, use the `ReadStatPath` / `ReadStatMetadata` / `ReadStatData` types directly — see the [crate documentation](https://docs.rs/readstat).
+For streaming large files in chunks, parallel reads, and custom writer orchestration, use the `ReadStatPath` / `ReadStatMetadata` / `ReadStatData` types directly — see the [crate documentation](https://docs.rs/readstat).
 
 ## Features
 
@@ -42,10 +57,11 @@ Output format writers are feature-gated (all enabled by default):
 
 ## Key Types
 
+- `ReadOptions` — High-level options for column projection and row ranges
 - `ReadStatData` — Coordinates FFI parsing, accumulates values directly into typed Arrow builders
 - `ReadStatMetadata` — File-level metadata (row/var counts, encoding, compression, schema)
 - `ReadStatWriter` — Writes Arrow batches to the requested output format
 - `ReadStatPath` — Validated input file path
 - `WriteConfig` — Output configuration (path, format, compression)
 
-For the full architecture overview, see [docs/ARCHITECTURE.md](https://github.com/curtisalexander/readstat-rs/blob/main/docs/ARCHITECTURE.md).
+For the full architecture overview, see [docs/ARCHITECTURE.md](https://github.com/curtisalexander/readstat-rs/blob/main/docs/ARCHITECTURE.md). For a diagram-style pipeline walkthrough, see [docs/VISUAL-GUIDE.md](https://github.com/curtisalexander/readstat-rs/blob/main/docs/VISUAL-GUIDE.md).

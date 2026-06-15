@@ -97,10 +97,7 @@ fn zero_rows_feather_creates_valid_empty_file() {
         .success();
 
     let bytes = std::fs::read(tempfile.path()).unwrap();
-    assert!(
-        bytes.starts_with(b"ARROW1"),
-        "missing Arrow IPC file magic"
-    );
+    assert!(bytes.starts_with(b"ARROW1"), "missing Arrow IPC file magic");
 }
 
 /// A file that fails mid-parse must exit nonzero — never report success over

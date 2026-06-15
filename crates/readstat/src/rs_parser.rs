@@ -39,7 +39,9 @@ impl ReadStatParser {
             unsafe { readstat_sys::readstat_parser_init() };
 
         if parser.is_null() {
-            return Err(ReadStatError::CLibrary(ReadStatCError::READSTAT_ERROR_MALLOC));
+            return Err(ReadStatError::CLibrary(
+                ReadStatCError::READSTAT_ERROR_MALLOC,
+            ));
         }
 
         Ok(Self { parser })

@@ -39,6 +39,46 @@ fn read_to_batch_returns_all_rows() {
 }
 
 #[test]
+fn read_to_batch_with_options_projects_columns_and_rows() {
+    let path = data_path("cars.sas7bdat");
+    let md = readstat::read_metadata(&path).unwrap();
+    let first_col = md.vars.values().next().unwrap().var_name.clone();
+
+    let batch = readstat::read_to_batch_with_options(
+        &path,
+        readstat::ReadOptions::new()
+            .columns([first_col.clone()])
+            .row_start(1)
+            .row_count(3),
+    )
+    .unwrap();
+
+    assert_eq!(batch.num_rows(), 3);
+    assert_eq!(batch.num_columns(), 1);
+    assert_eq!(batch.schema().field(0).name(), &first_col);
+}
+
+#[test]
+fn read_to_batch_from_bytes_with_options_can_return_zero_rows() {
+    let path = data_path("cars.sas7bdat");
+    let md = readstat::read_metadata(&path).unwrap();
+    let first_col = md.vars.values().next().unwrap().var_name.clone();
+    let bytes = std::fs::read(&path).unwrap();
+
+    let batch = readstat::read_to_batch_from_bytes_with_options(
+        &bytes,
+        readstat::ReadOptions::new()
+            .columns([first_col.clone()])
+            .row_count(0),
+    )
+    .unwrap();
+
+    assert_eq!(batch.num_rows(), 0);
+    assert_eq!(batch.num_columns(), 1);
+    assert_eq!(batch.schema().field(0).name(), &first_col);
+}
+
+#[test]
 fn read_metadata_accepts_str_and_pathbuf() {
     // Exercises the `impl AsRef<Path>` signature with multiple argument types.
     let path = data_path("cars.sas7bdat");

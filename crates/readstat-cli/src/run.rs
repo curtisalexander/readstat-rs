@@ -203,7 +203,10 @@ fn run_metadata(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let rsp = ReadStatPath::new(sas_path)?;
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, skip_row_count)?;
-    println!("{}", ReadStatWriter::metadata_to_string(&md, &rsp, as_json)?);
+    println!(
+        "{}",
+        ReadStatWriter::metadata_to_string(&md, &rsp, as_json)?
+    );
     Ok(())
 }
 
@@ -605,13 +608,7 @@ fn spawn_reader(
             let mut d = ReadStatData::new()
                 .set_column_filter(column_filter.clone(), original_var_count)
                 .set_total_rows_processed(total_rows_processed.clone())
-                .init_shared(
-                    var_count,
-                    vars.clone(),
-                    schema.clone(),
-                    row_start,
-                    row_end,
-                );
+                .init_shared(var_count, vars.clone(), schema.clone(), row_start, row_end);
 
             if let Some(ref p) = progress {
                 d = d.set_progress(p.clone() as Arc<dyn ProgressCallback>);
@@ -623,9 +620,7 @@ fn spawn_reader(
         };
 
         let send_err = || {
-            ReadStatError::Other(
-                "Error when attempting to send read data for writing".to_string(),
-            )
+            ReadStatError::Other("Error when attempting to send read data for writing".to_string())
         };
 
         if parallel {
@@ -685,9 +680,7 @@ struct WriteContext {
 /// Must be called after the channel drains and BEFORE finalizing output:
 /// writing a Parquet/Feather footer over missing chunks would produce a
 /// silently-corrupt file with exit code 0.
-fn join_reader(
-    handle: thread::JoinHandle<Result<(), ReadStatError>>,
-) -> Result<(), ReadStatError> {
+fn join_reader(handle: thread::JoinHandle<Result<(), ReadStatError>>) -> Result<(), ReadStatError> {
     match handle.join() {
         Ok(res) => res,
         Err(_) => Err(ReadStatError::Other("Reader thread panicked".to_string())),
@@ -740,7 +733,10 @@ fn write_sequential(ctx: WriteContext) -> Result<(), ReadStatError> {
 /// Parquet output): write each buffered batch group to a temp file
 /// concurrently, then merge the temp files into the final output.
 #[cfg(feature = "parquet")]
-fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result<(), ReadStatError> {
+fn write_parallel_parquet(
+    ctx: WriteContext,
+    buffer_size_bytes: usize,
+) -> Result<(), ReadStatError> {
     let WriteContext {
         rx,
         reader,
@@ -856,7 +852,11 @@ fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result
 #[cfg(feature = "sql")]
 fn write_with_sql(ctx: WriteContext, query: &str, table_name: &str) -> Result<(), ReadStatError> {
     let WriteContext {
-        rx, reader, wc, schema, ..
+        rx,
+        reader,
+        wc,
+        schema,
+        ..
     } = ctx;
 
     let mut all_batches = Vec::new();

@@ -635,7 +635,11 @@ impl ReadStatWriter {
 
         let mut out = String::new();
         // Writing to a String is infallible; the `let _ =` discards the Result.
-        let _ = writeln!(out, "Metadata for the file {}\n", rsp.path.to_string_lossy());
+        let _ = writeln!(
+            out,
+            "Metadata for the file {}\n",
+            rsp.path.to_string_lossy()
+        );
         let _ = writeln!(out, "Row count: {}", md.row_count);
         let _ = writeln!(out, "Variable count: {}", md.var_count);
         let _ = writeln!(out, "Table name: {}", md.table_name);

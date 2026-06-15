@@ -104,6 +104,8 @@ Clone the repository (with submodules), install platform-specific developer tool
 | Document | Description |
 |----------|-------------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crate layout, key types, and architectural patterns |
+| [docs/VISUAL-GUIDE.md](docs/VISUAL-GUIDE.md) | Visual contributor map from input bytes through FFI callbacks, Arrow builders, RecordBatches, and writers |
+| [docs/IMPROVEMENT-ROADMAP.md](docs/IMPROVEMENT-ROADMAP.md) | Follow-up improvement ideas: true streaming batches, builder API, API privacy, release polish, onboarding, and FFI hardening |
 | [docs/USAGE.md](docs/USAGE.md) | Full CLI reference and examples |
 | [docs/readstat-cheatsheet.html](docs/readstat-cheatsheet.html) | One-page printable CLI cheatsheet ([rendered](https://curtisalexander.github.io/readstat-rs/readstat-cheatsheet.html)) |
 | [docs/BUILDING.md](docs/BUILDING.md) | Clone, build, and linking details per platform |

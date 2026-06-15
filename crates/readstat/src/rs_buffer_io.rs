@@ -94,13 +94,19 @@ unsafe extern "C" fn buffer_seek(
     let newpos: i64 = match whence {
         readstat_sys::readstat_io_flags_e_READSTAT_SEEK_SET => offset,
         readstat_sys::readstat_io_flags_e_READSTAT_SEEK_CUR => {
-            match i64::try_from(ctx.pos).ok().and_then(|p| p.checked_add(offset)) {
+            match i64::try_from(ctx.pos)
+                .ok()
+                .and_then(|p| p.checked_add(offset))
+            {
                 Some(n) => n,
                 None => return -1,
             }
         }
         readstat_sys::readstat_io_flags_e_READSTAT_SEEK_END => {
-            match i64::try_from(ctx.len).ok().and_then(|l| l.checked_add(offset)) {
+            match i64::try_from(ctx.len)
+                .ok()
+                .and_then(|l| l.checked_add(offset))
+            {
                 Some(n) => n,
                 None => return -1,
             }

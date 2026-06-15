@@ -116,7 +116,12 @@ impl PartitionStream for ChannelPartitionStream {
         // partition more than once; rather than panic inside the execution
         // operator — which would abort the whole process — surface a recoverable
         // query error so the caller gets an `Err` from the query instead.
-        let Some(receiver) = self.receiver.lock().unwrap_or_else(|e| e.into_inner()).take() else {
+        let Some(receiver) = self
+            .receiver
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        else {
             let err = datafusion::error::DataFusionError::Execution(
                 "ChannelPartitionStream can only be executed once; this query plan reads the \
                  streaming input more than once (e.g. a self-join). Re-run with the \

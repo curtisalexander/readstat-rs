@@ -33,11 +33,19 @@
 //!
 //! let batch = readstat::read_to_batch("data.sas7bdat")?;
 //! println!("Schema: {:?}", batch.schema());
+//!
+//! // Optional projection / row range without dropping to the low-level API:
+//! let preview = readstat::read_to_batch_with_options(
+//!     "data.sas7bdat",
+//!     readstat::ReadOptions::new()
+//!         .columns(["name", "age"])
+//!         .row_count(100),
+//! )?;
 //! # Ok(())
 //! # }
 //! ```
 //!
-//! For streaming, parallelism, or column filtering, drop down to the
+//! For streaming, parallelism, or custom writer orchestration, drop down to the
 //! [`ReadStatMetadata`] / [`ReadStatData`] types as shown below.
 //!
 //! ## Inspect file metadata
@@ -296,7 +304,10 @@ pub use arrow_schema;
 // SQL API ([`ChunkReceiver`](crate::ChunkReceiver)).
 pub use crossbeam;
 
-pub use api::{read_metadata, read_to_batch};
+pub use api::{
+    ReadOptions, read_metadata, read_to_batch, read_to_batch_from_bytes,
+    read_to_batch_from_bytes_with_options, read_to_batch_with_options,
+};
 pub use common::build_offsets;
 pub use err::{ReadStatCError, ReadStatError};
 pub use progress::ProgressCallback;
