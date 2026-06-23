@@ -248,7 +248,7 @@
   <!-- Header -->
   <div class="header">
     <div class="header-left">
-      <h1><span>readstat</span> <span style="color:#6366f1">Cheatsheet</span><span class="version-badge">v0.22.0</span></h1>
+      <h1><span>readstat</span> <span style="color:#6366f1">Cheatsheet</span><span class="version-badge">v0.24.0</span></h1>
       <div class="subtitle">Convert SAS .sas7bdat files to CSV, Feather, NDJSON, or Parquet</div>
     </div>
     <div class="header-right">
@@ -364,6 +364,14 @@
       <div class="tip"><strong>Works with:</strong> both <span class="cmd">preview</span> and <span class="cmd">data</span> subcommands.</div>
     </section>
 
+    <!-- ── SQL Queries ── -->
+    <section class="section theme-sky">
+      <h2>SQL Queries <span style="font-size:0.62rem; font-weight:600; color:#0369a1; background:#f0f9ff; border:1px solid #bae6fd; padding:1px 5px; border-radius:3px; margin-left:4px; letter-spacing:0.02em;">feature: sql</span></h2>
+      <div class="row"><span class="k">--sql "SELECT ..."</span><span class="d">Inline query</span></div>
+      <div class="row"><span class="k">--sql-file query.sql</span><span class="d">Query from file</span></div>
+      <div class="tip"><strong>Install:</strong> <span class="cmd">cargo install readstat-cli --features sql</span>. Table name = input file stem (e.g. <span class="cmd">cars</span> for <span class="cmd">cars.sas7bdat</span>). Mutually exclusive with <span class="cmd">--columns</span>/<span class="cmd">--columns-file</span>. Full dataset is materialised in memory via DataFusion.</div>
+    </section>
+
     <!-- ── Metadata in Output Files ── -->
     <section class="section theme-rose">
       <h2>Metadata Preservation</h2>
@@ -422,7 +430,7 @@
   <!-- Footer -->
   <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:2px solid #e2e8f0; font-size:0.72rem; color:#94a3b8;">
     <span><strong style="color:#6366f1">Input:</strong> SAS <span class="cmd">.sas7bdat</span> &ensp;|&ensp; <strong style="color:#6366f1">Output:</strong> CSV, Feather, NDJSON, Parquet</span>
-    <span>readstat-cli <strong style="color:#6366f1">v0.22.0</strong> &ensp;|&ensp; Rust + ReadStat C library &ensp;|&ensp; Arrow v58 &ensp;|&ensp; <a href="https://github.com/curtisalexander/readstat-rs" style="color:#6366f1; text-decoration:none;">github.com/curtisalexander/readstat-rs</a></span>
+    <span>readstat-cli <strong style="color:#6366f1">v0.24.0</strong> &ensp;|&ensp; Rust + ReadStat C library &ensp;|&ensp; Arrow v58 &ensp;|&ensp; <a href="https://github.com/curtisalexander/readstat-rs" style="color:#6366f1; text-decoration:none;">github.com/curtisalexander/readstat-rs</a></span>
   </div>
 
 </div>
