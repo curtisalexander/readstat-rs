@@ -25,6 +25,11 @@ on:
     paths:
       - 'crates/readstat-sys/**'
       - 'crates/readstat-iconv-sys/**'
+      # The consume matrix is the only place the test suite runs on
+      # Windows/macOS/arm — without this filter, test-only changes would
+      # silently skip cross-platform validation (e.g. the encoding tests,
+      # whose expectations differ by platform iconv).
+      - 'crates/readstat-tests/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
@@ -33,6 +38,7 @@ on:
     paths:
       - 'crates/readstat-sys/**'
       - 'crates/readstat-iconv-sys/**'
+      - 'crates/readstat-tests/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
