@@ -114,11 +114,14 @@ else
     fail "Version mismatch: readstat=$READSTAT_VER, readstat-cli=$CLI_VER"
 fi
 
-# readstat-sys and readstat-iconv-sys should match
-if [ "$SYS_VER" = "$ICONV_VER" ]; then
-    pass "readstat-sys ($SYS_VER) and readstat-iconv-sys ($ICONV_VER) versions match"
+# readstat-sys and readstat-iconv-sys version independently (each is bumped
+# only when it changes); the real constraint is that readstat-sys's declared
+# dependency requirement matches readstat-iconv-sys's actual version.
+SYS_ICONV_DEP=$(grep 'readstat-iconv-sys' "$ROOT_DIR/crates/readstat-sys/Cargo.toml" | grep 'version' | sed 's/.*version = "\(.*\)".*/\1/')
+if [ "$SYS_ICONV_DEP" = "$ICONV_VER" ]; then
+    pass "readstat-sys depends on readstat-iconv-sys $SYS_ICONV_DEP (matches)"
 else
-    fail "Version mismatch: readstat-sys=$SYS_VER, readstat-iconv-sys=$ICONV_VER"
+    fail "readstat-sys depends on readstat-iconv-sys $SYS_ICONV_DEP but current is $ICONV_VER"
 fi
 
 # Check that readstat depends on the current readstat-sys version

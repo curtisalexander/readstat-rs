@@ -10,9 +10,11 @@
 #
 #   git push origin main --follow-tags
 #
-# For sys crates (bump only when C bindings or vendored library changes):
+# The sys crates version independently — bump only the one whose C bindings
+# or vendored library changed (readstat-sys's dependency requirement on
+# readstat-iconv-sys is the compatibility contract, checked by release-check):
 #
-#   cargo release patch -p readstat-sys -p readstat-iconv-sys
+#   cargo release patch -p readstat-sys
 
 # Don't publish automatically — crates need vendor preparation first.
 # See docs/RELEASING.md for the full manual publish workflow.

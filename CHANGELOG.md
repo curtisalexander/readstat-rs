@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.25.0] - Unreleased
+
+Bumps `readstat` and `readstat-cli` to 0.25.0; `readstat-sys` to 0.5.0; `readstat-iconv-sys` to 0.4.0. (Set the release date when publishing.)
+
+### Added
+- `x86_64-pc-windows-gnu` is now a first-class target: dedicated pre-generated bindings (`bindings_windows_gnu_x86_64.rs` — the MSVC and GNU ABIs differ in C enum signedness), `consume`/`regen` CI coverage on Windows runners with the MinGW toolchain, and build instructions for native MSYS2 and Linux cross-compilation in `docs/BUILDING.md`.
+- Character-encoding test coverage: WINDOWS-1251 and EUC-TW variants of `messydata.sas7bdat`, derived reproducibly by `crates/readstat-tests/util/create_encoding_variants.py`, with tests asserting real iconv conversion (Cyrillic output) and the Windows-specific unsupported-charset behavior.
+
+### Changed
+- **Windows licensing**: `readstat-iconv-sys` now vendors [win-iconv](https://github.com/win-iconv/win-iconv) (public domain) instead of GNU libiconv (`LGPL-2.1-or-later`). Statically linked Windows binaries no longer carry LGPL §6 obligations; every crate and artifact is now plain MIT. The crate license field changed from `LGPL-2.1-or-later AND MIT` to `MIT`.
+- On Windows, `sas7bdat` files in encodings with no Win32 codepage (e.g. EUC-TW, ISO-2022-KR/CN, SHIFT_JISX0213) now fail cleanly at open with `READSTAT_ERROR_UNSUPPORTED_CHARSET` instead of being converted by GNU libiconv's software tables. Mainstream encodings (WINDOWS-125x, ISO-8859-x, UTF-8/16/32, CJK codepages, GB18030, BIG5) are unaffected.
+- The `aarch64-unknown-linux-gnu` release binary is now built on a native arm64 runner (`ubuntu-24.04-arm`) and the test suite runs on arm64 before the artifact ships; previously it was cross-compiled and never executed in CI.
+- `readstat-sys` and `readstat-iconv-sys` now version independently; `release-check` verifies `readstat-sys`'s dependency requirement on `readstat-iconv-sys` instead of requiring equal version numbers.
+- The `readstat-sys cross-platform CI` workflow also runs on changes under `crates/readstat-tests/**`, so test-only changes are validated on Windows/macOS/arm instead of only Linux.
+
 ## [0.24.0] - 2026-06-13
 
 Bumps `readstat` and `readstat-cli` to 0.24.0; `readstat-sys` to 0.4.1; `readstat-iconv-sys` to 0.3.1.

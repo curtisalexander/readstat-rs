@@ -32,7 +32,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.24.0) — Library Crate
+### `readstat` (v0.25.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -70,7 +70,7 @@ Key public types:
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.24.0) — CLI Binary
+### `readstat-cli` (v0.25.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -82,7 +82,7 @@ Owns CLI arg parsing, progress bars, colored output, and reader-writer thread or
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
-### `readstat-sys` (v0.4.1) — FFI Bindings
+### `readstat-sys` (v0.5.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate. Rust bindings are pre-generated per `(os, arch)` and checked in at `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so default builds need no `libclang` on any platform. Maintainers regenerate via `cargo build -p readstat-sys --features buildtime_bindgen` (requires `libclang`). Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
@@ -97,7 +97,7 @@ Header include paths are propagated between crates using Cargo's `links` key:
 - `readstat-iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`
 - `libz-sys` sets `cargo:include=...` which becomes `DEP_Z_INCLUDE` in `readstat-sys`
 
-### `readstat-iconv-sys` (v0.3.1) — iconv FFI (Windows)
+### `readstat-iconv-sys` (v0.4.0) — iconv FFI (Windows)
 **Path**: `crates/readstat-iconv-sys/`
 
 Windows-target-only (gated on `CARGO_CFG_TARGET_OS == "windows"` so cross-compilation works). Compiles [win-iconv](https://github.com/win-iconv/win-iconv) — a public-domain iconv implementation backed by the Win32 conversion APIs — from the `vendor/win-iconv/` git submodule using the `cc` crate, producing a static library. On non-Windows targets the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
