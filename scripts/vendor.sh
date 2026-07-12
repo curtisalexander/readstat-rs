@@ -15,7 +15,7 @@ LOCK_FILE="$ROOT_DIR/vendor-lock.txt"
 
 # Vendor directories and their submodule paths
 READSTAT_VENDOR="$ROOT_DIR/crates/readstat-sys/vendor/ReadStat"
-ICONV_VENDOR="$ROOT_DIR/crates/readstat-iconv-sys/vendor/libiconv-win-build"
+ICONV_VENDOR="$ROOT_DIR/crates/readstat-iconv-sys/vendor/win-iconv"
 
 # Files to copy for readstat-sys (matches Cargo.toml include patterns)
 # Only source files needed by build.rs — excludes bin/, fuzz/, test/
@@ -29,15 +29,13 @@ READSTAT_PATTERNS=(
     "src/txt"
 )
 
-# Files to copy for iconv-sys (matches Cargo.toml include patterns)
+# Files to copy for iconv-sys (matches Cargo.toml include patterns).
+# win-iconv is public domain; the license statement lives in readme.txt
+# and the header of win_iconv.c.
 ICONV_PATTERNS=(
-    "include"
-    "lib"
-    "libcharset"
-    "srclib"
-    "COPYING"
-    "COPYING.LIB"
-    "LICENSE.md"
+    "win_iconv.c"
+    "iconv.h"
+    "readme.txt"
 )
 
 check_git_repo() {
@@ -92,20 +90,14 @@ copy_iconv_files() {
 
     # Progress goes to stderr — stdout is captured by the caller and must
     # contain only the temp path.
-    echo "Copying libiconv vendor files..." >&2
+    echo "Copying win-iconv vendor files..." >&2
     rm -rf "$tmp"
     mkdir -p "$tmp"
 
-    # Copy directories
-    for dir in include lib libcharset srclib; do
-        if [ -d "$src/$dir" ]; then
-            cp -r "$src/$dir" "$tmp/"
-        fi
+    # Copy sources + readme (contains the public-domain statement)
+    for f in "${ICONV_PATTERNS[@]}"; do
+        cp "$src/$f" "$tmp/" 2>/dev/null || true
     done
-
-    # Copy license files
-    cp "$src"/COPYING* "$tmp/" 2>/dev/null || true
-    cp "$src/LICENSE.md" "$tmp/" 2>/dev/null || true
 
     echo "  Copied $(find "$tmp" -type f | wc -l) files" >&2
     echo "$tmp"
@@ -131,7 +123,7 @@ do_prepare() {
     iconv_tmp=$(copy_iconv_files)
 
     # Refuse to delete anything unless both temp copies verifiably exist.
-    if [ ! -f "$readstat_tmp/src/readstat.h" ] || [ ! -d "$iconv_tmp/lib" ]; then
+    if [ ! -f "$readstat_tmp/src/readstat.h" ] || [ ! -f "$iconv_tmp/win_iconv.c" ]; then
         echo "Error: vendor copy failed (readstat_tmp=$readstat_tmp, iconv_tmp=$iconv_tmp); aborting before removing submodules" >&2
         exit 1
     fi
@@ -139,7 +131,7 @@ do_prepare() {
     # Deinit submodules (removes the checkout but keeps .gitmodules)
     echo "Deinitializing submodules..."
     git -C "$ROOT_DIR" submodule deinit --force crates/readstat-sys/vendor/ReadStat 2>/dev/null || true
-    git -C "$ROOT_DIR" submodule deinit --force crates/readstat-iconv-sys/vendor/libiconv-win-build 2>/dev/null || true
+    git -C "$ROOT_DIR" submodule deinit --force crates/readstat-iconv-sys/vendor/win-iconv 2>/dev/null || true
 
     # Remove submodule directories
     rm -rf "$READSTAT_VENDOR"
@@ -152,7 +144,7 @@ do_prepare() {
     echo ""
     echo "=== Vendor directories prepared for publishing ==="
     echo "ReadStat: $(find "$READSTAT_VENDOR" -type f | wc -l) files"
-    echo "libiconv: $(find "$ICONV_VENDOR" -type f | wc -l) files"
+    echo "win-iconv: $(find "$ICONV_VENDOR" -type f | wc -l) files"
     echo ""
     echo "Verify with:"
     echo "  cargo package --list -p readstat-sys --allow-dirty"
@@ -202,14 +194,14 @@ do_status() {
         echo "ReadStat: NOT PRESENT"
     fi
 
-    # Check libiconv
+    # Check win-iconv
     if [ -d "$ICONV_VENDOR/.git" ] || [ -f "$ICONV_VENDOR/.git" ]; then
-        echo "libiconv: git submodule (development mode)"
+        echo "win-iconv: git submodule (development mode)"
     elif [ -d "$ICONV_VENDOR" ]; then
-        echo "libiconv: copied files (publish mode)"
+        echo "win-iconv: copied files (publish mode)"
         echo "  Files: $(find "$ICONV_VENDOR" -type f | wc -l)"
     else
-        echo "libiconv: NOT PRESENT"
+        echo "win-iconv: NOT PRESENT"
     fi
 
     # Show lock file if present

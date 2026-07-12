@@ -25,6 +25,11 @@ Data for testing [readstat-rs](https://github.com/curtisalexander/readstat-rs) b
     - Tests lossy UTF-8 fallback for [issue #78](https://github.com/curtisalexander/readstat-rs/issues/78)
 - `messydata.sas7bdat`
     - https://www.alanelliott.com/sas/ED2_FILES.html
+- `messydata_1251.sas7bdat` &rarr; WINDOWS-1251 (Cyrillic) variant of `messydata.sas7bdat`; exercises real iconv conversion (the rest of the corpus is 1252/UTF-8 with ASCII-only strings, where conversion is a byte copy)
+    - Derived deterministically by [create_encoding_variants.py](../../util/create_encoding_variants.py): re-run the script to regenerate; see its docstring for the exact byte patches (header encoding byte 62 &rarr; 61 at offset 70, `Bus` cells &rarr; Cyrillic `Бус`)
+- `messydata_euctw.sas7bdat` &rarr; EUC-TW variant of `messydata.sas7bdat` (header byte only; data is ASCII, which is valid EUC-TW)
+    - Derived by [create_encoding_variants.py](../../util/create_encoding_variants.py)
+    - Pins the platform split: glibc/macOS iconv converts EUC-TW in software, while the vendored [win-iconv](https://github.com/win-iconv/win-iconv) has no Win32 codepage for it and must fail cleanly with `READSTAT_ERROR_UNSUPPORTED_CHARSET` on Windows
 - `rand_ds.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas)
     - Renamed to be `_rand_ds.sas7bdat` in order to be picked up by the `_*.sas7bdat` pattern in the `.gitignore` file
 - `rand_ds_largepage_err.sas7bdat` &rarr; Created using [create_rand_ds.sas](../util/create_rand_ds.sas) with [BUFSIZE](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/ledsoptsref/n0pw7cnugsttken1voc6qo0ye3cg.htm) set to `2M`

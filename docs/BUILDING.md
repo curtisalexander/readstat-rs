@@ -55,9 +55,23 @@ Build
 cargo build
 ```
 
-**iconv**: Compiled from source using the vendored [libiconv-win-build](https://github.com/kiyolee/libiconv-win-build) submodule (located at `crates/readstat-iconv-sys/vendor/libiconv-win-build/`) via the [readstat-iconv-sys](../crates/readstat-iconv-sys/) crate. `readstat-iconv-sys` is a Windows-only dependency (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](../crates/readstat-sys/Cargo.toml)).
+**iconv**: Compiled from source using the vendored [win-iconv](https://github.com/win-iconv/win-iconv) submodule (located at `crates/readstat-iconv-sys/vendor/win-iconv/`; public domain, so static linking carries no copyleft obligations) via the [readstat-iconv-sys](../crates/readstat-iconv-sys/) crate. `readstat-iconv-sys` is a Windows-only dependency (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](../crates/readstat-sys/Cargo.toml)).
 
 **zlib**: Compiled from source via the [libz-sys](https://crates.io/crates/libz-sys) crate (statically linked).
+
+### Windows (GNU / MinGW)
+
+The `x86_64-pc-windows-gnu` target is also supported, with its own pre-generated
+bindings (`bindings_windows_gnu_x86_64.rs` — the MSVC and GNU ABIs differ in C
+enum signedness, so the flavors cannot share a file). It needs a MinGW-w64 GCC
+for the vendored C code:
+
+- **On Windows**: `pacman -S mingw-w64-x86_64-gcc` in MSYS2, with
+  `C:\msys64\mingw64\bin` on `PATH`, then
+  `cargo build --target x86_64-pc-windows-gnu`.
+- **Cross-compiling from Linux**: install `gcc-mingw-w64-x86-64` (Debian/Ubuntu)
+  and run `cargo build --target x86_64-pc-windows-gnu` — this links a complete
+  `readstat.exe` with no Windows machine involved.
 
 ## Regenerating bindings (maintainers only)
 
@@ -67,7 +81,7 @@ Default builds consume pre-generated bindings checked into `crates/readstat-sys/
 cargo build -p readstat-sys --features buildtime_bindgen
 ```
 
-This invokes [bindgen](https://rust-lang.github.io/rust-bindgen/), which requires [LLVM / `libclang`](https://rust-lang.github.io/rust-bindgen/requirements.html#clang) to be installed. On Windows specifically, you also need to set `LIBCLANG_PATH` (e.g. `C:\Program Files\LLVM\lib`). The build script writes the regenerated file to both `OUT_DIR` (for the current compile) and `src/bindings/bindings_<os>_<arch>.rs` (so the diff can be committed). Regeneration must be repeated on each supported target OS — the `verify-bindings` workflow can do this for you (`workflow_dispatch` → download artifacts → commit).
+This invokes [bindgen](https://rust-lang.github.io/rust-bindgen/), which requires [LLVM / `libclang`](https://rust-lang.github.io/rust-bindgen/requirements.html#clang) to be installed. On Windows specifically, you also need to set `LIBCLANG_PATH` (e.g. `C:\Program Files\LLVM\lib`). The build script writes the regenerated file to both `OUT_DIR` (for the current compile) and the target's checked-in file under `src/bindings/` (`bindings_<os>_<arch>.rs`; the `x86_64-pc-windows-gnu` target uses `bindings_windows_gnu_x86_64.rs`), so the diff can be committed. Regeneration must be repeated on each supported target — the **readstat-sys cross-platform CI** workflow (`regen` jobs) can do this for you (`workflow_dispatch` → download artifacts → commit); see [CI-CD.md](CI-CD.md) for the full procedure.
 
 `wasm32-unknown-emscripten` builds require `--features buildtime_bindgen` because the emsdk sysroot can't be reproduced from a checked-in file.
 
@@ -77,4 +91,4 @@ This invokes [bindgen](https://rust-lang.github.io/rust-bindgen/), which require
 |----------|-------|------|
 | Linux (glibc/musl) | Dynamic (system) | libz-sys (prefers system, falls back to source) |
 | macOS (x86/ARM) | Dynamic (system) | libz-sys (uses system) |
-| Windows (MSVC) | Static (vendored submodule) | libz-sys (compiled from source, static) |
+| Windows (MSVC or GNU) | Static (vendored win-iconv submodule) | libz-sys (compiled from source, static) |

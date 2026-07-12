@@ -79,9 +79,12 @@ then push: `git push origin main --follow-tags`.
 
 **Version conventions:**
 - `readstat` and `readstat-cli` share the same version (e.g. `0.21.0`) — always bump together
-- `readstat-sys` and `readstat-iconv-sys` share the same version (e.g. `0.3.0`)
-- Bump sys crates only when the vendored C library or bindings change:
-  `cargo release patch -p readstat-sys -p readstat-iconv-sys`
+- `readstat-sys` and `readstat-iconv-sys` version **independently** — bump each
+  only when its vendored C library or bindings change (e.g.
+  `cargo release minor -p readstat-sys`). Their numbers are not expected to
+  match; the compatibility contract is `readstat-sys`'s declared dependency
+  requirement on `readstat-iconv-sys`, which `release-check` verifies against
+  the actual crate version (as it does for `readstat` → `readstat-sys`).
 
 ### 2. Update CHANGELOG.md
 
@@ -168,7 +171,7 @@ dirty. The two `*-sys` crates bundle those files, so their publishes need
 they publish clean.)
 
 ```bash
-# 1. No crate dependencies (carries vendored libiconv → --allow-dirty)
+# 1. No crate dependencies (carries vendored win-iconv → --allow-dirty)
 cargo publish -p readstat-iconv-sys --allow-dirty
 
 # 2. Depends on readstat-iconv-sys (carries vendored ReadStat → --allow-dirty)

@@ -32,7 +32,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.24.0) — Library Crate
+### `readstat` (v0.25.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -70,7 +70,7 @@ Key public types:
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.24.0) — CLI Binary
+### `readstat-cli` (v0.25.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -82,14 +82,14 @@ Owns CLI arg parsing, progress bars, colored output, and reader-writer thread or
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
-### `readstat-sys` (v0.4.1) — FFI Bindings
+### `readstat-sys` (v0.5.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate. Rust bindings are pre-generated per `(os, arch)` and checked in at `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so default builds need no `libclang` on any platform. Maintainers regenerate via `cargo build -p readstat-sys --features buildtime_bindgen` (requires `libclang`). Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
-| **Windows** (`windows-msvc`) | Static — compiled from vendored `readstat-iconv-sys` submodule | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency |
+| **Windows** (`windows-msvc`, `windows-gnu`) | Static — win-iconv (public domain) compiled by `readstat-iconv-sys` | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency; the two flavors use separate pre-gen bindings (MSVC/GNU enum ABIs differ) |
 | **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | `libz-sys` (uses system zlib) | iconv linked via `cargo:rustc-link-lib=iconv` |
 | **Linux** (gnu/musl) | Dynamic — system library | `libz-sys` (prefers system, falls back to source) | No explicit iconv link directives; system linker resolves automatically |
 
@@ -97,10 +97,10 @@ Header include paths are propagated between crates using Cargo's `links` key:
 - `readstat-iconv-sys` sets `cargo:include=...` which becomes `DEP_ICONV_INCLUDE` in `readstat-sys`
 - `libz-sys` sets `cargo:include=...` which becomes `DEP_Z_INCLUDE` in `readstat-sys`
 
-### `readstat-iconv-sys` (v0.3.1) — iconv FFI (Windows)
+### `readstat-iconv-sys` (v0.4.0) — iconv FFI (Windows)
 **Path**: `crates/readstat-iconv-sys/`
 
-Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-win-build/` git submodule using the `cc` crate, producing a static library. On non-Windows platforms the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
+Windows-target-only (gated on `CARGO_CFG_TARGET_OS == "windows"` so cross-compilation works). Compiles [win-iconv](https://github.com/win-iconv/win-iconv) — a public-domain iconv implementation backed by the Win32 conversion APIs — from the `vendor/win-iconv/` git submodule using the `cc` crate, producing a static library. On non-Windows targets the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
 
 ### `readstat-wasm` (v0.1.0) — WebAssembly Build
 **Path**: `crates/readstat-wasm/`
@@ -112,9 +112,9 @@ Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_nd
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
 
-30 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, malformed UTF-8, large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
+33 test modules covering: all SAS data types, 118 date/time/datetime formats, missing values, malformed UTF-8, character encoding conversion (WINDOWS-1251, plus the EUC-TW platform split between GNU/macOS iconv and the vendored win-iconv on Windows), large pages, CLI subcommands, parallel read/write, Parquet output, CSV output, Arrow migration, row offsets, scientific notation, column selection, skip row count, memory-mapped file reading, byte-slice reading, and SQL queries. Every `sas7bdat` file in the test data directory has both metadata and data reading tests.
 
-Test data lives in `tests/data/*.sas7bdat` (14 datasets). SAS scripts to regenerate test data are in `util/`.
+Test data lives in `tests/data/*.sas7bdat` (16 datasets). Scripts to regenerate test data are in `util/` (SAS programs, plus `create_encoding_variants.py` for the byte-patched encoding variants).
 
 | Dataset | Metadata Test | Data Test |
 |---------|:---:|:---:|

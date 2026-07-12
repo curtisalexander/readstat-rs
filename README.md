@@ -96,6 +96,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | **Linux** ([musl](https://www.musl-libc.org/)) | :heavy_check_mark: Builds and runs | System iconv, system zlib | &mdash; |
 | **macOS** | :heavy_check_mark: Builds and runs | System `libiconv`, system zlib | &mdash; |
 | **Windows** (MSVC) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | MSVC supported since [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5` (no msys2 needed). Default builds use pre-generated bindings &mdash; no `libclang` install required. |
+| **Windows** (GNU / MinGW) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | Needs a MinGW-w64 GCC (e.g. MSYS2 on Windows, `gcc-mingw-w64-x86-64` when cross-compiling from Linux). Own pre-generated bindings (MSVC/GNU enum ABIs differ) &mdash; see [docs/BUILDING.md](docs/BUILDING.md). |
 
 ## :books: Documentation
 
@@ -114,7 +115,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [docs/MEMORY-SAFETY.md](docs/MEMORY-SAFETY.md) | Automated memory-safety CI checks (Miri, AddressSanitizer on Linux/macOS/Windows, weekly fuzzing; Valgrind run manually) |
 | [docs/RELEASING.md](docs/RELEASING.md) | Step-by-step guide for publishing crates to crates.io |
 | [scripts/check-updates.sh](scripts/check-updates.sh) | Crate dependency update checker — supply-chain quarantine, held-back/major reporting, and a `bindgen` advisory (`--apply` to update; `.ps1` for Windows) |
-| [scripts/check-vendor-updates.sh](scripts/check-vendor-updates.sh) | Read-only check for upstream updates to the vendored git submodules (ReadStat, libiconv) — never alters the checkout (`.ps1` for Windows) |
+| [scripts/check-vendor-updates.sh](scripts/check-vendor-updates.sh) | Read-only check for upstream updates to the vendored git submodules (ReadStat, win-iconv) — never alters the checkout (`.ps1` for Windows) |
 
 ## :jigsaw: Workspace Crates
 
@@ -123,8 +124,8 @@ Clone the repository (with submodules), install platform-specific developer tool
 | [`readstat`](crates/readstat/) | `crates/readstat/` | Pure library for parsing SAS files into Arrow RecordBatch format. Output writers are feature-gated. |
 | [`readstat-cli`](crates/readstat-cli/) | `crates/readstat-cli/` | Binary crate producing the `readstat` CLI tool (arg parsing, progress bars, orchestration). |
 | [`readstat-sys`](crates/readstat-sys/) | `crates/readstat-sys/` | Raw FFI bindings to the full ReadStat C library (SAS, SPSS, Stata) via bindgen. |
-| [`readstat-iconv-sys`](crates/readstat-iconv-sys/) | `crates/readstat-iconv-sys/` | Windows-only FFI bindings to libiconv for character encoding conversion. |
-| [`readstat-tests`](crates/readstat-tests/) | `crates/readstat-tests/` | Integration test suite (30 modules, 14 datasets). |
+| [`readstat-iconv-sys`](crates/readstat-iconv-sys/) | `crates/readstat-iconv-sys/` | Windows-only FFI bindings to iconv (vendored public-domain win-iconv) for character encoding conversion. |
+| [`readstat-tests`](crates/readstat-tests/) | `crates/readstat-tests/` | Integration test suite (33 modules, 16 datasets). |
 | [`readstat-wasm`](crates/readstat-wasm/) | `crates/readstat-wasm/` | WebAssembly build for browser/JS usage (excluded from workspace, built with Emscripten). |
 
 For full architectural details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -147,13 +148,11 @@ To use `readstat` as a library in your own Rust project, add the [`readstat`](cr
 
 `readstat-rs` is licensed under the [MIT License](LICENSE).
 
-> :warning: **Windows builds statically link LGPL libiconv.** On Windows the
-> `readstat-iconv-sys` crate compiles and statically links the vendored
-> [libiconv](https://www.gnu.org/software/libiconv/), which is
-> `LGPL-2.1-or-later`. The Windows binary as a whole is therefore
-> `LGPL-2.1-or-later AND MIT`; distributors of Windows binaries are subject to
-> the LGPL §6 relinking obligation. Linux and macOS builds use the system
-> iconv and are unaffected (MIT only).
+> :information_source: On Windows the `readstat-iconv-sys` crate compiles and
+> statically links the vendored
+> [win-iconv](https://github.com/win-iconv/win-iconv), which is placed in the
+> public domain and imposes no obligations — Windows binaries are MIT like
+> everything else. Linux and macOS builds use the system iconv.
 
 ## :link: Resources
 The following have been **_incredibly_** helpful while developing!

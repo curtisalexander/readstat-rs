@@ -117,10 +117,14 @@ if ($readstatVer -eq $cliVer) {
     Write-Fail "Version mismatch: readstat=$readstatVer, readstat-cli=$cliVer"
 }
 
-if ($sysVer -eq $iconvVer) {
-    Write-Pass "readstat-sys ($sysVer) and readstat-iconv-sys ($iconvVer) versions match"
+# readstat-sys and readstat-iconv-sys version independently (each is bumped
+# only when it changes); the real constraint is that readstat-sys's declared
+# dependency requirement matches readstat-iconv-sys's actual version.
+$sysIconvDep = (Select-String -Path "$RootDir\crates\readstat-sys\Cargo.toml" -Pattern 'readstat-iconv-sys' | Where-Object { $_.Line -match 'version' } | Select-Object -First 1).Line -replace '.*version\s*=\s*"(.*?)".*', '$1'
+if ($sysIconvDep -eq $iconvVer) {
+    Write-Pass "readstat-sys depends on readstat-iconv-sys $sysIconvDep (matches)"
 } else {
-    Write-Fail "Version mismatch: readstat-sys=$sysVer, readstat-iconv-sys=$iconvVer"
+    Write-Fail "readstat-sys depends on readstat-iconv-sys $sysIconvDep but current is $iconvVer"
 }
 
 # Check that readstat depends on the current readstat-sys version

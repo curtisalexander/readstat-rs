@@ -6,7 +6,9 @@ name: readstat-sys cross-platform CI
 #   * `consume`: builds the workspace + runs all tests on
 #     ubuntu/macos/windows using the checked-in per-target pre-gen
 #     bindings. This is the load-bearing check — it proves the
-#     `bindings_<os>_<arch>.rs` files match each platform's actual ABI.
+#     `bindings_<os>_<arch>.rs` files (Windows additionally keyed by
+#     env: msvc is the un-suffixed file, gnu is `bindings_windows_gnu_*`)
+#     match each platform's actual ABI.
 #
 #   * `regen`: runs bindgen via `--features buildtime_bindgen` to
 #     reproduce the corresponding per-target file. Uploads each result
@@ -23,6 +25,11 @@ on:
     paths:
       - 'crates/readstat-sys/**'
       - 'crates/readstat-iconv-sys/**'
+      # The consume matrix is the only place the test suite runs on
+      # Windows/macOS/arm — without this filter, test-only changes would
+      # silently skip cross-platform validation (e.g. the encoding tests,
+      # whose expectations differ by platform iconv).
+      - 'crates/readstat-tests/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
@@ -31,6 +38,7 @@ on:
     paths:
       - 'crates/readstat-sys/**'
       - 'crates/readstat-iconv-sys/**'
+      - 'crates/readstat-tests/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
@@ -43,26 +51,49 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
             file: bindings_linux_x86_64.rs
           - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
             file: bindings_linux_aarch64.rs
           - os: macos-15-intel
+            target: x86_64-apple-darwin
             file: bindings_macos_x86_64.rs
           - os: macos-latest
+            target: aarch64-apple-darwin
             file: bindings_macos_aarch64.rs
           - os: windows-latest
+            target: x86_64-pc-windows-msvc
             file: bindings_windows_x86_64.rs
+          # windows-gnu runs on the same Windows host as windows-msvc — the
+          # binaries execute natively — but uses the MinGW toolchain and the
+          # GNU-ABI bindings file (C enums are unsigned under GCC/Clang,
+          # signed under MSVC).
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
+            file: bindings_windows_gnu_x86_64.rs
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
 
+      - name: Install MinGW toolchain (windows-gnu only)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-gcc
+          Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
+
+      - name: Add Rust target (windows-gnu only)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: rustup target add ${{ matrix.target }}
+
       - name: Build with default features (consumes pre-gen ${{ matrix.file }})
-        run: cargo build --workspace
+        run: cargo build --workspace --target ${{ matrix.target }}
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --target ${{ matrix.target }}
 
   regen:
     strategy:
@@ -70,15 +101,23 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
             file: bindings_linux_x86_64.rs
           - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
             file: bindings_linux_aarch64.rs
           - os: macos-15-intel
+            target: x86_64-apple-darwin
             file: bindings_macos_x86_64.rs
           - os: macos-latest
+            target: aarch64-apple-darwin
             file: bindings_macos_aarch64.rs
           - os: windows-latest
+            target: x86_64-pc-windows-msvc
             file: bindings_windows_x86_64.rs
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
+            file: bindings_windows_gnu_x86_64.rs
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -91,8 +130,19 @@ jobs:
         with:
           version: "17"
 
+      - name: Install MinGW toolchain (windows-gnu only)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-gcc
+          Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
+
+      - name: Add Rust target (windows-gnu only)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: rustup target add ${{ matrix.target }}
+
       - name: Regenerate bindings
-        run: cargo build -p readstat-sys --features buildtime_bindgen
+        run: cargo build -p readstat-sys --features buildtime_bindgen --target ${{ matrix.target }}
 
       # Upload BEFORE the drift check so the artifact is downloadable even
       # when the diff step fails — that's exactly when the maintainer
@@ -100,7 +150,7 @@ jobs:
       - name: Upload regenerated bindings
         uses: actions/upload-artifact@v7
         with:
-          name: bindings-${{ matrix.os }}
+          name: bindings-${{ matrix.target }}
           path: crates/readstat-sys/src/bindings/${{ matrix.file }}
 
       - name: Fail if regenerated bindings differ from checked-in
@@ -111,12 +161,12 @@ jobs:
           # freshly added target) that a plain content diff would silently pass.
           if [ ! -f "$path" ]; then
             echo "::error::$path does not exist after regeneration."
-            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            echo "::error::Download the 'bindings-${{ matrix.target }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
             exit 1
           fi
           if ! git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
             echo "::error::$path is untracked — commit the generated bindings."
-            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            echo "::error::Download the 'bindings-${{ matrix.target }}' artifact, copy it into crates/readstat-sys/src/bindings/, commit, and push."
             exit 1
           fi
           # Compare with `git diff` (NOT `git status --porcelain`): it applies
@@ -125,10 +175,10 @@ jobs:
           # runner — is not mistaken for real ABI drift. Real content changes
           # still fail. (git normalizes the artifact's CRLF to LF on commit.)
           if git --no-pager diff --no-color --exit-code -- "$path"; then
-            echo "::notice::Bindings match a fresh regeneration on ${{ matrix.os }}."
+            echo "::notice::Bindings match a fresh regeneration for ${{ matrix.target }}."
           else
             echo "::error::Checked-in bindings/${{ matrix.file }} differ from what bindgen now produces."
-            echo "::error::Download the 'bindings-${{ matrix.os }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
+            echo "::error::Download the 'bindings-${{ matrix.target }}' artifact from this run, copy it into crates/readstat-sys/src/bindings/, commit, and push."
             exit 1
           fi
 
