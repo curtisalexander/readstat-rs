@@ -10,7 +10,10 @@
 //! imposes no copyleft obligations on downstream Windows binaries.
 //!
 //! Like `readstat-sys`, the Rust bindings are **pre-generated per target** and
-//! checked in under `src/bindings/bindings_windows_<arch>.rs`. The default
+//! checked in under `src/bindings/bindings_windows_<arch>.rs`. Unlike
+//! `readstat-sys`, one file serves both the MSVC and GNU flavors: the iconv
+//! surface is enum-free (`void*`, `size_t`, `char*` only), so its ABI is
+//! identical under either toolchain. The default
 //! build copies the file matching the current target into `OUT_DIR`, so
 //! **consumers need no `libclang`**. Enable the `buildtime_bindgen` feature to
 //! regenerate the file from `wrapper.h` (requires `libclang`); the result is

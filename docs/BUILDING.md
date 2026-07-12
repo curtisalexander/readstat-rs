@@ -81,7 +81,7 @@ Default builds consume pre-generated bindings checked into `crates/readstat-sys/
 cargo build -p readstat-sys --features buildtime_bindgen
 ```
 
-This invokes [bindgen](https://rust-lang.github.io/rust-bindgen/), which requires [LLVM / `libclang`](https://rust-lang.github.io/rust-bindgen/requirements.html#clang) to be installed. On Windows specifically, you also need to set `LIBCLANG_PATH` (e.g. `C:\Program Files\LLVM\lib`). The build script writes the regenerated file to both `OUT_DIR` (for the current compile) and `src/bindings/bindings_<os>_<arch>.rs` (so the diff can be committed). Regeneration must be repeated on each supported target OS — the `verify-bindings` workflow can do this for you (`workflow_dispatch` → download artifacts → commit).
+This invokes [bindgen](https://rust-lang.github.io/rust-bindgen/), which requires [LLVM / `libclang`](https://rust-lang.github.io/rust-bindgen/requirements.html#clang) to be installed. On Windows specifically, you also need to set `LIBCLANG_PATH` (e.g. `C:\Program Files\LLVM\lib`). The build script writes the regenerated file to both `OUT_DIR` (for the current compile) and the target's checked-in file under `src/bindings/` (`bindings_<os>_<arch>.rs`; the `x86_64-pc-windows-gnu` target uses `bindings_windows_gnu_x86_64.rs`), so the diff can be committed. Regeneration must be repeated on each supported target — the **readstat-sys cross-platform CI** workflow (`regen` jobs) can do this for you (`workflow_dispatch` → download artifacts → commit); see [CI-CD.md](CI-CD.md) for the full procedure.
 
 `wasm32-unknown-emscripten` builds require `--features buildtime_bindgen` because the emsdk sysroot can't be reproduced from a checked-in file.
 

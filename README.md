@@ -96,6 +96,7 @@ Clone the repository (with submodules), install platform-specific developer tool
 | **Linux** ([musl](https://www.musl-libc.org/)) | :heavy_check_mark: Builds and runs | System iconv, system zlib | &mdash; |
 | **macOS** | :heavy_check_mark: Builds and runs | System `libiconv`, system zlib | &mdash; |
 | **Windows** (MSVC) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | MSVC supported since [ReadStat](https://github.com/WizardMac/ReadStat) `1.1.5` (no msys2 needed). Default builds use pre-generated bindings &mdash; no `libclang` install required. |
+| **Windows** (GNU / MinGW) | :heavy_check_mark: Builds and runs | Vendored iconv, vendored zlib | Needs a MinGW-w64 GCC (e.g. MSYS2 on Windows, `gcc-mingw-w64-x86-64` when cross-compiling from Linux). Own pre-generated bindings (MSVC/GNU enum ABIs differ) &mdash; see [docs/BUILDING.md](docs/BUILDING.md). |
 
 ## :books: Documentation
 
