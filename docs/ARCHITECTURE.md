@@ -89,7 +89,7 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
-| **Windows** (`windows-msvc`) | Static — win-iconv (public domain) compiled by `readstat-iconv-sys` | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency |
+| **Windows** (`windows-msvc`, `windows-gnu`) | Static — win-iconv (public domain) compiled by `readstat-iconv-sys` | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency; the two flavors use separate pre-gen bindings (MSVC/GNU enum ABIs differ) |
 | **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | `libz-sys` (uses system zlib) | iconv linked via `cargo:rustc-link-lib=iconv` |
 | **Linux** (gnu/musl) | Dynamic — system library | `libz-sys` (prefers system, falls back to source) | No explicit iconv link directives; system linker resolves automatically |
 

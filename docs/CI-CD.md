@@ -114,13 +114,17 @@ Three jobs:
 
 | Job | Runs on | What it does |
 |-----|---------|--------------|
-| `consume` | linux x86_64/aarch64, macOS x86_64/aarch64, windows x86_64 | Builds + tests the workspace using the **committed** `bindings_<os>_<arch>.rs` — the load-bearing check that each file matches that platform's real ABI. |
-| `regen` | same matrix | Regenerates each target's bindings with `--features buildtime_bindgen`, uploads the result as artifact `bindings-<os>`, and **fails on drift** if it differs from the committed file. |
+| `consume` | linux x86_64/aarch64, macOS x86_64/aarch64, windows-msvc x86_64, windows-gnu x86_64 | Builds + tests the workspace using the **committed** `bindings_<os>_<arch>.rs` — the load-bearing check that each file matches that platform's real ABI. |
+| `regen` | same matrix | Regenerates each target's bindings with `--features buildtime_bindgen`, uploads the result as artifact `bindings-<target>`, and **fails on drift** if it differs from the committed file. |
 | `regen-iconv` | windows x86_64 | Same idea for `readstat-iconv-sys`; artifact `iconv-bindings-windows`. |
 
+Both Windows flavors run on the same `windows-latest` host (the binaries execute
+natively either way); the gnu entries install the MSYS2 MinGW GCC and pass an
+explicit `--target x86_64-pc-windows-gnu`.
+
 The checked-in files live in:
-- `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs` (`<os>` ∈ linux/macos/windows, `<arch>` ∈ x86_64/aarch64)
-- `crates/readstat-iconv-sys/src/bindings/bindings_windows_x86_64.rs`
+- `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs` (`<os>` ∈ linux/macos/windows, `<arch>` ∈ x86_64/aarch64). Windows is additionally keyed by env: the un-suffixed `bindings_windows_x86_64.rs` is MSVC-ABI and `bindings_windows_gnu_x86_64.rs` is GNU-ABI — MSVC emits C enums as `signed int`, GCC/Clang as `unsigned int`, so the two flavors cannot share a file.
+- `crates/readstat-iconv-sys/src/bindings/bindings_windows_x86_64.rs` — shared by both Windows flavors: the iconv surface is enum-free (`void*`, `size_t`, `char*` only), so its ABI is identical under MSVC and GNU.
 
 ### Updating bindgen (or the vendored C) — regenerating bindings
 
@@ -144,7 +148,7 @@ You can only regenerate **your own host target** locally (cross-compiling the ot
 
 **Let CI do (the targets you can't build locally):**
 
-5. Push the branch. The `regen` matrix (5 targets) and `regen-iconv` run on real runners with `libclang`. For every target whose committed file you didn't refresh, the **drift check fails on purpose** — that failure is the signal, and each job still uploads its freshly-generated file as an artifact (`bindings-<os>`, `iconv-bindings-windows`).
+5. Push the branch. The `regen` matrix (6 targets) and `regen-iconv` run on real runners with `libclang`. For every target whose committed file you didn't refresh, the **drift check fails on purpose** — that failure is the signal, and each job still uploads its freshly-generated file as an artifact (`bindings-<target>`, `iconv-bindings-windows`).
 6. Download those artifacts, drop them into the two `src/bindings/` directories above, commit, and push.
 7. On the next run the `regen` / `regen-iconv` drift checks pass and the `consume` jobs build + test green on all platforms. The bindgen bump is complete.
 

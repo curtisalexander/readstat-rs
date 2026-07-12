@@ -161,9 +161,8 @@ fn main() {
         }
         println!("cargo:rustc-link-lib=static=iconv");
     } else if target.contains("windows") {
-        // windows-gnu: link the static win-iconv built by readstat-iconv-sys.
-        // Note the pre-generated bindings reject this target (MSVC-ABI enums);
-        // it is only reachable with `buildtime_bindgen`.
+        // windows-gnu: link the static win-iconv built by readstat-iconv-sys
+        // (windows-msvc is handled in the branch above).
         println!("cargo:rustc-link-lib=static=iconv");
     } else if target.contains("apple-darwin") {
         println!("cargo:rustc-link-lib=iconv");
@@ -187,31 +186,33 @@ fn main() {
     // `signed int` while GCC/Clang emit `unsigned int`; Windows `c_long`
     // is 32 bits vs 64 bits on 64-bit Unix; and union/padding layout
     // rules differ between the Itanium and Microsoft C++ ABIs. Each
-    // (os, arch) combination needs its own bindgen output.
+    // (os, arch) combination needs its own bindgen output — and Windows is
+    // additionally keyed by target env, because the MSVC/GNU enum-signedness
+    // difference splits the two flavors: the un-suffixed windows file is
+    // MSVC-ABI, and `*-pc-windows-gnu` gets `bindings_windows_gnu_<arch>.rs`.
     //
     // Emscripten/wasm32 has no pre-gen — its sysroot can't be reproduced
     // outside an emsdk install — so wasm32 consumers must enable
     // `buildtime_bindgen`.
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    let bindings_dir = project_dir.join("src").join("bindings");
     let pregenerated_bindings = if is_emscripten {
         None
+    } else if target_os == "windows" && target_env == "gnu" {
+        Some(bindings_dir.join(format!("bindings_windows_gnu_{target_arch}.rs")))
     } else {
-        Some(
-            project_dir
-                .join("src")
-                .join("bindings")
-                .join(format!("bindings_{target_os}_{target_arch}.rs")),
-        )
+        Some(bindings_dir.join(format!("bindings_{target_os}_{target_arch}.rs")))
     };
 
     if cfg!(feature = "buildtime_bindgen") {
         // Regeneration path — invoked by maintainers when the vendored
         // ReadStat C surface changes. Must be run once per supported
-        // (os, arch) target to refresh all five checked-in files
-        // (linux/macos × aarch64/x86_64, plus windows x86_64); the verify
-        // CI workflow does this for Linux/macOS/Windows. Writes the result
-        // to both OUT_DIR (for the current compile) and the target's
+        // target to refresh all six checked-in files (linux/macos ×
+        // aarch64/x86_64, plus windows-msvc and windows-gnu x86_64); the
+        // verify CI workflow does this for Linux/macOS/Windows. Writes the
+        // result to both OUT_DIR (for the current compile) and the target's
         // pre-gen file (so the diff can be committed).
         #[cfg(feature = "buildtime_bindgen")]
         {
@@ -279,21 +280,6 @@ fn main() {
         // into OUT_DIR so `src/lib.rs` can `include!` them via
         // `env!("OUT_DIR")` exactly as before. No bindgen, no libclang at
         // consumer build time.
-
-        // The pre-gen files are keyed by (os, arch) only. The lone Windows file
-        // is generated for the MSVC ABI, where C enums are `signed int`; the GNU
-        // ABI emits them as `unsigned int`, so reusing the MSVC bindings on
-        // `*-pc-windows-gnu` would silently mis-type the enums. Reject that target
-        // on the pre-gen path and steer the user to `buildtime_bindgen`.
-        let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
-        assert!(
-            !(target_os == "windows" && target_env == "gnu"),
-            "the `*-pc-windows-gnu` target is not supported with pre-generated bindings \
-             (they are generated for the MSVC ABI, whose enum signedness differs); \
-             build for `*-pc-windows-msvc`, or enable the `buildtime_bindgen` feature \
-             to generate GNU-ABI bindings at build time"
-        );
-
         let path = pregenerated_bindings.as_ref().unwrap_or_else(|| {
             panic!(
                 "no pre-generated bindings available for target `{target}`; \

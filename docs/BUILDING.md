@@ -59,6 +59,20 @@ cargo build
 
 **zlib**: Compiled from source via the [libz-sys](https://crates.io/crates/libz-sys) crate (statically linked).
 
+### Windows (GNU / MinGW)
+
+The `x86_64-pc-windows-gnu` target is also supported, with its own pre-generated
+bindings (`bindings_windows_gnu_x86_64.rs` — the MSVC and GNU ABIs differ in C
+enum signedness, so the flavors cannot share a file). It needs a MinGW-w64 GCC
+for the vendored C code:
+
+- **On Windows**: `pacman -S mingw-w64-x86_64-gcc` in MSYS2, with
+  `C:\msys64\mingw64\bin` on `PATH`, then
+  `cargo build --target x86_64-pc-windows-gnu`.
+- **Cross-compiling from Linux**: install `gcc-mingw-w64-x86-64` (Debian/Ubuntu)
+  and run `cargo build --target x86_64-pc-windows-gnu` — this links a complete
+  `readstat.exe` with no Windows machine involved.
+
 ## Regenerating bindings (maintainers only)
 
 Default builds consume pre-generated bindings checked into `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so no `libclang` / LLVM install is required. If you need to regenerate the bindings (e.g. after bumping the vendored ReadStat sources or changing `wrapper.h`), enable the `buildtime_bindgen` feature on `readstat-sys`:
@@ -77,4 +91,4 @@ This invokes [bindgen](https://rust-lang.github.io/rust-bindgen/), which require
 |----------|-------|------|
 | Linux (glibc/musl) | Dynamic (system) | libz-sys (prefers system, falls back to source) |
 | macOS (x86/ARM) | Dynamic (system) | libz-sys (uses system) |
-| Windows (MSVC) | Static (vendored submodule) | libz-sys (compiled from source, static) |
+| Windows (MSVC or GNU) | Static (vendored win-iconv submodule) | libz-sys (compiled from source, static) |
