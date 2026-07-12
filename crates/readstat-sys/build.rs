@@ -94,6 +94,13 @@ fn main() {
         cc.include(include);
     }
 
+    // win-iconv (vendored by readstat-iconv-sys) declares
+    // `iconv(iconv_t, const char **inbuf, ...)`; tell ReadStat so its
+    // readstat_iconv_inbuf_t typedef matches (see readstat_iconv.h).
+    if target.contains("windows") {
+        cc.define("ICONV_CONST", "const");
+    }
+
     // Include zlib.h — Emscripten provides its own
     if !is_emscripten && let Some(include) = env::var_os("DEP_Z_INCLUDE") {
         cc.include(include);
@@ -127,6 +134,9 @@ fn main() {
             // SAFETY: This runs in a build script which is single-threaded.
             unsafe { env::set_var("LIBCLANG_PATH", &default) };
         }
+        println!("cargo:rustc-link-lib=static=iconv");
+    } else if target.contains("windows") {
+        // windows-gnu: link the static win-iconv built by readstat-iconv-sys
         println!("cargo:rustc-link-lib=static=iconv");
     } else if target.contains("apple-darwin") {
         println!("cargo:rustc-link-lib=iconv");

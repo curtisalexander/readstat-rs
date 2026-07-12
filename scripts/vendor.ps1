@@ -19,7 +19,7 @@ $RootDir = Split-Path -Parent $ScriptDir
 $LockFile = Join-Path $RootDir "vendor-lock.txt"
 
 $ReadStatVendor = Join-Path $RootDir "crates\readstat-sys\vendor\ReadStat"
-$IconvVendor = Join-Path $RootDir "crates\readstat-iconv-sys\vendor\libiconv-win-build"
+$IconvVendor = Join-Path $RootDir "crates\readstat-iconv-sys\vendor\win-iconv"
 
 function Test-GitRepo {
     $result = git -C $RootDir rev-parse --is-inside-work-tree 2>$null
@@ -77,22 +77,18 @@ function Copy-IconvFiles {
     $src = $IconvVendor
     $tmp = Join-Path $RootDir ".vendor-tmp-iconv"
 
-    Write-Host "Copying libiconv vendor files..."
+    Write-Host "Copying win-iconv vendor files..."
     if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
     New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 
     # Copy directories
-    foreach ($dir in @("include", "lib", "libcharset", "srclib")) {
-        $dirPath = Join-Path $src $dir
-        if (Test-Path $dirPath) {
-            Copy-Item $dirPath "$tmp\" -Recurse
+    # Copy sources + license/readme (win-iconv is public domain; the
+    # license statement lives in readme.txt and the win_iconv.c header)
+    foreach ($f in @("win_iconv.c", "iconv.h", "localcharset.h", "readme.txt", "ChangeLog")) {
+        $fPath = Join-Path $src $f
+        if (Test-Path $fPath) {
+            Copy-Item $fPath "$tmp\"
         }
-    }
-
-    # Copy license files
-    Copy-Item "$src\COPYING*" "$tmp\" -ErrorAction SilentlyContinue
-    if (Test-Path "$src\LICENSE.md") {
-        Copy-Item "$src\LICENSE.md" "$tmp\"
     }
 
     $count = (Get-ChildItem -Recurse -File $tmp).Count
@@ -117,7 +113,7 @@ function Invoke-Prepare {
 
     Write-Host "Deinitializing submodules..."
     git -C $RootDir submodule deinit --force "crates/readstat-sys/vendor/ReadStat" 2>$null
-    git -C $RootDir submodule deinit --force "crates/readstat-iconv-sys/vendor/libiconv-win-build" 2>$null
+    git -C $RootDir submodule deinit --force "crates/readstat-iconv-sys/vendor/win-iconv" 2>$null
 
     if (Test-Path $ReadStatVendor) { Remove-Item -Recurse -Force $ReadStatVendor }
     if (Test-Path $IconvVendor) { Remove-Item -Recurse -Force $IconvVendor }
@@ -130,7 +126,7 @@ function Invoke-Prepare {
     $rsCount = (Get-ChildItem -Recurse -File $ReadStatVendor).Count
     $icCount = (Get-ChildItem -Recurse -File $IconvVendor).Count
     Write-Host "ReadStat: $rsCount files"
-    Write-Host "libiconv: $icCount files"
+    Write-Host "win-iconv: $icCount files"
     Write-Host ""
     Write-Host "Verify with:"
     Write-Host "  cargo package --list -p readstat-sys --allow-dirty"
@@ -178,15 +174,15 @@ function Invoke-Status {
         Write-Host "ReadStat: NOT PRESENT"
     }
 
-    # Check libiconv
+    # Check win-iconv
     $icGit = Join-Path $IconvVendor ".git"
     if (Test-Path $icGit) {
-        Write-Host "libiconv: git submodule (development mode)"
+        Write-Host "win-iconv: git submodule (development mode)"
     } elseif (Test-Path $IconvVendor) {
         $count = (Get-ChildItem -Recurse -File $IconvVendor).Count
-        Write-Host "libiconv: copied files (publish mode) - $count files"
+        Write-Host "win-iconv: copied files (publish mode) - $count files"
     } else {
-        Write-Host "libiconv: NOT PRESENT"
+        Write-Host "win-iconv: NOT PRESENT"
     }
 
     if (Test-Path $LockFile) {

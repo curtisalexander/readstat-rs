@@ -1,7 +1,9 @@
-//! Raw FFI bindings to [libiconv](https://www.gnu.org/software/libiconv/) for Windows.
+//! Raw FFI bindings to [win-iconv](https://github.com/win-iconv/win-iconv) for Windows.
 //!
-//! This crate compiles libiconv from a vendored git submodule on Windows and is a
-//! no-op on other platforms. It exists primarily to support [`readstat-sys`](https://docs.rs/readstat-sys),
+//! win-iconv is a public-domain iconv implementation backed by the Win32
+//! conversion APIs. This crate compiles it from a vendored git submodule when
+//! targeting Windows and is a
+//! no-op on other platforms — so no LGPL code is statically linked. It exists primarily to support [`readstat-sys`](https://docs.rs/readstat-sys),
 //! which needs iconv for character encoding conversion in the `ReadStat` C library.
 
 // Auto-generated bindgen code — suppress lints from generated bindings
