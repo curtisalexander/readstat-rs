@@ -1,8 +1,13 @@
 //! Build script for `readstat-iconv-sys`.
 //!
-//! Windows-only: compiles the vendored libiconv static library and makes FFI
+//! Windows-only: compiles the vendored win-iconv static library and makes FFI
 //! bindings available. On non-Windows targets (and Emscripten, which supplies
 //! its own iconv) the build script is a no-op.
+//!
+//! win-iconv is a public-domain iconv implementation backed by the Win32
+//! conversion APIs (`MultiByteToWideChar` / `WideCharToMultiByte`), so — unlike
+//! the GNU libiconv (LGPL-2.1) vendored previously — statically linking it
+//! imposes no copyleft obligations on downstream Windows binaries.
 //!
 //! Like `readstat-sys`, the Rust bindings are **pre-generated per target** and
 //! checked in under `src/bindings/bindings_windows_<arch>.rs`. The default
@@ -19,7 +24,7 @@ fn main() {
 
     // Gate on the *target* OS, not the host: a build script is compiled for the
     // host, so `#[cfg(windows)]` would mis-handle cross-compilation (building a
-    // Windows target from Linux/macOS, or vice versa). libiconv is only linked
+    // Windows target from Linux/macOS, or vice versa). win-iconv is only linked
     // when the target is Windows; every other target (including Emscripten,
     // which supplies its own iconv) is a no-op.
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
@@ -29,36 +34,29 @@ fn main() {
 
     let project_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
-    let root = project_dir.join("vendor").join("libiconv-win-build");
-    let include = root.join("include");
-    let lib = root.join("lib");
-    let libcharset = root.join("libcharset").join("lib");
-    let srclib = root.join("srclib");
+    let root = project_dir.join("vendor").join("win-iconv");
 
-    // Fail early with a clear message if the vendored libiconv sources are
+    // Fail early with a clear message if the vendored win-iconv sources are
     // missing (typically a `git clone` without `--recursive`). The published
     // crate bundles these files, so this only guards the source-checkout path.
     assert!(
-        lib.join("iconv.c").exists(),
-        "Vendored libiconv sources not found under {}.\n\
+        root.join("win_iconv.c").exists(),
+        "Vendored win-iconv sources not found under {}.\n\
          Run `git submodule update --init --recursive` to fetch them.",
         root.display()
     );
 
     cc::Build::new()
-        .file(libcharset.join("localcharset.c"))
-        .file(lib.join("iconv.c"))
-        .include(&include)
-        .include(&lib)
-        .include(&srclib)
+        .file(root.join("win_iconv.c"))
+        .include(&root)
         .warnings(false)
         .compile("iconv");
 
     println!("cargo:rerun-if-changed=wrapper.h");
     // Emitting any rerun-if-changed directive disables cargo's default
-    // whole-package tracking, so watch the vendored libiconv sources explicitly.
-    println!("cargo:rerun-if-changed=vendor/libiconv-win-build/lib");
-    println!("cargo:rerun-if-changed=vendor/libiconv-win-build/libcharset");
+    // whole-package tracking, so watch the vendored win-iconv sources explicitly.
+    println!("cargo:rerun-if-changed=vendor/win-iconv/win_iconv.c");
+    println!("cargo:rerun-if-changed=vendor/win-iconv/iconv.h");
     println!("cargo:rustc-link-lib=static=iconv");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -71,7 +69,7 @@ fn main() {
     // the `DEP_ICONV_INCLUDE` environment variable (set from `cargo:include`).
     fs::create_dir_all(out_path.join("include")).unwrap();
     fs::copy(
-        include.join("iconv.h"),
+        root.join("iconv.h"),
         out_path.join("include").join("iconv.h"),
     )
     .unwrap();

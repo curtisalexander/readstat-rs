@@ -124,7 +124,7 @@ The checked-in files live in:
 
 ### Updating bindgen (or the vendored C) — regenerating bindings
 
-`bindgen` is **exact-pinned** in the workspace `Cargo.toml` (`bindgen = "=x.y.z"`) because its output *is* the checked-in bindings; a different bindgen version can change that output. The exact pin means `cargo update` and `scripts/check-updates.sh` never bump it — it is always a deliberate, manual change, paired with regenerating every target's bindings. The same procedure applies when you bump the vendored `ReadStat` / `libiconv` submodule and its C surface changes.
+`bindgen` is **exact-pinned** in the workspace `Cargo.toml` (`bindgen = "=x.y.z"`) because its output *is* the checked-in bindings; a different bindgen version can change that output. The exact pin means `cargo update` and `scripts/check-updates.sh` never bump it — it is always a deliberate, manual change, paired with regenerating every target's bindings. The same procedure applies when you bump the vendored `ReadStat` / `win-iconv` submodule and its C surface changes.
 
 You can only regenerate **your own host target** locally (cross-compiling the others needs each platform's toolchain + `libclang`, and Windows for iconv). So: verify locally, then let CI regenerate the rest.
 

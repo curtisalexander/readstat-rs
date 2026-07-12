@@ -16,9 +16,8 @@ exclude = [
 resolver = "2"
 
 # Fields shared by the workspace member crates. Inherited per-crate with
-# `<field>.workspace = true`. Note: `license` is hoisted as MIT (the common
-# case) but `readstat-iconv-sys` overrides it with its own
-# `LGPL-2.1-or-later AND MIT` because it vendors libiconv. `description`,
+# `<field>.workspace = true`. All crates are MIT (`readstat-iconv-sys` vendors
+# win-iconv, which is public domain and imposes no obligations). `description`,
 # `documentation`, `keywords`, and `categories` differ per crate and are not
 # hoisted. The excluded `readstat-wasm` crate does not inherit these.
 [workspace.package]

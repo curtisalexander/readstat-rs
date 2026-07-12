@@ -89,7 +89,7 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 
 | Platform | iconv | zlib | Notes |
 |----------|-------|------|-------|
-| **Windows** (`windows-msvc`) | Static — compiled from vendored `readstat-iconv-sys` submodule | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency |
+| **Windows** (`windows-msvc`) | Static — win-iconv (public domain) compiled by `readstat-iconv-sys` | Static — compiled via `libz-sys` crate | `readstat-iconv-sys` is a `cfg(windows)` dependency |
 | **macOS** (`apple-darwin`) | Dynamic — system `libiconv` | `libz-sys` (uses system zlib) | iconv linked via `cargo:rustc-link-lib=iconv` |
 | **Linux** (gnu/musl) | Dynamic — system library | `libz-sys` (prefers system, falls back to source) | No explicit iconv link directives; system linker resolves automatically |
 
@@ -100,7 +100,7 @@ Header include paths are propagated between crates using Cargo's `links` key:
 ### `readstat-iconv-sys` (v0.3.1) — iconv FFI (Windows)
 **Path**: `crates/readstat-iconv-sys/`
 
-Windows-only (`#[cfg(windows)]`). Compiles libiconv from the `vendor/libiconv-win-build/` git submodule using the `cc` crate, producing a static library. On non-Windows platforms the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
+Windows-target-only (gated on `CARGO_CFG_TARGET_OS == "windows"` so cross-compilation works). Compiles [win-iconv](https://github.com/win-iconv/win-iconv) — a public-domain iconv implementation backed by the Win32 conversion APIs — from the `vendor/win-iconv/` git submodule using the `cc` crate, producing a static library. On non-Windows targets the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
 
 ### `readstat-wasm` (v0.1.0) — WebAssembly Build
 **Path**: `crates/readstat-wasm/`

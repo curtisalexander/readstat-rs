@@ -33,7 +33,7 @@ include = [
 
 # Build docs on the default Linux target, which ships pre-generated bindings —
 # no libclang required, and avoids docs.rs attempting the Windows target (which
-# would try to compile vendored libiconv).
+# would try to compile vendored win-iconv).
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 

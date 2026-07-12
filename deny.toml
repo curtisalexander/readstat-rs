@@ -26,7 +26,6 @@ allow = [
     "Unicode-3.0",
     "MPL-2.0",
     "CC0-1.0",
-    "LGPL-2.1-or-later",
 ]
 
 # Treat unpublished workspace crates as private (no license required)

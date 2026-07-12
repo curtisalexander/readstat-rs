@@ -168,7 +168,7 @@ dirty. The two `*-sys` crates bundle those files, so their publishes need
 they publish clean.)
 
 ```bash
-# 1. No crate dependencies (carries vendored libiconv → --allow-dirty)
+# 1. No crate dependencies (carries vendored win-iconv → --allow-dirty)
 cargo publish -p readstat-iconv-sys --allow-dirty
 
 # 2. Depends on readstat-iconv-sys (carries vendored ReadStat → --allow-dirty)

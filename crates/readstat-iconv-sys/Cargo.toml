@@ -4,11 +4,13 @@ version = "0.3.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-# NOT inherited: this crate vendors libiconv, so it is LGPL in addition to MIT.
-license = "LGPL-2.1-or-later AND MIT"
+# The vendored win-iconv is public domain (see vendor/win-iconv/readme.txt),
+# which imposes no obligations, so the crate is plain MIT like the rest of
+# the workspace.
+license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Windows-only FFI bindings to libiconv for character encoding conversion"
+description = "Windows-only FFI bindings to iconv (vendored public-domain win-iconv) for character encoding conversion"
 readme = "README.md"
 documentation = "https://docs.rs/readstat-iconv-sys"
 keywords = ["iconv", "ffi", "bindings", "windows"]
@@ -23,12 +25,9 @@ include = [
     "wrapper.h",
     "README.md",
     "LICENSE",
-    "vendor/libiconv-win-build/include/**",
-    "vendor/libiconv-win-build/lib/**",
-    "vendor/libiconv-win-build/libcharset/**",
-    "vendor/libiconv-win-build/srclib/**",
-    "vendor/libiconv-win-build/COPYING*",
-    "vendor/libiconv-win-build/LICENSE.md",
+    "vendor/win-iconv/win_iconv.c",
+    "vendor/win-iconv/iconv.h",
+    "vendor/win-iconv/readme.txt",
 ]
 
 # This crate is a no-op on non-Windows targets; docs.rs builds the default
