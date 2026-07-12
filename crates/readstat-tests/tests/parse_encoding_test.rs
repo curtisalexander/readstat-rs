@@ -79,25 +79,30 @@ fn parse_encoding_euctw_platform_split() {
 
     #[cfg(windows)]
     {
+        use readstat::{ReadStatCError, ReadStatError};
+
         // win-iconv cannot open an EUC-TW converter: either metadata or data
         // reading must surface UNSUPPORTED_CHARSET, and no string data may be
         // silently mis-decoded.
+        let assert_unsupported_charset = |e: &ReadStatError| {
+            assert!(
+                matches!(
+                    e,
+                    ReadStatError::CLibrary(ReadStatCError::READSTAT_ERROR_UNSUPPORTED_CHARSET)
+                ),
+                "expected UNSUPPORTED_CHARSET, got: {e:?}"
+            );
+        };
         let failed = match md_result {
             Err(e) => {
-                assert!(matches!(
-                    e,
-                    readstat::ReadStatError::READSTAT_ERROR_UNSUPPORTED_CHARSET
-                ));
+                assert_unsupported_charset(&e);
                 true
             }
             Ok(()) => {
                 let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
                 match d.read_data(&rsp) {
                     Err(e) => {
-                        assert!(matches!(
-                            e,
-                            readstat::ReadStatError::READSTAT_ERROR_UNSUPPORTED_CHARSET
-                        ));
+                        assert_unsupported_charset(&e);
                         true
                     }
                     Ok(()) => false,
