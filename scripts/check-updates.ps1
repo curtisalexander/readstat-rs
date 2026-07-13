@@ -303,9 +303,9 @@ if ($bindgenHasUpdate) {
     Write-Host ''
     Write-Host ('    Locally  — bump the pin to "=' + $bindgenLatest + '" in Cargo.toml, then regenerate')
     Write-Host '              your host target and verify it works (needs libclang):'
-    Write-Host '                cargo build -p readstat-sys --features buildtime_bindgen'
+    Write-Host '                $env:READSTAT_REGEN_BINDINGS=1; cargo build -p readstat-sys --features buildtime_bindgen'
     Write-Host '                cargo test --workspace'
-    Write-Host '              (Windows also: cargo build -p readstat-iconv-sys --features buildtime_bindgen)'
+    Write-Host '              (Windows also: $env:READSTAT_REGEN_BINDINGS=1; cargo build -p readstat-iconv-sys --features buildtime_bindgen)'
     Write-Host "    In CI    — push; the 'readstat-sys cross-platform CI' regen/regen-iconv jobs"
     Write-Host '              regenerate the other targets. Their drift check fails on purpose for'
     Write-Host '              each stale file; download the uploaded artifacts, commit them, re-push.'

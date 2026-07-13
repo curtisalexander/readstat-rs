@@ -19,7 +19,7 @@ The command-line tool is developed in Rust and is only possible due to the follo
 
 The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arrow` crate is used to convert the read `sas7bdat` data into the [Arrow](https://arrow.apache.org/) memory format. Once in the `Arrow` memory format, the data can be written to other file formats.
 
-> :bulb: **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](crates/readstat-sys/) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, the higher-level crates (`readstat`, `readstat-cli`, `readstat-wasm`) currently only implement support for **SAS `.sas7bdat` files**.
+> :bulb: **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](crates/readstat-sys/) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, the higher-level crates (`readstat`, `readstat-cli`, `readstat-wasm`) only implement support for **SAS `.sas7bdat` files**. SPSS and Stata support is a possible future addition, but is **not planned at this time** &mdash; if you need those formats today, the `readstat-sys` bindings already expose the complete SPSS (`.sav`, `.zsav`, `.por`) and Stata (`.dta`) C API to build on.
 
 ## :rocket: CLI Quickstart
 

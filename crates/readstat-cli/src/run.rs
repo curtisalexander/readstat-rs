@@ -203,12 +203,14 @@ fn run_metadata(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let rsp = ReadStatPath::new(sas_path)?;
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, skip_row_count)?;
-    println!("{}", ReadStatWriter::metadata_to_string(&md, &rsp, as_json)?);
+    println!(
+        "{}",
+        ReadStatWriter::metadata_to_string(&md, &rsp, as_json)?
+    );
     Ok(())
 }
 
 /// Handle the `preview` subcommand: read a limited number of rows and write to stdout as CSV.
-#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 fn run_preview(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let ReadStatCliCommands::Preview {
         input,
@@ -249,7 +251,9 @@ fn run_preview(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     }
 
     let column_filter = column_filter.map(Arc::new);
-    let total_rows_to_process = std::cmp::min(rows, md.row_count as u32);
+    // try_from (not `as`): a corrupt header reporting a negative row count
+    // must surface as an error, not wrap to ~4 billion rows.
+    let total_rows_to_process = std::cmp::min(rows, u32::try_from(md.row_count)?);
     let total_rows_to_stream = resolve_stream_rows(reader, stream_rows, total_rows_to_process);
     let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let progress = create_progress(no_progress, total_rows_to_process)?;
@@ -330,11 +334,7 @@ fn run_preview(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 }
 
 /// Handle the `data` subcommand: read SAS data and write to an output file.
-#[allow(
-    clippy::too_many_lines,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_truncation
-)]
+#[allow(clippy::too_many_lines)]
 fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let ReadStatCliCommands::Data {
         input,
@@ -425,11 +425,14 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             }
             let column_filter = column_filter.map(Arc::new);
 
-            // Determine row count
+            // Determine row count. try_from (not `as`): a corrupt header
+            // reporting a negative row count must surface as an error, not
+            // wrap to ~4 billion rows.
+            let row_count = u32::try_from(md.row_count)?;
             let total_rows_to_process = if let Some(r) = rows {
-                std::cmp::min(r, md.row_count as u32)
+                std::cmp::min(r, row_count)
             } else {
-                md.row_count as u32
+                row_count
             };
 
             let total_rows_to_stream =
@@ -519,7 +522,10 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             } else if use_parallel_writes {
                 #[cfg(feature = "parquet")]
                 {
-                    let buffer_size_bytes = (parallel_write_buffer_mb * 1024 * 1024) as usize;
+                    // clap caps the flag at 10240 MB, so this only fails on a
+                    // 32-bit usize — where >4 GiB genuinely can't be buffered.
+                    let buffer_size_bytes =
+                        usize::try_from(parallel_write_buffer_mb * 1024 * 1024)?;
                     write_parallel_parquet(ctx, buffer_size_bytes)?;
                 }
                 #[cfg(not(feature = "parquet"))]
@@ -605,13 +611,7 @@ fn spawn_reader(
             let mut d = ReadStatData::new()
                 .set_column_filter(column_filter.clone(), original_var_count)
                 .set_total_rows_processed(total_rows_processed.clone())
-                .init_shared(
-                    var_count,
-                    vars.clone(),
-                    schema.clone(),
-                    row_start,
-                    row_end,
-                );
+                .init_shared(var_count, vars.clone(), schema.clone(), row_start, row_end);
 
             if let Some(ref p) = progress {
                 d = d.set_progress(p.clone() as Arc<dyn ProgressCallback>);
@@ -623,9 +623,7 @@ fn spawn_reader(
         };
 
         let send_err = || {
-            ReadStatError::Other(
-                "Error when attempting to send read data for writing".to_string(),
-            )
+            ReadStatError::Other("Error when attempting to send read data for writing".to_string())
         };
 
         if parallel {
@@ -685,9 +683,7 @@ struct WriteContext {
 /// Must be called after the channel drains and BEFORE finalizing output:
 /// writing a Parquet/Feather footer over missing chunks would produce a
 /// silently-corrupt file with exit code 0.
-fn join_reader(
-    handle: thread::JoinHandle<Result<(), ReadStatError>>,
-) -> Result<(), ReadStatError> {
+fn join_reader(handle: thread::JoinHandle<Result<(), ReadStatError>>) -> Result<(), ReadStatError> {
     match handle.join() {
         Ok(res) => res,
         Err(_) => Err(ReadStatError::Other("Reader thread panicked".to_string())),
@@ -740,7 +736,10 @@ fn write_sequential(ctx: WriteContext) -> Result<(), ReadStatError> {
 /// Parquet output): write each buffered batch group to a temp file
 /// concurrently, then merge the temp files into the final output.
 #[cfg(feature = "parquet")]
-fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result<(), ReadStatError> {
+fn write_parallel_parquet(
+    ctx: WriteContext,
+    buffer_size_bytes: usize,
+) -> Result<(), ReadStatError> {
     let WriteContext {
         rx,
         reader,
@@ -756,9 +755,12 @@ fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result
     let compression_level = wc.compression_level();
 
     let temp_dir = if let Some(out_path) = &out_path {
-        match out_path.parent() {
-            Ok(parent) => parent.to_path_buf(),
-            Err(_) => std::env::current_dir()?,
+        // Fully qualified std call: with `path_abs::PathInfo` in scope, plain
+        // `out_path.parent()` would resolve to the trait's Result-returning
+        // method instead of std's Option-returning one.
+        match std::path::Path::parent(out_path) {
+            Some(parent) => parent.to_path_buf(),
+            None => std::env::current_dir()?,
         }
     } else {
         return Err(ReadStatError::Other(
@@ -778,6 +780,9 @@ fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result
     let mut all_temp_files: Vec<PathBuf> = Vec::new();
     let mut merged_schema: Option<Arc<arrow_schema::Schema>> = None;
     let mut batch_idx: usize = 0;
+    // Rows actually written across all batch groups, for the final summary —
+    // mirrors what `finish` reports on the sequential path.
+    let mut total_rows: usize = 0;
 
     loop {
         let mut batch_group: Vec<(ReadStatData, WriteConfig, usize)> =
@@ -796,6 +801,14 @@ fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result
         if merged_schema.is_none() {
             merged_schema = Some(batch_group[0].0.schema.clone());
         }
+        total_rows += batch_group
+            .iter()
+            .map(|(d, _, _)| {
+                d.batch
+                    .as_ref()
+                    .map_or(0, arrow_array::RecordBatch::num_rows)
+            })
+            .sum::<usize>();
         let schema_ref = merged_schema
             .as_ref()
             .expect("schema must be set after first batch group");
@@ -846,6 +859,7 @@ fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result
             compression,
             compression_level,
         )?;
+        print_write_summary(total_rows, &input_path, Some(out_path));
     }
 
     Ok(())
@@ -856,7 +870,11 @@ fn write_parallel_parquet(ctx: WriteContext, buffer_size_bytes: usize) -> Result
 #[cfg(feature = "sql")]
 fn write_with_sql(ctx: WriteContext, query: &str, table_name: &str) -> Result<(), ReadStatError> {
     let WriteContext {
-        rx, reader, wc, schema, ..
+        rx,
+        reader,
+        wc,
+        schema,
+        ..
     } = ctx;
 
     let mut all_batches = Vec::new();

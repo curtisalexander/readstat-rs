@@ -2,7 +2,7 @@
 
 Rust library for parsing SAS binary files (`.sas7bdat`) into Apache Arrow `RecordBatch` format. Parsing is performed via FFI bindings to the [ReadStat](https://github.com/WizardMac/ReadStat) C library; the resulting data is exposed through a safe, idiomatic Rust API.
 
-> **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](https://crates.io/crates/readstat-sys) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, this crate currently only implements parsing and conversion for **SAS `.sas7bdat` files**. SPSS and Stata formats are not supported.
+> **Note:** The ReadStat C library supports SAS, SPSS, and Stata file formats. The [`readstat-sys`](https://crates.io/crates/readstat-sys) crate exposes the **full** ReadStat API &mdash; all 125 functions across all formats. However, this crate only implements parsing and conversion for **SAS `.sas7bdat` files**. SPSS and Stata support is a possible future addition, but is **not planned at this time** &mdash; if you need those formats today, the `readstat-sys` bindings already expose the complete SPSS (`.sav`, `.zsav`, `.por`) and Stata (`.dta`) C API to build on.
 
 **Minimum Supported Rust Version (MSRV):** `1.88` (Rust edition 2024).
 

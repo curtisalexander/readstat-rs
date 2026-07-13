@@ -336,3 +336,47 @@ fn sql_stream_and_write() {
     // Clean up
     let _ = std::fs::remove_file(&out_path);
 }
+
+/// A streaming query that returns zero rows must still produce a valid output
+/// file carrying the result schema — matching the buffered `execute_sql` path,
+/// which synthesizes an empty batch for the same case.
+#[test]
+fn sql_stream_and_write_zero_rows() {
+    let (receiver, schema) = send_cars_via_channel();
+
+    let temp_dir = std::env::temp_dir();
+    let out_path = temp_dir.join("sql_stream_test_zero_rows.parquet");
+
+    let write_config = readstat::WriteConfig::new(
+        Some(out_path.clone()),
+        Some(readstat::OutFormat::Parquet),
+        true,
+        None,
+        None,
+    )
+    .unwrap();
+
+    readstat::execute_sql_and_write_stream(
+        receiver,
+        schema,
+        "cars",
+        "SELECT \"Brand\", \"Model\", \"EngineSize\" FROM cars WHERE 1=0",
+        &write_config,
+    )
+    .unwrap();
+
+    // The file must exist and be a valid, readable Parquet file with the
+    // projected schema and zero rows.
+    use readstat::arrow_array::RecordBatchReader;
+    let file = std::fs::File::open(&out_path).unwrap();
+    let reader =
+        parquet::arrow::arrow_reader::ParquetRecordBatchReader::try_new(file, 1024).unwrap();
+    let out_schema = reader.schema();
+    assert_eq!(out_schema.fields().len(), 3);
+    assert_eq!(out_schema.field(0).name(), "Brand");
+    let total_rows: usize = reader.into_iter().map(|b| b.unwrap().num_rows()).sum();
+    assert_eq!(total_rows, 0);
+
+    // Clean up
+    let _ = std::fs::remove_file(&out_path);
+}

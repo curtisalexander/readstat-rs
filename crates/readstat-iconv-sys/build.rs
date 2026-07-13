@@ -16,9 +16,10 @@
 //! identical under either toolchain. The default
 //! build copies the file matching the current target into `OUT_DIR`, so
 //! **consumers need no `libclang`**. Enable the `buildtime_bindgen` feature to
-//! regenerate the file from `wrapper.h` (requires `libclang`); the result is
-//! written to both `OUT_DIR` and the checked-in path so a maintainer can commit
-//! the diff. The CI `regen` job runs this on a Windows runner.
+//! regenerate the bindings from `wrapper.h` (requires `libclang`); the result
+//! is written to `OUT_DIR`, and additionally to the checked-in path (so a
+//! maintainer can commit the diff) when `READSTAT_REGEN_BINDINGS` is set. The
+//! CI `regen-iconv` job runs this on a Windows runner.
 
 fn main() {
     use std::env;
@@ -88,9 +89,15 @@ fn main() {
         .join("bindings")
         .join(format!("bindings_windows_{target_arch}.rs"));
 
+    println!("cargo:rerun-if-env-changed=READSTAT_REGEN_BINDINGS");
+
     if cfg!(feature = "buildtime_bindgen") {
-        // Regeneration path — requires `libclang`. Writes to both OUT_DIR (for
-        // this compile) and the checked-in file (so the diff can be committed).
+        // Regeneration path — requires `libclang`. Always writes to OUT_DIR
+        // (for this compile); the checked-in file is refreshed ONLY when
+        // `READSTAT_REGEN_BINDINGS` is set — enabling the feature alone (e.g.
+        // a workspace-wide `--all-features` build) must not silently rewrite
+        // committed bindings, whose exact output depends on the local
+        // libclang version.
         #[cfg(feature = "buildtime_bindgen")]
         {
             let bindings = bindgen::Builder::default()
@@ -108,19 +115,21 @@ fn main() {
                 .write_to_file(out_path.join("bindings.rs"))
                 .expect("Couldn't write bindings to OUT_DIR!");
 
-            if let Some(parent) = pregenerated.parent() {
-                fs::create_dir_all(parent).expect("Couldn't create src/bindings directory");
+            if env::var_os("READSTAT_REGEN_BINDINGS").is_some() {
+                if let Some(parent) = pregenerated.parent() {
+                    fs::create_dir_all(parent).expect("Couldn't create src/bindings directory");
+                }
+                bindings
+                    .write_to_file(&pregenerated)
+                    .expect("Couldn't refresh per-target pre-generated bindings file");
             }
-            bindings
-                .write_to_file(&pregenerated)
-                .expect("Couldn't refresh per-target pre-generated bindings file");
         }
     } else {
         // Default path — copy the checked-in bindings; no bindgen, no libclang.
         assert!(
             pregenerated.exists(),
-            "{} is missing; run `cargo build -p readstat-iconv-sys --features buildtime_bindgen` \
-             (requires libclang) to regenerate it",
+            "{} is missing; run `READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-iconv-sys \
+             --features buildtime_bindgen` (requires libclang) to regenerate it",
             pregenerated.display()
         );
         fs::copy(&pregenerated, out_path.join("bindings.rs"))

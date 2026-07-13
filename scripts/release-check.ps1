@@ -72,6 +72,23 @@ if (Test-Path $WasmDir) {
     Write-Warn "readstat-wasm directory not found — skipping"
 }
 
+# 2c. MSRV — the workspace must at least type-check on the exact toolchain
+# declared in `[workspace.package] rust-version`. Skipped (with a warning) if
+# that toolchain isn't installed; CI's `msrv` job enforces it regardless.
+$Msrv = (Select-String -Path (Join-Path $RootDir "Cargo.toml") -Pattern '^rust-version\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+Write-Host "Checking MSRV ($Msrv)..."
+$toolchains = rustup toolchain list 2>$null
+if ($toolchains -match "^$Msrv") {
+    cargo "+$Msrv" check --workspace --all-targets *>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Pass "MSRV $Msrv check"
+    } else {
+        Write-Fail "MSRV $Msrv check — workspace does not build on rust-version; bump rust-version or fix"
+    }
+} else {
+    Write-Warn "MSRV toolchain $Msrv not installed — skipping (install: rustup toolchain install $Msrv)"
+}
+
 # 3. Tests
 Write-Host "Running tests..."
 cargo test --workspace *>$null

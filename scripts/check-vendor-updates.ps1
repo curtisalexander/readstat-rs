@@ -139,7 +139,7 @@ if ($anyUpdate) {
     Write-Host "    git -C <path> fetch origin" -ForegroundColor DarkGray
     Write-Host "    git -C <path> checkout <commit-or-tag>   # then commit the submodule bump" -ForegroundColor DarkGray
     Write-Host "  Bumping the vendored C also requires regenerating + committing the per-target" -ForegroundColor DarkGray
-    Write-Host "  bindings (cargo build -p readstat-sys --features buildtime_bindgen, etc.) —" -ForegroundColor DarkGray
+    Write-Host "  bindings (READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen, etc.) —" -ForegroundColor DarkGray
     Write-Host "  CI's drift check enforces this. See docs/RELEASING.md / CHANGELOG.md." -ForegroundColor DarkGray
 }
 else {

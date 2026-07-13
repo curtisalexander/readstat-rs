@@ -116,7 +116,12 @@ impl PartitionStream for ChannelPartitionStream {
         // partition more than once; rather than panic inside the execution
         // operator — which would abort the whole process — surface a recoverable
         // query error so the caller gets an `Err` from the query instead.
-        let Some(receiver) = self.receiver.lock().unwrap_or_else(|e| e.into_inner()).take() else {
+        let Some(receiver) = self
+            .receiver
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        else {
             let err = datafusion::error::DataFusionError::Execution(
                 "ChannelPartitionStream can only be executed once; this query plan reads the \
                  streaming input more than once (e.g. a self-join). Re-run with the \
@@ -191,6 +196,8 @@ async fn execute_sql_stream_async(
 /// streaming pass for the Data command path.
 ///
 /// The output path in `write_config` must be `Some`; returns an error otherwise.
+/// A query that returns zero rows still produces a valid output file
+/// (header-only CSV, empty Parquet/Feather/NDJSON) carrying the result schema.
 ///
 /// # Single-execution limit
 ///
@@ -238,6 +245,7 @@ async fn execute_sql_and_write_stream_async(
     ctx.register_table(table_name, Arc::new(table))?;
 
     let df = ctx.sql(sql).await?;
+    let result_schema = Arc::new(df.schema().as_arrow().clone());
     let mut stream = df.execute_stream().await?;
 
     // Collect all result batches — we need the output schema (which may differ
@@ -246,6 +254,13 @@ async fn execute_sql_and_write_stream_async(
     let mut result_batches: Vec<RecordBatch> = Vec::new();
     while let Some(batch) = stream.next().await {
         result_batches.push(batch?);
+    }
+
+    // A query may legitimately return zero rows. Synthesize a single empty
+    // batch carrying the result schema so a valid (header-only/empty) output
+    // file is still produced — matching the buffered `execute_sql` path.
+    if result_batches.is_empty() {
+        result_batches.push(RecordBatch::new_empty(result_schema));
     }
 
     write_sql_results(

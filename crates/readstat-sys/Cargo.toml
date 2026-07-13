@@ -42,9 +42,11 @@ default-target = "x86_64-unknown-linux-gnu"
 [features]
 # Default builds consume the pre-generated per-target bindings file under
 # `src/bindings/` — no `libclang` dependency at consumer build time. Enable
-# `buildtime_bindgen` to regenerate the current target's file from
-# `wrapper.h`; the build script writes the result to both `OUT_DIR` and
-# `src/bindings/bindings_<os>_<arch>.rs` so a maintainer can commit the diff
+# `buildtime_bindgen` to generate fresh bindings from `wrapper.h` into
+# `OUT_DIR`. To also refresh the checked-in
+# `src/bindings/bindings_<os>_<arch>.rs` (so the diff can be committed), set
+# `READSTAT_REGEN_BINDINGS=1` as well — the feature alone never rewrites
+# committed files, so a workspace-wide `--all-features` build stays clean
 # (must be run once per supported target).
 default = []
 buildtime_bindgen = ["dep:bindgen"]

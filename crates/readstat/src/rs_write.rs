@@ -135,7 +135,9 @@ impl ReadStatWriter {
         }
     }
 
-    /// Opens an output file: creates or truncates on first write, appends on subsequent writes.
+    /// Opens (creating or truncating) the output file. Called exactly once per
+    /// output — every caller guards with `!self.wrote_start` and keeps the
+    /// returned writer open for subsequent batches.
     #[cfg(any(
         feature = "csv",
         feature = "feather",
@@ -143,15 +145,12 @@ impl ReadStatWriter {
         feature = "parquet"
     ))]
     fn open_output(&self, path: &Path) -> Result<File, ReadStatError> {
-        let f = if self.wrote_start {
-            OpenOptions::new().create(true).append(true).open(path)?
-        } else {
-            OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(path)?
-        };
+        debug_assert!(!self.wrote_start, "output file opened twice");
+        let f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)?;
         Ok(f)
     }
 
@@ -577,8 +576,9 @@ impl ReadStatWriter {
     }
 
     #[cfg(feature = "csv")]
-    #[allow(clippy::unnecessary_wraps)]
     fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), ReadStatError> {
+        use std::io::Write;
+
         // CSV-escape each name so the header stays well-formed and column-aligned
         // with the (already-escaped) data rows. Variable names may legally contain
         // commas or quotes under SAS `VALIDVARNAME=ANY`.
@@ -589,7 +589,9 @@ impl ReadStatWriter {
             .collect::<Vec<_>>()
             .join(",");
 
-        println!("{header}");
+        // writeln! (not println!): a closed pipe (e.g. `... | head`) must
+        // surface as an I/O error, not a panic.
+        writeln!(stdout(), "{header}")?;
 
         self.wrote_header = true;
 
@@ -635,7 +637,11 @@ impl ReadStatWriter {
 
         let mut out = String::new();
         // Writing to a String is infallible; the `let _ =` discards the Result.
-        let _ = writeln!(out, "Metadata for the file {}\n", rsp.path.to_string_lossy());
+        let _ = writeln!(
+            out,
+            "Metadata for the file {}\n",
+            rsp.path.to_string_lossy()
+        );
         let _ = writeln!(out, "Row count: {}", md.row_count);
         let _ = writeln!(out, "Variable count: {}", md.var_count);
         let _ = writeln!(out, "Table name: {}", md.table_name);

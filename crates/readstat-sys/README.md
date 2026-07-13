@@ -20,10 +20,10 @@ Because the crate ships the C as real files (not a submodule reference), the pub
 
 Rust bindings are **pre-generated per `(os, arch)`** and checked in under `src/bindings/bindings_<os>_<arch>.rs`. The default build simply copies the file matching the current target, so **building this crate requires no `libclang`** on any of the supported targets (Linux `x86_64`/`aarch64`, macOS `x86_64`/`aarch64`, Windows `x86_64`).
 
-Targets without a checked-in bindings file (e.g. `wasm32-unknown-emscripten`) must enable the `buildtime_bindgen` feature, which regenerates bindings from `wrapper.h` at build time and requires `libclang`. Maintainers also use this feature to refresh the checked-in files when the vendored C surface changes:
+Targets without a checked-in bindings file (e.g. `wasm32-unknown-emscripten`) must enable the `buildtime_bindgen` feature, which regenerates bindings from `wrapper.h` at build time and requires `libclang`. Maintainers also use this feature to refresh the checked-in files when the vendored C surface changes — setting `READSTAT_REGEN_BINDINGS=1` opts in to rewriting the checked-in file (the feature alone only writes to the build's `OUT_DIR`):
 
 ```bash
-cargo build -p readstat-sys --features buildtime_bindgen
+READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen
 ```
 
 ## API Coverage

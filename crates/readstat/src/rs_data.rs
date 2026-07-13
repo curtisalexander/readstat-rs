@@ -272,7 +272,7 @@ impl ReadStatData {
     /// Each builder's type is determined by the variable metadata. String builders
     /// are additionally pre-sized with `storage_width * chunk_rows` bytes.
     ///
-    /// The capacity hint is clamped to [`MAX_PREALLOC_ROWS`] because both the row
+    /// The capacity hint is clamped to `MAX_PREALLOC_ROWS` (1,000,000 rows) because both the row
     /// count and per-string `storage_width` originate from untrusted file headers;
     /// a crafted file claiming billions of rows would otherwise trigger a multi-GB
     /// up-front allocation (or a multiply overflow) before a single row is parsed.

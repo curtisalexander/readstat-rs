@@ -49,6 +49,32 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+  # Enforce the MSRV declared in `[workspace.package] rust-version` (and
+  # advertised in the READMEs): the workspace must at least type-check on that
+  # exact toolchain. `--all-features` is applied per-crate (not workspace-wide)
+  # so `readstat-sys/buildtime_bindgen` stays off — it would drag in
+  # bindgen/libclang, which is irrelevant to the MSRV contract.
+  msrv:
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential
+      - name: Check workspace (default features)
+        run: cargo check --workspace --all-targets
+      - name: Check readstat + readstat-cli (all features, incl. sql)
+        run: cargo check -p readstat -p readstat-cli --all-features --all-targets
+
   release-notes:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest

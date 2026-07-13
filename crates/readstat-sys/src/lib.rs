@@ -6,8 +6,10 @@
 //!
 //! These bindings expose the **full** `ReadStat` API, including support for SAS (`.sas7bdat`,
 //! `.xpt`), SPSS (`.sav`, `.zsav`, `.por`), and Stata (`.dta`) file formats. However,
-//! the higher-level [`readstat`](https://docs.rs/readstat) crate currently only implements
-//! parsing and conversion for **SAS `.sas7bdat` files**.
+//! the higher-level [`readstat`](https://docs.rs/readstat) crate only implements
+//! parsing and conversion for **SAS `.sas7bdat` files** (SPSS/Stata support there is a
+//! possible future addition but not planned at this time — these bindings are the
+//! building block if you need those formats).
 //!
 //! Most users should depend on the higher-level [`readstat`](https://docs.rs/readstat)
 //! crate instead of using these bindings directly.

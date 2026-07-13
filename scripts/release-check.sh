@@ -72,6 +72,21 @@ else
     warn "readstat-wasm directory not found — skipping"
 fi
 
+# 2c. MSRV — the workspace must at least type-check on the exact toolchain
+# declared in `[workspace.package] rust-version`. Skipped (with a warning) if
+# that toolchain isn't installed; CI's `msrv` job enforces it regardless.
+MSRV="$(grep -m1 '^rust-version' "$ROOT_DIR/Cargo.toml" | sed 's/.*"\(.*\)".*/\1/')"
+echo "Checking MSRV ($MSRV)..."
+if rustup toolchain list 2>/dev/null | grep -q "^$MSRV"; then
+    if cargo "+$MSRV" check --workspace --all-targets &>/dev/null; then
+        pass "MSRV $MSRV check"
+    else
+        fail "MSRV $MSRV check — workspace does not build on rust-version; bump rust-version or fix"
+    fi
+else
+    warn "MSRV toolchain $MSRV not installed — skipping (install: rustup toolchain install $MSRV)"
+fi
+
 # 3. Tests
 echo "Running tests..."
 if cargo test --workspace &>/dev/null; then

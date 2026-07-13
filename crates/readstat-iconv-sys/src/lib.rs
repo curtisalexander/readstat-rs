@@ -8,7 +8,8 @@
 //!
 //! Rust bindings are pre-generated per target and checked in under
 //! `src/bindings/`, so building requires no `libclang`. Maintainers regenerate
-//! them with `cargo build -p readstat-iconv-sys --features buildtime_bindgen`.
+//! them with `READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-iconv-sys
+//! --features buildtime_bindgen`.
 
 // Auto-generated bindgen code — suppress lints from generated bindings
 #![allow(clippy::pedantic)]

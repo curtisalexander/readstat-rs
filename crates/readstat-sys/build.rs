@@ -177,6 +177,7 @@ fn main() {
     // rebuild. Also watch the sanitizer env var, which toggles the C cflags.
     println!("cargo:rerun-if-changed=vendor/ReadStat/src");
     println!("cargo:rerun-if-env-changed=READSTAT_SANITIZE_ADDRESS");
+    println!("cargo:rerun-if-env-changed=READSTAT_REGEN_BINDINGS");
     println!("cargo:rustc-link-lib=static=readstat");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -211,9 +212,13 @@ fn main() {
         // ReadStat C surface changes. Must be run once per supported
         // target to refresh all six checked-in files (linux/macos ×
         // aarch64/x86_64, plus windows-msvc and windows-gnu x86_64); the
-        // verify CI workflow does this for Linux/macOS/Windows. Writes the
-        // result to both OUT_DIR (for the current compile) and the target's
-        // pre-gen file (so the diff can be committed).
+        // verify CI workflow does this for Linux/MacOS/Windows. Always
+        // writes the result to OUT_DIR (for the current compile); the
+        // checked-in per-target file under `src/bindings/` is refreshed
+        // ONLY when `READSTAT_REGEN_BINDINGS` is set — enabling the feature
+        // alone (e.g. a workspace-wide `--all-features` build) must not
+        // silently rewrite committed bindings, whose exact output depends
+        // on the local libclang version.
         #[cfg(feature = "buildtime_bindgen")]
         {
             let mut builder = bindgen::Builder::default()
@@ -265,7 +270,9 @@ fn main() {
             bindings
                 .write_to_file(out_path.join("bindings.rs"))
                 .expect("Couldn't write bindings to OUT_DIR!");
-            if let Some(path) = &pregenerated_bindings {
+            if env::var_os("READSTAT_REGEN_BINDINGS").is_some()
+                && let Some(path) = &pregenerated_bindings
+            {
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)
                         .expect("Couldn't create src/bindings directory");
@@ -288,7 +295,7 @@ fn main() {
         });
         assert!(
             path.exists(),
-            "{} is missing; run `cargo build -p readstat-sys --features buildtime_bindgen` to regenerate it",
+            "{} is missing; run `READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen` to regenerate it",
             path.display()
         );
         std::fs::copy(path, out_path.join("bindings.rs"))

@@ -6,9 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.25.0] - Unreleased
+## [0.25.1] - 2026-07-13
 
-Bumps `readstat` and `readstat-cli` to 0.25.0; `readstat-sys` to 0.5.0; `readstat-iconv-sys` to 0.4.0. (Set the release date when publishing.)
+Bumps `readstat` and `readstat-cli` to 0.25.1; `readstat-sys` to 0.5.1; `readstat-iconv-sys` to 0.4.1 (both sys crates' build scripts changed behavior — see the bindings regeneration note under Changed).
+
+### Added
+- MSRV (`1.88`) is now CI-enforced: a new `msrv` job in `main.yml` type-checks the workspace on the exact `rust-version` toolchain, and `scripts/release-check.sh` / `.ps1` run the same check locally when that toolchain is installed.
+
+### Fixed
+- `execute_sql_and_write_stream` now writes a valid empty output file (header-only CSV, empty Parquet/Feather/NDJSON) carrying the result schema when a query returns zero rows, matching the buffered `execute_sql` path; previously no output file was produced at all.
+- The CLI's `preview` and `data` subcommands now surface a corrupt header reporting a negative row count as an error instead of wrapping it to ~4 billion rows.
+- The library's CSV-to-stdout header write no longer panics on a closed pipe (e.g. piping into `head`); it surfaces a normal I/O error instead.
+- The `--parallel --parallel-write` Parquet path now prints the same "In total, wrote N rows" summary as the sequential write path.
+
+### Changed
+- Regenerating the checked-in per-target bindings now requires setting `READSTAT_REGEN_BINDINGS=1` in addition to `--features buildtime_bindgen` (both `readstat-sys` and `readstat-iconv-sys`). The feature alone only writes to `OUT_DIR`, so a workspace-wide `--all-features` build can no longer silently rewrite committed bindings with output from whatever `libclang` is installed locally. CI's `regen`/`regen-iconv` jobs set the variable.
+- Scope docs (crate READMEs, rustdoc, ARCHITECTURE.md) now state explicitly that SPSS/Stata support in the high-level crates is a possible future addition but not planned at this time, and point to the `readstat-sys` bindings, which already expose the complete SPSS/Stata C API.
+
+## [0.25.0] - 2026-07-12
+
+Bumps `readstat` and `readstat-cli` to 0.25.0; `readstat-sys` to 0.5.0; `readstat-iconv-sys` to 0.4.0.
 
 ### Added
 - `x86_64-pc-windows-gnu` is now a first-class target: dedicated pre-generated bindings (`bindings_windows_gnu_x86_64.rs` — the MSVC and GNU ABIs differ in C enum signedness), `consume`/`regen` CI coverage on Windows runners with the MinGW toolchain, and build instructions for native MSYS2 and Linux cross-compilation in `docs/BUILDING.md`.

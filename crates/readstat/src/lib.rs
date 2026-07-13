@@ -7,7 +7,11 @@
 //!
 //! **Note:** While the underlying [`readstat-sys`](https://docs.rs/readstat-sys) crate
 //! exposes bindings for all formats supported by `ReadStat` (SAS, SPSS, Stata),
-//! this crate currently only implements parsing and conversion for **SAS `.sas7bdat` files**.
+//! this crate only implements parsing and conversion for **SAS `.sas7bdat` files**.
+//! SPSS and Stata support is a possible future addition, but is **not planned at
+//! this time** — if you need those formats today, the `readstat-sys` bindings
+//! already expose the complete SPSS (`.sav`, `.zsav`, `.por`) and Stata (`.dta`)
+//! C API to build on.
 //!
 //! # Data Pipeline
 //!

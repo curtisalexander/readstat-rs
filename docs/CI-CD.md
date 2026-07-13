@@ -90,6 +90,17 @@ Repository dispatch event types for API triggers:
 
 :memo: API triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
+## MSRV Check (`msrv` job in `.github/workflows/main.yml`)
+
+Non-tag pushes and PRs also run an `msrv` job that type-checks the workspace on
+the exact toolchain declared in `[workspace.package] rust-version` (currently
+`1.88`): `cargo check --workspace --all-targets` with default features, plus
+`cargo check -p readstat -p readstat-cli --all-features --all-targets` (kept
+per-crate so `readstat-sys/buildtime_bindgen` stays off). A dependency or
+language-feature bump that silently raises the real MSRV fails this job instead
+of surprising downstream users. `scripts/release-check.sh` runs the same check
+locally when the MSRV toolchain is installed.
+
 ## Fuzz Testing (`.github/workflows/fuzz.yml`)
 
 A separate workflow runs [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) (libFuzzer) targets against the `readstat` library's byte-parsing paths.
@@ -115,7 +126,7 @@ Three jobs:
 | Job | Runs on | What it does |
 |-----|---------|--------------|
 | `consume` | linux x86_64/aarch64, macOS x86_64/aarch64, windows-msvc x86_64, windows-gnu x86_64 | Builds + tests the workspace using the **committed** `bindings_<os>_<arch>.rs` — the load-bearing check that each file matches that platform's real ABI. |
-| `regen` | same matrix | Regenerates each target's bindings with `--features buildtime_bindgen`, uploads the result as artifact `bindings-<target>`, and **fails on drift** if it differs from the committed file. |
+| `regen` | same matrix | Regenerates each target's bindings with `--features buildtime_bindgen` + `READSTAT_REGEN_BINDINGS=1`, uploads the result as artifact `bindings-<target>`, and **fails on drift** if it differs from the committed file. |
 | `regen-iconv` | windows x86_64 | Same idea for `readstat-iconv-sys`; artifact `iconv-bindings-windows`. |
 
 Both Windows flavors run on the same `windows-latest` host (the binaries execute
@@ -135,14 +146,16 @@ You can only regenerate **your own host target** locally (cross-compiling the ot
 **Do locally:**
 
 1. Edit the pin in `Cargo.toml`: `bindgen = "=<new-version>"`.
-2. Regenerate + sanity-check your host target (needs `libclang` installed):
+2. Regenerate + sanity-check your host target (needs `libclang` installed).
+   `READSTAT_REGEN_BINDINGS=1` opts in to rewriting the checked-in file — the
+   feature alone only writes to `OUT_DIR`:
    ```sh
-   cargo build -p readstat-sys --features buildtime_bindgen
+   READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen
    # On Windows, also:
-   cargo build -p readstat-iconv-sys --features buildtime_bindgen
+   READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-iconv-sys --features buildtime_bindgen
    ```
-   The build script writes the regenerated file to both `OUT_DIR` and the checked-in
-   `src/bindings/bindings_<host-os>_<host-arch>.rs`, so it shows up as a working-tree change.
+   With the env var set, the build script writes the regenerated file to both `OUT_DIR` and the
+   checked-in `src/bindings/bindings_<host-os>_<host-arch>.rs`, so it shows up as a working-tree change.
 3. Confirm it still works: `cargo test --workspace`.
 4. Commit the `Cargo.toml` change together with your host target's regenerated file. (The other targets will still be stale — that's expected; CI produces them next.)
 

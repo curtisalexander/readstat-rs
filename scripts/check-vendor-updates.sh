@@ -113,7 +113,7 @@ if [ "$any_update" = true ]; then
   echo -e "${DIM}    git -C <path> fetch origin${RESET}"
   echo -e "${DIM}    git -C <path> checkout <commit-or-tag>   # then commit the submodule bump${RESET}"
   echo -e "${DIM}  Bumping the vendored C also requires regenerating + committing the per-target${RESET}"
-  echo -e "${DIM}  bindings (cargo build -p readstat-sys --features buildtime_bindgen, etc.) —${RESET}"
+  echo -e "${DIM}  bindings (READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen, etc.) —${RESET}"
   echo -e "${DIM}  CI's drift check enforces this. See docs/RELEASING.md / CHANGELOG.md.${RESET}"
 else
   echo -e "${GREEN}${CHECK} All vendored submodules are at or ahead of upstream's latest tag and branch tip.${RESET}"
