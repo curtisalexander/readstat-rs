@@ -170,11 +170,20 @@ if (Test-Path $changelogPath) {
 Write-Host "Checking package contents..."
 $publishableCrates = @("readstat-iconv-sys", "readstat-sys", "readstat", "readstat-cli")
 foreach ($crate in $publishableCrates) {
+    # Test the exit code, not a grepped string ("warning: aborting" is no
+    # longer printed by modern cargo, so matching it fails open).
+    #
+    # Exception: before the FIRST publish, packaging any crate with a path
+    # dependency fails with "no matching package named `<dep>` found" because
+    # the dependency isn't on crates.io yet. That's expected — downgrade it to
+    # a warning. Real packaging errors still fail.
     $pkgOutput = cargo package -p $crate --allow-dirty 2>&1
-    if ($pkgOutput -match "warning: aborting") {
-        Write-Fail "cargo package -p $crate"
-    } else {
+    if ($LASTEXITCODE -eq 0) {
         Write-Pass "cargo package -p $crate"
+    } elseif ($pkgOutput -match "no matching package named") {
+        Write-Warn "cargo package -p $crate — path dependency not on crates.io yet (expected before first publish)"
+    } else {
+        Write-Fail "cargo package -p $crate"
     }
 }
 

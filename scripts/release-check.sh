@@ -167,8 +167,16 @@ for crate in "${PUBLISHABLE_CRATES[@]}"; do
     # (e.g. "warning: aborting") fails open — modern cargo doesn't print it, and
     # a pipe would mask cargo's exit status anyway. `cargo package` exits
     # nonzero when packaging actually fails.
-    if cargo package -p "$crate" --allow-dirty >/dev/null 2>&1; then
+    #
+    # Exception: before the FIRST publish, packaging any crate with a path
+    # dependency fails with "no matching package named `<dep>` found" because
+    # the dependency isn't on crates.io yet. That's expected — downgrade it to
+    # a warning so the first-publish run isn't littered with false failures.
+    # Real packaging errors still fail.
+    if pkg_output=$(cargo package -p "$crate" --allow-dirty 2>&1); then
         pass "cargo package -p $crate"
+    elif grep -q "no matching package named" <<<"$pkg_output"; then
+        warn "cargo package -p $crate — path dependency not on crates.io yet (expected before first publish)"
     else
         fail "cargo package -p $crate"
     fi

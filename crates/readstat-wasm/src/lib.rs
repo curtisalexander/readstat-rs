@@ -108,8 +108,10 @@ pub unsafe extern "C" fn free_binary(ptr: *mut u8, len: usize) {
     if !ptr.is_null() {
         // SAFETY: The pointer was produced by `Box::into_raw` on a `Box<[u8]>` of
         // exactly `len` bytes in `read_data_binary_inner`, so reconstructing the
-        // same `Box<[u8]>` is valid.
-        drop(unsafe { Box::from_raw(slice::from_raw_parts_mut(ptr, len)) });
+        // same `Box<[u8]>` is valid. `slice_from_raw_parts_mut` builds the raw
+        // fat pointer directly, without materializing an intermediate `&mut [u8]`
+        // before `Box::from_raw` takes ownership.
+        drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len)) });
     }
 }
 
