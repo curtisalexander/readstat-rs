@@ -5,10 +5,13 @@ env:
   CARGO_TERM_COLOR: always
 
 on:
-  # Trigger on tag push (for releases)
+  # Trigger on release tag push. Only `v*` tags (readstat/readstat-cli
+  # releases, e.g. v0.25.1) build binaries and create a GitHub Release.
+  # The sys-crate tags (`readstat-sys-v*`, `readstat-iconv-sys-v*`) are
+  # crates.io version markers only and must NOT produce GitHub Releases.
   push:
     tags:
-      - "*"
+      - "v*"
     # Trigger tests (but not releases) on branch pushes
     branches: [main, dev]
 
