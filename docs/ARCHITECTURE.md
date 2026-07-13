@@ -82,7 +82,7 @@ Owns CLI arg parsing, progress bars, colored output, and reader-writer thread or
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
-### `readstat-sys` (v0.5.0) — FFI Bindings
+### `readstat-sys` (v0.5.1) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate. Rust bindings are pre-generated per `(os, arch)` and checked in at `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so default builds need no `libclang` on any platform. Maintainers regenerate via `READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen` (requires `libclang`; the env var opts in to rewriting the checked-in file — the feature alone only writes to `OUT_DIR`). Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
