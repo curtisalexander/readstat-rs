@@ -28,7 +28,16 @@ tag = true
 tag-name = "v{{version}}"
 
 # Commit message for the version-bump commit.
-pre-release-commit-message = "Release v{{version}}"
+#
+# NOTE: with `consolidate-commits = true`, cargo-release only renders
+# `{{version}}` when every workspace member shares one version — and this
+# workspace never does (`readstat-tests` stays at 0.1.0, the sys crates
+# version independently). A versioned template would land literally as
+# "Release v{{version}}" (observed with cargo-release 1.1.2), so keep this
+# message static; the version lives in the annotated tag, whose per-crate
+# `tag-name`/message render fine. Amend the commit afterwards if you want
+# the version in the subject line (historical style: "Release vX.Y.Z").
+pre-release-commit-message = "chore: release"
 
 # Combine the version-bump commits for all crates into one commit.
 consolidate-commits = true
