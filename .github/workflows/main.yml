@@ -7,8 +7,9 @@ env:
 on:
   # Trigger on release tag push. Only `v*` tags (readstat/readstat-cli
   # releases, e.g. v0.25.1) build binaries and create a GitHub Release.
-  # The sys-crate tags (`readstat-sys-v*`, `readstat-iconv-sys-v*`) are
-  # crates.io version markers only and must NOT produce GitHub Releases.
+  # Sys-crate releases are never tagged (their release.toml sets tag = false)
+  # and must NOT produce GitHub Releases; the v* filter is defense in depth
+  # against any stray non-release tag.
   push:
     tags:
       - "v*"

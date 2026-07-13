@@ -19,13 +19,10 @@ cargo release minor -p readstat -p readstat-cli --dry-run   # preview first
 cargo release minor -p readstat -p readstat-cli             # apply
 
 # 3. Review the bump commit and tag, then push to trigger CI release builds.
-#    Push tags EXPLICITLY (not --follow-tags): --follow-tags pushes every
-#    reachable annotated tag, including local-only sys-crate tags whose older
-#    commits predate the v*-only release trigger — pushing those would create
-#    unwanted GitHub Releases. Only v* tags trigger a release build.
-git push origin main vX.Y.Z                        # readstat/readstat-cli release tag
-git push origin readstat-sys-vA.B.C                # optional: crates.io version marker only
-git push origin readstat-iconv-sys-vD.E.F          # optional: crates.io version marker only
+#    Push the release tag EXPLICITLY (not --follow-tags, which would push any
+#    stray local annotated tag). Only readstat/readstat-cli releases are
+#    tagged (`v*`); sys-crate releases are crates.io-only events with no tag.
+git push origin main vX.Y.Z
 
 # 4. After CI builds the release artifacts, publish to crates.io:
 #    Switch vendor dirs from submodules to copied files
@@ -82,9 +79,10 @@ cargo release minor -p readstat -p readstat-cli
 
 Use `patch` / `minor` / `major` as appropriate. After running, verify the diff looks right,
 then push the branch and the release tag explicitly: `git push origin main vX.Y.Z`.
-Avoid `--follow-tags` — it pushes every reachable annotated tag, including local-only
-sys-crate tags whose commits may predate the `v*`-only release trigger, which would
-create unwanted GitHub Releases.
+Avoid `--follow-tags` — it pushes every reachable annotated tag, not just the release tag.
+Only `readstat`/`readstat-cli` releases create a tag (`v*`, which triggers the GitHub
+Release build); sys-crate releases set `tag = false` and exist only as a bump commit,
+a CHANGELOG entry, and a crates.io publish.
 
 **Version conventions:**
 - `readstat` and `readstat-cli` share the same version (e.g. `0.21.0`) — always bump together

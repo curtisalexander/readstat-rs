@@ -7,9 +7,10 @@ The CI/CD workflow can be triggered in multiple ways:
 ## 1. Tag Push (Release)
 
 Push a `v*` tag (e.g. `v0.25.1`) to trigger a full release build with GitHub
-Release artifacts. Only `v*` tags trigger releases — the sys-crate tags
-(`readstat-sys-v*`, `readstat-iconv-sys-v*`) are crates.io version markers and
-deliberately do **not** build binaries or create GitHub Releases:
+Release artifacts. Only `v*` tags trigger releases, and only
+`readstat`/`readstat-cli` releases are tagged — sys-crate releases set
+`tag = false` in their `release.toml` and are crates.io-only events with no
+tag, no binaries, and no GitHub Release:
 
 ```sh
 # add and commit local changes
