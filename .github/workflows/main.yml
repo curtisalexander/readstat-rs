@@ -299,6 +299,55 @@ jobs:
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build-win-gnu:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    # windows-gnu flavor: statically linked against the MinGW runtime, so the
+    # binary has no MSVC runtime dependency. The runner image ships a MinGW
+    # gcc/binutils on PATH, which rustc uses as the linker and cc uses to
+    # compile the vendored C (ReadStat, win-iconv); readstat-sys has
+    # pre-generated windows-gnu bindings, so no libclang is needed.
+    runs-on: windows-latest
+    env:
+      target: x86_64-pc-windows-gnu
+    steps:
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.target }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --target ${{ env.target }}
+      - name: Zip
+        run: Compress-Archive -Path target\${{ env.target }}\release\${{ env.PACKAGE_NAME }}.exe -DestinationPath target\${{ env.target }}\release\${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip  -CompressionLevel Optimal
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}
+          path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-macos-x86:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: macos-latest
