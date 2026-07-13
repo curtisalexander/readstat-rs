@@ -3042,7 +3042,7 @@ dependencies = [
 
 [[package]]
 name = "readstat"
-version = "0.25.0"
+version = "0.25.1"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -3074,7 +3074,7 @@ dependencies = [
 
 [[package]]
 name = "readstat-cli"
-version = "0.25.0"
+version = "0.25.1"
 dependencies = [
  "arrow-array",
  "arrow-csv",
