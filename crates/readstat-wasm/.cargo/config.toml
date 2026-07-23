@@ -1,3 +1,8 @@
+[env]
+# Rust emits this cdylib as an Emscripten side module. Every native archive in
+# the final link (including transitive format codecs) must therefore use PIC.
+CFLAGS_wasm32_unknown_emscripten = "-fPIC"
+
 [target.wasm32-unknown-emscripten]
 rustflags = [
     "-Clink-arg=-sALLOW_MEMORY_GROWTH=1",
