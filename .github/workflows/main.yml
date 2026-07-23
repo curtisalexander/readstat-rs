@@ -104,6 +104,21 @@ jobs:
       - name: Build WASM crate
         working-directory: crates/readstat-wasm
         run: cargo build --target wasm32-unknown-emscripten --release
+      - name: Smoke-test generated WASM package
+        working-directory: crates/readstat-wasm
+        run: |
+          cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/readstat_wasm.wasm
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { init, read_metadata } from "./pkg/readstat_wasm.js";
+
+          await init();
+          const input = readFileSync("../readstat-tests/tests/data/cars.sas7bdat");
+          const metadata = JSON.parse(read_metadata(input));
+          if (metadata.row_count <= 0 || metadata.var_count <= 0) {
+            throw new Error(`unexpected metadata: ${JSON.stringify(metadata)}`);
+          }
+          NODE
 
   # Enforce the MSRV declared in `[workspace.package] rust-version` (and
   # advertised in the READMEs): the workspace must at least type-check on that

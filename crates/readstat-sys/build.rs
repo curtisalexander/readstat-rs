@@ -88,13 +88,6 @@ fn main() {
 
     cc.include(&src).warnings(false);
 
-    // Rust links cdylibs as Emscripten side modules, whose static inputs must
-    // use position-independent relocations. `cc` does not infer PIC for this
-    // target, so request it explicitly for the vendored ReadStat objects.
-    if is_emscripten {
-        cc.pic(true);
-    }
-
     // AddressSanitizer: instrument ReadStat C code when requested.
     // Uses a targeted env var so third-party sys crates (e.g. zstd-sys)
     // are not affected — global CFLAGS would break their linking.
