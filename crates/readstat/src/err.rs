@@ -285,6 +285,33 @@ pub enum ReadStatError {
     #[error("The parent directory of the output path {} does not exist", .0.display())]
     OutputParentMissing(PathBuf),
 
+    /// A reader was configured with a zero chunk size.
+    #[error("chunk size must be greater than zero")]
+    InvalidChunkSize,
+
+    /// A selected row range falls outside the dataset.
+    #[error("invalid row range: offset {offset}, limit {limit:?}, row count {row_count}")]
+    InvalidRowRange {
+        /// First requested row.
+        offset: u32,
+        /// Optional requested row count.
+        limit: Option<u32>,
+        /// Dataset row count.
+        row_count: u32,
+    },
+
+    /// A batch does not have the schema supplied to the writer constructor.
+    #[error("record batch schema does not match writer schema")]
+    SchemaMismatch,
+
+    /// Output destination or format settings are inconsistent.
+    #[error("invalid output configuration: {0}")]
+    InvalidOutputConfig(String),
+
+    /// Compression codec and level settings are inconsistent.
+    #[error("invalid compression configuration: {0}")]
+    InvalidCompressionConfig(String),
+
     /// The format string is not a recognized output format.
     #[error("Unknown format: {0:?}. Expected one of: csv, feather, ndjson, parquet")]
     UnknownFormat(String),
@@ -301,6 +328,13 @@ pub enum ReadStatError {
     #[cfg(feature = "sql")]
     #[error("{0}")]
     DataFusion(#[from] datafusion::error::DataFusionError),
+
+    /// A synchronous SQL API was called from an asynchronous Tokio context.
+    #[cfg(feature = "sql")]
+    #[error(
+        "synchronous SQL APIs cannot run inside a Tokio runtime; use the corresponding *_async API"
+    )]
+    SyncSqlInAsyncRuntime,
 
     /// Catch-all error with a custom message.
     #[error("{0}")]

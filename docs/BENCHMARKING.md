@@ -410,7 +410,7 @@ hyperfine --warmup 5 "ReadStat_App.exe -f crates\readstat-tests\tests\data\cars.
 
 ```sh
 # Linux and macOS
-hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f crates/readstat-tests/tests/data/cars.sas7bdat crates/readstat-tests/tests/data/cars_c.csv" "./target/release/readstat data tests/data/cars.sas7bdat --output crates/readstat-tests/tests/data/cars_rust.csv"
+hyperfine --prepare "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches" "readstat -f crates/readstat-tests/tests/data/cars.sas7bdat crates/readstat-tests/tests/data/cars_c.csv" "./target/release/readstat convert crates/readstat-tests/tests/data/cars.sas7bdat --output crates/readstat-tests/tests/data/cars_rust.csv"
 ```
 
 Other, future, benchmarking may be performed now that [channels and threads](https://github.com/curtisalexander/readstat-rs/issues/28) have been developed.

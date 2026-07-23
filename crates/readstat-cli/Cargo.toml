@@ -1,6 +1,6 @@
 [package]
 name = "readstat-cli"
-version = "0.25.1"
+version = "0.26.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -20,9 +20,10 @@ categories = ["command-line-utilities"]
 [[bin]]
 name = "readstat"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
-readstat = { path = "../readstat", version = "0.25.1" }
+readstat = { path = "../readstat", version = "0.26.0" }
 
 arrow-array = { workspace = true }
 arrow-csv = { workspace = true, optional = true }
@@ -39,7 +40,7 @@ rayon = { workspace = true }
 tempfile = { version = "3", optional = true }
 
 [features]
-default = ["csv", "parquet", "feather", "ndjson"]
+default = ["csv", "parquet", "feather", "ndjson", "sql"]
 csv = ["readstat/csv", "dep:arrow-csv"]
 parquet = ["readstat/parquet", "dep:tempfile"]
 feather = ["readstat/feather"]

@@ -9,8 +9,8 @@
 # them into the output so the book can link to them.
 #
 # Usage:
-#   ./scripts/build-book.sh           # build book only
-#   ./scripts/build-book.sh --docs    # build book + rustdocs
+#   bash scripts/build-book.sh           # build book only
+#   bash scripts/build-book.sh --docs    # build book + rustdocs
 
 set -euo pipefail
 

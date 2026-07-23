@@ -20,7 +20,8 @@ use std::ffi::CStr;
 /// // Produces pairs: [0,10), [10,20), [20,25)
 /// ```
 pub fn build_offsets(row_count: u32, stream_rows: u32) -> Vec<u32> {
-    let chunks = row_count.div_ceil(stream_rows.max(1));
+    let stream_rows = stream_rows.max(1);
+    let chunks = row_count.div_ceil(stream_rows);
     let mut offsets = Vec::with_capacity(chunks as usize + 1);
 
     for c in 0..chunks {
@@ -89,6 +90,11 @@ mod tests {
         assert_eq!(offsets, vec![0]);
         // No windows produced for zero rows
         assert_eq!(offsets.windows(2).count(), 0);
+    }
+
+    #[test]
+    fn build_offsets_zero_chunk_size_is_one() {
+        assert_eq!(build_offsets(4, 0), vec![0, 1, 2, 3, 4]);
     }
 
     #[test]
@@ -180,7 +186,7 @@ mod tests {
             #[test]
             fn offsets_start_at_zero_end_at_row_count(
                 row_count in 0u32..100_000,
-                stream_rows in 1u32..50_000
+                stream_rows in 0u32..50_000
             ) {
                 let offsets = build_offsets(row_count, stream_rows);
                 prop_assert_eq!(*offsets.first().unwrap(), 0);
@@ -191,11 +197,12 @@ mod tests {
             #[test]
             fn offsets_are_monotonically_increasing(
                 row_count in 1u32..100_000,
-                stream_rows in 1u32..50_000
+                stream_rows in 0u32..50_000
             ) {
                 let offsets = build_offsets(row_count, stream_rows);
                 for pair in offsets.windows(2) {
                     prop_assert!(pair[0] < pair[1], "offsets not strictly increasing: {} >= {}", pair[0], pair[1]);
+                    prop_assert!(pair[1] <= row_count);
                 }
             }
 

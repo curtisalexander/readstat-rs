@@ -1,5 +1,5 @@
 use readstat::{
-    ReadStatData, ReadStatMetadata, write_batch_to_csv_bytes, write_batch_to_ndjson_bytes,
+    ReadStatMetadata, ReadStatReader, write_batch_to_csv_bytes, write_batch_to_ndjson_bytes,
 };
 use readstat::{write_batch_to_feather_bytes, write_batch_to_parquet_bytes};
 use std::ffi::CString;
@@ -124,10 +124,20 @@ unsafe fn read_metadata_inner(ptr: *const u8, len: usize, skip_row_count: bool) 
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    let mut md = ReadStatMetadata::new();
-    if md.read_metadata_from_bytes(bytes, skip_row_count).is_err() {
-        return std::ptr::null_mut();
-    }
+    let md = if skip_row_count {
+        // The high-level reader intentionally always computes the exact row count.
+        // Keep the low-level metadata call for this fast-path export only.
+        let mut md = ReadStatMetadata::new();
+        if md.read_metadata_from_bytes(bytes, true).is_err() {
+            return std::ptr::null_mut();
+        }
+        md
+    } else {
+        let Ok(md) = ReadStatReader::from_bytes(bytes).metadata() else {
+            return std::ptr::null_mut();
+        };
+        md
+    };
 
     match serde_json::to_string(&md) {
         Ok(json) => match CString::new(json) {
@@ -157,28 +167,13 @@ unsafe fn read_data_inner(ptr: *const u8, len: usize, format: &OutputFormat) -> 
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    // First pass: read metadata
-    let mut md = ReadStatMetadata::new();
-    if md.read_metadata_from_bytes(bytes, false).is_err() {
-        return std::ptr::null_mut();
-    }
-
-    #[allow(clippy::cast_sign_loss)]
-    let row_count = md.row_count as u32;
-
-    // Second pass: read data
-    let mut d = ReadStatData::new().init(md, 0, row_count);
-    if d.read_data_from_bytes(bytes).is_err() {
-        return std::ptr::null_mut();
-    }
-
-    let Some(batch) = &d.batch else {
+    let Ok(batch) = ReadStatReader::from_bytes(bytes).read() else {
         return std::ptr::null_mut();
     };
 
     let output_bytes = match format {
-        OutputFormat::Csv => write_batch_to_csv_bytes(batch),
-        OutputFormat::Ndjson => write_batch_to_ndjson_bytes(batch),
+        OutputFormat::Csv => write_batch_to_csv_bytes(&batch),
+        OutputFormat::Ndjson => write_batch_to_ndjson_bytes(&batch),
     };
 
     match output_bytes {
@@ -204,28 +199,13 @@ unsafe fn read_data_binary_inner(
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    // First pass: read metadata
-    let mut md = ReadStatMetadata::new();
-    if md.read_metadata_from_bytes(bytes, false).is_err() {
-        return std::ptr::null_mut();
-    }
-
-    #[allow(clippy::cast_sign_loss)]
-    let row_count = md.row_count as u32;
-
-    // Second pass: read data
-    let mut d = ReadStatData::new().init(md, 0, row_count);
-    if d.read_data_from_bytes(bytes).is_err() {
-        return std::ptr::null_mut();
-    }
-
-    let Some(batch) = &d.batch else {
+    let Ok(batch) = ReadStatReader::from_bytes(bytes).read() else {
         return std::ptr::null_mut();
     };
 
     let output_bytes = match format {
-        BinaryOutputFormat::Parquet => write_batch_to_parquet_bytes(batch),
-        BinaryOutputFormat::Feather => write_batch_to_feather_bytes(batch),
+        BinaryOutputFormat::Parquet => write_batch_to_parquet_bytes(&batch),
+        BinaryOutputFormat::Feather => write_batch_to_feather_bytes(&batch),
     };
 
     match output_bytes {

@@ -3,6 +3,7 @@
 
 use assert_cmd::Command;
 use assert_fs::NamedTempFile;
+use predicates::prelude::*;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -31,14 +32,12 @@ fn zero_rows_csv_creates_header_only_file() {
     let tempfile = NamedTempFile::new("zero.csv").unwrap();
 
     readstat_cmd()
-        .arg("data")
+        .arg("convert")
         .arg("tests/data/cars.sas7bdat")
         .arg("--rows")
         .arg("0")
         .arg("--output")
         .arg(tempfile.path())
-        .arg("--format")
-        .arg("csv")
         .arg("--overwrite")
         .assert()
         .success();
@@ -56,14 +55,12 @@ fn zero_rows_parquet_creates_valid_empty_file() {
     let tempfile = NamedTempFile::new("zero.parquet").unwrap();
 
     readstat_cmd()
-        .arg("data")
+        .arg("convert")
         .arg("tests/data/cars.sas7bdat")
         .arg("--rows")
         .arg("0")
         .arg("--output")
         .arg(tempfile.path())
-        .arg("--format")
-        .arg("parquet")
         .arg("--overwrite")
         .assert()
         .success();
@@ -84,20 +81,37 @@ fn zero_rows_feather_creates_valid_empty_file() {
     let tempfile = NamedTempFile::new("zero.feather").unwrap();
 
     readstat_cmd()
-        .arg("data")
+        .arg("convert")
         .arg("tests/data/cars.sas7bdat")
         .arg("--rows")
         .arg("0")
         .arg("--output")
         .arg(tempfile.path())
-        .arg("--format")
-        .arg("feather")
         .arg("--overwrite")
         .assert()
         .success();
 
     let bytes = std::fs::read(tempfile.path()).unwrap();
     assert!(bytes.starts_with(b"ARROW1"), "missing Arrow IPC file magic");
+}
+
+/// Extension inference also covers NDJSON; an empty result is an empty file.
+#[test]
+fn zero_rows_ndjson_creates_valid_empty_file() {
+    let tempfile = NamedTempFile::new("zero.ndjson").unwrap();
+
+    readstat_cmd()
+        .arg("convert")
+        .arg("tests/data/cars.sas7bdat")
+        .arg("--rows")
+        .arg("0")
+        .arg("--output")
+        .arg(tempfile.path())
+        .arg("--overwrite")
+        .assert()
+        .success();
+
+    assert!(std::fs::read(tempfile.path()).unwrap().is_empty());
 }
 
 /// A file that fails mid-parse must exit nonzero — never report success over
@@ -109,9 +123,10 @@ fn truncated_input_exits_nonzero() {
     std::fs::write(truncated.path(), &data[..data.len() / 2]).unwrap();
 
     let out = NamedTempFile::new("truncated_out.parquet").unwrap();
+    std::fs::write(out.path(), b"existing destination").unwrap();
 
     readstat_cmd()
-        .arg("data")
+        .arg("convert")
         .arg(truncated.path())
         .arg("--output")
         .arg(out.path())
@@ -120,4 +135,31 @@ fn truncated_input_exits_nonzero() {
         .arg("--overwrite")
         .assert()
         .failure();
+
+    assert_eq!(
+        std::fs::read(out.path()).unwrap(),
+        b"existing destination",
+        "a failed conversion must not damage the previous destination"
+    );
+}
+
+#[test]
+fn ineffective_option_combinations_are_rejected() {
+    let input = "tests/data/cars.sas7bdat";
+
+    readstat_cmd()
+        .args(["convert", input, "--reader", "mem", "--parallel"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--parallel cannot be used with --reader mem",
+        ));
+
+    readstat_cmd()
+        .args(["convert", input, "--format", "parquet"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "only CSV may be written to stdout",
+        ));
 }

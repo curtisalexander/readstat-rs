@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
     routing::{get, post},
 };
-use readstat::OutFormat;
+use readstat::{OutFormat, ReadStatReader};
 use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
@@ -50,13 +50,9 @@ async fn health() -> Json<serde_json::Value> {
 async fn metadata(multipart: Multipart) -> Result<Json<serde_json::Value>, AppError> {
     let bytes = extract_file_bytes(multipart).await?;
 
-    let md = tokio::task::spawn_blocking(move || {
-        let mut md = readstat::ReadStatMetadata::new();
-        md.read_metadata_from_bytes(&bytes, false)?;
-        Ok::<_, readstat::ReadStatError>(md)
-    })
-    .await
-    .unwrap()?;
+    let md = tokio::task::spawn_blocking(move || ReadStatReader::from_bytes(bytes).metadata())
+        .await
+        .map_err(|e| AppError(readstat::ReadStatError::Other(e.to_string())))??;
 
     serde_json::to_value(&md)
         .map(Json)
@@ -76,22 +72,13 @@ async fn preview(
     let max_rows = params.rows.unwrap_or(10);
 
     let csv_bytes = tokio::task::spawn_blocking(move || {
-        let mut md = readstat::ReadStatMetadata::new();
-        md.read_metadata_from_bytes(&bytes, false)?;
-
-        let end = (max_rows).min(md.row_count as u32);
-        let mut d = readstat::ReadStatData::new()
-            .set_no_progress(true)
-            .init(md, 0, end);
-        d.read_data_from_bytes(&bytes)?;
-
-        let batch = d.batch.as_ref().ok_or_else(|| {
-            readstat::ReadStatError::Other("parsing produced no data".into())
-        })?;
-        readstat::write_batch_to_csv_bytes(batch)
+        let reader = ReadStatReader::from_bytes(bytes);
+        let row_count = u32::try_from(reader.metadata()?.row_count)?;
+        let batch = reader.rows(0, Some(max_rows.min(row_count))).read()?;
+        readstat::write_batch_to_csv_bytes(&batch)
     })
     .await
-    .unwrap()?;
+    .map_err(|e| AppError(readstat::ReadStatError::Other(e.to_string())))??;
 
     Ok(([(header::CONTENT_TYPE, "text/csv")], csv_bytes).into_response())
 }
@@ -115,46 +102,33 @@ async fn data(
     let bytes = extract_file_bytes(multipart).await?;
 
     let (output_bytes, content_type, filename) = tokio::task::spawn_blocking(move || {
-        let mut md = readstat::ReadStatMetadata::new();
-        md.read_metadata_from_bytes(&bytes, false)?;
-
-        let row_count = md.row_count as u32;
-        let mut d = readstat::ReadStatData::new()
-            .set_no_progress(true)
-            .init(md, 0, row_count);
-        d.read_data_from_bytes(&bytes)?;
-
-        let batch = d.batch.as_ref().ok_or_else(|| {
-            readstat::ReadStatError::Other("parsing produced no data".into())
-        })?;
+        let batch = ReadStatReader::from_bytes(bytes).read()?;
         match fmt {
             OutFormat::Csv => Ok((
-                readstat::write_batch_to_csv_bytes(batch)?,
+                readstat::write_batch_to_csv_bytes(&batch)?,
                 "text/csv",
                 "data.csv",
             )),
             OutFormat::Ndjson => Ok((
-                readstat::write_batch_to_ndjson_bytes(batch)?,
+                readstat::write_batch_to_ndjson_bytes(&batch)?,
                 "application/x-ndjson",
                 "data.ndjson",
             )),
             OutFormat::Parquet => Ok((
-                readstat::write_batch_to_parquet_bytes(batch)?,
+                readstat::write_batch_to_parquet_bytes(&batch)?,
                 "application/octet-stream",
                 "data.parquet",
             )),
             OutFormat::Feather => Ok((
-                readstat::write_batch_to_feather_bytes(batch)?,
+                readstat::write_batch_to_feather_bytes(&batch)?,
                 "application/octet-stream",
                 "data.feather",
             )),
-            _ => Err(readstat::ReadStatError::Other(
-                "unsupported format".into(),
-            )),
+            _ => Err(readstat::ReadStatError::Other("unsupported format".into())),
         }
     })
     .await
-    .unwrap()?;
+    .map_err(|e| AppError(readstat::ReadStatError::Other(e.to_string())))??;
 
     let disposition = format!("attachment; filename=\"{filename}\"");
     Ok((

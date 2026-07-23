@@ -25,7 +25,10 @@ fn setup_path(filename: &str) -> ReadStatPath {
 // Helper to setup WriteConfig for output
 fn setup_write_config(temp_dir: &TempDir, format: readstat::OutFormat) -> WriteConfig {
     let output_path = temp_dir.path().join(format!("output.{format:?}"));
-    WriteConfig::new(Some(output_path), Some(format), true, None, None).unwrap()
+    WriteConfig::new(format)
+        .output(output_path)
+        .unwrap()
+        .overwrite(true)
 }
 
 /// Benchmark: Read metadata only (no data)
@@ -150,9 +153,9 @@ fn bench_write_csv(c: &mut Criterion) {
     group.bench_function("sequential", |b| {
         b.iter(|| {
             let wc = setup_write_config(&temp_dir, readstat::OutFormat::Csv);
-            let mut wtr = ReadStatWriter::new();
-            wtr.write(black_box(&d), black_box(&wc)).unwrap();
-            wtr.finish(black_box(&d), black_box(&wc)).unwrap();
+            let mut wtr = ReadStatWriter::new(wc, d.schema.clone()).unwrap();
+            wtr.write(black_box(d.batch.as_ref().unwrap())).unwrap();
+            wtr.finish().unwrap();
         });
     });
 
@@ -191,18 +194,16 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
                     let output_path = temp_dir
                         .path()
                         .join(format!("output_{}.parquet", compression.0));
-                    let wc = WriteConfig::new(
-                        Some(output_path),
-                        Some(readstat::OutFormat::Parquet),
-                        true,
-                        *comp,
-                        None,
-                    )
-                    .unwrap();
-
-                    let mut wtr = ReadStatWriter::new();
-                    wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(black_box(&d), black_box(&wc)).unwrap();
+                    let mut wc = WriteConfig::new(readstat::OutFormat::Parquet)
+                        .output(output_path)
+                        .unwrap()
+                        .overwrite(true);
+                    if let Some(codec) = *comp {
+                        wc = wc.compression(codec, None).unwrap();
+                    }
+                    let mut wtr = ReadStatWriter::new(wc, d.schema.clone()).unwrap();
+                    wtr.write(black_box(d.batch.as_ref().unwrap())).unwrap();
+                    wtr.finish().unwrap();
                 });
             },
         );
@@ -246,6 +247,7 @@ fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
                             None,
                             None,
                             buffer_bytes,
+                            true,
                         )
                         .unwrap();
                     }
@@ -285,9 +287,9 @@ fn bench_write_formats(c: &mut Criterion) {
             |b, fmt| {
                 b.iter(|| {
                     let wc = setup_write_config(&temp_dir, *fmt);
-                    let mut wtr = ReadStatWriter::new();
-                    wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                    wtr.finish(black_box(&d), black_box(&wc)).unwrap();
+                    let mut wtr = ReadStatWriter::new(wc, d.schema.clone()).unwrap();
+                    wtr.write(black_box(d.batch.as_ref().unwrap())).unwrap();
+                    wtr.finish().unwrap();
                 });
             },
         );
@@ -320,9 +322,9 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
 
                 // Write
                 let wc = setup_write_config(&temp_dir, *fmt);
-                let mut wtr = ReadStatWriter::new();
-                wtr.write(black_box(&d), black_box(&wc)).unwrap();
-                wtr.finish(black_box(&d), black_box(&wc)).unwrap();
+                let mut wtr = ReadStatWriter::new(wc, d.schema.clone()).unwrap();
+                wtr.write(black_box(d.batch.as_ref().unwrap())).unwrap();
+                wtr.finish().unwrap();
             });
         });
     }

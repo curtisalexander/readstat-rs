@@ -35,7 +35,7 @@ fn readstat_cmd() -> Command {
 }
 
 #[test]
-fn cli_file_does_not_exist() {
+fn data_alias_reports_missing_input() {
     let mut cmd = readstat_cmd();
     cmd.arg("data").arg("tests/data/adataset.sas7bdat");
     cmd.assert().failure().stderr(

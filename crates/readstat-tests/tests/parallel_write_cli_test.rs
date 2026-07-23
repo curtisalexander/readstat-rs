@@ -48,7 +48,7 @@ fn test_parallel_write_cli_option() {
 
     // Run the CLI with parallel write enabled
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg(&test_data_path)
         .arg("--output")
         .arg(output_file.path())
@@ -81,7 +81,7 @@ fn test_parallel_write_buffer_size_cli_option() {
 
     // Run the CLI with custom buffer size
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg(&test_data_path)
         .arg("--output")
         .arg(output_file.path())
@@ -116,7 +116,7 @@ fn test_parallel_write_buffer_size_default() {
 
     // Run the CLI without specifying buffer size (should use default 100 MB)
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg(&test_data_path)
         .arg("--output")
         .arg(output_file.path())
@@ -147,7 +147,7 @@ fn test_parallel_write_buffer_size_small() {
         .join("all_types.sas7bdat");
 
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg(&test_data_path)
         .arg("--output")
         .arg(output_file.path())
@@ -179,7 +179,7 @@ fn test_parallel_write_buffer_size_large() {
         .join("all_types.sas7bdat");
 
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg(&test_data_path)
         .arg("--output")
         .arg(output_file.path())
@@ -200,8 +200,9 @@ fn test_parallel_write_buffer_size_large() {
 }
 
 #[test]
-fn test_parallel_write_without_parallel_reads() {
-    // Test that parallel-write works even without parallel reads
+fn test_parallel_write_requires_parallel_reads() {
+    // Parallel writes without parallel reads are rejected instead of silently
+    // ignoring the requested mode.
     let temp = assert_fs::TempDir::new().unwrap();
     let output_file = temp.child("output.parquet");
 
@@ -211,7 +212,7 @@ fn test_parallel_write_without_parallel_reads() {
         .join("all_types.sas7bdat");
 
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg(&test_data_path)
         .arg("--output")
         .arg(output_file.path())
@@ -220,11 +221,9 @@ fn test_parallel_write_without_parallel_reads() {
         .arg("--parallel-write")
         .arg("--overwrite");
 
-    let assert = cmd.assert();
-    assert.success();
-
-    // Note: parallel-write is only effective with --parallel, so this should use sequential write
-    output_file.assert(predicates::path::exists());
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("--parallel"));
 
     temp.close().unwrap();
 }

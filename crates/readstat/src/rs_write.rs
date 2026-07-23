@@ -5,7 +5,6 @@
 //! streaming writes across multiple batches. It also supports metadata output
 //! (pretty-printed or JSON) and parallel Parquet writes via temporary files.
 
-#[cfg(feature = "parquet")]
 use arrow_array::RecordBatch;
 #[cfg(feature = "csv")]
 use arrow_csv::WriterBuilder as CsvWriterBuilder;
@@ -15,6 +14,7 @@ use arrow_ipc::writer::FileWriter as IpcFileWriter;
 use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
 #[cfg(feature = "parquet")]
 use arrow_schema::Schema;
+use arrow_schema::SchemaRef;
 #[cfg(feature = "parquet")]
 use parquet::{
     arrow::ArrowWriter as ParquetArrowWriter, basic::Compression as ParquetCompressionCodec,
@@ -28,7 +28,7 @@ use std::fs;
     feature = "ndjson",
     feature = "parquet"
 ))]
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 #[cfg(any(
     feature = "csv",
     feature = "feather",
@@ -53,9 +53,6 @@ use std::sync::Arc;
 use tempfile::SpooledTempFile;
 
 use crate::err::ReadStatError;
-use crate::rs_data::ReadStatData;
-use crate::rs_metadata::ReadStatMetadata;
-use crate::rs_path::ReadStatPath;
 #[cfg(any(
     feature = "csv",
     feature = "feather",
@@ -66,6 +63,18 @@ use crate::rs_write_config::OutFormat;
 #[cfg(feature = "parquet")]
 use crate::rs_write_config::ParquetCompression;
 use crate::rs_write_config::WriteConfig;
+
+#[cfg(feature = "parquet")]
+struct StagingGuard(Option<PathBuf>);
+
+#[cfg(feature = "parquet")]
+impl Drop for StagingGuard {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
 
 /// Internal wrapper around the Parquet Arrow writer, allowing ownership transfer on close.
 #[cfg(feature = "parquet")]
@@ -104,7 +113,6 @@ pub(crate) enum ReadStatWriterFormat {
 /// Supports streaming writes across multiple batches. The writer is created lazily
 /// on the first call to [`write`](ReadStatWriter::write) and finalized via
 /// [`finish`](ReadStatWriter::finish).
-#[derive(Default)]
 // With no format features enabled the fields are written but never read.
 #[cfg_attr(
     not(any(
@@ -122,36 +130,52 @@ pub struct ReadStatWriter {
     pub(crate) wrote_header: bool,
     /// Whether any data has been written (controls file creation vs. append).
     pub(crate) wrote_start: bool,
-}
-
-impl ReadStatWriter {
-    /// Creates a new `ReadStatWriter` with no active writer.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            wtr: None,
-            wrote_header: false,
-            wrote_start: false,
-        }
-    }
-
-    /// Opens (creating or truncating) the output file. Called exactly once per
-    /// output — every caller guards with `!self.wrote_start` and keeps the
-    /// returned writer open for subsequent batches.
+    config: WriteConfig,
+    schema: SchemaRef,
+    rows_written: usize,
     #[cfg(any(
         feature = "csv",
         feature = "feather",
         feature = "ndjson",
         feature = "parquet"
     ))]
-    fn open_output(&self, path: &Path) -> Result<File, ReadStatError> {
+    staging_path: Option<PathBuf>,
+}
+
+impl ReadStatWriter {
+    /// Creates a new `ReadStatWriter` with no active writer.
+    pub fn new(config: WriteConfig, schema: SchemaRef) -> Result<Self, ReadStatError> {
+        config.validate()?;
+        Ok(Self {
+            wtr: None,
+            wrote_header: false,
+            wrote_start: false,
+            config,
+            schema,
+            rows_written: 0,
+            #[cfg(any(
+                feature = "csv",
+                feature = "feather",
+                feature = "ndjson",
+                feature = "parquet"
+            ))]
+            staging_path: None,
+        })
+    }
+
+    /// Opens a sibling staging file. Called exactly once per output; successful
+    /// finalization publishes it to the configured destination.
+    #[cfg(any(
+        feature = "csv",
+        feature = "feather",
+        feature = "ndjson",
+        feature = "parquet"
+    ))]
+    fn open_output(&mut self, wc: &WriteConfig) -> Result<File, ReadStatError> {
         debug_assert!(!self.wrote_start, "output file opened twice");
-        let f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)?;
-        Ok(f)
+        let (file, staging_path) = crate::rs_write_config::open_output(wc)?;
+        self.staging_path = Some(staging_path);
+        Ok(file)
     }
 
     /// Write a single batch to a Parquet file (for parallel writes).
@@ -170,6 +194,7 @@ impl ReadStatWriter {
         compression: Option<ParquetCompression>,
         compression_level: Option<u32>,
         buffer_size_bytes: usize,
+        overwrite: bool,
     ) -> Result<(), ReadStatError> {
         // Create a SpooledTempFile that keeps data in memory until buffer_size_bytes
         let mut spooled_file = SpooledTempFile::new(buffer_size_bytes);
@@ -189,14 +214,22 @@ impl ReadStatWriter {
         wtr.write(batch)?;
         wtr.close()?;
 
-        // Now copy from SpooledTempFile to the actual output file
+        // Copy into a sibling staging file and publish only after the complete
+        // Parquet payload has been copied successfully.
         spooled_file.seek(SeekFrom::Start(0))?;
-        let mut output_file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(output_path)?;
-        std::io::copy(&mut spooled_file, &mut output_file)?;
+        let (mut output_file, staging_path) =
+            crate::rs_write_config::create_staging_file(output_path)?;
+        let mut staging = StagingGuard(Some(staging_path));
+        if let Err(error) = std::io::copy(&mut spooled_file, &mut output_file) {
+            return Err(error.into());
+        }
+        drop(output_file);
+        crate::rs_write_config::publish_staging(
+            staging.0.as_deref().expect("staging is armed"),
+            output_path,
+            overwrite,
+        )?;
+        staging.0 = None;
 
         Ok(())
     }
@@ -215,14 +248,12 @@ impl ReadStatWriter {
         schema: &Schema,
         compression: Option<ParquetCompression>,
         compression_level: Option<u32>,
+        overwrite: bool,
     ) -> Result<(), ReadStatError> {
         use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-        let f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(output_path)?;
+        let (f, staging_path) = crate::rs_write_config::create_staging_file(output_path)?;
+        let mut staging = StagingGuard(Some(staging_path));
 
         let compression_codec = Self::resolve_compression(compression, compression_level)?;
 
@@ -244,12 +275,20 @@ impl ReadStatWriter {
             for batch in reader {
                 writer.write(&batch?)?;
             }
-
-            // Clean up temp file
-            fs::remove_file(temp_file)?;
         }
 
-        writer.close()?;
+        if let Err(error) = writer.close() {
+            return Err(error.into());
+        }
+        crate::rs_write_config::publish_staging(
+            staging.0.as_deref().expect("staging is armed"),
+            output_path,
+            overwrite,
+        )?;
+        staging.0 = None;
+        for temp_file in temp_files {
+            fs::remove_file(temp_file)?;
+        }
         Ok(())
     }
 
@@ -263,46 +302,76 @@ impl ReadStatWriter {
 
     /// Finalizes the writer, flushing and closing the underlying format writer.
     ///
-    /// Returns the total number of rows written, as tracked by the shared
-    /// counter on `d`. The library does not print anything — the caller (e.g.
-    /// the CLI) is responsible for any user-facing summary output.
+    /// Returns the total number of successfully written rows. Consuming the
+    /// writer makes finalization a one-shot operation. The library does not
+    /// print anything; callers own user-facing summary output.
     ///
     /// # Errors
     ///
     /// Returns an error if the underlying writer fails to flush or close,
     /// or if the output format is not enabled.
     #[allow(unused_variables)]
-    pub fn finish(&mut self, d: &ReadStatData, wc: &WriteConfig) -> Result<usize, ReadStatError> {
-        match wc.format {
+    pub fn finish(mut self) -> Result<usize, ReadStatError> {
+        // Initialize even for zero rows, producing a schema-carrying output.
+        if !self.wrote_start {
+            self.write(&RecordBatch::new_empty(self.schema.clone()))?;
+        }
+        match self.config.format {
             #[cfg(feature = "csv")]
             OutFormat::Csv => {
                 // Explicitly flush: relying on BufWriter's Drop would silently
                 // discard I/O errors (e.g. disk full), reporting success over
                 // a truncated file.
                 self.flush_buffered()?;
-                Ok(rows_written(d))
+                self.publish()
             }
             #[cfg(feature = "feather")]
             OutFormat::Feather => {
                 self.finish_feather()?;
-                Ok(rows_written(d))
+                self.publish()
             }
             #[cfg(feature = "ndjson")]
             OutFormat::Ndjson => {
                 self.flush_buffered()?;
-                Ok(rows_written(d))
+                self.publish()
             }
             #[cfg(feature = "parquet")]
             OutFormat::Parquet => {
                 self.finish_parquet()?;
-                Ok(rows_written(d))
+                self.publish()
             }
             #[allow(unreachable_patterns)]
             _ => Err(ReadStatError::Other(format!(
                 "Output format {:?} is not enabled. Enable the corresponding feature flag.",
-                wc.format
+                self.config.format
             ))),
         }
+    }
+
+    #[cfg(any(
+        feature = "csv",
+        feature = "feather",
+        feature = "ndjson",
+        feature = "parquet"
+    ))]
+    fn publish(&mut self) -> Result<usize, ReadStatError> {
+        let Some(staging) = self.staging_path.take() else {
+            return Ok(self.rows_written);
+        };
+        // Close every handle before publication (required by Windows too).
+        self.wtr = None;
+        let destination = self
+            .config
+            .out_path
+            .as_ref()
+            .expect("staging has destination");
+        let result =
+            crate::rs_write_config::publish_staging(&staging, destination, self.config.overwrite);
+        if result.is_err() {
+            let _ = std::fs::remove_file(&staging);
+        }
+        result?;
+        Ok(self.rows_written)
     }
 
     /// Flushes the buffered file writer for formats (CSV, NDJSON) whose
@@ -359,58 +428,65 @@ impl ReadStatWriter {
     /// Returns an error if the output file cannot be opened, writing fails,
     /// or the output format is not enabled.
     #[allow(unused_variables)]
-    pub fn write(&mut self, d: &ReadStatData, wc: &WriteConfig) -> Result<(), ReadStatError> {
+    pub fn write(&mut self, batch: &RecordBatch) -> Result<(), ReadStatError> {
+        if batch.schema() != self.schema {
+            return Err(ReadStatError::SchemaMismatch);
+        }
+        let wc = self.config.clone();
         match wc.format {
             #[cfg(feature = "csv")]
             OutFormat::Csv => {
                 if wc.out_path.is_none() {
                     if self.wrote_header {
-                        self.write_data_to_stdout(d)
+                        self.write_data_to_stdout(batch)
                     } else {
-                        self.write_header_to_stdout(d)?;
-                        self.write_data_to_stdout(d)
+                        self.write_header_to_stdout()?;
+                        self.write_data_to_stdout(batch)
                     }
                 } else {
-                    self.write_data_to_csv(d, wc)
+                    self.write_data_to_csv(batch, &wc)
                 }
             }
             #[cfg(feature = "feather")]
-            OutFormat::Feather => self.write_data_to_feather(d, wc),
+            OutFormat::Feather => self.write_data_to_feather(batch, &wc),
             #[cfg(feature = "ndjson")]
-            OutFormat::Ndjson => self.write_data_to_ndjson(d, wc),
+            OutFormat::Ndjson => self.write_data_to_ndjson(batch, &wc),
             #[cfg(feature = "parquet")]
-            OutFormat::Parquet => self.write_data_to_parquet(d, wc),
+            OutFormat::Parquet => self.write_data_to_parquet(batch, &wc),
             #[allow(unreachable_patterns)]
             _ => Err(ReadStatError::Other(format!(
                 "Output format {:?} is not enabled. Enable the corresponding feature flag.",
                 wc.format
             ))),
-        }
+        }?;
+        self.rows_written = self
+            .rows_written
+            .checked_add(batch.num_rows())
+            .ok_or_else(|| ReadStatError::Other("writer row count overflow".into()))?;
+        Ok(())
     }
 
     #[cfg(feature = "csv")]
     fn write_data_to_csv(
         &mut self,
-        d: &ReadStatData,
+        batch: &RecordBatch,
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
-        if let Some(p) = &wc.out_path {
+        if wc.out_path.is_some() {
             // Open the file only on the first batch; later batches reuse the
             // open writer. Opening (and immediately dropping) the handle on
             // every batch was wasted syscalls.
             if !self.wrote_start {
-                let f = self.open_output(p)?;
+                let f = self.open_output(wc)?;
                 self.wtr = Some(ReadStatWriterFormat::Csv(BufWriter::new(f)));
             }
 
             // write
             if let Some(ReadStatWriterFormat::Csv(f)) = &mut self.wtr {
-                if let Some(batch) = &d.batch {
-                    let include_header = !self.wrote_header;
-                    let mut writer = CsvWriterBuilder::new().with_header(include_header).build(f);
-                    writer.write(batch)?;
-                    self.wrote_header = true;
-                }
+                let include_header = !self.wrote_header;
+                let mut writer = CsvWriterBuilder::new().with_header(include_header).build(f);
+                writer.write(batch)?;
+                self.wrote_header = true;
 
                 self.wrote_start = true;
                 Ok(())
@@ -429,22 +505,20 @@ impl ReadStatWriter {
     #[cfg(feature = "feather")]
     fn write_data_to_feather(
         &mut self,
-        d: &ReadStatData,
+        batch: &RecordBatch,
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
-        if let Some(p) = &wc.out_path {
+        if wc.out_path.is_some() {
             // Open the file only on the first batch (see write_data_to_csv).
             if !self.wrote_start {
-                let f = self.open_output(p)?;
-                let wtr = IpcFileWriter::try_new(BufWriter::new(f), &d.schema)?;
+                let f = self.open_output(wc)?;
+                let wtr = IpcFileWriter::try_new(BufWriter::new(f), &self.schema)?;
                 self.wtr = Some(ReadStatWriterFormat::Feather(wtr));
             }
 
             // write
             if let Some(ReadStatWriterFormat::Feather(wtr)) = &mut self.wtr {
-                if let Some(batch) = &d.batch {
-                    wtr.write(batch)?;
-                }
+                wtr.write(batch)?;
 
                 self.wrote_start = true;
 
@@ -465,23 +539,21 @@ impl ReadStatWriter {
     #[cfg(feature = "ndjson")]
     fn write_data_to_ndjson(
         &mut self,
-        d: &ReadStatData,
+        batch: &RecordBatch,
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
-        if let Some(p) = &wc.out_path {
+        if wc.out_path.is_some() {
             // Open the file only on the first batch (see write_data_to_csv).
             if !self.wrote_start {
-                let f = self.open_output(p)?;
+                let f = self.open_output(wc)?;
                 self.wtr = Some(ReadStatWriterFormat::Ndjson(BufWriter::new(f)));
             }
 
             // write
             if let Some(ReadStatWriterFormat::Ndjson(f)) = &mut self.wtr {
-                if let Some(batch) = &d.batch {
-                    let mut writer = JsonLineDelimitedWriter::new(f);
-                    writer.write(batch)?;
-                    writer.finish()?;
-                }
+                let mut writer = JsonLineDelimitedWriter::new(f);
+                writer.write(batch)?;
+                writer.finish()?;
 
                 self.wrote_start = true;
 
@@ -502,14 +574,14 @@ impl ReadStatWriter {
     #[cfg(feature = "parquet")]
     fn write_data_to_parquet(
         &mut self,
-        d: &ReadStatData,
+        batch: &RecordBatch,
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
-        if let Some(p) = &wc.out_path {
+        if wc.out_path.is_some() {
             // setup writer — open the file only on the first batch (see
             // write_data_to_csv).
             if !self.wrote_start {
-                let f = self.open_output(p)?;
+                let f = self.open_output(wc)?;
                 let compression_codec =
                     Self::resolve_compression(wc.compression, wc.compression_level)?;
 
@@ -519,8 +591,11 @@ impl ReadStatWriter {
                     .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
                     .build();
 
-                let wtr =
-                    ParquetArrowWriter::try_new(BufWriter::new(f), d.schema.clone(), Some(props))?;
+                let wtr = ParquetArrowWriter::try_new(
+                    BufWriter::new(f),
+                    self.schema.clone(),
+                    Some(props),
+                )?;
 
                 self.wtr = Some(ReadStatWriterFormat::Parquet(ReadStatParquetWriter::new(
                     wtr,
@@ -529,9 +604,7 @@ impl ReadStatWriter {
 
             // write
             if let Some(ReadStatWriterFormat::Parquet(pwtr)) = &mut self.wtr {
-                if let Some(batch) = &d.batch
-                    && let Some(ref mut wtr) = pwtr.wtr
-                {
+                if let Some(ref mut wtr) = pwtr.wtr {
                     wtr.write(batch)?;
                 }
 
@@ -552,7 +625,7 @@ impl ReadStatWriter {
     }
 
     #[cfg(feature = "csv")]
-    fn write_data_to_stdout(&mut self, d: &ReadStatData) -> Result<(), ReadStatError> {
+    fn write_data_to_stdout(&mut self, batch: &RecordBatch) -> Result<(), ReadStatError> {
         // writer setup
         if !self.wrote_start {
             self.wtr = Some(ReadStatWriterFormat::CsvStdout(stdout()));
@@ -560,10 +633,8 @@ impl ReadStatWriter {
 
         // write
         if let Some(ReadStatWriterFormat::CsvStdout(f)) = &mut self.wtr {
-            if let Some(batch) = &d.batch {
-                let mut writer = CsvWriterBuilder::new().with_header(false).build(f);
-                writer.write(batch)?;
-            }
+            let mut writer = CsvWriterBuilder::new().with_header(false).build(f);
+            writer.write(batch)?;
 
             self.wrote_start = true;
 
@@ -576,16 +647,17 @@ impl ReadStatWriter {
     }
 
     #[cfg(feature = "csv")]
-    fn write_header_to_stdout(&mut self, d: &ReadStatData) -> Result<(), ReadStatError> {
+    fn write_header_to_stdout(&mut self) -> Result<(), ReadStatError> {
         use std::io::Write;
 
         // CSV-escape each name so the header stays well-formed and column-aligned
         // with the (already-escaped) data rows. Variable names may legally contain
         // commas or quotes under SAS `VALIDVARNAME=ANY`.
-        let header = d
-            .vars
-            .values()
-            .map(|m| csv_escape_field(&m.var_name))
+        let header = self
+            .schema
+            .fields()
+            .iter()
+            .map(|field| csv_escape_field(field.name()))
             .collect::<Vec<_>>()
             .join(",");
 
@@ -597,102 +669,22 @@ impl ReadStatWriter {
 
         Ok(())
     }
-
-    /// Formats file and variable metadata for display, as either pretty text
-    /// (when `as_json` is false) or pretty-printed JSON.
-    ///
-    /// The library does not print — the caller is responsible for emitting the
-    /// returned string.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if JSON serialization fails.
-    pub fn metadata_to_string(
-        md: &ReadStatMetadata,
-        rsp: &ReadStatPath,
-        as_json: bool,
-    ) -> Result<String, ReadStatError> {
-        if as_json {
-            Self::metadata_to_json(md)
-        } else {
-            Ok(Self::format_metadata(md, rsp))
-        }
-    }
-
-    /// Serializes metadata as pretty-printed JSON.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if JSON serialization fails.
-    pub fn metadata_to_json(md: &ReadStatMetadata) -> Result<String, ReadStatError> {
-        Ok(serde_json::to_string_pretty(md)?)
-    }
-
-    /// Formats metadata as a human-readable, multi-line string.
-    #[must_use]
-    #[allow(clippy::cast_sign_loss)]
-    pub fn format_metadata(md: &ReadStatMetadata, rsp: &ReadStatPath) -> String {
-        use crate::rs_var::ReadStatVarFormatClass;
-        use std::fmt::Write as _;
-
-        let mut out = String::new();
-        // Writing to a String is infallible; the `let _ =` discards the Result.
-        let _ = writeln!(
-            out,
-            "Metadata for the file {}\n",
-            rsp.path.to_string_lossy()
-        );
-        let _ = writeln!(out, "Row count: {}", md.row_count);
-        let _ = writeln!(out, "Variable count: {}", md.var_count);
-        let _ = writeln!(out, "Table name: {}", md.table_name);
-        let _ = writeln!(out, "Table label: {}", md.file_label);
-        let _ = writeln!(out, "File encoding: {}", md.file_encoding);
-        let _ = writeln!(out, "Format version: {}", md.version);
-        let _ = writeln!(
-            out,
-            "Bitness: {}",
-            if md.is_64bit { "64-bit" } else { "32-bit" }
-        );
-        let _ = writeln!(out, "Creation time: {}", md.creation_time);
-        let _ = writeln!(out, "Modified time: {}", md.modified_time);
-        let _ = writeln!(out, "Compression: {:#?}", md.compression);
-        let _ = writeln!(out, "Byte order: {:#?}", md.endianness);
-        let _ = writeln!(out, "Variable names:");
-        for (k, v) in &md.vars {
-            let format_class = v.var_format_class.as_ref().map_or("", |f| match f {
-                ReadStatVarFormatClass::Date => "Date",
-                ReadStatVarFormatClass::DateTime
-                | ReadStatVarFormatClass::DateTimeWithMilliseconds
-                | ReadStatVarFormatClass::DateTimeWithMicroseconds
-                | ReadStatVarFormatClass::DateTimeWithNanoseconds => "DateTime",
-                ReadStatVarFormatClass::Time
-                | ReadStatVarFormatClass::TimeWithMilliseconds
-                | ReadStatVarFormatClass::TimeWithMicroseconds
-                | ReadStatVarFormatClass::TimeWithNanoseconds => "Time",
-            });
-            let data_type = md.schema.fields[*k as usize].data_type();
-            let _ = writeln!(
-                out,
-                "{k}: {} {{ type class: {:#?}, type: {:#?}, label: {}, format class: {format_class}, format: {}, arrow data type: {data_type:#?} }}",
-                v.var_name, v.var_type_class, v.var_type, v.var_label, v.var_format,
-            );
-        }
-
-        out
-    }
 }
 
-/// Total rows written so far, as tracked by the shared row counter on `d`.
-#[cfg(any(
-    feature = "csv",
-    feature = "feather",
-    feature = "ndjson",
-    feature = "parquet"
-))]
-fn rows_written(d: &ReadStatData) -> usize {
-    d.total_rows_processed
-        .as_ref()
-        .map_or(0, |trp| trp.load(std::sync::atomic::Ordering::SeqCst))
+impl Drop for ReadStatWriter {
+    fn drop(&mut self) {
+        #[cfg(any(
+            feature = "csv",
+            feature = "feather",
+            feature = "ndjson",
+            feature = "parquet"
+        ))]
+        if let Some(path) = self.staging_path.take() {
+            // Drop format writers/file handles before attempting cleanup.
+            self.wtr = None;
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 /// Escapes a single CSV field per RFC 4180: if it contains a comma, double
@@ -851,10 +843,137 @@ mod tests {
 
     #[test]
     fn new_writer_defaults() {
-        let wtr = ReadStatWriter::new();
+        let wtr = ReadStatWriter::new(WriteConfig::new(OutFormat::Csv), Arc::new(Schema::empty()))
+            .unwrap();
         assert!(wtr.wtr.is_none());
         assert!(!wtr.wrote_header);
         assert!(!wtr.wrote_start);
+    }
+
+    fn test_batch(schema: SchemaRef, values: &[&str]) -> RecordBatch {
+        RecordBatch::try_new(
+            schema,
+            vec![Arc::new(arrow_array::StringArray::from(values.to_vec()))],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn multi_batch_rows_and_consuming_finish() {
+        let dir = tempfile::tempdir().unwrap();
+        let schema = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "x",
+            arrow_schema::DataType::Utf8,
+            false,
+        )]));
+        let config = WriteConfig::new(OutFormat::Csv)
+            .output(dir.path().join("rows.csv"))
+            .unwrap();
+        let mut writer = ReadStatWriter::new(config, schema.clone()).unwrap();
+        writer
+            .write(&test_batch(schema.clone(), &["a", "b"]))
+            .unwrap();
+        writer.write(&test_batch(schema.clone(), &["c"])).unwrap();
+        assert_eq!(writer.finish().unwrap(), 3);
+    }
+
+    #[test]
+    fn rejects_schema_mismatch() {
+        let schema = Arc::new(Schema::empty());
+        let mut writer = ReadStatWriter::new(WriteConfig::new(OutFormat::Csv), schema).unwrap();
+        let other = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "x",
+            arrow_schema::DataType::Utf8,
+            true,
+        )]));
+        assert!(matches!(
+            writer.write(&RecordBatch::new_empty(other)),
+            Err(ReadStatError::SchemaMismatch)
+        ));
+    }
+
+    #[test]
+    fn empty_output_for_each_enabled_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let schema = Arc::new(Schema::empty());
+        let formats = [
+            OutFormat::Csv,
+            OutFormat::Feather,
+            OutFormat::Ndjson,
+            OutFormat::Parquet,
+        ];
+        for format in formats {
+            let path = dir.path().join(format!("empty.{format}"));
+            let config = WriteConfig::new(format).output(&path).unwrap();
+            let writer = ReadStatWriter::new(config, schema.clone()).unwrap();
+            assert_eq!(writer.finish().unwrap(), 0);
+            assert!(path.exists());
+        }
+    }
+
+    #[test]
+    fn output_open_race_and_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("race.csv");
+        let config = WriteConfig::new(OutFormat::Csv).output(&path).unwrap();
+        std::fs::write(&path, "sentinel").unwrap();
+        let schema = Arc::new(Schema::empty());
+        let writer = ReadStatWriter::new(config, schema.clone()).unwrap();
+        assert!(matches!(
+            writer.finish(),
+            Err(ReadStatError::OutputFileExists(_))
+        ));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "sentinel");
+
+        let config = WriteConfig::new(OutFormat::Csv)
+            .output(&path)
+            .unwrap()
+            .overwrite(true);
+        let writer = ReadStatWriter::new(config, schema).unwrap();
+        writer.finish().unwrap();
+        assert_ne!(std::fs::read_to_string(path).unwrap(), "sentinel");
+    }
+
+    #[test]
+    fn drop_before_finish_preserves_destination_and_cleans_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("preserve.csv");
+        std::fs::write(&path, "sentinel").unwrap();
+        let schema = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "x",
+            arrow_schema::DataType::Utf8,
+            false,
+        )]));
+        let config = WriteConfig::new(OutFormat::Csv)
+            .output(&path)
+            .unwrap()
+            .overwrite(true);
+        let mut writer = ReadStatWriter::new(config, schema.clone()).unwrap();
+        writer.write(&test_batch(schema, &["new"])).unwrap();
+        drop(writer);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "sentinel");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn no_overwrite_destination_raced_before_publication() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("raced.csv");
+        let schema = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "x",
+            arrow_schema::DataType::Utf8,
+            false,
+        )]));
+        let config = WriteConfig::new(OutFormat::Csv).output(&path).unwrap();
+        let mut writer = ReadStatWriter::new(config, schema.clone()).unwrap();
+        writer.write(&test_batch(schema, &["new"])).unwrap();
+        std::fs::write(&path, "racer").unwrap();
+        assert!(matches!(
+            writer.finish(),
+            Err(ReadStatError::OutputFileExists(_))
+        ));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "racer");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 
     // --- csv_escape_field ---

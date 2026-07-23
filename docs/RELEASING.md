@@ -30,8 +30,8 @@ git push origin main vX.Y.Z
 .\scripts\vendor.ps1 prepare      # Windows
 
 #    Publish (in dependency order)
-cargo publish -p readstat-iconv-sys
-cargo publish -p readstat-sys
+cargo publish -p readstat-iconv-sys --allow-dirty
+cargo publish -p readstat-sys --allow-dirty
 cargo publish -p readstat
 cargo publish -p readstat-cli
 
@@ -117,10 +117,12 @@ Add an entry for the new version:
 
 This runs:
 - `cargo fmt --all -- --check` — formatting
-- `cargo clippy --workspace` — linting
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` — linting
 - `readstat-wasm` fmt and clippy (excluded from workspace, checked separately)
-- `cargo test --workspace` — all tests
-- `cargo doc --workspace --no-deps` — documentation build
+- all-feature/all-target workspace checks and tests (including default SQL)
+- Arrow/DataFusion lockstep, all-feature rustdocs, and mdBook
+- advertised Rust API-server and PyO3 checks
+- WASM host fmt/clippy and an Emscripten release build when that toolchain is available (otherwise a prominent warning)
 - `cargo deny check` — license and security audit (if installed)
 - Version consistency checks
 - CHANGELOG entry check
@@ -133,7 +135,7 @@ Fix any failures before proceeding.
 - [ ] README.md is up to date
 - [ ] Documentation reflects any API changes
 - [ ] Architecture docs (`docs/ARCHITECTURE.md`) are current
-- [ ] mdbook builds cleanly: `./scripts/build-book.sh`
+- [ ] mdbook builds cleanly: `bash scripts/build-book.sh`
 - [ ] `readstat-wasm` builds and exports are up to date (excluded from workspace; not published to crates.io)
 
 ---

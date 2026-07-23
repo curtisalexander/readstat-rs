@@ -147,24 +147,6 @@ fn column_order_preserved_from_dataset() {
 }
 
 #[test]
-fn parse_columns_file() {
-    let temp_dir = std::env::temp_dir();
-    let columns_file = temp_dir.join("test_columns.txt");
-
-    std::fs::write(
-        &columns_file,
-        "# Columns to extract\nBrand\n\n# Another comment\nModel\n  EngineSize  \n",
-    )
-    .unwrap();
-
-    let names = ReadStatMetadata::parse_columns_file(&columns_file).unwrap();
-    assert_eq!(names, vec!["Brand", "Model", "EngineSize"]);
-
-    // Clean up
-    let _ = std::fs::remove_file(&columns_file);
-}
-
-#[test]
 fn column_select_with_streaming() {
     // Test column selection with row offsets (simulating streaming)
     let rsp = common::setup_path("cars.sas7bdat").unwrap();

@@ -6,7 +6,7 @@ The CI/CD workflow can be triggered in multiple ways:
 
 ## 1. Tag Push (Release)
 
-Push a `v*` tag (e.g. `v0.25.1`) to trigger a full release build with GitHub
+Push a `v*` tag (e.g. `v0.26.0`) to trigger a full release build with GitHub
 Release artifacts. Only `v*` tags trigger releases, and only
 `readstat`/`readstat-cli` releases are tagged — sys-crate releases set
 `tag = false` in their `release.toml` and are crates.io-only events with no
@@ -24,7 +24,7 @@ git push
 git tag -a v0.1.0 -m "v0.1.0"
 
 # push local tag to remote
-git push origin --tags
+git push origin v0.1.0
 ```
 
 To delete and recreate tags:
@@ -95,6 +95,8 @@ Repository dispatch event types for API triggers:
 :memo: API triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
 ## MSRV Check (`msrv` job in `.github/workflows/main.yml`)
+
+The main verification job runs workspace all-feature clippy, checks, and tests (SQL is a default feature), Arrow lockstep, and the advertised Rust server and PyO3 extension. A separate required `wasm` job installs Emscripten and performs a release build for `wasm32-unknown-emscripten`; host formatting and clippy remain in the main verification job. Tag builds depend on both required jobs before creating release notes or binaries. Specialized cross-platform sys jobs remain separate.
 
 Non-tag pushes and PRs also run an `msrv` job that type-checks the workspace on
 the exact toolchain declared in `[workspace.package] rust-version` (currently

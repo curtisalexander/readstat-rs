@@ -70,12 +70,12 @@ fn cars_to_csv() {
     let tempfile = NamedTempFile::new("cars.csv").unwrap();
     let mut cmd = readstat_cmd();
 
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg("tests/data/cars.sas7bdat")
         .args(["--format", "csv"])
         .args(["--output", tempfile.as_os_str().to_str().unwrap()]);
 
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "In total, wrote 1,081 rows from file cars.sas7bdat into cars.csv",
     ));
 
@@ -96,13 +96,13 @@ fn cars_to_csv_with_streaming() {
     let tempfile = NamedTempFile::new("cars_streaming.csv").unwrap();
     let mut cmd = readstat_cmd();
 
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg("tests/data/cars.sas7bdat")
         .args(["--format", "csv"])
         .args(["--output", tempfile.as_os_str().to_str().unwrap()])
         .args(["--stream-rows", "500"]);
 
-    cmd.assert().success().stdout(predicate::str::contains(
+    cmd.assert().success().stderr(predicate::str::contains(
         "In total, wrote 1,081 rows from file cars.sas7bdat into",
     ));
 
@@ -124,7 +124,7 @@ fn cars_to_csv_overwrite() {
 
     // First write
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg("tests/data/cars.sas7bdat")
         .args(["--format", "csv"])
         .args(["--output", tempfile.as_os_str().to_str().unwrap()]);
@@ -132,7 +132,7 @@ fn cars_to_csv_overwrite() {
 
     // Overwrite
     let mut cmd = readstat_cmd();
-    cmd.arg("data")
+    cmd.arg("convert")
         .arg("tests/data/cars.sas7bdat")
         .args(["--format", "csv"])
         .args(["--output", tempfile.as_os_str().to_str().unwrap()])

@@ -25,7 +25,7 @@ The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arro
 
 Convert the first 50,000 rows of `example.sas7bdat` (by performing the read in parallel) to the file `example.parquet`, overwriting the file if it already exists.
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 50000 --overwrite --parallel
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --rows 50000 --overwrite --parallel
 ```
 
 ## :package: CLI Install
@@ -74,7 +74,7 @@ readstat --help
 The binary is invoked using subcommands:
 - `metadata` &rarr; writes file and variable metadata to standard out or JSON
 - `preview` &rarr; writes the first N rows of parsed data as `csv` to standard out
-- `data` &rarr; writes parsed data in `csv`, `feather`, `ndjson`, or `parquet` format to a file
+- `convert` &rarr; converts data to CSV, Feather, NDJSON, or Parquet; the output extension selects the format, or omitted output writes CSV to stdout
 
 Column metadata &mdash; labels, SAS format strings, and storage widths &mdash; is preserved in Parquet and Feather output as Arrow field metadata. See **[docs/TECHNICAL.md](docs/TECHNICAL.md#column-metadata-in-arrow-and-parquet)** for details.
 
@@ -143,6 +143,8 @@ The [`examples/`](examples/) directory contains runnable demos showing different
 | [`sql-explorer`](examples/sql-explorer/) | Browser-based SQL explorer — upload a `.sas7bdat` file and query it interactively with SQL via AlaSQL |
 
 To use `readstat` as a library in your own Rust project, add the [`readstat`](crates/readstat/) crate as a dependency.
+
+SQL support (synchronous and asynchronous DataFusion APIs) and all four output writers are enabled by default. Disable defaults only when building a deliberately smaller library.
 
 ## :balance_scale: License
 

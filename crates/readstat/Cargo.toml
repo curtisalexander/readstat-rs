@@ -1,6 +1,6 @@
 [package]
 name = "readstat"
-version = "0.25.1"
+version = "0.26.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -54,13 +54,12 @@ serde_json = "1"
 thiserror = "2"
 
 [features]
-default = ["csv", "parquet", "feather", "ndjson"]
+default = ["csv", "parquet", "feather", "ndjson", "sql"]
 csv = ["dep:arrow-csv"]
 parquet = ["dep:parquet", "dep:tempfile"]
 feather = ["dep:arrow-ipc"]
 ndjson = ["dep:arrow-json"]
-# `sql` writes query results in any output format, so it requires all four
-# format writers (rs_query.rs uses arrow-csv/ipc/json and parquet directly).
+# SQL output delegates to ReadStatWriter, so enable its supported formats.
 sql = ["dep:datafusion", "dep:tokio", "dep:futures", "csv", "parquet", "feather", "ndjson"]
 
 [dependencies.datafusion]
@@ -69,7 +68,7 @@ optional = true
 
 [dependencies.tokio]
 version = "1"
-features = ["rt-multi-thread"]
+features = ["rt-multi-thread", "sync"]
 optional = true
 
 [dependencies.futures]
@@ -80,6 +79,9 @@ optional = true
 memmap2 = "0.9"
 path_abs = { workspace = true }
 rayon = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

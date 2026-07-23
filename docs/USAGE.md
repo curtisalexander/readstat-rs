@@ -25,7 +25,7 @@ After either [building](BUILDING.md) or [installing](../README.md#package-cli-in
     - variable formats
     - arrow data types
 - `preview` &rarr; writes the first 10 rows (or optionally the number of rows provided by the user) of parsed data in `csv` format to standard out
-- `data` &rarr; writes parsed data in `csv`, `feather`, `ndjson`, or `parquet` format to a file
+- `convert` &rarr; converts to `csv`, `feather`, `ndjson`, or `parquet`
 
 ## Metadata
 To write metadata to standard out, invoke the following.
@@ -54,7 +54,7 @@ In that mode the reported row count is `0` and parsing returns as soon as the he
 
 ### Suppressing the progress bar
 
-By default `metadata`, `preview`, and `data` render a progress bar while the file is being parsed.  Pass `--no-progress` (available on all three subcommands) to suppress it &mdash; useful in CI logs, when piping output, or when launching `readstat` from another process.
+By default `metadata`, `preview`, and `convert` render a progress bar while the file is being parsed. Pass `--no-progress` to suppress it.
 
 ### Search for a column with `jq`
 
@@ -91,77 +91,81 @@ To write the first 100 rows of parsed data (as a `csv`) to standard out, invoke 
 readstat preview /some/dir/to/example.sas7bdat --rows 100
 ```
 
-## Data
-:memo: The `data` subcommand includes a parameter for `--format`, which is the file format that is to be written.  Currently, the following formats have been implemented:
+## Convert
+`convert` infers output from `.csv`, `.feather`, `.ndjson`, or `.parquet`. An explicit `--format` must match the extension; unknown extensions and mismatches are errors. With no `--output`, CSV is written to stdout. Diagnostics are written to stderr.
+
+The old `data` spelling remains a compatibility alias; new usage should use `convert`.
+
+Supported formats:
 - `csv`
 - `feather`
 - `ndjson`
 - `parquet`
 
-By default `data` refuses to overwrite an existing output file.  Pass `--overwrite` to replace it:
+By default `convert` refuses to overwrite an existing output file. Pass `--overwrite` to replace it:
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --overwrite
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --overwrite
 ```
 
 ### `csv`
 To write parsed data (as `csv`) to a file, invoke the following (default is to write all parsed data to the specified file).
 
-The default `--format` is `csv`.  Thus, the parameter is elided from the below examples.
+Omit `--output` to stream CSV to stdout (for example, `readstat convert example.sas7bdat | head`). With a `.csv` output path, the format is inferred:
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv
 ```
 
 To write the first 100 rows of parsed data (as `csv`) to a file, invoke the following.
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --rows 100
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --rows 100
 ```
 
 ### `feather`
 To write parsed data (as `feather`) to a file, invoke the following (default is to write all parsed data to the specified file).
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather --format feather
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather
 ```
 
 To write the first 100 rows of parsed data (as `feather`) to a file, invoke the following.
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather --format feather --rows 100
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.feather --rows 100
 ```
 
 ### `ndjson`
 To write parsed data (as `ndjson`) to a file, invoke the following (default is to write all parsed data to the specified file).
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson --format ndjson
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson
 ```
 
 To write the first 100 rows of parsed data (as `ndjson`) to a file, invoke the following.
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson --format ndjson --rows 100
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson --rows 100
 ```
 
 ### `parquet`
 To write parsed data (as `parquet`) to a file, invoke the following (default is to write all parsed data to the specified file).
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet
 ```
 
 To write the first 100 rows of parsed data (as `parquet`) to a file, invoke the following.
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --rows 100
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --rows 100
 ```
 
 To write parsed data (as `parquet`) to a file with specific compression settings, invoke the following:
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --compression zstd --compression-level 3
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --compression zstd --compression-level 3
 ```
 
 ## Column Selection
@@ -196,7 +200,7 @@ for v in md['vars'].values():
 ### Step 2: Select columns on the command line
 
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output out.parquet --format parquet --columns Brand,Model,EngineSize
+readstat convert /some/dir/to/example.sas7bdat --output out.parquet --columns Brand,Model,EngineSize
 ```
 
 ### Step 2 (alt): Select columns from a file
@@ -211,7 +215,7 @@ EngineSize
 
 Then pass it to the CLI:
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output out.parquet --format parquet --columns-file columns.txt
+readstat convert /some/dir/to/example.sas7bdat --output out.parquet --columns-file columns.txt
 ```
 
 ### Preview with column selection
@@ -221,7 +225,7 @@ readstat preview /some/dir/to/example.sas7bdat --columns Brand,Model,EngineSize
 ```
 
 ## Parallelism
-The `data` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
+The `convert` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
 
 ### Parallel Reading (`--parallel`)
 If invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
@@ -238,7 +242,7 @@ When combined with `--parallel`, the `--parallel-write` flag enables _**parallel
 
 Example usage:
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --parallel --parallel-write
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --parallel --parallel-write
 ```
 
 ### Memory Buffer Size (`--parallel-write-buffer-mb`)
@@ -251,7 +255,7 @@ Smaller buffers will cause data to spill to disk sooner, while larger buffers ke
 
 Example with custom buffer size:
 ```sh
-readstat data /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --format parquet --parallel --parallel-write --parallel-write-buffer-mb 200
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --parallel --parallel-write --parallel-write-buffer-mb 200
 ```
 
 :heavy_exclamation_mark: Parallel writing may write batches out of order. This is acceptable for Parquet files as the row order is preserved when merged.
@@ -337,20 +341,16 @@ Parallel Write (--parallel --parallel-write)
 
 ### SQL Queries (`--sql` / `--sql-file`)
 
-:warning: **`--sql` is feature-gated.** SQL support is **not** enabled by default. The binary published via `cargo install readstat-cli` does **not** include it; to get `--sql`/`--sql-file`, install with the feature explicitly:
-
-```sh
-cargo install readstat-cli --features sql
-```
+SQL is enabled by default. Library users have synchronous and asynchronous buffered and streaming APIs. Buffered batches support repeated scans; only channel-backed streaming input is single-execution because execution consumes its receiver.
 
 Provide the query inline with `--sql "SELECT ..."`, or point at a file containing the query with `--sql-file path/to/query.sql`. The table name is the input file stem (e.g. `cars` for `cars.sas7bdat`). `--sql` and `--sql-file` are mutually exclusive with each other and with `--columns`/`--columns-file`.
 
 ```sh
 # inline query
-readstat data cars.sas7bdat --output out.parquet --sql "SELECT make, mpg FROM cars WHERE mpg > 30"
+readstat convert cars.sas7bdat --output out.parquet --sql "SELECT make, mpg FROM cars WHERE mpg > 30"
 
 # query from a file
-readstat data cars.sas7bdat --output out.parquet --sql-file query.sql
+readstat convert cars.sas7bdat --output out.parquet --sql-file query.sql
 ```
 
 SQL queries require the full dataset to be materialized in memory via DataFusion's `MemTable` before query execution.  For large files this may result in significant memory usage.  Queries that filter rows (e.g. `SELECT ... WHERE ...`) will reduce the _output_ size but the _input_ must still be fully loaded.
@@ -442,7 +442,7 @@ for (field in schema) {
 ```
 
 ## Reader
-The `preview` and `data` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
+The `preview` and `convert` subcommands include a parameter for `--reader`.  The possible values for `--reader` include the following.
 - `mem` &rarr; Parse and read the entire `sas7bdat` into memory before writing to either standard out or a file
 - `stream` (default) &rarr; Parse and read at most `stream-rows` into memory before writing to disk
     - `stream-rows` may be set via the command line parameter `--stream-rows` or if elided will default to 10,000 rows
@@ -454,7 +454,7 @@ The `preview` and `data` subcommands include a parameter for `--reader`.  The po
 - In addition, by enabling these options as command line parameters [hyperfine](BENCHMARKING.md#benchmarking-with-hyperfine) may be used to benchmark across an assortment of file sizes
 
 ## Debug
-Debug information is printed to standard out by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.
+Debug information is printed to standard error by setting the environment variable `RUST_LOG=debug` before the call to `readstat`.
 
 :warning: This is quite verbose!  If using the [preview](#preview-data) or [data](#data) subcommand, will write debug information for _every single value_!
 
@@ -475,5 +475,5 @@ For full details run with `--help`.
 readstat --help
 readstat metadata --help
 readstat preview --help
-readstat data --help
+readstat convert --help
 ```

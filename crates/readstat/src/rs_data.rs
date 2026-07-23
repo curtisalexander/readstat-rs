@@ -7,7 +7,7 @@
 
 use arrow::datatypes::Schema;
 use arrow_array::{
-    ArrayRef, RecordBatch,
+    ArrayRef, RecordBatch, RecordBatchOptions,
     builder::{
         Date32Builder, Float32Builder, Float64Builder, Int16Builder, Int32Builder, StringBuilder,
         Time32MillisecondBuilder, Time32SecondBuilder, Time64MicrosecondBuilder,
@@ -300,7 +300,15 @@ impl ReadStatData {
             .map(ColumnBuilder::finish)
             .collect();
 
-        self.batch = Some(RecordBatch::try_new(self.schema.clone(), arrays)?);
+        self.batch = Some(if arrays.is_empty() {
+            RecordBatch::try_new_with_options(
+                self.schema.clone(),
+                arrays,
+                &RecordBatchOptions::new().with_row_count(Some(self.chunk_rows_processed)),
+            )?
+        } else {
+            RecordBatch::try_new(self.schema.clone(), arrays)?
+        });
 
         Ok(())
     }
@@ -332,6 +340,7 @@ impl ReadStatData {
         // parse data and if successful then convert cols into a record batch
         self.parse_data(rsp)?;
         self.cols_to_batch()?;
+        self.report_progress();
         Ok(())
     }
 
@@ -346,6 +355,7 @@ impl ReadStatData {
     pub fn read_data_from_bytes(&mut self, bytes: &[u8]) -> Result<(), ReadStatError> {
         self.parse_data_from_bytes(bytes)?;
         self.cols_to_batch()?;
+        self.report_progress();
         Ok(())
     }
 
@@ -400,15 +410,13 @@ impl ReadStatData {
         }
         check_c_error(error as i32)?;
 
-        // Advance the progress bar by the rows just parsed. Doing this *after*
-        // the chunk completes (rather than before) keeps the displayed position
-        // in step with work actually done — under `--parallel` a pre-parse
-        // increment made the bar jump straight to 100%.
-        if let Some(progress) = &self.progress {
-            progress.inc(self.chunk_rows_to_process as u64);
-        }
-
         Ok(())
+    }
+
+    fn report_progress(&self) {
+        if let Some(progress) = &self.progress {
+            progress.inc(self.batch.as_ref().map_or(0, RecordBatch::num_rows) as u64);
+        }
     }
 
     #[allow(clippy::cast_possible_wrap, clippy::ptr_as_ptr)]

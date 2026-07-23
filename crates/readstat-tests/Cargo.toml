@@ -22,6 +22,7 @@ proptest = "1"
 readstat = { path = "../readstat" }
 
 [features]
+default = ["sql"]
 sql = ["readstat/sql"]
 
 [[test]]

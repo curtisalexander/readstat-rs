@@ -76,6 +76,7 @@ fn test_parallel_write_parquet_basic() {
                 None,
                 None,
                 100 * 1024 * 1024, // 100 MB buffer
+                false,
             )
             .unwrap();
             temp_files.push(temp_file);
@@ -83,7 +84,8 @@ fn test_parallel_write_parquet_basic() {
     }
 
     // Merge temp files
-    ReadStatWriter::merge_parquet_files(&temp_files, &output_path, &schema, None, None).unwrap();
+    ReadStatWriter::merge_parquet_files(&temp_files, &output_path, &schema, None, None, false)
+        .unwrap();
 
     // Verify the output file exists and is valid
     assert!(output_path.exists());
@@ -149,6 +151,7 @@ fn test_parallel_write_parquet_out_of_order() {
                 None,
                 None,
                 100 * 1024 * 1024, // 100 MB buffer
+                false,
             )
             .unwrap();
 
@@ -157,7 +160,8 @@ fn test_parallel_write_parquet_out_of_order() {
     }
 
     // Merge temp files (they were written out of order)
-    ReadStatWriter::merge_parquet_files(&temp_files, &output_path, schema, None, None).unwrap();
+    ReadStatWriter::merge_parquet_files(&temp_files, &output_path, schema, None, None, false)
+        .unwrap();
 
     // Verify the output file exists and is valid
     assert!(output_path.exists());
@@ -209,6 +213,7 @@ fn test_parallel_write_parquet_with_compression() {
             Some(readstat::ParquetCompression::Snappy),
             None,
             100 * 1024 * 1024, // 100 MB buffer
+            false,
         )
         .unwrap();
 
@@ -250,6 +255,46 @@ fn test_parallel_write_parquet_with_compression() {
 }
 
 #[test]
+fn single_batch_parallel_helper_honors_overwrite() {
+    let rsp_in = common::setup_path("cars.sas7bdat").unwrap();
+    let mut md = ReadStatMetadata::new();
+    md.read_metadata(&rsp_in, false).unwrap();
+    let mut data = ReadStatData::new().init(md.clone(), 0, 1);
+    data.read_data(&rsp_in).unwrap();
+    let batch = data.batch.as_ref().unwrap();
+
+    let output_path = setup_test_output("parallel_write_overwrite.parquet");
+    std::fs::write(&output_path, b"sentinel").unwrap();
+    let result = ReadStatWriter::write_batch_to_parquet(
+        batch,
+        &data.schema,
+        &output_path,
+        None,
+        None,
+        1024,
+        false,
+    );
+    assert!(matches!(
+        result,
+        Err(readstat::ReadStatError::OutputFileExists(_))
+    ));
+    assert_eq!(std::fs::read(&output_path).unwrap(), b"sentinel");
+
+    ReadStatWriter::write_batch_to_parquet(
+        batch,
+        &data.schema,
+        &output_path,
+        None,
+        None,
+        1024,
+        true,
+    )
+    .unwrap();
+    assert_eq!(&std::fs::read(&output_path).unwrap()[..4], b"PAR1");
+    cleanup_test_output(&output_path);
+}
+
+#[test]
 fn test_bufwriter_optimization_verification() {
     // This test verifies that BufWriter is being used by checking that writes complete successfully
     // The performance benefit would be measured in benchmarks
@@ -273,6 +318,7 @@ fn test_bufwriter_optimization_verification() {
             None,
             None,
             100 * 1024 * 1024, // 100 MB buffer
+            false,
         )
         .unwrap();
 
@@ -305,6 +351,7 @@ fn test_spooled_tempfile_small_buffer() {
             None,
             None,
             1024, // Only 1 KB buffer - should spill to disk
+            false,
         )
         .unwrap();
 
@@ -346,6 +393,7 @@ fn test_spooled_tempfile_large_buffer() {
             None,
             None,
             1024 * 1024 * 1024, // 1 GB buffer - should stay in memory
+            false,
         )
         .unwrap();
 

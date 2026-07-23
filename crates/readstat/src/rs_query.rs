@@ -1,13 +1,8 @@
 //! SQL query execution via Apache DataFusion.
-//!
-//! Registers Arrow [`RecordBatch`] data as an in-memory table in a DataFusion
-//! [`SessionContext`], executes a SQL query, and returns the results as a
-//! `Vec<RecordBatch>`.
+
+use std::sync::{Arc, Mutex};
 
 use arrow_array::RecordBatch;
-use arrow_csv::WriterBuilder as CsvWriterBuilder;
-use arrow_ipc::writer::FileWriter as IpcFileWriter;
-use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
 use arrow_schema::SchemaRef;
 use datafusion::catalog::streaming::StreamingTable;
 use datafusion::datasource::MemTable;
@@ -16,93 +11,106 @@ use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::streaming::PartitionStream;
 use datafusion::prelude::*;
 use futures::StreamExt;
-use parquet::{arrow::ArrowWriter as ParquetArrowWriter, file::properties::WriterProperties};
-use std::io::BufWriter;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
 
-use crate::err::ReadStatError;
-use crate::rs_data::ReadStatData;
-use crate::rs_path::ReadStatPath;
-use crate::rs_write_config::{
-    OutFormat, ParquetCompression, WriteConfig, resolve_parquet_compression,
-};
+use crate::{ReadStatError, ReadStatWriter, WriteConfig};
 
-/// Channel receiver type for streaming parsed data chunks between threads.
-///
-/// Each message contains the parsed [`ReadStatData`], the source [`ReadStatPath`],
-/// and the chunk index. Construct the matching sender/receiver pair with the
-/// re-exported [`crossbeam`](crate::crossbeam) channel functions.
-pub type ChunkReceiver = crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>;
+/// Error-aware Arrow batch receiver used by streaming SQL queries.
+pub type RecordBatchReceiver = crossbeam::channel::Receiver<Result<RecordBatch, ReadStatError>>;
+/// Sending half of a streaming SQL input channel.
+pub type RecordBatchSender = crossbeam::channel::Sender<Result<RecordBatch, ReadStatError>>;
+/// Async receiving half of a streaming SQL input channel.
+pub type AsyncRecordBatchReceiver = tokio::sync::mpsc::Receiver<Result<RecordBatch, ReadStatError>>;
+/// Async sending half of a streaming SQL input channel.
+pub type AsyncRecordBatchSender = tokio::sync::mpsc::Sender<Result<RecordBatch, ReadStatError>>;
 
-/// Executes a SQL query against in-memory Arrow data.
+/// Creates a bounded input channel for streaming SQL queries.
 ///
-/// Registers the provided batches as a table named `table_name` in a
-/// DataFusion [`SessionContext`], runs the SQL query, and collects the
-/// results.
-///
-/// # Arguments
-///
-/// * `batches` - The data to query, as one or more [`RecordBatch`]es
-/// * `schema` - The Arrow schema shared by all batches
-/// * `table_name` - The name used to reference the table in SQL
-/// * `sql` - The SQL query string to execute
+/// A bounded channel applies backpressure to producers; capacity zero creates
+/// a rendezvous channel.
+#[must_use]
+pub fn record_batch_channel(capacity: usize) -> (RecordBatchSender, RecordBatchReceiver) {
+    crossbeam::channel::bounded(capacity)
+}
+
+/// Creates a bounded, executor-friendly input channel for async SQL queries.
 ///
 /// # Errors
 ///
-/// Returns [`ReadStatError`] if the Tokio runtime cannot be created, the table
-/// cannot be registered, or the query fails to plan or execute.
+/// Returns an error when `capacity` is zero.
+pub fn async_record_batch_channel(
+    capacity: usize,
+) -> Result<(AsyncRecordBatchSender, AsyncRecordBatchReceiver), ReadStatError> {
+    if capacity == 0 {
+        return Err(ReadStatError::Other(
+            "async record batch channel capacity must be greater than zero".into(),
+        ));
+    }
+    Ok(tokio::sync::mpsc::channel(capacity))
+}
+
+fn runtime() -> Result<tokio::runtime::Runtime, ReadStatError> {
+    if tokio::runtime::Handle::try_current().is_ok() {
+        return Err(ReadStatError::SyncSqlInAsyncRuntime);
+    }
+    Ok(tokio::runtime::Runtime::new()?)
+}
+
+/// Synchronously executes SQL against in-memory Arrow batches.
 pub fn execute_sql(
     batches: Vec<RecordBatch>,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
 ) -> Result<Vec<RecordBatch>, ReadStatError> {
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(execute_sql_async(batches, schema, table_name, sql))
+    runtime()?.block_on(execute_sql_async(batches, schema, table_name, sql))
 }
 
-async fn execute_sql_async(
+/// Executes SQL asynchronously against in-memory Arrow batches.
+pub async fn execute_sql_async(
     batches: Vec<RecordBatch>,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
 ) -> Result<Vec<RecordBatch>, ReadStatError> {
     let ctx = SessionContext::new();
-
-    let table = MemTable::try_new(schema, vec![batches])?;
-    ctx.register_table(table_name, Arc::new(table))?;
-
-    let df = ctx.sql(sql).await?;
-    let result_schema = Arc::new(df.schema().as_arrow().clone());
-    let results = df.collect().await?;
-
-    // A query may legitimately return zero rows (e.g. `WHERE 1=0`). Return a
-    // single empty batch carrying the result schema so downstream writers can
-    // still produce a valid (header-only) output file.
-    if results.is_empty() {
-        return Ok(vec![RecordBatch::new_empty(result_schema)]);
-    }
-
-    Ok(results)
+    ctx.register_table(
+        table_name,
+        Arc::new(MemTable::try_new(schema, vec![batches])?),
+    )?;
+    collect_with_empty_batch(ctx.sql(sql).await?).await
 }
 
-/// A [`PartitionStream`] implementation that reads `RecordBatch`es from a
-/// crossbeam channel, allowing DataFusion to consume data as it arrives
-/// without collecting everything into memory first.
+async fn collect_with_empty_batch(df: DataFrame) -> Result<Vec<RecordBatch>, ReadStatError> {
+    let schema = Arc::new(df.schema().as_arrow().clone());
+    let results = df.collect().await?;
+    Ok(if results.is_empty() {
+        vec![RecordBatch::new_empty(schema)]
+    } else {
+        results
+    })
+}
+
+/// A channel-backed partition is single-execution because receiving consumes
+/// its input. Plans that scan it more than once return an execution error.
 #[derive(Debug)]
 struct ChannelPartitionStream {
     schema: SchemaRef,
-    receiver: Arc<Mutex<Option<ChunkReceiver>>>,
+    receiver: Arc<Mutex<Option<InputReceiver>>>,
 }
 
 impl ChannelPartitionStream {
-    fn new(schema: SchemaRef, receiver: ChunkReceiver) -> Self {
+    fn new(schema: SchemaRef, receiver: InputReceiver) -> Self {
         Self {
             schema,
             receiver: Arc::new(Mutex::new(Some(receiver))),
         }
     }
+}
+
+#[derive(Debug)]
+enum InputReceiver {
+    Blocking(RecordBatchReceiver),
+    Async(AsyncRecordBatchReceiver),
 }
 
 impl PartitionStream for ChannelPartitionStream {
@@ -111,244 +119,274 @@ impl PartitionStream for ChannelPartitionStream {
     }
 
     fn execute(&self, _ctx: Arc<datafusion::execution::TaskContext>) -> SendableRecordBatchStream {
-        // The receiver is moved out on first execute, so this partition can be
-        // consumed exactly once. Some query plans (notably self-joins) execute a
-        // partition more than once; rather than panic inside the execution
-        // operator — which would abort the whole process — surface a recoverable
-        // query error so the caller gets an `Err` from the query instead.
-        let Some(receiver) = self
+        let receiver = self
             .receiver
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .take()
-        else {
-            let err = datafusion::error::DataFusionError::Execution(
-                "ChannelPartitionStream can only be executed once; this query plan reads the \
-                 streaming input more than once (e.g. a self-join). Re-run with the \
-                 non-streaming SQL path (execute_sql), which buffers the data."
-                    .to_string(),
-            );
-            let stream = futures::stream::once(async move { Err(err) });
-            return Box::pin(RecordBatchStreamAdapter::new(self.schema.clone(), stream));
+            .take();
+        let schema = self.schema.clone();
+        let stream = match receiver {
+            Some(receiver) => {
+                let receiver = match receiver {
+                    InputReceiver::Async(receiver) => receiver,
+                    InputReceiver::Blocking(receiver) => {
+                        let (sender, receiver_async) = tokio::sync::mpsc::channel(2);
+                        // Crossbeam receive is blocking. Bridge it from a dedicated
+                        // thread so polling DataFusion never blocks a Tokio worker.
+                        std::thread::spawn(move || {
+                            loop {
+                                if sender.is_closed() {
+                                    break;
+                                }
+                                match receiver
+                                    .recv_timeout(std::time::Duration::from_millis(100))
+                                {
+                                    Ok(result) => {
+                                        if sender.blocking_send(result).is_err() {
+                                            break;
+                                        }
+                                    }
+                                    Err(crossbeam::channel::RecvTimeoutError::Timeout) => {}
+                                    Err(crossbeam::channel::RecvTimeoutError::Disconnected) => break,
+                                }
+                            }
+                        });
+                        receiver_async
+                    }
+                };
+                futures::stream::unfold(receiver, |mut receiver| async move {
+                    receiver.recv().await.map(|batch| {
+                        let batch = batch.map_err(|error| {
+                            datafusion::error::DataFusionError::External(Box::new(error))
+                        });
+                        (batch, receiver)
+                    })
+                })
+                .left_stream()
+            }
+            None => futures::stream::once(async {
+                Err(datafusion::error::DataFusionError::Execution(
+                    "channel-backed StreamingTable can only be executed once; use execute_sql for plans that scan input multiple times".into(),
+                ))
+            })
+            .right_stream(),
         };
-
-        let stream =
-            futures::stream::iter(receiver.into_iter().filter_map(|(d, _, _)| d.batch).map(Ok));
-
-        Box::pin(RecordBatchStreamAdapter::new(self.schema.clone(), stream))
+        Box::pin(RecordBatchStreamAdapter::new(schema, stream))
     }
 }
 
-/// Executes a SQL query by streaming data from a crossbeam channel through
-/// DataFusion, avoiding double-materialization of the full dataset.
-///
-/// The receiver is consumed directly by DataFusion's query engine via
-/// [`StreamingTable`], and results are collected via `execute_stream()`.
-///
-/// # Single-execution limit
-///
-/// The streaming input is consumed exactly once. Query plans that read the
-/// table more than once (e.g. a self-join on the streamed table) will fail with
-/// a DataFusion execution error. Use [`execute_sql`] (which buffers the data)
-/// for such queries.
-///
-/// # Errors
-///
-/// Returns [`ReadStatError`] if the Tokio runtime cannot be created, the table
-/// cannot be registered, or the query fails to plan or execute.
-pub fn execute_sql_stream(
-    receiver: ChunkReceiver,
+fn streaming_context(
+    receiver: InputReceiver,
     schema: SchemaRef,
     table_name: &str,
-    sql: &str,
-) -> Result<Vec<RecordBatch>, ReadStatError> {
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(execute_sql_stream_async(receiver, schema, table_name, sql))
-}
-
-async fn execute_sql_stream_async(
-    receiver: ChunkReceiver,
-    schema: SchemaRef,
-    table_name: &str,
-    sql: &str,
-) -> Result<Vec<RecordBatch>, ReadStatError> {
+) -> Result<SessionContext, ReadStatError> {
     let ctx = SessionContext::new();
-
     let partition = ChannelPartitionStream::new(schema.clone(), receiver);
-    let table = StreamingTable::try_new(schema, vec![Arc::new(partition)])?;
-    ctx.register_table(table_name, Arc::new(table))?;
-
-    let df = ctx.sql(sql).await?;
-    let mut stream = df.execute_stream().await?;
-
-    let mut results = Vec::new();
-    while let Some(batch) = stream.next().await {
-        results.push(batch?);
-    }
-
-    Ok(results)
+    ctx.register_table(
+        table_name,
+        Arc::new(StreamingTable::try_new(schema, vec![Arc::new(partition)])?),
+    )?;
+    Ok(ctx)
 }
 
-/// Executes a SQL query by streaming data from a crossbeam channel and writes
-/// the results directly to an output file, avoiding intermediate collection.
+/// Synchronously executes SQL from a single-use channel of Arrow batches.
 ///
-/// This combines [`execute_sql_stream`] and [`write_sql_results`] into one
-/// streaming pass for the Data command path.
-///
-/// The output path in `write_config` must be `Some`; returns an error otherwise.
-/// A query that returns zero rows still produces a valid output file
-/// (header-only CSV, empty Parquet/Feather/NDJSON) carrying the result schema.
-///
-/// # Single-execution limit
-///
-/// As with [`execute_sql_stream`], the streaming input is consumed exactly once;
-/// query plans that read the table more than once (e.g. a self-join) fail with a
-/// DataFusion execution error. Use the non-streaming path for those.
-///
-/// # Errors
-///
-/// Returns [`ReadStatError`] if the output path is missing, the Tokio runtime
-/// cannot be created, the query fails, or writing the results fails.
-pub fn execute_sql_and_write_stream(
-    receiver: ChunkReceiver,
+/// Input is consumed incrementally; query results are collected in memory.
+pub fn execute_sql_stream(
+    receiver: RecordBatchReceiver,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
-    write_config: &WriteConfig,
-) -> Result<(), ReadStatError> {
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(execute_sql_and_write_stream_async(
-        receiver,
+) -> Result<Vec<RecordBatch>, ReadStatError> {
+    runtime()?.block_on(execute_sql_from_input_async(
+        InputReceiver::Blocking(receiver),
         schema,
         table_name,
         sql,
-        write_config,
     ))
 }
 
-async fn execute_sql_and_write_stream_async(
-    receiver: ChunkReceiver,
+/// Asynchronously executes SQL from a single-use channel of Arrow batches.
+///
+/// Input is consumed incrementally without blocking the async executor; query
+/// results are collected in memory. Plans that scan the input more than once
+/// are unsupported.
+pub async fn execute_sql_stream_async(
+    receiver: AsyncRecordBatchReceiver,
     schema: SchemaRef,
     table_name: &str,
     sql: &str,
-    write_config: &WriteConfig,
-) -> Result<(), ReadStatError> {
-    let output_path = write_config
-        .out_path
-        .as_deref()
-        .ok_or_else(|| ReadStatError::Other("Output path is required for SQL write".into()))?;
+) -> Result<Vec<RecordBatch>, ReadStatError> {
+    execute_sql_from_input_async(InputReceiver::Async(receiver), schema, table_name, sql).await
+}
 
-    let ctx = SessionContext::new();
+async fn execute_sql_from_input_async(
+    receiver: InputReceiver,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+) -> Result<Vec<RecordBatch>, ReadStatError> {
+    let ctx = streaming_context(receiver, schema, table_name)?;
+    collect_with_empty_batch(ctx.sql(sql).await?).await
+}
 
-    let partition = ChannelPartitionStream::new(schema.clone(), receiver);
-    let table = StreamingTable::try_new(schema, vec![Arc::new(partition)])?;
-    ctx.register_table(table_name, Arc::new(table))?;
+/// Synchronously streams SQL output directly to a configured writer.
+pub fn execute_sql_and_write_stream(
+    receiver: RecordBatchReceiver,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+    config: &WriteConfig,
+) -> Result<usize, ReadStatError> {
+    runtime()?.block_on(execute_sql_and_write_from_input_async(
+        InputReceiver::Blocking(receiver),
+        schema,
+        table_name,
+        sql,
+        config,
+    ))
+}
 
+/// Asynchronously writes each SQL output batch as soon as DataFusion produces it.
+/// Plans that scan the channel-backed table more than once are unsupported.
+pub async fn execute_sql_and_write_stream_async(
+    receiver: AsyncRecordBatchReceiver,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+    config: &WriteConfig,
+) -> Result<usize, ReadStatError> {
+    execute_sql_and_write_from_input_async(
+        InputReceiver::Async(receiver),
+        schema,
+        table_name,
+        sql,
+        config,
+    )
+    .await
+}
+
+async fn execute_sql_and_write_from_input_async(
+    receiver: InputReceiver,
+    schema: SchemaRef,
+    table_name: &str,
+    sql: &str,
+    config: &WriteConfig,
+) -> Result<usize, ReadStatError> {
+    let ctx = streaming_context(receiver, schema, table_name)?;
     let df = ctx.sql(sql).await?;
     let result_schema = Arc::new(df.schema().as_arrow().clone());
     let mut stream = df.execute_stream().await?;
-
-    // Collect all result batches — we need the output schema (which may differ
-    // from the input schema due to projections/aggregations) before we can open
-    // a writer, and some formats (Feather/IPC) need all data before finishing.
-    let mut result_batches: Vec<RecordBatch> = Vec::new();
+    enum Message {
+        Batch(RecordBatch),
+        Finish,
+    }
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(2);
+    let config = config.clone();
+    let writer_task = tokio::task::spawn_blocking(move || {
+        let mut writer = ReadStatWriter::new(config, result_schema)?;
+        while let Some(message) = receiver.blocking_recv() {
+            match message {
+                Message::Batch(batch) => writer.write(&batch)?,
+                Message::Finish => return writer.finish(),
+            }
+        }
+        Err(ReadStatError::Other(
+            "SQL output was cancelled before the writer finished".into(),
+        ))
+    });
     while let Some(batch) = stream.next().await {
-        result_batches.push(batch?);
+        sender
+            .send(Message::Batch(batch?))
+            .await
+            .map_err(|_| ReadStatError::Other("SQL writer stopped unexpectedly".into()))?;
     }
-
-    // A query may legitimately return zero rows. Synthesize a single empty
-    // batch carrying the result schema so a valid (header-only/empty) output
-    // file is still produced — matching the buffered `execute_sql` path.
-    if result_batches.is_empty() {
-        result_batches.push(RecordBatch::new_empty(result_schema));
-    }
-
-    write_sql_results(
-        &result_batches,
-        output_path,
-        write_config.format,
-        write_config.compression,
-        write_config.compression_level,
-    )?;
-
-    Ok(())
+    sender
+        .send(Message::Finish)
+        .await
+        .map_err(|_| ReadStatError::Other("SQL writer stopped unexpectedly".into()))?;
+    drop(sender);
+    writer_task
+        .await
+        .map_err(|error| ReadStatError::Other(format!("SQL writer task failed: {error}")))?
 }
 
-/// Writes SQL result batches to an output file in the specified format.
-///
-/// Returns `Ok(())` without writing anything if `batches` is empty.
-///
-/// # Errors
-///
-/// Returns [`ReadStatError`] if the output file cannot be created or a write
-/// fails for the chosen format.
-pub fn write_sql_results(
-    batches: &[RecordBatch],
-    output_path: &Path,
-    format: OutFormat,
-    compression: Option<ParquetCompression>,
-    compression_level: Option<u32>,
-) -> Result<(), ReadStatError> {
-    if batches.is_empty() {
-        return Ok(());
-    }
-    let schema = batches[0].schema();
-
-    match format {
-        OutFormat::Csv => {
-            let f = std::fs::File::create(output_path)?;
-            let mut writer = CsvWriterBuilder::new()
-                .with_header(true)
-                .build(BufWriter::new(f));
-            for batch in batches {
-                writer.write(batch)?;
-            }
-        }
-        OutFormat::Feather => {
-            let f = std::fs::File::create(output_path)?;
-            let mut writer = IpcFileWriter::try_new(BufWriter::new(f), &schema)?;
-            for batch in batches {
-                writer.write(batch)?;
-            }
-            writer.finish()?;
-        }
-        OutFormat::Ndjson => {
-            let f = std::fs::File::create(output_path)?;
-            let mut writer = JsonLineDelimitedWriter::new(BufWriter::new(f));
-            for batch in batches {
-                writer.write(batch)?;
-            }
-            writer.finish()?;
-        }
-        OutFormat::Parquet => {
-            let f = std::fs::File::create(output_path)?;
-            let codec = resolve_parquet_compression(compression, compression_level)?;
-            let props = WriterProperties::builder()
-                .set_compression(codec)
-                .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
-                .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
-                .build();
-            let mut writer = ParquetArrowWriter::try_new(BufWriter::new(f), schema, Some(props))?;
-            for batch in batches {
-                writer.write(batch)?;
-            }
-            writer.close()?;
-        }
-    }
-    Ok(())
-}
-
-/// Reads a SQL query from a file path.
-///
-/// # Errors
-///
-/// Returns [`ReadStatError`] if the file cannot be read or contains only
-/// whitespace.
+/// Reads and validates a SQL query file.
 pub fn read_sql_file(path: &std::path::Path) -> Result<String, ReadStatError> {
-    let sql = std::fs::read_to_string(path)?;
-    let sql = sql.trim().to_string();
+    let sql = std::fs::read_to_string(path)?.trim().to_string();
     if sql.is_empty() {
         return Err(ReadStatError::EmptySqlFile(path.to_path_buf()));
     }
     Ok(sql)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow_array::{Int32Array, RecordBatch};
+    use arrow_schema::{DataType, Field, Schema};
+
+    fn input() -> (SchemaRef, RecordBatch) {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Int32,
+            false,
+        )]));
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(Int32Array::from(vec![1, 2]))])
+                .unwrap();
+        (schema, batch)
+    }
+
+    #[tokio::test]
+    async fn async_query_and_sync_runtime_guard() {
+        let (schema, batch) = input();
+        let result = execute_sql_async(vec![batch.clone()], schema.clone(), "t", "select * from t")
+            .await
+            .unwrap();
+        assert_eq!(result.iter().map(RecordBatch::num_rows).sum::<usize>(), 2);
+        assert!(matches!(
+            execute_sql(vec![batch], schema, "t", "select * from t"),
+            Err(ReadStatError::SyncSqlInAsyncRuntime)
+        ));
+    }
+
+    #[tokio::test]
+    async fn streaming_propagates_channel_errors_and_preserves_empty_schema() {
+        let (schema, batch) = input();
+        let (sender, receiver) = async_record_batch_channel(1).unwrap();
+        sender
+            .send(Err(ReadStatError::Other("source failed".into())))
+            .await
+            .unwrap();
+        drop(sender);
+        let error = execute_sql_stream_async(receiver, schema.clone(), "t", "select * from t")
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("source failed"));
+
+        let (sender, receiver) = async_record_batch_channel(1).unwrap();
+        sender.send(Ok(batch)).await.unwrap();
+        drop(sender);
+        let result = execute_sql_stream_async(receiver, schema, "t", "select * from t where 1=0")
+            .await
+            .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].num_rows(), 0);
+        assert_eq!(result[0].num_columns(), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn streaming_does_not_block_current_thread_runtime() {
+        let (schema, batch) = input();
+        let (sender, receiver) = async_record_batch_channel(1).unwrap();
+        tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            sender.send(Ok(batch)).await.unwrap();
+        });
+        let result = execute_sql_stream_async(receiver, schema, "t", "select * from t")
+            .await
+            .unwrap();
+        assert_eq!(result.iter().map(RecordBatch::num_rows).sum::<usize>(), 2);
+    }
 }

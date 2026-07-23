@@ -33,9 +33,9 @@ on:
     types: [build, test, release]
 
 jobs:
-  # Lightweight CI: tests only, runs on branch pushes and PRs (not on tag releases).
-  ci-test:
-    if: "!startsWith(github.ref, 'refs/tags/')"
+  # Required verification for branches, PRs, and tags. Release-producing jobs
+  # depend on this once rather than duplicating these heavy gates per target.
+  verify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -50,8 +50,59 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Install system dependencies
         run: sudo apt-get update -y && sudo apt-get install -y build-essential clang
-      - name: Test
-        run: cargo test --workspace
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy (all targets and features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Check (all targets and features)
+        run: cargo check --workspace --all-targets --all-features
+      - name: Check minimal feature builds
+        run: |
+          cargo check -p readstat --no-default-features
+          cargo check -p readstat-cli --no-default-features
+      - name: Test (SQL is default)
+        run: cargo test --workspace --all-features
+      - name: Rustdoc
+        run: cargo doc --workspace --all-features --no-deps
+      - name: Install mdBook
+        uses: taiki-e/install-action@mdbook
+      - name: Build documentation book
+        run: bash scripts/build-book.sh
+      - name: Check advertised API examples
+        run: |
+          cargo check --manifest-path examples/api-demo/rust-server/Cargo.toml
+          cargo check --manifest-path examples/api-demo/python-server/readstat_py/Cargo.toml
+      - name: Check WASM crate on host
+        run: |
+          cargo fmt --manifest-path crates/readstat-wasm/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/readstat-wasm/Cargo.toml --all-targets -- -D warnings
+      - name: Check package contents
+        run: |
+          for crate in readstat-iconv-sys readstat-sys readstat readstat-cli; do
+            cargo package -p "$crate" --allow-dirty --list >/dev/null
+          done
+
+  # The WASM crate is excluded from the workspace and needs Emscripten to link,
+  # so host clippy alone cannot establish that the published JS artifact builds.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/readstat-wasm
+      - name: Install Emscripten
+        uses: emscripten-core/setup-emsdk@v15
+      - name: Build WASM crate
+        run: cargo build --manifest-path crates/readstat-wasm/Cargo.toml --target wasm32-unknown-emscripten --release
 
   # Enforce the MSRV declared in `[workspace.package] rust-version` (and
   # advertised in the READMEs): the workspace must at least type-check on that
@@ -81,6 +132,7 @@ jobs:
 
   release-notes:
     if: startsWith(github.ref, 'refs/tags/')
+    needs: [verify, wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -144,6 +196,7 @@ jobs:
 
   build-linux-gnu:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: [verify, wasm]
     runs-on: ubuntu-latest
     env:
       target: x86_64-unknown-linux-gnu
@@ -189,6 +242,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-linux-musl:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: [verify, wasm]
     runs-on: ubuntu-latest
     env:
       target: x86_64-unknown-linux-musl
@@ -234,6 +288,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-linux-arm:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: [verify, wasm]
     # Native arm64 runner (same image the readstat-sys cross-platform CI uses):
     # no cross toolchain or CC_/AR_/LINKER plumbing, and — unlike the old
     # cross-compile job — the test suite actually runs on the artifact's
@@ -287,6 +342,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-win-msvc:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: [verify, wasm]
     runs-on: windows-latest
     env:
       target: x86_64-pc-windows-msvc
@@ -331,6 +387,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-win-gnu:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: [verify, wasm]
     # windows-gnu flavor: statically linked against the MinGW runtime, so the
     # binary has no MSVC runtime dependency. The runner image ships a MinGW
     # gcc/binutils on PATH, which rustc uses as the linker and cc uses to
@@ -380,6 +437,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-macos-x86:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: [verify, wasm]
     runs-on: macos-latest
     env:
       target: x86_64-apple-darwin
@@ -427,6 +485,7 @@ jobs:
 
   build-macos-arm:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: [verify, wasm]
     runs-on: macos-latest
     env:
       target: aarch64-apple-darwin

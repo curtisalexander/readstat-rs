@@ -42,7 +42,7 @@ pub enum ReadStatCliCommands {
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[arg(value_enum, ignore_case = true, long, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
+        /// Number of rows per streaming chunk (default: 10,000){n}Cannot be used with --reader mem
         #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
         stream_rows: Option<u32>,
         /// Do not display progress bar
@@ -54,24 +54,25 @@ pub enum ReadStatCliCommands {
         /// Path to a file containing column names (one per line, # comments)
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with = "columns")]
         columns_file: Option<PathBuf>,
-        /// SQL query to run against the data (requires sql feature){n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file
+        /// SQL query to run against the data{n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file
         #[cfg(feature = "sql")]
         #[arg(long, conflicts_with_all = ["columns", "columns_file"])]
         sql: Option<String>,
-        /// Path to a file containing a SQL query (requires sql feature){n}Mutually exclusive with --sql and --columns/--columns-file
+        /// Path to a file containing a SQL query{n}Mutually exclusive with --sql and --columns/--columns-file
         #[cfg(feature = "sql")]
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with_all = ["sql", "columns", "columns_file"])]
         sql_file: Option<PathBuf>,
     },
     /// Convert sas7bdat data to csv, feather (or the Arrow IPC format), ndjson, or parquet format
-    Data {
+    #[command(alias = "data")]
+    Convert {
         /// Path to sas7bdat file
         #[arg(value_hint = ValueHint::FilePath, value_parser)]
         input: PathBuf,
-        /// Output file path
+        /// Output file path; its extension determines the format when --format is omitted{n}Without an output path, CSV is written to stdout
         #[arg(long, short = 'o', value_hint = ValueHint::FilePath, value_parser)]
         output: Option<PathBuf>,
-        /// Output file format{n}Defaults to csv
+        /// Output format (normally inferred from the output extension)
         #[arg(ignore_case = true, long, short = 'f', value_enum, value_parser)]
         format: Option<CliOutFormat>,
         /// Overwrite output file if it already exists
@@ -83,7 +84,7 @@ pub enum ReadStatCliCommands {
         /// Type of reader{n}    mem = read all data into memory{n}    stream = read at most stream-rows into memory{n}Defaults to stream
         #[arg(ignore_case = true, long, value_enum, value_parser)]
         reader: Option<Reader>,
-        /// Number of rows to stream (read into memory) at a time{n}↑ rows = ↑ memory usage{n}Ignored if reader is set to mem{n}Defaults to 10,000 rows
+        /// Number of rows per streaming chunk (default: 10,000){n}Cannot be used with --reader mem
         #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
         stream_rows: Option<u32>,
         /// Do not display progress bar
@@ -92,12 +93,12 @@ pub enum ReadStatCliCommands {
         /// Convert sas7bdat data in parallel
         #[arg(action, long)]
         parallel: bool,
-        /// Write Parquet output in parallel{n}Parquet only — ignored for other formats{n}Only effective when --parallel is also enabled{n}Output row order is preserved
-        #[arg(action, long)]
+        /// Write Parquet output in parallel{n}Requires --parallel and Parquet output; preserves row order
+        #[arg(action, long, requires = "parallel")]
         parallel_write: bool,
-        /// Memory buffer size in MB before spilling to disk during parallel writes{n}Defaults to 100 MB{n}Only effective when parallel-write is enabled
-        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=10240), default_value = "100")]
-        parallel_write_buffer_mb: u64,
+        /// Memory buffer size in MB before spilling to disk (default: 100){n}Requires --parallel-write
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=10240), requires = "parallel_write")]
+        parallel_write_buffer_mb: Option<u64>,
         /// Parquet compression algorithm
         #[arg(long, value_enum, value_parser)]
         compression: Option<CliParquetCompression>,
@@ -110,11 +111,11 @@ pub enum ReadStatCliCommands {
         /// Path to a file containing column names (one per line, # comments)
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with = "columns")]
         columns_file: Option<PathBuf>,
-        /// SQL query to run against the data (requires sql feature){n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file
+        /// SQL query to run against the data{n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file and --parallel-write
         #[cfg(feature = "sql")]
         #[arg(long, conflicts_with_all = ["columns", "columns_file"])]
         sql: Option<String>,
-        /// Path to a file containing a SQL query (requires sql feature){n}Mutually exclusive with --sql and --columns/--columns-file
+        /// Path to a file containing a SQL query{n}Mutually exclusive with --sql, --columns/--columns-file, and --parallel-write
         #[cfg(feature = "sql")]
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with_all = ["sql", "columns", "columns_file"])]
         sql_file: Option<PathBuf>,

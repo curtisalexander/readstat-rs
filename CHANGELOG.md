@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-07-23
+
+### Added
+- Added `CONTRIBUTING.md` as a concise workspace orientation map and expanded equivalent Unix/Windows release gates for the book, advertised API examples, WASM, packaging, and dependency policy.
+- Added a required Emscripten CI build for the standalone `readstat-wasm` crate.
+
+### Changed
+- Redesigned the primary library surface around `ReadStatReader` (path/bytes/mmap, selection, metadata/read/chunks/visit) and `WriteConfig` plus schema-bound `ReadStatWriter`; SQL sync and async APIs are enabled by default.
+- Made `readstat convert` canonical, with extension-based output inference, CSV stdout when output is omitted, strict extension/format validation, and diagnostics on stderr.
+- Strengthened normal and tag CI so all-feature verification and advertised examples pass before release artifacts are produced.
+- Made writer finalization consume the writer and publish fully finalized filesystem output from a same-directory staging file; failed conversion preserves an existing destination, and overwrite refusal remains race-free.
+- Added a discoverable bounded SQL input channel constructor; channel-backed async SQL no longer blocks Tokio workers, and async output encoding runs on a blocking worker with bounded backpressure.
+
+### Fixed
+- Reconciled release documentation around explicit tag pushes and `--allow-dirty` publishing of vendor-prepared sys crates.
+- Fixed writer row counts, zero-row output finalization, metadata parse rollback, zero-sized offset chunks, broken-pipe handling, and ineffective CLI option combinations.
+
 ## [0.25.1] - 2026-07-13
 
 Bumps `readstat` and `readstat-cli` to 0.25.1; `readstat-sys` to 0.5.1; `readstat-iconv-sys` to 0.4.1 (both sys crates' build scripts changed behavior — see the bindings regeneration note under Changed).
