@@ -177,7 +177,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
     debug!(
         "Generating data from the file {}",
-        &sas_path.to_string_lossy()
+        sas_path.to_string_lossy()
     );
 
     let rsp = ReadStatPath::new(sas_path)?;
