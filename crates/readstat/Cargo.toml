@@ -48,7 +48,6 @@ log = { workspace = true }
 num-derive = "0.4"
 num-traits = "0.2"
 regex = "1.12"
-readstat-sys = { path = "../readstat-sys", version = "0.5.1" }
 serde = { workspace = true }
 serde_json = "1"
 thiserror = "2"
@@ -79,6 +78,14 @@ optional = true
 memmap2 = "0.9"
 path_abs = { workspace = true }
 rayon = { workspace = true }
+
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+readstat-sys = { path = "../readstat-sys", version = "0.5.1" }
+
+# Emscripten has no portable pre-generated bindings because its sysroot is part
+# of emsdk. Enable target-local generation automatically for WASM consumers.
+[target.'cfg(target_os = "emscripten")'.dependencies]
+readstat-sys = { path = "../readstat-sys", version = "0.5.1", features = ["buildtime_bindgen"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
