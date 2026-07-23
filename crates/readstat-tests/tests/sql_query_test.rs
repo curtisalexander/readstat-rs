@@ -10,7 +10,7 @@
 #![cfg(feature = "sql")]
 
 use arrow_array::{Array, Float64Array};
-use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath};
+use readstat::{ReadStatData, ReadStatMetadata};
 use std::sync::Arc;
 
 mod common;
@@ -207,10 +207,7 @@ fn sql_read_empty_sql_file_returns_error() {
 // ── Streaming SQL tests ─────────────────────────────────────────────
 
 /// Helper: send cars data through a crossbeam channel, returns (receiver, schema).
-fn send_cars_via_channel() -> (
-    crossbeam::channel::Receiver<(ReadStatData, ReadStatPath, usize)>,
-    arrow_schema::SchemaRef,
-) {
+fn send_cars_via_channel() -> (readstat::RecordBatchReceiver, arrow_schema::SchemaRef) {
     let rsp = common::setup_path("cars.sas7bdat").unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
@@ -221,7 +218,7 @@ fn send_cars_via_channel() -> (
     d.read_data(&rsp).unwrap();
 
     let (s, r) = crossbeam::channel::bounded(10);
-    s.send((d, rsp, 1)).unwrap();
+    s.send(Ok(d.batch.expect("cars batch"))).unwrap();
     drop(s); // close the channel
 
     (r, schema)
@@ -306,14 +303,10 @@ fn sql_stream_and_write() {
     let temp_dir = std::env::temp_dir();
     let out_path = temp_dir.join("sql_stream_test_output.parquet");
 
-    let write_config = readstat::WriteConfig::new(
-        Some(out_path.clone()),
-        Some(readstat::OutFormat::Parquet),
-        true,
-        None,
-        None,
-    )
-    .unwrap();
+    let write_config = readstat::WriteConfig::new(readstat::OutFormat::Parquet)
+        .output(out_path.clone())
+        .unwrap()
+        .overwrite(true);
 
     readstat::execute_sql_and_write_stream(
         receiver,
@@ -347,14 +340,10 @@ fn sql_stream_and_write_zero_rows() {
     let temp_dir = std::env::temp_dir();
     let out_path = temp_dir.join("sql_stream_test_zero_rows.parquet");
 
-    let write_config = readstat::WriteConfig::new(
-        Some(out_path.clone()),
-        Some(readstat::OutFormat::Parquet),
-        true,
-        None,
-        None,
-    )
-    .unwrap();
+    let write_config = readstat::WriteConfig::new(readstat::OutFormat::Parquet)
+        .output(out_path.clone())
+        .unwrap()
+        .overwrite(true);
 
     readstat::execute_sql_and_write_stream(
         receiver,

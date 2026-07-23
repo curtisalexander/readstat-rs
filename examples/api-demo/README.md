@@ -282,7 +282,7 @@ The multipart field name must be `file`. Binary formats include a `Content-Dispo
 HTTP upload → Axum multipart extraction → Vec<u8>
   → spawn_blocking {
       ReadStatMetadata::read_metadata_from_bytes()
-      ReadStatData::read_data_from_bytes() → Arrow RecordBatch
+      ReadStatReader::from_bytes(...).read() → Arrow RecordBatch
       write_batch_to_{csv,ndjson,parquet,feather}_bytes()
     }
   → HTTP response
@@ -297,7 +297,7 @@ HTTP upload → FastAPI UploadFile → bytes
   → readstat_py.read_to_{csv,ndjson,parquet,feather}(bytes)
     → [PyO3 boundary]
       → ReadStatMetadata::read_metadata_from_bytes()
-      → ReadStatData::read_data_from_bytes() → Arrow RecordBatch
+      → ReadStatReader::from_bytes(...).read() → Arrow RecordBatch
       → write_batch_to_*_bytes()
     → [back to Python]
   → HTTP response

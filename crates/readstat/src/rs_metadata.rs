@@ -11,10 +11,11 @@ use num_derive::FromPrimitive;
 use serde::Serialize;
 #[cfg(any(not(target_arch = "wasm32"), test))]
 use std::fs::File;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::Path;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     ffi::{CString, c_void},
-    path::Path,
 };
 
 use crate::cb::{handle_metadata, handle_variable};
@@ -67,6 +68,10 @@ impl Default for ReadStatMetadata {
 }
 
 impl ReadStatMetadata {
+    /// Serializes this metadata as pretty-printed JSON.
+    pub fn to_json(&self) -> Result<String, ReadStatError> {
+        Ok(serde_json::to_string_pretty(self)?)
+    }
     /// Creates a new `ReadStatMetadata` with default (empty) values.
     pub fn new() -> Self {
         Self {
@@ -173,10 +178,11 @@ impl ReadStatMetadata {
         rsp: &ReadStatPath,
         skip_row_count: bool,
     ) -> Result<(), ReadStatError> {
+        let mut parsed = Self::new();
         debug!("Path as C string is {:?}", rsp.cstring_path);
         let ppath = rsp.cstring_path.as_ptr();
 
-        let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
+        let ctx = std::ptr::from_mut::<Self>(&mut parsed) as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {error}");
@@ -192,7 +198,8 @@ impl ReadStatMetadata {
         check_c_error(error as i32)?;
 
         // if successful, initialize schema
-        self.schema = self.initialize_schema();
+        parsed.schema = parsed.initialize_schema();
+        *self = parsed;
         Ok(())
     }
 
@@ -215,9 +222,10 @@ impl ReadStatMetadata {
         bytes: &[u8],
         skip_row_count: bool,
     ) -> Result<(), ReadStatError> {
+        let mut parsed = Self::new();
         let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
 
-        let ctx = std::ptr::from_mut::<Self>(self) as *mut c_void;
+        let ctx = std::ptr::from_mut::<Self>(&mut parsed) as *mut c_void;
 
         let error: readstat_sys::readstat_error_t = readstat_sys::readstat_error_e_READSTAT_OK;
         debug!("Initially, error ==> {error}");
@@ -239,7 +247,8 @@ impl ReadStatMetadata {
         check_c_error(error as i32)?;
 
         // if successful, initialize schema
-        self.schema = self.initialize_schema();
+        parsed.schema = parsed.initialize_schema();
+        *self = parsed;
         Ok(())
     }
 
@@ -268,25 +277,6 @@ impl ReadStatMetadata {
         let file = File::open(path)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         self.read_metadata_from_bytes(&mmap, skip_row_count)
-    }
-
-    /// Parses a columns file, returning column names.
-    ///
-    /// Lines starting with `#` are treated as comments and blank lines are skipped.
-    /// Each remaining line is trimmed and used as a column name.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ReadStatError`] if the file cannot be read.
-    pub fn parse_columns_file(path: &Path) -> Result<Vec<String>, ReadStatError> {
-        let contents = std::fs::read_to_string(path)?;
-        let names: Vec<String> = contents
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(std::string::ToString::to_string)
-            .collect();
-        Ok(names)
     }
 
     /// Validates column names against the dataset's variables and returns a mapping
@@ -465,7 +455,6 @@ impl ReadStatVarMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     /// Create a test metadata instance with the given variable names.
     #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
@@ -761,52 +750,6 @@ mod tests {
         assert_eq!(field_meta.get("storage_width").unwrap(), "8");
         assert!(!field_meta.contains_key("display_width"));
         assert!(schema.metadata().is_empty());
-    }
-
-    // --- parse_columns_file ---
-
-    #[test]
-    fn parse_columns_file_normal() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("cols.txt");
-        let mut f = File::create(&path).unwrap();
-        writeln!(f, "col_a").unwrap();
-        writeln!(f, "col_b").unwrap();
-        writeln!(f, "col_c").unwrap();
-
-        let names = ReadStatMetadata::parse_columns_file(&path).unwrap();
-        assert_eq!(names, vec!["col_a", "col_b", "col_c"]);
-    }
-
-    #[test]
-    fn parse_columns_file_with_comments_and_blanks() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("cols.txt");
-        let mut f = File::create(&path).unwrap();
-        writeln!(f, "# This is a comment").unwrap();
-        writeln!(f, "col_a").unwrap();
-        writeln!(f).unwrap();
-        writeln!(f, "  col_b  ").unwrap();
-        writeln!(f, "# Another comment").unwrap();
-
-        let names = ReadStatMetadata::parse_columns_file(&path).unwrap();
-        assert_eq!(names, vec!["col_a", "col_b"]);
-    }
-
-    #[test]
-    fn parse_columns_file_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("cols.txt");
-        File::create(&path).unwrap();
-
-        let names = ReadStatMetadata::parse_columns_file(&path).unwrap();
-        assert!(names.is_empty());
-    }
-
-    #[test]
-    fn parse_columns_file_nonexistent() {
-        let path = Path::new("/nonexistent/path/cols.txt");
-        assert!(ReadStatMetadata::parse_columns_file(path).is_err());
     }
 
     // --- ReadStatMetadata defaults ---

@@ -8,8 +8,6 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "parquet")]
 use parquet::basic::{BrotliLevel, Compression as ParquetCompressionCodec, GzipLevel, ZstdLevel};
 
-use log::warn;
-
 use crate::err::ReadStatError;
 
 /// Output file format for data conversion.
@@ -130,7 +128,7 @@ impl std::str::FromStr for ParquetCompression {
 /// behavior. Created separately from [`ReadStatPath`](crate::ReadStatPath),
 /// which handles only input path validation.
 ///
-/// Fields are private and validated by [`new`](WriteConfig::new); read them via
+/// Fields are private and validated by the builder methods; read them via
 /// the accessor methods. This prevents constructing a config that bypasses path,
 /// extension, and compression-level validation.
 #[derive(Debug, Clone)]
@@ -148,44 +146,86 @@ pub struct WriteConfig {
 }
 
 impl WriteConfig {
-    /// Creates a new `WriteConfig` after validating the output path, format,
-    /// and compression settings.
+    /// Infers the format from an output path and returns a validated config.
     ///
     /// # Errors
     ///
-    /// Returns [`ReadStatError`] if the output path, format, or compression settings
-    /// are invalid.
-    pub fn new(
-        out_path: Option<PathBuf>,
-        format: Option<OutFormat>,
-        overwrite: bool,
-        compression: Option<ParquetCompression>,
-        compression_level: Option<u32>,
-    ) -> Result<Self, ReadStatError> {
-        let f = Self::validate_format(format);
-        let op = Self::validate_out_path(out_path, overwrite)?;
-        let op = if let Some(op) = op {
-            Self::validate_out_extension(&op, f)?
-        } else {
-            None
-        };
-        let cl = match compression {
-            None => {
-                if compression_level.is_some() {
-                    warn!("Ignoring value of --compression-level as --compression was not set");
-                }
-                None
+    /// Returns [`ReadStatError`] if the path has an unknown extension or fails
+    /// normal output-path validation.
+    pub fn from_output(path: impl Into<PathBuf>) -> Result<Self, ReadStatError> {
+        let path = path.into();
+        let format = match path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref()
+        {
+            Some("csv") => OutFormat::Csv,
+            Some("feather") => OutFormat::Feather,
+            Some("ndjson") => OutFormat::Ndjson,
+            Some("parquet") => OutFormat::Parquet,
+            _ => {
+                return Err(ReadStatError::InvalidOutputConfig(format!(
+                    "cannot infer output format from '{}'; supported extensions are .csv, .feather, .ndjson, and .parquet",
+                    path.display()
+                )));
             }
-            Some(pc) => Self::validate_compression_level(pc, compression_level)?,
         };
+        Self::new(format).output(path)
+    }
 
-        Ok(Self {
-            out_path: op,
-            format: f,
-            overwrite,
-            compression,
-            compression_level: cl,
-        })
+    /// Starts a validated configuration for `format`. CSV defaults to stdout;
+    /// other formats require [`output`](Self::output) before writer creation.
+    #[must_use]
+    pub const fn new(format: OutFormat) -> Self {
+        Self {
+            out_path: None,
+            format,
+            overwrite: false,
+            compression: None,
+            compression_level: None,
+        }
+    }
+
+    /// Sets and validates the output path.
+    pub fn output(mut self, path: impl Into<PathBuf>) -> Result<Self, ReadStatError> {
+        let path = Self::validate_out_path(Some(path.into()))?.expect("path was supplied");
+        self.out_path = Self::validate_out_extension(&path, self.format)?;
+        Ok(self)
+    }
+
+    /// Controls atomic publication when the writer is successfully finished.
+    /// When false, publication fails rather than replacing a destination that
+    /// appeared while the output was being written.
+    #[must_use]
+    pub const fn overwrite(mut self, overwrite: bool) -> Self {
+        self.overwrite = overwrite;
+        self
+    }
+
+    /// Sets and validates Parquet compression.
+    pub fn compression(
+        mut self,
+        codec: ParquetCompression,
+        level: Option<u32>,
+    ) -> Result<Self, ReadStatError> {
+        if !matches!(self.format, OutFormat::Parquet) {
+            return Err(ReadStatError::InvalidCompressionConfig(
+                "compression is only supported for Parquet".into(),
+            ));
+        }
+        self.compression_level = Self::validate_compression_level(codec, level)?;
+        self.compression = Some(codec);
+        Ok(self)
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), ReadStatError> {
+        if self.out_path.is_none() && !matches!(self.format, OutFormat::Csv) {
+            return Err(ReadStatError::InvalidOutputConfig(
+                "only CSV may be written to stdout".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// The validated output path, or `None` to write CSV to stdout.
@@ -202,13 +242,13 @@ impl WriteConfig {
 
     /// Whether an existing output file may be overwritten.
     #[must_use]
-    pub const fn overwrite(&self) -> bool {
+    pub const fn is_overwrite(&self) -> bool {
         self.overwrite
     }
 
     /// The configured Parquet compression codec, if any.
     #[must_use]
-    pub const fn compression(&self) -> Option<ParquetCompression> {
+    pub const fn compression_codec(&self) -> Option<ParquetCompression> {
         self.compression
     }
 
@@ -216,10 +256,6 @@ impl WriteConfig {
     #[must_use]
     pub const fn compression_level(&self) -> Option<u32> {
         self.compression_level
-    }
-
-    fn validate_format(format: Option<OutFormat>) -> OutFormat {
-        format.unwrap_or(OutFormat::Csv)
     }
 
     /// Validates the output file extension matches the format.
@@ -237,10 +273,7 @@ impl WriteConfig {
     }
 
     /// Validates the output path exists and handles overwrite logic.
-    fn validate_out_path(
-        path: Option<PathBuf>,
-        overwrite: bool,
-    ) -> Result<Option<PathBuf>, ReadStatError> {
+    fn validate_out_path(path: Option<PathBuf>) -> Result<Option<PathBuf>, ReadStatError> {
         match path {
             None => Ok(None),
             Some(p) => {
@@ -251,19 +284,7 @@ impl WriteConfig {
                     None => Err(ReadStatError::OutputParentMissing(abs_path.clone())),
                     Some(parent) => {
                         if parent.exists() {
-                            if abs_path.exists() {
-                                if overwrite {
-                                    warn!(
-                                        "The file {} will be overwritten!",
-                                        abs_path.to_string_lossy()
-                                    );
-                                    Ok(Some(abs_path))
-                                } else {
-                                    Err(ReadStatError::OutputFileExists(abs_path))
-                                }
-                            } else {
-                                Ok(Some(abs_path))
-                            }
+                            Ok(Some(abs_path))
                         } else {
                             Err(ReadStatError::OutputParentMissing(parent.to_path_buf()))
                         }
@@ -289,12 +310,9 @@ impl WriteConfig {
 
         match (max_level, compression_level) {
             (None | Some(_), None) => Ok(None),
-            (None, Some(_)) => {
-                warn!(
-                    "Compression level is not required for compression={name}, ignoring value of --compression-level"
-                );
-                Ok(None)
-            }
+            (None, Some(_)) => Err(ReadStatError::Other(format!(
+                "compression codec {name} does not support a level"
+            ))),
             (Some(max), Some(c)) => {
                 if c <= max {
                     Ok(Some(c))
@@ -306,6 +324,119 @@ impl WriteConfig {
                 }
             }
         }
+    }
+}
+
+/// Creates a uniquely named staging file beside the destination. Keeping the
+/// staging file in the same directory makes the eventual rename a same-filesystem
+/// operation.
+#[cfg(any(
+    feature = "csv",
+    feature = "feather",
+    feature = "ndjson",
+    feature = "parquet"
+))]
+pub(crate) fn open_output(config: &WriteConfig) -> Result<(std::fs::File, PathBuf), ReadStatError> {
+    create_staging_file(
+        config
+            .out_path
+            .as_ref()
+            .ok_or_else(|| ReadStatError::Other("stdout has no output file".into()))?,
+    )
+}
+
+#[cfg(any(
+    feature = "csv",
+    feature = "feather",
+    feature = "ndjson",
+    feature = "parquet"
+))]
+pub(crate) fn create_staging_file(path: &Path) -> Result<(std::fs::File, PathBuf), ReadStatError> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_STAGING_ID: AtomicU64 = AtomicU64::new(0);
+    let parent = path.parent().expect("validated output has a parent");
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("output");
+    for _ in 0..100 {
+        let id = NEXT_STAGING_ID.fetch_add(1, Ordering::Relaxed);
+        let staging = parent.join(format!(".{name}.readstat-{}-{id}.tmp", std::process::id()));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staging)
+        {
+            Ok(file) => return Ok((file, staging)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(ReadStatError::Other(format!(
+        "could not create a unique staging file for {}",
+        path.display()
+    )))
+}
+
+#[cfg(any(
+    feature = "csv",
+    feature = "feather",
+    feature = "ndjson",
+    feature = "parquet"
+))]
+pub(crate) fn publish_staging(
+    staging: &Path,
+    destination: &Path,
+    overwrite: bool,
+) -> Result<(), ReadStatError> {
+    if overwrite {
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            use windows_sys::Win32::Storage::FileSystem::{
+                MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+            };
+
+            let staging = staging
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
+            let destination = destination
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
+            // SAFETY: both buffers are NUL-terminated and remain alive for the
+            // duration of the call. Same-directory staging keeps this on one volume.
+            let moved = unsafe {
+                MoveFileExW(
+                    staging.as_ptr(),
+                    destination.as_ptr(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+                )
+            };
+            if moved == 0 {
+                Err(std::io::Error::last_os_error().into())
+            } else {
+                Ok(())
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            std::fs::rename(staging, destination).map_err(Into::into)
+        }
+    } else {
+        std::fs::hard_link(staging, destination).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                ReadStatError::OutputFileExists(destination.to_owned())
+            } else {
+                error.into()
+            }
+        })?;
+        std::fs::remove_file(staging)?;
+        Ok(())
     }
 }
 
@@ -360,18 +491,15 @@ pub fn resolve_parquet_compression(
 mod tests {
     use super::*;
 
-    // --- validate_format ---
-
     #[test]
-    fn format_none_defaults_to_csv() {
-        let f = WriteConfig::validate_format(None);
-        assert!(matches!(f, OutFormat::Csv));
+    fn from_output_infers_format_case_insensitively() {
+        let config = WriteConfig::from_output("result.PARQUET").unwrap();
+        assert!(matches!(config.format(), OutFormat::Parquet));
     }
 
     #[test]
-    fn format_some_passes_through() {
-        let f = WriteConfig::validate_format(Some(OutFormat::Parquet));
-        assert!(matches!(f, OutFormat::Parquet));
+    fn from_output_rejects_unknown_extension() {
+        assert!(WriteConfig::from_output("result.unknown").is_err());
     }
 
     // --- validate_out_extension ---
@@ -419,25 +547,22 @@ mod tests {
     // --- validate_compression_level ---
 
     #[test]
-    fn uncompressed_ignores_level() {
+    fn uncompressed_rejects_level() {
         let result =
-            WriteConfig::validate_compression_level(ParquetCompression::Uncompressed, Some(5))
-                .unwrap();
-        assert_eq!(result, None);
+            WriteConfig::validate_compression_level(ParquetCompression::Uncompressed, Some(5));
+        assert!(result.is_err());
     }
 
     #[test]
-    fn snappy_ignores_level() {
-        let result =
-            WriteConfig::validate_compression_level(ParquetCompression::Snappy, Some(5)).unwrap();
-        assert_eq!(result, None);
+    fn snappy_rejects_level() {
+        let result = WriteConfig::validate_compression_level(ParquetCompression::Snappy, Some(5));
+        assert!(result.is_err());
     }
 
     #[test]
-    fn lz4raw_ignores_level() {
-        let result =
-            WriteConfig::validate_compression_level(ParquetCompression::Lz4Raw, Some(5)).unwrap();
-        assert_eq!(result, None);
+    fn lz4raw_rejects_level() {
+        let result = WriteConfig::validate_compression_level(ParquetCompression::Lz4Raw, Some(5));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -500,10 +625,6 @@ mod tests {
 
     #[test]
     fn validate_out_path_none() {
-        assert!(
-            WriteConfig::validate_out_path(None, false)
-                .unwrap()
-                .is_none()
-        );
+        assert!(WriteConfig::validate_out_path(None).unwrap().is_none());
     }
 }

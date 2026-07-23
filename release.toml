@@ -8,7 +8,10 @@
 #
 # Then review the bump commit and tag, then:
 #
-#   git push origin main --follow-tags
+#   git push origin main vX.Y.Z
+#
+# Push the intended tag explicitly; never use --follow-tags, which may push
+# unrelated reachable annotated tags.
 #
 # The sys crates version independently — bump only the one whose C bindings
 # or vendored library changed (readstat-sys's dependency requirement on

@@ -187,7 +187,7 @@ lock the schema and stream normally.
 Let the user specify desired types per column via CLI flags or a schema file:
 
 ```bash
-readstat data input.sas7bdat --output out.parquet \
+readstat convert input.sas7bdat --output out.parquet \
     --type-override "flag_col=bool,count_col=int32"
 ```
 

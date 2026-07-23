@@ -43,7 +43,7 @@ if ($LASTEXITCODE -eq 0) {
 
 # 2. Clippy
 Write-Host "Checking clippy..."
-cargo clippy --workspace --all-targets -- -D warnings *>$null
+cargo clippy --workspace --all-targets --all-features -- -D warnings *>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Pass "cargo clippy"
 } else {
@@ -61,11 +61,19 @@ if (Test-Path $WasmDir) {
     } else {
         Write-Fail "readstat-wasm fmt — run 'cargo fmt' in crates\readstat-wasm\"
     }
-    cargo clippy -- -D warnings *>$null
+    cargo clippy --all-targets -- -D warnings *>$null
     if ($LASTEXITCODE -eq 0) {
         Write-Pass "readstat-wasm clippy"
     } else {
         Write-Fail "readstat-wasm clippy — warnings or errors found"
+    }
+    $emcc = Get-Command emcc -ErrorAction SilentlyContinue
+    $targets = rustup target list --installed 2>$null
+    if ($emcc -and ($targets -contains "wasm32-unknown-emscripten")) {
+        cargo build --target wasm32-unknown-emscripten --release *>$null
+        if ($LASTEXITCODE -eq 0) { Write-Pass "readstat-wasm Emscripten build" } else { Write-Fail "readstat-wasm Emscripten build failed" }
+    } else {
+        Write-Warn "Emscripten/emcc or wasm32-unknown-emscripten unavailable — skipping actual WASM build"
     }
     Pop-Location
 } else {
@@ -91,7 +99,13 @@ if ($toolchains -match "^$Msrv") {
 
 # 3. Tests
 Write-Host "Running tests..."
-cargo test --workspace *>$null
+cargo check --workspace --all-targets --all-features *>$null
+if ($LASTEXITCODE -eq 0) { Write-Pass "workspace all-feature/all-target check" } else { Write-Fail "workspace all-feature/all-target check" }
+cargo check -p readstat --no-default-features *>$null
+$readstatMinimal = $LASTEXITCODE
+cargo check -p readstat-cli --no-default-features *>$null
+if (($readstatMinimal -eq 0) -and ($LASTEXITCODE -eq 0)) { Write-Pass "minimal feature builds" } else { Write-Fail "minimal feature builds" }
+cargo test --workspace --all-features *>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Pass "cargo test"
 } else {
@@ -100,12 +114,29 @@ if ($LASTEXITCODE -eq 0) {
 
 # 4. Doc build
 Write-Host "Checking doc build..."
-cargo doc --workspace --no-deps *>$null
+$lockContent = Get-Content (Join-Path $RootDir "Cargo.lock") -Raw
+$lockstep = $true
+foreach ($crate in @("arrow", "parquet")) {
+    $majors = $lockContent -split '\[\[package\]\]' | Where-Object { $_ -match "(?m)^name = `"$crate`"$" } | ForEach-Object {
+        if ($_ -match '(?m)^version = "(\d+)\.') { $Matches[1] }
+    } | Sort-Object -Unique
+    if (@($majors).Count -gt 1) { $lockstep = $false }
+}
+if ($lockstep) { Write-Pass "Arrow/DataFusion lockstep" } else { Write-Fail "Arrow/DataFusion lockstep" }
+cargo doc --workspace --all-features --no-deps *>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Pass "cargo doc"
 } else {
     Write-Fail "cargo doc — build failed"
 }
+& (Join-Path $ScriptDir "build-book.ps1") *>$null
+if ($LASTEXITCODE -eq 0) { Write-Pass "mdBook" } else { Write-Fail "mdBook build failed" }
+
+Write-Host "Checking advertised examples..."
+cargo check --manifest-path (Join-Path $RootDir "examples\api-demo\rust-server\Cargo.toml") *>$null
+if ($LASTEXITCODE -eq 0) { Write-Pass "Rust API server" } else { Write-Fail "Rust API server" }
+cargo check --manifest-path (Join-Path $RootDir "examples\api-demo\python-server\readstat_py\Cargo.toml") *>$null
+if ($LASTEXITCODE -eq 0) { Write-Pass "PyO3 extension" } else { Write-Fail "PyO3 extension" }
 
 # 5. cargo-deny (optional)
 Write-Host "Checking dependencies..."
@@ -170,6 +201,8 @@ if (Test-Path $changelogPath) {
 Write-Host "Checking package contents..."
 $publishableCrates = @("readstat-iconv-sys", "readstat-sys", "readstat", "readstat-cli")
 foreach ($crate in $publishableCrates) {
+    cargo package -p $crate --allow-dirty --list *>$null
+    if ($LASTEXITCODE -eq 0) { Write-Pass "cargo package -p $crate --list" } else { Write-Fail "cargo package -p $crate --list" }
     # Test the exit code, not a grepped string ("warning: aborting" is no
     # longer printed by modern cargo, so matching it fails open).
     #
@@ -177,7 +210,7 @@ foreach ($crate in $publishableCrates) {
     # dependency fails with "no matching package named `<dep>` found" because
     # the dependency isn't on crates.io yet. That's expected — downgrade it to
     # a warning. Real packaging errors still fail.
-    $pkgOutput = cargo package -p $crate --allow-dirty 2>&1
+    $pkgOutput = cargo package -p $crate --locked --allow-dirty 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Pass "cargo package -p $crate"
     } elseif ($pkgOutput -match "no matching package named") {
@@ -191,13 +224,10 @@ foreach ($crate in $publishableCrates) {
 Write-Host "Checking vendor status..."
 $vendorScript = Join-Path $ScriptDir "vendor.ps1"
 if (Test-Path $vendorScript) {
-    try {
-        & $vendorScript status 2>$null
-    } catch {
-        Write-Warn "Could not determine vendor status"
-    }
+    & $vendorScript status *>$null
+    if ($LASTEXITCODE -eq 0) { Write-Pass "vendor status" } else { Write-Fail "vendor status could not be verified" }
 } else {
-    Write-Warn "vendor.ps1 not found — skipping"
+    Write-Fail "vendor.ps1 not found"
 }
 
 # Summary

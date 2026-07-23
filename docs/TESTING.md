@@ -5,7 +5,7 @@
 To perform unit / integration tests, run the following.
 
 ```
-cargo test --workspace
+cargo test --workspace --all-features
 ```
 
 To run only integration tests:
@@ -13,6 +13,8 @@ To run only integration tests:
 ```
 cargo test -p readstat-tests
 ```
+
+SQL is a default feature, so the workspace command includes SQL tests without extra flags. Before release, use `scripts/release-check.sh` (or `.ps1`) for all-target clippy/checks, docs, book, examples, dependency, packaging, and WASM gates.
 
 ## Datasets
 Formally tested (via integration tests) against the following datasets.  See the [README.md](../crates/readstat-tests/tests/data/README.md) for data sources.

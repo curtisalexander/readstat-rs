@@ -15,7 +15,10 @@ use readstat::{
     ReadStatWriter, WriteConfig, build_offsets,
 };
 
-use crate::cli::{ReadStatCli, ReadStatCliCommands, Reader};
+use super::support::resolve_columns;
+#[cfg(feature = "sql")]
+use super::support::{resolve_sql, table_name_from_path};
+use crate::cli::{ReadStatCliCommands, Reader};
 
 /// Default number of rows to read per streaming chunk.
 const STREAM_ROWS: u32 = 10000;
@@ -34,11 +37,10 @@ fn write_empty_output(
     wc: &WriteConfig,
     input_path: &std::path::Path,
 ) -> Result<(), ReadStatError> {
-    let mut d = ReadStatData::new().init_shared(var_count, vars, schema.clone(), 0, 0);
-    d.batch = Some(arrow_array::RecordBatch::new_empty(schema));
-    let mut wtr = ReadStatWriter::new();
-    wtr.write(&d, wc)?;
-    let rows = wtr.finish(&d, wc)?;
+    let _ = (var_count, vars);
+    let mut wtr = ReadStatWriter::new(wc.clone(), schema.clone())?;
+    wtr.write(&arrow_array::RecordBatch::new_empty(schema))?;
+    let rows = wtr.finish()?;
     print_write_summary(rows, input_path, wc.out_path());
     Ok(())
 }
@@ -52,7 +54,7 @@ fn print_write_summary(rows: usize, in_path: &std::path::Path, out_path: Option<
     let out_f = out_path
         .and_then(std::path::Path::file_name)
         .map_or_else(|| "___".to_string(), |f| f.to_string_lossy().to_string());
-    println!(
+    eprintln!(
         "In total, wrote {} rows from file {in_f} into {out_f}",
         format_with_commas(rows)
     );
@@ -126,217 +128,10 @@ fn create_progress(
     Ok(Some(Arc::new(IndicatifProgress { pb })))
 }
 
-/// Resolve column names from `--columns` or `--columns-file` CLI options.
-fn resolve_columns(
-    columns: Option<Vec<String>>,
-    columns_file: Option<PathBuf>,
-) -> Result<Option<Vec<String>>, ReadStatError> {
-    if let Some(path) = columns_file {
-        let names = ReadStatMetadata::parse_columns_file(&path)?;
-        if names.is_empty() {
-            // An empty columns file is almost certainly a mistake; selecting ALL
-            // columns silently would mask it. Surface it as an error instead.
-            Err(ReadStatError::EmptyColumnsFile(path))
-        } else {
-            Ok(Some(names))
-        }
-    } else {
-        Ok(columns)
-    }
-}
-
-/// Resolve the SQL query from `--sql` or `--sql-file` CLI options.
-#[cfg(feature = "sql")]
-fn resolve_sql(
-    sql: Option<String>,
-    sql_file: Option<PathBuf>,
-) -> Result<Option<String>, ReadStatError> {
-    if let Some(path) = sql_file {
-        Ok(Some(readstat::read_sql_file(&path)?))
-    } else {
-        Ok(sql)
-    }
-}
-
-/// Extract a table name from the input file stem (e.g. "cars" from "cars.sas7bdat").
-#[cfg(feature = "sql")]
-fn table_name_from_path(path: &std::path::Path) -> String {
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("data")
-        .to_string()
-}
-
-/// Executes the CLI command specified by the parsed [`ReadStatCli`] arguments.
-///
-/// This is the main entry point for the CLI binary, dispatching to the
-/// `metadata`, `preview`, or `data` subcommand.
-pub fn run(rs: ReadStatCli) -> Result<(), ReadStatError> {
-    // Default to showing warnings (e.g. "file will be overwritten") rather than
-    // env_logger's stock `error`-only filter, under which library `warn!`s were
-    // invisible. `RUST_LOG` still overrides this.
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
-
-    match rs.command {
-        cmd @ ReadStatCliCommands::Metadata { .. } => run_metadata(cmd),
-        cmd @ ReadStatCliCommands::Preview { .. } => run_preview(cmd),
-        cmd @ ReadStatCliCommands::Data { .. } => run_data(cmd),
-    }
-}
-
-/// Handle the `metadata` subcommand: read and display SAS file metadata.
-fn run_metadata(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
-    let ReadStatCliCommands::Metadata {
-        input: in_path,
-        as_json,
-        skip_row_count,
-    } = cmd
-    else {
-        unreachable!()
-    };
-    let sas_path = PathAbs::new(in_path)?.as_path().to_path_buf();
-    debug!(
-        "Retrieving metadata from the file {}",
-        &sas_path.to_string_lossy()
-    );
-
-    let rsp = ReadStatPath::new(sas_path)?;
-    let mut md = ReadStatMetadata::new();
-    md.read_metadata(&rsp, skip_row_count)?;
-    println!(
-        "{}",
-        ReadStatWriter::metadata_to_string(&md, &rsp, as_json)?
-    );
-    Ok(())
-}
-
-/// Handle the `preview` subcommand: read a limited number of rows and write to stdout as CSV.
-fn run_preview(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
-    let ReadStatCliCommands::Preview {
-        input,
-        rows,
-        reader,
-        stream_rows,
-        no_progress,
-        columns,
-        columns_file,
-        #[cfg(feature = "sql")]
-        sql,
-        #[cfg(feature = "sql")]
-        sql_file,
-    } = cmd
-    else {
-        unreachable!()
-    };
-
-    #[cfg(feature = "sql")]
-    let sql_query = resolve_sql(sql, sql_file)?;
-
-    let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
-    debug!(
-        "Generating data preview from the file {}",
-        &sas_path.to_string_lossy()
-    );
-
-    let rsp = ReadStatPath::new(sas_path)?;
-    let mut md = ReadStatMetadata::new();
-    md.read_metadata(&rsp, false)?;
-
-    // Resolve column selection
-    let col_names = resolve_columns(columns, columns_file)?;
-    let column_filter = md.resolve_selected_columns(col_names)?;
-    let original_var_count = md.var_count;
-    if let Some(ref mapping) = column_filter {
-        md = md.filter_to_selected_columns(mapping);
-    }
-
-    let column_filter = column_filter.map(Arc::new);
-    // try_from (not `as`): a corrupt header reporting a negative row count
-    // must surface as an error, not wrap to ~4 billion rows.
-    let total_rows_to_process = std::cmp::min(rows, u32::try_from(md.row_count)?);
-    let total_rows_to_stream = resolve_stream_rows(reader, stream_rows, total_rows_to_process);
-    let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let progress = create_progress(no_progress, total_rows_to_process)?;
-
-    let offsets = build_offsets(total_rows_to_process, total_rows_to_stream);
-    let offsets_pairs = offsets.windows(2);
-
-    let var_count = md.var_count;
-    let vars_shared = Arc::new(md.vars);
-    let schema_shared = Arc::new(md.schema);
-
-    // Signal "parsing started" once (the library no longer does this per-chunk).
-    if let Some(ref p) = progress {
-        p.parsing_started(&rsp.path.to_string_lossy());
-    }
-
-    // Read all chunks into batches
-    let mut all_batches: Vec<arrow_array::RecordBatch> = Vec::new();
-    for w in offsets_pairs {
-        let row_start = w[0];
-        let row_end = w[1];
-
-        let mut d = ReadStatData::new()
-            .set_column_filter(column_filter.clone(), original_var_count)
-            .set_total_rows_processed(total_rows_processed.clone())
-            .init_shared(
-                var_count,
-                vars_shared.clone(),
-                schema_shared.clone(),
-                row_start,
-                row_end,
-            );
-
-        if let Some(ref p) = progress {
-            d = d.set_progress(p.clone() as Arc<dyn ProgressCallback>);
-        }
-
-        d.read_data(&rsp)?;
-
-        if let Some(batch) = d.batch {
-            all_batches.push(batch);
-        }
-    }
-
-    if let Some(p) = progress {
-        p.pb.finish_with_message("Done");
-    }
-
-    // Apply SQL query if provided
-    #[cfg(feature = "sql")]
-    let all_batches = if let Some(ref query) = sql_query {
-        let table_name = table_name_from_path(&rsp.path);
-        readstat::execute_sql(all_batches, schema_shared.clone(), &table_name, query)?
-    } else {
-        all_batches
-    };
-
-    // Write all batches to stdout as CSV
-    #[cfg(feature = "csv")]
-    {
-        let stdout = std::io::stdout();
-        let mut csv_writer = arrow_csv::WriterBuilder::new()
-            .with_header(true)
-            .build(stdout);
-        for batch in &all_batches {
-            csv_writer.write(batch)?;
-        }
-    }
-    #[cfg(not(feature = "csv"))]
-    {
-        let _ = all_batches;
-        return Err(ReadStatError::Other(
-            "CSV feature is required for preview output".to_string(),
-        ));
-    }
-    #[cfg(feature = "csv")]
-    Ok(())
-}
-
-/// Handle the `data` subcommand: read SAS data and write to an output file.
+/// Handle conversion: read SAS data and write it in the selected format.
 #[allow(clippy::too_many_lines)]
-fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
-    let ReadStatCliCommands::Data {
+pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
+    let ReadStatCliCommands::Convert {
         input,
         output,
         format,
@@ -367,54 +162,64 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     #[cfg(feature = "sql")]
     let sql_query = resolve_sql(sql, sql_file)?;
 
+    if matches!(reader, Some(Reader::Mem)) && stream_rows.is_some() {
+        return Err(ReadStatError::Other(
+            "--stream-rows cannot be used with --reader mem".into(),
+        ));
+    }
+    if matches!(reader, Some(Reader::Mem)) && parallel {
+        return Err(ReadStatError::Other(
+            "--parallel cannot be used with --reader mem; use --reader stream or omit --reader"
+                .into(),
+        ));
+    }
+
     let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
     debug!(
         "Generating data from the file {}",
-        &sas_path.to_string_lossy()
+        sas_path.to_string_lossy()
     );
 
     let rsp = ReadStatPath::new(sas_path)?;
-    let wc = WriteConfig::new(
-        output,
-        format.map(Into::into),
-        overwrite,
-        compression.map(Into::into),
-        compression_level,
-    )?;
+    let mut wc = match (output, format) {
+        (None, None) => WriteConfig::new(OutFormat::Csv),
+        (None, Some(format)) => WriteConfig::new(format.into()),
+        (Some(path), None) => WriteConfig::from_output(path)?,
+        (Some(path), Some(format)) => WriteConfig::new(format.into()).output(path)?,
+    }
+    .overwrite(overwrite);
+    if let Some(compression) = compression {
+        wc = wc.compression(compression.into(), compression_level)?;
+    }
+    if wc.out_path().is_none() && !matches!(wc.format(), OutFormat::Csv) {
+        return Err(ReadStatError::InvalidOutputConfig(
+            "only CSV may be written to stdout; provide --output for this format".into(),
+        ));
+    }
+    if parallel_write && !matches!(wc.format(), OutFormat::Parquet) {
+        return Err(ReadStatError::Other(
+            "--parallel-write is only supported for Parquet output".into(),
+        ));
+    }
+    #[cfg(feature = "sql")]
+    if parallel_write && sql_query.is_some() {
+        return Err(ReadStatError::Other(
+            "--parallel-write cannot be combined with --sql or --sql-file".into(),
+        ));
+    }
 
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false)?;
 
-    // If no output path then only read metadata; otherwise read data
+    // CSV is streamed to stdout when no output path is supplied.
     match wc.out_path() {
-        None => {
-            // A SQL query with no destination would be silently discarded —
-            // surface it as an error rather than quietly falling through to the
-            // metadata-only display.
-            #[cfg(feature = "sql")]
-            if sql_query.is_some() {
-                return Err(ReadStatError::Other(
-                    "--sql/--sql-file requires --output: the query result needs a destination file"
-                        .to_string(),
-                ));
+        None | Some(_) => {
+            if let Some(p) = wc.out_path() {
+                eprintln!(
+                    "Writing parsed data to file {}",
+                    p.to_string_lossy().bright_yellow()
+                );
             }
-
-            println!(
-                "{}: a value was not provided for the parameter {}, thus displaying metadata only\n",
-                "Warning".bright_yellow(),
-                "--output".bright_cyan()
-            );
-
-            // Column selection does not apply to a metadata-only display, so
-            // reuse the metadata already read above rather than parsing again.
-            println!("{}", ReadStatWriter::metadata_to_string(&md, &rsp, false)?);
-            Ok(())
-        }
-        Some(p) => {
-            println!(
-                "Writing parsed data to file {}",
-                p.to_string_lossy().bright_yellow()
-            );
 
             // Resolve column selection (only meaningful when writing data).
             let col_names = resolve_columns(columns, columns_file)?;
@@ -525,7 +330,7 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                     // clap caps the flag at 10240 MB, so this only fails on a
                     // 32-bit usize — where >4 GiB genuinely can't be buffered.
                     let buffer_size_bytes =
-                        usize::try_from(parallel_write_buffer_mb * 1024 * 1024)?;
+                        usize::try_from(parallel_write_buffer_mb.unwrap_or(100) * 1024 * 1024)?;
                     write_parallel_parquet(ctx, buffer_size_bytes)?;
                 }
                 #[cfg(not(feature = "parquet"))]
@@ -547,7 +352,7 @@ fn run_data(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     }
 }
 
-/// Inputs to the reader thread spawned by [`run_data`].
+/// Inputs to the conversion reader thread.
 ///
 /// Bundles the parse configuration so [`spawn_reader`] takes a single named
 /// value rather than a long positional argument list.
@@ -655,7 +460,7 @@ fn spawn_reader(
     })
 }
 
-/// State shared by every write strategy in [`run_data`].
+/// State shared by every conversion write strategy.
 ///
 /// Owns the channel receiver and the reader-thread handle so it can move into
 /// whichever strategy runs. The metadata fields (`var_count`, `vars`, `schema`)
@@ -704,26 +509,28 @@ fn write_sequential(ctx: WriteContext) -> Result<(), ReadStatError> {
         schema,
     } = ctx;
 
-    let mut wtr = ReadStatWriter::new();
+    let mut wtr = ReadStatWriter::new(wc.clone(), schema.clone())?;
 
     // Each chunk replaces `last`, dropping the previous chunk's RecordBatch
     // memory; `last` is kept so `finish` can report the row total after the
     // channel drains.
-    let mut last: Option<(ReadStatData, WriteConfig)> = None;
-    for (d, chunk_wc, _pairs_cnt) in rx.iter() {
-        wtr.write(&d, &chunk_wc)?;
-        last = Some((d, chunk_wc));
+    let mut wrote_any = false;
+    for (d, _chunk_wc, _pairs_cnt) in rx.iter() {
+        if let Some(batch) = &d.batch {
+            wtr.write(batch)?;
+            wrote_any = true;
+        }
     }
 
     // Check the reader result before finalizing the output file.
     join_reader(reader)?;
 
-    match last {
-        Some((d, chunk_wc)) => {
-            let rows = wtr.finish(&d, &chunk_wc)?;
-            print_write_summary(rows, &input_path, chunk_wc.out_path());
+    match wrote_any {
+        true => {
+            let rows = wtr.finish()?;
+            print_write_summary(rows, &input_path, wc.out_path());
         }
-        None => {
+        false => {
             // Zero rows: still produce a valid header-only/empty file.
             write_empty_output(var_count, vars, schema, &wc, &input_path)?;
         }
@@ -751,7 +558,7 @@ fn write_parallel_parquet(
     } = ctx;
 
     let out_path = wc.out_path().map(std::path::Path::to_path_buf);
-    let compression = wc.compression();
+    let compression = wc.compression_codec();
     let compression_level = wc.compression_level();
 
     let temp_dir = if let Some(out_path) = &out_path {
@@ -829,6 +636,7 @@ fn write_parallel_parquet(
                         compression,
                         compression_level,
                         buffer_size_bytes,
+                        false,
                     )?;
                 }
 
@@ -858,6 +666,7 @@ fn write_parallel_parquet(
                 .expect("schema must be set when temp files exist"),
             compression,
             compression_level,
+            wc.is_overwrite(),
         )?;
         print_write_summary(total_rows, &input_path, Some(out_path));
     }
@@ -886,16 +695,15 @@ fn write_with_sql(ctx: WriteContext, query: &str, table_name: &str) -> Result<()
 
     join_reader(reader)?;
 
-    let results = readstat::execute_sql(all_batches, schema, table_name, query)?;
-    if let Some(out_path) = wc.out_path() {
-        readstat::write_sql_results(
-            &results,
-            out_path,
-            wc.format(),
-            wc.compression(),
-            wc.compression_level(),
-        )?;
+    let results = readstat::execute_sql(all_batches, schema.clone(), table_name, query)?;
+    let result_schema = results
+        .first()
+        .map_or_else(|| schema, arrow_array::RecordBatch::schema);
+    let mut writer = ReadStatWriter::new(wc, result_schema)?;
+    for batch in &results {
+        writer.write(batch)?;
     }
+    writer.finish()?;
 
     Ok(())
 }

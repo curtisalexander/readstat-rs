@@ -12,13 +12,13 @@
 # Usage:
 #   ./scripts/demo.sh              # paced for recording (typewriter pauses)
 #   DEMO_SPEED=0 ./scripts/demo.sh # no pauses — CI smoke test
-#   DEMO_SQL=1 ./scripts/demo.sh   # include the SQL beat (needs --features sql)
+#   DEMO_SQL=1 ./scripts/demo.sh   # include the default SQL beat
 #
 # Environment:
 #   DEMO_SPEED  Seconds to pause before/after each command (default 1).
 #               Set to 0 for an instant, non-interactive run.
 #   DEMO_SQL    If "1", include the SQL aggregation beat. Requires a binary
-#               built with `--features sql`.
+#               built with default features.
 #   READSTAT    Override the binary/command used (whitespace-separated, e.g.
 #               "cargo run -q -p readstat-cli --"). Default: release binary if
 #               present, else a cargo-run fallback.
@@ -92,24 +92,24 @@ prompt "readstat preview cars.sas7bdat --columns Brand,Model,EngineSize,Cylinder
 echo; pause
 
 banner "5. Convert to compressed Parquet"
-prompt "readstat data cars.sas7bdat -o cars.parquet -f parquet --compression zstd --overwrite"
-"${RS[@]}" data cars.sas7bdat -o cars.parquet -f parquet --compression zstd --overwrite
+prompt "readstat convert cars.sas7bdat -o cars.parquet --compression zstd --overwrite"
+"${RS[@]}" convert cars.sas7bdat -o cars.parquet --compression zstd --overwrite
 prompt "ls -lh cars.parquet"
 ls -lh cars.parquet
 echo; pause
 
 banner "6. Convert a few rows to NDJSON"
-prompt "readstat data cars.sas7bdat -o cars.ndjson -f ndjson --rows 3 --overwrite"
-"${RS[@]}" data cars.sas7bdat -o cars.ndjson -f ndjson --rows 3 --overwrite
+prompt "readstat convert cars.sas7bdat -o cars.ndjson --rows 3 --overwrite"
+"${RS[@]}" convert cars.sas7bdat -o cars.ndjson --rows 3 --overwrite
 prompt "cat cars.ndjson"
 cat cars.ndjson
 echo; pause
 
 if [ "$DEMO_SQL" = "1" ]; then
-    banner "7. Query with SQL (requires a --features sql build)"
+    banner "7. Query with SQL (enabled by default)"
     SQL='SELECT "Brand", ROUND(AVG("CityMPG"),1) AS avg_city_mpg FROM cars GROUP BY "Brand" ORDER BY avg_city_mpg DESC LIMIT 8'
-    prompt "readstat data cars.sas7bdat --sql '$SQL' -o top.csv --overwrite"
-    "${RS[@]}" data cars.sas7bdat --sql "$SQL" -o top.csv --overwrite
+    prompt "readstat convert cars.sas7bdat --sql '$SQL' -o top.csv --overwrite"
+    "${RS[@]}" convert cars.sas7bdat --sql "$SQL" -o top.csv --overwrite
     prompt "cat top.csv"
     cat top.csv
     echo; pause

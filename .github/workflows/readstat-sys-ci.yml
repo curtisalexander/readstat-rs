@@ -3,12 +3,12 @@ name: readstat-sys cross-platform CI
 # Runs on every PR (and direct push to main) that touches `readstat-sys`
 # itself, the vendored C sources, or this workflow. Two job matrices:
 #
-#   * `consume`: builds the workspace + runs all tests on
-#     ubuntu/macos/windows using the checked-in per-target pre-gen
-#     bindings. This is the load-bearing check — it proves the
+#   * `consume`: builds the workspace without SQL and runs focused native
+#     parser tests on ubuntu/macos/windows using the checked-in per-target
+#     pre-gen bindings. This is the load-bearing check — it proves the
 #     `bindings_<os>_<arch>.rs` files (Windows additionally keyed by
 #     env: msvc is the un-suffixed file, gnu is `bindings_windows_gnu_*`)
-#     match each platform's actual ABI.
+#     match each platform's actual ABI without compiling DataFusion six times.
 #
 #   * `regen`: runs bindgen via `--features buildtime_bindgen` to
 #     reproduce the corresponding per-target file. Uploads each result
@@ -21,6 +21,9 @@ name: readstat-sys cross-platform CI
 # bindings on demand without a PR.
 
 on:
+  schedule:
+    # Weekly comprehensive native/bindings validation.
+    - cron: "0 5 * * 0"
   pull_request:
     paths:
       - 'crates/readstat-sys/**'
@@ -43,6 +46,11 @@ on:
       - 'Cargo.lock'
       - '.github/workflows/readstat-sys-ci.yml'
   workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  RUSTDOCFLAGS: "-D warnings"
 
 jobs:
   consume:
@@ -74,9 +82,14 @@ jobs:
             file: bindings_windows_gnu_x86_64.rs
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: consume-${{ matrix.target }}
 
       - name: Install MinGW toolchain (windows-gnu only)
         if: matrix.target == 'x86_64-pc-windows-gnu'
@@ -89,11 +102,13 @@ jobs:
         if: matrix.target == 'x86_64-pc-windows-gnu'
         run: rustup target add ${{ matrix.target }}
 
-      - name: Build with default features (consumes pre-gen ${{ matrix.file }})
-        run: cargo build --workspace --target ${{ matrix.target }}
+      - name: Build without SQL (consumes pre-gen ${{ matrix.file }})
+        run: cargo build --workspace --no-default-features --target ${{ matrix.target }}
 
-      - name: Test
-        run: cargo test --workspace --target ${{ matrix.target }}
+      - name: Test native parser and platform-sensitive encodings
+        run: |
+          cargo test -p readstat --no-default-features --target ${{ matrix.target }}
+          cargo test -p readstat-tests --no-default-features --target ${{ matrix.target }} --test parse_encoding_test --test parse_malformed_utf8_test
 
   regen:
     strategy:
@@ -120,15 +135,31 @@ jobs:
             file: bindings_windows_gnu_x86_64.rs
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: regen-${{ matrix.target }}
+
       - name: Install LLVM (Windows only — bindgen needs libclang)
         if: matrix.os == 'windows-latest'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "17"
+        shell: pwsh
+        run: |
+          choco uninstall llvm --no-progress -y
+          choco install llvm --version=17.0.6 --allow-downgrade --no-progress -y
+          $llvmBin = Join-Path $env:ProgramFiles "LLVM\bin"
+          if (!(Test-Path (Join-Path $llvmBin "libclang.dll"))) {
+            throw "libclang.dll not found in $llvmBin"
+          }
+          $clangVersion = & (Join-Path $llvmBin "clang.exe") --version
+          if ($clangVersion[0] -notmatch "17\.0\.6") {
+            throw "Expected LLVM 17.0.6, got: $($clangVersion[0])"
+          }
+          Add-Content $env:GITHUB_PATH $llvmBin
+          Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=$llvmBin"
 
       - name: Install MinGW toolchain (windows-gnu only)
         if: matrix.target == 'x86_64-pc-windows-gnu'
@@ -195,14 +226,30 @@ jobs:
   regen-iconv:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - name: Install LLVM (bindgen needs libclang)
-        uses: KyleMayes/install-llvm-action@v2
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          version: "17"
+          key: regen-iconv-windows
+
+      - name: Install LLVM (bindgen needs libclang)
+        shell: pwsh
+        run: |
+          choco uninstall llvm --no-progress -y
+          choco install llvm --version=17.0.6 --allow-downgrade --no-progress -y
+          $llvmBin = Join-Path $env:ProgramFiles "LLVM\bin"
+          if (!(Test-Path (Join-Path $llvmBin "libclang.dll"))) {
+            throw "libclang.dll not found in $llvmBin"
+          }
+          $clangVersion = & (Join-Path $llvmBin "clang.exe") --version
+          if ($clangVersion[0] -notmatch "17\.0\.6") {
+            throw "Expected LLVM 17.0.6, got: $($clangVersion[0])"
+          }
+          Add-Content $env:GITHUB_PATH $llvmBin
+          Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=$llvmBin"
 
       - name: Regenerate iconv bindings
         # READSTAT_REGEN_BINDINGS opts in to refreshing the checked-in

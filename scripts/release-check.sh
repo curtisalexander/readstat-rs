@@ -48,7 +48,7 @@ fi
 
 # 2. Clippy
 echo "Checking clippy..."
-if cargo clippy --workspace --all-targets -- -D warnings &>/dev/null; then
+if cargo clippy --workspace --all-targets --all-features -- -D warnings &>/dev/null; then
     pass "cargo clippy"
 else
     fail "cargo clippy — warnings or errors found"
@@ -63,10 +63,19 @@ if [ -d "$WASM_DIR" ]; then
     else
         fail "readstat-wasm fmt — run 'cargo fmt' in crates/readstat-wasm/"
     fi
-    if (cd "$WASM_DIR" && cargo clippy -- -D warnings) &>/dev/null; then
+    if (cd "$WASM_DIR" && cargo clippy --all-targets -- -D warnings) &>/dev/null; then
         pass "readstat-wasm clippy"
     else
         fail "readstat-wasm clippy — warnings or errors found"
+    fi
+    if command -v emcc &>/dev/null && rustup target list --installed | grep -qx wasm32-unknown-emscripten; then
+        if (cd "$WASM_DIR" && cargo build --target wasm32-unknown-emscripten --release) &>/dev/null; then
+            pass "readstat-wasm Emscripten build"
+        else
+            fail "readstat-wasm Emscripten build failed"
+        fi
+    else
+        warn "Emscripten/emcc or wasm32-unknown-emscripten unavailable — skipping actual WASM build"
     fi
 else
     warn "readstat-wasm directory not found — skipping"
@@ -89,7 +98,18 @@ fi
 
 # 3. Tests
 echo "Running tests..."
-if cargo test --workspace &>/dev/null; then
+if cargo check --workspace --all-targets --all-features &>/dev/null; then
+    pass "cargo check --workspace --all-targets --all-features"
+else
+    fail "workspace all-feature/all-target check failed"
+fi
+if cargo check -p readstat --no-default-features &>/dev/null \
+    && cargo check -p readstat-cli --no-default-features &>/dev/null; then
+    pass "minimal feature builds"
+else
+    fail "minimal feature builds"
+fi
+if cargo test --workspace --all-features &>/dev/null; then
     pass "cargo test"
 else
     fail "cargo test — some tests failed"
@@ -97,11 +117,21 @@ fi
 
 # 4. Doc build
 echo "Checking doc build..."
-if cargo doc --workspace --no-deps &>/dev/null; then
+if "$SCRIPT_DIR/check-arrow-lockstep.sh" &>/dev/null; then
+    pass "Arrow/DataFusion lockstep"
+else
+    fail "Arrow/DataFusion lockstep"
+fi
+if cargo doc --workspace --all-features --no-deps &>/dev/null; then
     pass "cargo doc"
 else
     fail "cargo doc — build failed"
 fi
+if bash "$SCRIPT_DIR/build-book.sh" &>/dev/null; then pass "mdBook"; else fail "mdBook build failed"; fi
+
+echo "Checking advertised examples..."
+if cargo check --manifest-path "$ROOT_DIR/examples/api-demo/rust-server/Cargo.toml" &>/dev/null; then pass "Rust API server"; else fail "Rust API server"; fi
+if cargo check --manifest-path "$ROOT_DIR/examples/api-demo/python-server/readstat_py/Cargo.toml" &>/dev/null; then pass "PyO3 extension"; else fail "PyO3 extension"; fi
 
 # 5. cargo-deny (optional)
 echo "Checking dependencies..."
@@ -163,6 +193,11 @@ fi
 echo "Checking package contents..."
 PUBLISHABLE_CRATES=("readstat-iconv-sys" "readstat-sys" "readstat" "readstat-cli")
 for crate in "${PUBLISHABLE_CRATES[@]}"; do
+    if cargo package -p "$crate" --allow-dirty --list &>/dev/null; then
+        pass "cargo package -p $crate --list"
+    else
+        fail "cargo package -p $crate --list"
+    fi
     # Test the exit code directly. Grepping stdout/stderr for a fixed string
     # (e.g. "warning: aborting") fails open — modern cargo doesn't print it, and
     # a pipe would mask cargo's exit status anyway. `cargo package` exits
@@ -173,7 +208,7 @@ for crate in "${PUBLISHABLE_CRATES[@]}"; do
     # the dependency isn't on crates.io yet. That's expected — downgrade it to
     # a warning so the first-publish run isn't littered with false failures.
     # Real packaging errors still fail.
-    if pkg_output=$(cargo package -p "$crate" --allow-dirty 2>&1); then
+    if pkg_output=$(cargo package -p "$crate" --locked --allow-dirty 2>&1); then
         pass "cargo package -p $crate"
     elif grep -q "no matching package named" <<<"$pkg_output"; then
         warn "cargo package -p $crate — path dependency not on crates.io yet (expected before first publish)"
@@ -184,7 +219,7 @@ done
 
 # 9. Vendor status
 echo "Checking vendor status..."
-"$SCRIPT_DIR/vendor.sh" status 2>/dev/null || warn "Could not determine vendor status"
+if "$SCRIPT_DIR/vendor.sh" status &>/dev/null; then pass "vendor status"; else fail "vendor status could not be verified"; fi
 
 # Summary
 echo ""

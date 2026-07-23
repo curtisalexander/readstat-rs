@@ -32,13 +32,13 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.25.1) — Library Crate
+### `readstat` (v0.26.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
 Output format writers (CSV, Feather, NDJSON, Parquet) are feature-gated.
 
-Features: `csv`, `feather`, `ndjson`, `parquet` (all enabled by default), `sql`.
+Features: `csv`, `feather`, `ndjson`, `parquet`, and `sql` (all enabled by default).
 
 Key source modules in `crates/readstat/src/`:
 | Module | Purpose |
@@ -60,25 +60,26 @@ Key source modules in `crates/readstat/src/`:
 | `rs_buffer_io.rs` | Buffer I/O operations |
 
 Key public types:
-- `ReadStatData` — coordinates FFI parsing, accumulates values directly into typed Arrow builders, produces Arrow RecordBatch. Internally it uses `ColumnBuilder` (a `pub(crate)` enum wrapping 12 typed Arrow builders — `StringBuilder`, `Float64Builder`, `Date32Builder`, etc.) to append values during FFI callbacks with zero intermediate allocation.
+- `ReadStatReader` — primary reusable reader over a path, owned bytes, or mmap; builder options select rows, columns, and chunk size, and `metadata`, `read`, `chunks`, and `visit` choose materialization strategy.
+- `ReadStatData` — internal parsing engine that accumulates values directly into typed Arrow builders.
 - `ReadStatMetadata` — file-level metadata (row/var counts, encoding, compression, schema)
-- `ReadStatWriter` — writes output in requested format
-- `ReadStatPath` — validated input file path
-- `WriteConfig` — output configuration (path, format, compression)
+- `WriteConfig` — validated builder for output path/format/compression
+- `ReadStatWriter` — initialized with `(config, schema)`, accepts `RecordBatch` values through `write`, and returns the row count from `finish`
 - `OutFormat` — output format enum (Csv, Feather, Ndjson, Parquet)
 - `ProgressCallback` — trait for receiving progress updates during parsing
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.25.1) — CLI Binary
+### `readstat-cli` (v0.26.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
 - `metadata` — print file metadata (row/var counts, labels, encoding, etc.)
 - `preview` — preview first N rows
-- `data` — convert to output format (csv, feather, ndjson, parquet)
+- `convert` — convert to CSV, Feather, NDJSON, or Parquet; output extension drives format selection
 
 Owns CLI arg parsing, progress bars, colored output, and reader-writer thread orchestration.
+Human metadata formatting and `--columns-file` parsing intentionally live here rather than in the library.
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
 
@@ -150,4 +151,5 @@ Test data lives in `tests/data/*.sas7bdat` (16 datasets). Scripts to regenerate 
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format
 - **Multiple I/O strategies**: file path (default), memory-mapped files (`memmap2`), and in-memory byte slices — all feed into the same FFI parsing pipeline
+- **SQL**: DataFusion support is default and exposes sync and async APIs. Buffered input supports repeated scans; only channel-backed streaming input is limited to one execution.
 - **Metadata preservation**: SAS variable labels, format strings, and storage widths are persisted as Arrow field metadata, surviving round-trips through Parquet and Feather. See [TECHNICAL.md](TECHNICAL.md#column-metadata-in-arrow-and-parquet) for details.

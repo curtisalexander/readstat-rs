@@ -27,8 +27,9 @@
 //!
 //! ## Quick start
 //!
-//! The two convenience functions cover the common case — read metadata, or read
-//! every row into a single Arrow [`RecordBatch`](arrow_array::RecordBatch):
+//! [`ReadStatReader`] is the primary API. It reads paths, owned bytes, or memory
+//! maps and supports metadata, row/column selection, collection, and bounded
+//! chunk callbacks. The two free functions are shorthand for path defaults:
 //!
 //! ```no_run
 //! # fn main() -> Result<(), readstat::ReadStatError> {
@@ -41,8 +42,24 @@
 //! # }
 //! ```
 //!
-//! For streaming, parallelism, or column filtering, drop down to the
-//! [`ReadStatMetadata`] / [`ReadStatData`] types as shown below.
+//! For bounded-memory streaming and selection, configure a reader:
+//!
+//! ```no_run
+//! # fn main() -> Result<(), readstat::ReadStatError> {
+//! let reader = readstat::ReadStatReader::from_path("data.sas7bdat")?
+//!     .columns(["name", "age"])
+//!     .rows(100, Some(1_000))
+//!     .chunk_rows(250);
+//! reader.visit(|batch| {
+//!     println!("received {} rows", batch.num_rows());
+//!     Ok(())
+//! })?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! The lower-level metadata and data types remain public for compatibility and
+//! specialized integrations, but new callers should start with [`ReadStatReader`].
 //!
 //! ## Inspect file metadata
 //!
@@ -111,39 +128,17 @@
 //! Each chunk is parsed and written incrementally.
 //!
 //! ```no_run
-//! use readstat::{
-//!     ReadStatPath, ReadStatMetadata, ReadStatData, ReadStatWriter,
-//!     WriteConfig, OutFormat, build_offsets,
-//! };
+//! use readstat::{OutFormat, ReadStatReader, ReadStatWriter, WriteConfig};
 //!
 //! # fn main() -> Result<(), readstat::ReadStatError> {
-//! let rsp = ReadStatPath::new("data.sas7bdat")?;
-//! let wc = WriteConfig::new(
-//!     Some("output.parquet".into()),
-//!     Some(OutFormat::Parquet),
-//!     false, // overwrite
-//!     None,  // compression (defaults to Snappy for Parquet)
-//!     None,  // compression_level
-//! )?;
-//!
-//! let mut md = ReadStatMetadata::new();
-//! md.read_metadata(&rsp, false)?;
-//!
-//! // Build chunk offsets: [0, 10000, 20000, ..., row_count]
-//! let offsets = build_offsets(md.row_count as u32, 10_000);
-//! let mut wtr = ReadStatWriter::new();
-//! let pairs = offsets.windows(2);
-//! let pairs_cnt = pairs.len();
-//!
-//! for (i, w) in pairs.enumerate() {
-//!     let mut d = ReadStatData::new().init(md.clone(), w[0], w[1]);
-//!     d.read_data(&rsp)?;
-//!     wtr.write(&d, &wc)?;
-//!     if i == pairs_cnt - 1 {
-//!         let rows = wtr.finish(&d, &wc)?;
-//!         println!("wrote {rows} rows");
-//!     }
-//! }
+//! let reader = ReadStatReader::from_path("data.sas7bdat")?.chunk_rows(10_000);
+//! let schema = std::sync::Arc::new(reader.metadata()?.schema);
+//! let config = WriteConfig::new(OutFormat::Parquet)
+//!     .output("output.parquet")?
+//!     .overwrite(false);
+//! let mut writer = ReadStatWriter::new(config, schema)?;
+//! reader.visit(|batch| writer.write(&batch))?;
+//! println!("wrote {} rows", writer.finish()?);
 //! # Ok(())
 //! # }
 //! ```
@@ -269,7 +264,7 @@
 //! | `parquet` | Parquet | Columnar format via `parquet` crate, 5 compression codecs |
 //! | `feather` | Feather | Arrow IPC format via `arrow-ipc` |
 //! | `ndjson` | NDJSON | Newline-delimited JSON via `arrow-json` |
-//! | `sql` | SQL | Query data with SQL via DataFusion (not enabled by default) |
+//! | `sql` | SQL | Query data with SQL via DataFusion (enabled by default) |
 //!
 //! # Arrow version policy
 //!
@@ -293,14 +288,10 @@
 // Re-export the Arrow ecosystem crates so consumers can name the types that
 // appear in this crate's public API without pinning Arrow themselves. See the
 // "Arrow version policy" section above.
+pub use api::{ReadStatReader, read_metadata, read_to_batch};
 pub use arrow;
 pub use arrow_array;
 pub use arrow_schema;
-// Re-exported so consumers can construct the channels used by the streaming
-// SQL API ([`ChunkReceiver`](crate::ChunkReceiver)).
-pub use crossbeam;
-
-pub use api::{read_metadata, read_to_batch};
 pub use common::build_offsets;
 pub use err::{ReadStatCError, ReadStatError};
 pub use progress::ProgressCallback;
@@ -310,8 +301,10 @@ pub use rs_path::ReadStatPath;
 #[cfg(feature = "sql")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
 pub use rs_query::{
-    ChunkReceiver, execute_sql, execute_sql_and_write_stream, execute_sql_stream, read_sql_file,
-    write_sql_results,
+    AsyncRecordBatchReceiver, AsyncRecordBatchSender, RecordBatchReceiver, RecordBatchSender,
+    async_record_batch_channel, execute_sql, execute_sql_and_write_stream,
+    execute_sql_and_write_stream_async, execute_sql_async, execute_sql_stream,
+    execute_sql_stream_async, read_sql_file, record_batch_channel,
 };
 pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 pub use rs_write::ReadStatWriter;

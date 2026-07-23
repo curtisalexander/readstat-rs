@@ -281,7 +281,7 @@
         <div class="step">
           <div class="step-num">4</div>
           <h3>Convert</h3>
-          <p><span class="cmd">readstat data file.sas7bdat -o out.parquet -f parquet</span></p>
+          <p><span class="cmd">readstat convert file.sas7bdat -o out.parquet</span></p>
         </div>
       </div>
     </section>
@@ -310,11 +310,12 @@
     <!-- ── Data Conversion ── -->
     <section class="section theme-amber">
       <h2>Data Conversion</h2>
-      <div class="row"><span class="k">readstat data FILE -o OUT</span><span class="d">Convert (default: CSV)</span></div>
+      <div class="row"><span class="k">readstat convert FILE [-o OUT]</span><span class="d">Extension selects format; no output = CSV stdout</span></div>
       <div class="row"><span class="k">-f csv</span><span class="d">CSV (default)</span></div>
       <div class="row"><span class="k">-f feather</span><span class="d">Feather / Arrow IPC</span></div>
       <div class="row"><span class="k">-f ndjson</span><span class="d">Newline-delimited JSON</span></div>
       <div class="row"><span class="k">-f parquet</span><span class="d">Apache Parquet</span></div>
+      <div class="tip">An explicit <span class="cmd">--format</span> must match the output extension. Unknown extensions and mismatches are errors; diagnostics always use stderr.</div>
       <div class="row"><span class="k">--rows 1000</span><span class="d">Limit rows</span></div>
       <div class="row"><span class="k">--overwrite</span><span class="d">Overwrite existing output</span></div>
       <div class="row"><span class="k">--columns A,B,C</span><span class="d">Select columns</span></div>
@@ -331,7 +332,7 @@
       <div class="row"><span class="k">--compression lz4-raw</span><span class="d">Fastest decompression</span></div>
       <div class="row"><span class="k">--compression uncompressed</span><span class="d">No compression</span></div>
       <div class="row"><span class="k">--compression-level N</span><span class="d">Level (codec-specific)</span></div>
-      <div class="tip"><strong>Example:</strong> <span class="cmd">readstat data f.sas7bdat -o f.parquet -f parquet --compression zstd --compression-level 3</span></div>
+      <div class="tip"><strong>Example:</strong> <span class="cmd">readstat convert f.sas7bdat -o f.parquet --compression zstd --compression-level 3</span></div>
     </section>
 
     <!-- ── Parallelism ── -->
@@ -366,10 +367,10 @@
 
     <!-- ── SQL Queries ── -->
     <section class="section theme-sky">
-      <h2>SQL Queries <span style="font-size:0.62rem; font-weight:600; color:#0369a1; background:#f0f9ff; border:1px solid #bae6fd; padding:1px 5px; border-radius:3px; margin-left:4px; letter-spacing:0.02em;">feature: sql</span></h2>
+      <h2>SQL Queries <span style="font-size:0.62rem; font-weight:600; color:#0369a1; background:#f0f9ff; border:1px solid #bae6fd; padding:1px 5px; border-radius:3px; margin-left:4px; letter-spacing:0.02em;">default</span></h2>
       <div class="row"><span class="k">--sql "SELECT ..."</span><span class="d">Inline query</span></div>
       <div class="row"><span class="k">--sql-file query.sql</span><span class="d">Query from file</span></div>
-      <div class="tip"><strong>Install:</strong> <span class="cmd">cargo install readstat-cli --features sql</span>. Table name = input file stem (e.g. <span class="cmd">cars</span> for <span class="cmd">cars.sas7bdat</span>). Mutually exclusive with <span class="cmd">--columns</span>/<span class="cmd">--columns-file</span>. Full dataset is materialised in memory via DataFusion.</div>
+      <div class="tip">SQL is included by default. Table name = input file stem (e.g. <span class="cmd">cars</span>). Mutually exclusive with <span class="cmd">--columns</span>/<span class="cmd">--columns-file</span>.</div>
     </section>
 
     <!-- ── Metadata in Output Files ── -->
@@ -396,7 +397,7 @@
         </div>
         <div class="scenario">
           <div class="scenario-title">Production conversion</div>
-          <div class="row"><span class="k">readstat data big.sas7bdat -o big.parquet -f parquet --compression zstd</span></div>
+          <div class="row"><span class="k">readstat convert big.sas7bdat -o big.parquet --compression zstd</span></div>
           <div class="row"><span class="k">... --parallel --parallel-write</span><span class="d">Max throughput</span></div>
           <div class="row"><span class="k">... --columns-file keep.txt</span><span class="d">Only needed columns</span></div>
           <div class="row"><span class="k">... --rows 100000</span><span class="d">Partial extract</span></div>

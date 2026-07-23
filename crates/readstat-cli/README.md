@@ -8,15 +8,17 @@ Binary crate producing the `readstat` CLI tool for converting SAS binary files (
 
 - `metadata` — Print file metadata (row/var counts, labels, encoding, format version, etc.)
 - `preview` — Preview first N rows as CSV to stdout
-- `data` — Convert to output format (csv, feather, ndjson, parquet)
+- `convert` — Convert to CSV, Feather, NDJSON, or Parquet (inferred from the output extension)
 
 ## Key Features
 
 - Column selection (`--columns`, `--columns-file`)
 - Streaming reads with configurable chunk size (`--stream-rows`)
 - Parallel reading (`--parallel`) and parallel Parquet writing (`--parallel-write`)
-- SQL queries via DataFusion (`--sql`, feature-gated)
+- SQL queries via DataFusion (`--sql`, enabled by default)
 - Parquet compression settings (`--compression`, `--compression-level`)
+
+With no `--output`, conversion writes CSV to stdout. Progress, logs, and other diagnostics go to stderr, so stdout can be piped safely. An explicit format must agree with `.csv`, `.feather`, `.ndjson`, or `.parquet`; unknown extensions and mismatches are errors.
 
 ## Documentation
 
