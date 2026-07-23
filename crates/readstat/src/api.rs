@@ -3,10 +3,10 @@
 //! [`ReadStatReader`] is the primary reading API. The free functions are concise
 //! equivalents for reading a path with default settings.
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
 
 use arrow_array::{RecordBatch, RecordBatchOptions};
 

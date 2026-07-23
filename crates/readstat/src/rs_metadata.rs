@@ -11,10 +11,11 @@ use num_derive::FromPrimitive;
 use serde::Serialize;
 #[cfg(any(not(target_arch = "wasm32"), test))]
 use std::fs::File;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::Path;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     ffi::{CString, c_void},
-    path::Path,
 };
 
 use crate::cb::{handle_metadata, handle_variable};

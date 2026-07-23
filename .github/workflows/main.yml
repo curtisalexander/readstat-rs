@@ -102,7 +102,8 @@ jobs:
       - name: Install Emscripten
         uses: emscripten-core/setup-emsdk@v15
       - name: Build WASM crate
-        run: cargo build --manifest-path crates/readstat-wasm/Cargo.toml --target wasm32-unknown-emscripten --release
+        working-directory: crates/readstat-wasm
+        run: cargo build --target wasm32-unknown-emscripten --release
 
   # Enforce the MSRV declared in `[workspace.package] rust-version` (and
   # advertised in the READMEs): the workspace must at least type-check on that
