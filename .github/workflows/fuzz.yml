@@ -6,10 +6,17 @@ on:
     - cron: "0 3 * * 1"
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
 jobs:
   fuzz:
     name: Fuzz ${{ matrix.target }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     strategy:
       fail-fast: false
       matrix:
@@ -18,7 +25,7 @@ jobs:
           - fuzz_read_data
           - fuzz_read_data_filtered
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -28,6 +35,7 @@ jobs:
         run: cargo install cargo-fuzz
 
       - name: Run fuzzer (${{ matrix.target }})
+        id: fuzz
         run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=1800
 
       - name: Upload corpus
@@ -38,14 +46,14 @@ jobs:
           path: fuzz/corpus/${{ matrix.target }}/
 
       - name: Upload crash artifacts
-        if: failure()
+        if: failure() && steps.fuzz.outcome == 'failure' && hashFiles(format('fuzz/artifacts/{0}/**', matrix.target)) != ''
         uses: actions/upload-artifact@v7
         with:
           name: crashes-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}/
 
       - name: Open issue on crash
-        if: failure()
+        if: failure() && steps.fuzz.outcome == 'failure' && hashFiles(format('fuzz/artifacts/{0}/**', matrix.target)) != ''
         uses: actions/github-script@v9
         with:
           script: |

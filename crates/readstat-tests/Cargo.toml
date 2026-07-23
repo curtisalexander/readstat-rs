@@ -19,7 +19,11 @@ assert_fs = "1.1"
 escargot = "0.5"
 predicates = "3"
 proptest = "1"
-readstat = { path = "../readstat" }
+readstat = {
+    path = "../readstat",
+    default-features = false,
+    features = ["csv", "parquet", "feather", "ndjson"],
+}
 
 [features]
 default = ["sql"]

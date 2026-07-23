@@ -6,7 +6,10 @@ This project contains unsafe Rust code (FFI callbacks, pointer casts, memory-map
 
 ## CI Jobs
 
-All five jobs run on every workflow dispatch and tag push, in parallel with the build jobs. Any memory error fails the job with a nonzero exit code — except the experimental `asan-windows-full` job, which is marked `continue-on-error` and does not block the workflow.
+All five jobs run nightly, on every workflow dispatch, and on every tag push,
+in parallel with the build jobs. Any memory error fails the job with a nonzero
+exit code — except the experimental `asan-windows-full` job, which is marked
+`continue-on-error` and does not block the workflow.
 
 ### Miri (Rust undefined behavior)
 

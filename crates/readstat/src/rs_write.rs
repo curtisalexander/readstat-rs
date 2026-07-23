@@ -763,7 +763,16 @@ pub fn write_batch_to_feather_bytes(
     Ok(buf)
 }
 
-#[cfg(test)]
+// These lifecycle tests exercise every writer backend together. Keep the
+// module aligned with that contract so minimal-feature test builds remain a
+// valid supported configuration.
+#[cfg(all(
+    test,
+    feature = "csv",
+    feature = "feather",
+    feature = "ndjson",
+    feature = "parquet"
+))]
 mod tests {
     use super::*;
 

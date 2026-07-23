@@ -23,7 +23,7 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-readstat = { path = "../readstat", version = "0.26.0" }
+readstat = { path = "../readstat", version = "0.26.0", default-features = false }
 
 arrow-array = { workspace = true }
 arrow-csv = { workspace = true, optional = true }

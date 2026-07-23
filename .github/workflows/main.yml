@@ -3,6 +3,7 @@ name: readstat-rs
 env:
   PACKAGE_NAME: readstat
   CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: "-D warnings"
 
 on:
   # Trigger on release tag push. Only `v*` tags (readstat/readstat-cli
@@ -32,14 +33,22 @@ on:
   repository_dispatch:
     types: [build, test, release]
 
+  # Comprehensive memory-safety checks run nightly as well as before releases.
+  schedule:
+    - cron: "0 4 * * *"
+
 jobs:
-  # Required verification for branches, PRs, and tags. Release-producing jobs
-  # depend on this once rather than duplicating these heavy gates per target.
+  # Fast, required feedback for every branch, PR, and tag. SQL's expensive
+  # code generation and tests run independently below so both jobs start at
+  # once and failures are attributed to the owning subsystem.
   verify:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Check Arrow/DataFusion lockstep
@@ -52,26 +61,25 @@ jobs:
         run: sudo apt-get update -y && sudo apt-get install -y build-essential clang
       - name: Formatting
         run: cargo fmt --all -- --check
-      - name: Clippy (all targets and features)
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Check (all targets and features)
-        run: cargo check --workspace --all-targets --all-features
+      - name: Clippy without SQL
+        run: |
+          cargo clippy -p readstat --all-targets --no-default-features --features csv,parquet,feather,ndjson -- -D warnings
+          cargo clippy -p readstat-cli --all-targets --no-default-features --features csv,parquet,feather,ndjson -- -D warnings
+          cargo clippy -p readstat-sys -p readstat-iconv-sys --all-targets -- -D warnings
+      - name: Check format features without SQL
+        run: |
+          cargo check -p readstat --all-targets --no-default-features --features csv,parquet,feather,ndjson
+          cargo check -p readstat-cli --all-targets --no-default-features --features csv,parquet,feather,ndjson
       - name: Check minimal feature builds
         run: |
           cargo check -p readstat --no-default-features
           cargo check -p readstat-cli --no-default-features
-      - name: Test (SQL is default)
-        run: cargo test --workspace --all-features
-      - name: Rustdoc
-        run: cargo doc --workspace --all-features --no-deps
+      - name: Test core library without default features
+        run: cargo test -p readstat --no-default-features
       - name: Install mdBook
         uses: taiki-e/install-action@mdbook
       - name: Build documentation book
         run: bash scripts/build-book.sh
-      - name: Check advertised API examples
-        run: |
-          cargo check --manifest-path examples/api-demo/rust-server/Cargo.toml
-          cargo check --manifest-path examples/api-demo/python-server/readstat_py/Cargo.toml
       - name: Check WASM crate on host
         run: |
           cargo fmt --manifest-path crates/readstat-wasm/Cargo.toml -- --check
@@ -82,13 +90,46 @@ jobs:
             cargo package -p "$crate" --allow-dirty --list >/dev/null
           done
 
+  # SQL is part of the default API and remains a required PR gate. Keep its
+  # full code-generation/linking cost in one Linux job instead of repeating it
+  # in every native-platform binding job. The standalone examples share this
+  # job's target directory so their default-feature builds reuse DataFusion.
+  sql:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential clang
+      - name: Clippy with all features
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Test workspace with all features
+        run: cargo test --workspace --all-features
+      - name: Rustdoc with all features
+        run: cargo doc --workspace --all-features --no-deps
+      - name: Check advertised API examples
+        run: |
+          cargo check --manifest-path examples/api-demo/rust-server/Cargo.toml
+          cargo check --manifest-path examples/api-demo/python-server/readstat_py/Cargo.toml
+
   # The WASM crate is excluded from the workspace and needs Emscripten to link,
   # so host clippy alone cannot establish that the published JS artifact builds.
   wasm:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install Rust toolchain
@@ -100,7 +141,7 @@ jobs:
         with:
           workspaces: crates/readstat-wasm
       - name: Install Emscripten
-        uses: emscripten-core/setup-emsdk@v15
+        uses: emscripten-core/setup-emsdk@v16
       - name: Build WASM crate
         working-directory: crates/readstat-wasm
         run: cargo build --target wasm32-unknown-emscripten --release
@@ -126,11 +167,13 @@ jobs:
   # so `readstat-sys/buildtime_bindgen` stays off — it would drag in
   # bindgen/libclang, which is irrelevant to the MSRV contract.
   msrv:
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install MSRV toolchain
@@ -147,14 +190,14 @@ jobs:
         run: cargo check -p readstat -p readstat-cli --all-features --all-targets
 
   release-notes:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [verify, wasm]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Generate changelog
@@ -212,10 +255,13 @@ jobs:
 
   build-linux-gnu:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-    needs: [verify, wasm]
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       target: x86_64-unknown-linux-gnu
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Get version
         id: get_version
@@ -228,7 +274,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install toolchain
@@ -250,7 +296,7 @@ jobs:
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -258,10 +304,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-linux-musl:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-    needs: [verify, wasm]
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       target: x86_64-unknown-linux-musl
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Get version
         id: get_version
@@ -274,7 +323,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install toolchain
@@ -296,7 +345,7 @@ jobs:
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
             target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -304,14 +353,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-linux-arm:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-    needs: [verify, wasm]
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     # Native arm64 runner (same image the readstat-sys cross-platform CI uses):
     # no cross toolchain or CC_/AR_/LINKER plumbing, and — unlike the old
     # cross-compile job — the test suite actually runs on the artifact's
     # platform before it ships.
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
     env:
       target: aarch64-unknown-linux-gnu
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Get version
         id: get_version
@@ -324,7 +376,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install toolchain
@@ -350,7 +402,7 @@ jobs:
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
             target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -358,10 +410,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-win-msvc:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-    needs: [verify, wasm]
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     runs-on: windows-latest
+    permissions:
+      contents: write
     env:
       target: x86_64-pc-windows-msvc
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Get version
         id: get_version
@@ -375,7 +430,7 @@ jobs:
           fi
         shell: bash
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install toolchain
@@ -395,7 +450,7 @@ jobs:
           path: target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
       - name: Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
             target/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
@@ -403,15 +458,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-win-gnu:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-    needs: [verify, wasm]
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     # windows-gnu flavor: statically linked against the MinGW runtime, so the
     # binary has no MSVC runtime dependency. The runner image ships a MinGW
     # gcc/binutils on PATH, which rustc uses as the linker and cc uses to
     # compile the vendored C (ReadStat, win-iconv); readstat-sys has
     # pre-generated windows-gnu bindings, so no libclang is needed.
     runs-on: windows-latest
+    permissions:
+      contents: write
     env:
       target: x86_64-pc-windows-gnu
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Get version
         id: get_version
@@ -425,7 +483,7 @@ jobs:
           fi
         shell: bash
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install toolchain
@@ -445,7 +503,7 @@ jobs:
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
       - name: Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
             target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.zip
@@ -453,10 +511,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-macos-x86:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-    needs: [verify, wasm]
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     runs-on: macos-latest
+    permissions:
+      contents: write
     env:
       target: x86_64-apple-darwin
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Get version
         id: get_version
@@ -469,7 +530,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install toolchain
@@ -492,7 +553,7 @@ jobs:
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
             target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -501,10 +562,13 @@ jobs:
 
   build-macos-arm:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-    needs: [verify, wasm]
+    needs: [verify, sql, wasm, miri, asan-linux, asan-macos, asan-windows]
     runs-on: macos-latest
+    permissions:
+      contents: write
     env:
       target: aarch64-apple-darwin
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Get version
         id: get_version
@@ -517,7 +581,7 @@ jobs:
             echo "VERSION=${{ github.event.client_payload.version || 'dev' }}" >> $GITHUB_OUTPUT
           fi
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install toolchain
@@ -539,7 +603,7 @@ jobs:
           path: target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
       - name: Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
             target/${{ env.target }}/release/${{ env.PACKAGE_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ env.target }}.tar.gz
@@ -549,13 +613,14 @@ jobs:
   # --- Memory safety checks ---
 
   miri:
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     env:
       MIRIFLAGS: "-Zmiri-disable-isolation"
+      RUSTFLAGS: "-D warnings"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install nightly toolchain with Miri
@@ -569,17 +634,17 @@ jobs:
         # under Miri's interpreter. All proptest tests live in `property_tests`
         # submodules. Everything else (ptr_to_string unsafe, build_offsets, err,
         # rs_path) runs and gives Miri coverage over both unsafe and safe Rust.
-        run: cargo +nightly miri test -p readstat -- --skip property_tests
+        run: cargo +nightly miri test -p readstat --no-default-features -- --skip property_tests
 
   asan-linux:
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: "-Zsanitizer=address -Clinker=clang"
+      RUSTFLAGS: "-D warnings -Zsanitizer=address -Clinker=clang"
       READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install nightly toolchain
@@ -592,13 +657,13 @@ jobs:
         run: cargo +nightly test --workspace --lib --tests --bins --target x86_64-unknown-linux-gnu
 
   asan-macos:
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: macos-latest
     env:
-      RUSTFLAGS: "-Zsanitizer=address"
+      RUSTFLAGS: "-D warnings -Zsanitizer=address"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install nightly toolchain
@@ -611,13 +676,13 @@ jobs:
         run: cargo +nightly test --workspace --lib --tests --bins --target aarch64-apple-darwin
 
   asan-windows:
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: windows-latest
     env:
-      RUSTFLAGS: "-Zsanitizer=address"
+      RUSTFLAGS: "-D warnings -Zsanitizer=address"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install nightly toolchain
@@ -651,15 +716,15 @@ jobs:
   # instrumentation SHOULD work. Marked continue-on-error because this is
   # experimental — no one has publicly documented this combination working.
   asan-windows-full:
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: windows-latest
     continue-on-error: true
     env:
-      RUSTFLAGS: "-Zsanitizer=address"
+      RUSTFLAGS: "-D warnings -Zsanitizer=address"
       READSTAT_SANITIZE_ADDRESS: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install nightly toolchain

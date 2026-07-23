@@ -94,9 +94,23 @@ Repository dispatch event types for API triggers:
 
 :memo: API triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
 
-## MSRV Check (`msrv` job in `.github/workflows/main.yml`)
+## Required CI tiers (`.github/workflows/main.yml`)
 
-The main verification job runs workspace all-feature clippy, checks, and tests (SQL is a default feature), Arrow lockstep, and the advertised Rust server and PyO3 extension. A separate required `wasm` job installs Emscripten and performs a release build for `wasm32-unknown-emscripten`; host formatting and clippy remain in the main verification job. Tag builds depend on both required jobs before creating release notes or binaries. Specialized cross-platform sys jobs remain separate.
+Every PR runs three independent required gates in parallel:
+
+| Job | Responsibility |
+|-----|----------------|
+| `verify` | Fast feedback: formatting, non-SQL format clippy/check, minimal-feature build and tests, book, host WASM lint, and package contents. |
+| `sql` | The one authoritative all-feature clippy, workspace test, and rustdoc build, including default DataFusion SQL, followed by the advertised Rust server and PyO3 extension builds using a shared target directory. |
+| `wasm` | A real Emscripten release build for `wasm32-unknown-emscripten` plus a Node smoke test against a SAS fixture. |
+
+Rust and rustdoc warnings are denied throughout CI. Release-producing tag jobs
+depend on all three gates plus the blocking Miri and AddressSanitizer jobs
+before creating release notes or binaries. The specialized cross-platform sys
+workflow remains separate and deliberately does not rebuild DataFusion on each
+native target.
+
+## MSRV Check (`msrv` job in `.github/workflows/main.yml`)
 
 Non-tag pushes and PRs also run an `msrv` job that type-checks the workspace on
 the exact toolchain declared in `[workspace.package] rust-version` (currently
@@ -125,13 +139,13 @@ All builds (regardless of trigger method) upload artifacts that can be downloade
 
 ## readstat-sys Cross-Platform CI (`.github/workflows/readstat-sys-ci.yml`)
 
-A separate workflow guards the FFI bindings. The `readstat-sys` and `readstat-iconv-sys` crates ship **checked-in, per-target pre-generated bindings** so that downstream builds need no `libclang`. This workflow proves those files are correct and reproducible. It runs on PRs / pushes touching `crates/readstat-sys/**`, `crates/readstat-iconv-sys/**`, `Cargo.toml`, `Cargo.lock`, or the workflow file, and supports `workflow_dispatch`.
+A separate workflow guards the FFI bindings. The `readstat-sys` and `readstat-iconv-sys` crates ship **checked-in, per-target pre-generated bindings** so that downstream builds need no `libclang`. This workflow proves those files are correct and reproducible. It runs weekly, supports `workflow_dispatch`, and runs on PRs / pushes touching `crates/readstat-sys/**`, `crates/readstat-iconv-sys/**`, platform-sensitive integration tests, `Cargo.toml`, `Cargo.lock`, or the workflow file.
 
 Three jobs:
 
 | Job | Runs on | What it does |
 |-----|---------|--------------|
-| `consume` | linux x86_64/aarch64, macOS x86_64/aarch64, windows-msvc x86_64, windows-gnu x86_64 | Builds + tests the workspace using the **committed** `bindings_<os>_<arch>.rs` — the load-bearing check that each file matches that platform's real ABI. |
+| `consume` | linux x86_64/aarch64, macOS x86_64/aarch64, windows-msvc x86_64, windows-gnu x86_64 | Builds the workspace without default features and runs focused parser, encoding, and malformed-input tests using the **committed** bindings. SQL is tested once by the main `sql` job instead of compiling DataFusion six times. |
 | `regen` | same matrix | Regenerates each target's bindings with `--features buildtime_bindgen` + `READSTAT_REGEN_BINDINGS=1`, uploads the result as artifact `bindings-<target>`, and **fails on drift** if it differs from the committed file. |
 | `regen-iconv` | windows x86_64 | Same idea for `readstat-iconv-sys`; artifact `iconv-bindings-windows`. |
 
