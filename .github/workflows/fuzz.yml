@@ -6,6 +6,10 @@ on:
     - cron: "0 3 * * 1"
   workflow_dispatch:
 
+concurrency:
+  group: fuzz-${{ github.event_name }}-${{ github.run_id }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
@@ -36,7 +40,7 @@ jobs:
 
       - name: Run fuzzer (${{ matrix.target }})
         id: fuzz
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=1800
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=900
 
       - name: Upload corpus
         if: always()

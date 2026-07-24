@@ -1,0 +1,166 @@
+name: Safety
+
+on:
+  schedule:
+    - cron: "17 4 * * 3"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Safety runs are never canceled: releases must receive complete evidence.
+concurrency:
+  group: safety-${{ github.run_id }}-${{ github.run_attempt }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  miri:
+    runs-on: ubuntu-latest
+    env:
+      MIRIFLAGS: "-Zmiri-disable-isolation"
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain with Miri
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: safety-miri
+      - name: Run Miri on pure-Rust unit tests
+        # Skip proptest suites: they run 256 cases each and are 100-1000x slower
+        # under Miri's interpreter. All proptest tests live in `property_tests`
+        # submodules. Everything else (ptr_to_string unsafe, build_offsets, err,
+        # rs_path) runs and gives Miri coverage over both unsafe and safe Rust.
+        run: cargo +nightly miri test -p readstat --no-default-features -- --skip property_tests
+
+  asan-linux:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings -Zsanitizer=address -Clinker=clang"
+      READSTAT_SANITIZE_ADDRESS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: safety-asan-linux
+      - name: Run tests with AddressSanitizer
+        run: cargo +nightly test --workspace --lib --tests --bins --target x86_64-unknown-linux-gnu
+
+  asan-macos:
+    runs-on: macos-latest
+    env:
+      RUSTFLAGS: "-D warnings -Zsanitizer=address"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: aarch64-apple-darwin
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: safety-asan-macos
+      - name: Run tests with AddressSanitizer
+        run: cargo +nightly test --workspace --lib --tests --bins --target aarch64-apple-darwin
+
+  asan-windows:
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: "-D warnings -Zsanitizer=address"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: safety-asan-windows-rust
+      # The ASAN runtime comes from Visual Studio (MSVC). `readstat-sys`
+      # ships pre-generated bindings, so no LLVM/libclang install needed.
+      - name: Find MSVC ASAN runtime
+        id: asan-rt
+        shell: pwsh
+        run: |
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -latest -property installationPath
+          $msvcRoot = Join-Path $vsPath "VC\Tools\MSVC"
+          $msvcVer = (Get-ChildItem $msvcRoot | Sort-Object Name -Descending | Select-Object -First 1).Name
+          $asanDir = Join-Path $msvcRoot $msvcVer "bin" "Hostx64" "x64"
+          $asanDll = Join-Path $asanDir "clang_rt.asan_dynamic-x86_64.dll"
+          if (!(Test-Path $asanDll)) { throw "ASAN runtime not found at $asanDll" }
+          Write-Host "Found ASAN runtime: $asanDll"
+          echo "dir=$asanDir" >> $env:GITHUB_OUTPUT
+      - name: Run tests with AddressSanitizer
+        run: |
+            $env:PATH = "${{ steps.asan-rt.outputs.dir }};$env:PATH"
+            cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc
+
+  # Experimental telemetry: broader ReadStat C + Rust ASan instrumentation on Windows.
+  # Both Rust and MSVC's cl.exe use the same MSVC ASAN runtime, so this broader
+  # instrumentation should work. Marked continue-on-error because this combination
+  # is not widely documented; vendored win-iconv and other native dependencies are
+  # not claimed to be instrumented.
+  asan-windows-readstat-c-rust-experimental:
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      RUSTFLAGS: "-D warnings -Zsanitizer=address"
+      READSTAT_SANITIZE_ADDRESS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: safety-asan-windows-readstat-c-rust-experimental
+      # The ASAN runtime comes from Visual Studio (MSVC). `readstat-sys`
+      # ships pre-generated bindings, so no LLVM/libclang install needed.
+      - name: Find MSVC ASAN runtime
+        id: asan-rt
+        shell: pwsh
+        run: |
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -latest -property installationPath
+          $msvcRoot = Join-Path $vsPath "VC\Tools\MSVC"
+          $msvcVer = (Get-ChildItem $msvcRoot | Sort-Object Name -Descending | Select-Object -First 1).Name
+          $asanDir = Join-Path $msvcRoot $msvcVer "bin" "Hostx64" "x64"
+          $asanDll = Join-Path $asanDir "clang_rt.asan_dynamic-x86_64.dll"
+          if (!(Test-Path $asanDll)) { throw "ASAN runtime not found at $asanDll" }
+          Write-Host "Found ASAN runtime: $asanDll"
+          echo "dir=$asanDir" >> $env:GITHUB_OUTPUT
+      - name: Run tests with AddressSanitizer (ReadStat C + Rust)
+        run: |
+            $env:PATH = "${{ steps.asan-rt.outputs.dir }};$env:PATH"
+            cargo +nightly test --workspace --lib --tests --bins --target x86_64-pc-windows-msvc

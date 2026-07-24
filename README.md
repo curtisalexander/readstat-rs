@@ -1,4 +1,4 @@
-[![readstat-rs](https://github.com/curtisalexander/readstat-rs/workflows/readstat-rs/badge.svg)](https://github.com/curtisalexander/readstat-rs/actions)
+[![CI](https://github.com/curtisalexander/readstat-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/curtisalexander/readstat-rs/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/readstat)](https://crates.io/crates/readstat)
 [![docs.rs](https://img.shields.io/docsrs/readstat)](https://docs.rs/readstat)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

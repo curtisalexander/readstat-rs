@@ -233,8 +233,7 @@ Check build status and browse the rendered docs at:
 
 ### 4. Verify the GitHub release
 
-The tag push (step 3 of the Pre-Release Checklist above) already triggered CI to build
-platform binaries and create the GitHub Release. Confirm everything looks right on the
+The tag push triggers `.github/workflows/release.yml`. It validates the tag and versions, then runs CI, safety checks, and seven candidate builds in parallel. A single final fan-in verifies every expected archive and checksum before creating the GitHub Release; candidate jobs never publish, so partial releases cannot be created. Confirm everything looks right on the
 [Releases page](https://github.com/curtisalexander/readstat-rs/releases).
 
 ### 5. Clean up

@@ -1,190 +1,79 @@
 [< Back to README](../README.md)
 
-# GitHub Actions
+# GitHub Actions lifecycle
 
-The CI/CD workflow can be triggered in multiple ways:
+The automation is split by lifecycle so fast validation, long-running safety work,
+and publication have clear ownership.
 
-## 1. Tag Push (Release)
+## CI (`.github/workflows/ci.yml`)
 
-Push a `v*` tag (e.g. `v0.26.0`) to trigger a full release build with GitHub
-Release artifacts. Only `v*` tags trigger releases, and only
-`readstat`/`readstat-cli` releases are tagged — sys-crate releases set
-`tag = false` in their `release.toml` and are crates.io-only events with no
-tag, no binaries, and no GitHub Release:
+CI runs on pull requests and pushes to `main`/`dev`, manually, and as a reusable
+workflow. Four independent gates start in parallel:
 
-```sh
-# add and commit local changes
-git add .
-git commit -m "commit msg"
+| Gate | Purpose |
+|---|---|
+| `verify` | Formatting, non-SQL feature combinations, core tests, book, host WASM lint, package contents, and Arrow/DataFusion lockstep. |
+| `sql` | All-feature clippy, workspace tests, rustdoc, and advertised API examples. |
+| `wasm` | Emscripten release build and Node metadata smoke test. |
+| `msrv` | Workspace/default and readstat/CLI all-feature checks on Rust 1.88. |
 
-# push local changes to remote
-git push
+PR and branch runs cancel superseded work. Release calls use a unique run/run-attempt
+concurrency key, never cancel, and run MSRV as well. `RUSTFLAGS` is job-local so
+Emscripten receives its own required configuration.
 
-# add local tag
-git tag -a v0.1.0 -m "v0.1.0"
+## Safety (`.github/workflows/safety.yml`)
 
-# push local tag to remote
-git push origin v0.1.0
-```
+Safety runs weekly (Wednesday at 04:17 UTC), manually, and as a reusable workflow.
+It runs Miri plus Linux, macOS, and Windows AddressSanitizer checks. Ordinary Windows
+Rust ASan is blocking. The broader ReadStat-C-and-Rust Windows instrumentation is
+explicitly experimental, `continue-on-error` telemetry. Safety runs are never
+canceled and are required by release assembly.
 
-To delete and recreate tags:
+## Releases (`.github/workflows/release.yml`)
 
-```sh
-# delete local tag
-git tag --delete v0.1.0
+Strict `vN.N.N` tag pushes may publish. Manual runs (safe label defaults to `dev`)
+and repository-dispatch `build`, `test`, and `release` events are build-only dry
+runs. Preparation rejects malformed tags/labels, package-version mismatches, and
+tagged commits not contained in `origin/main`.
 
-# delete remote tag
-git push origin --delete v0.1.0
-```
+After preparation, CI, safety, and seven candidate builds run concurrently: Linux
+GNU x86_64, Linux musl x86_64, Linux GNU ARM64, macOS x86_64/ARM64, and Windows
+MSVC/GNU. Candidates only upload `candidate-*` workflow artifacts. A single final
+job downloads those artifacts, verifies the exact seven archive names, creates
+`SHA256SUMS`, and uploads the assembled bundle on every trigger. Only on a strict
+tag push does that final job check that no release already exists, generate notes
+from strict reachable version tags, and publish once. Thus a failed platform or
+safety check cannot leave a partially published GitHub Release.
 
-## 2. Manual Trigger (GitHub UI)
-
-Trigger a build manually from the GitHub Actions web interface (build-only, no releases):
-
-1. Go to the [Actions tab](https://github.com/curtisalexander/readstat-rs/actions)
-2. Select the **readstat-rs** workflow
-3. Click **Run workflow**
-4. Optionally specify:
-   - **Version string**: Label for artifacts (default: `dev`)
-
-:memo: Manual triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
-
-## 3. API Trigger (External Tools)
-
-Trigger builds programmatically using the GitHub API. This is useful for automation tools like Claude Code.
-
-### Using `gh` CLI
+To run a dry build in the UI select **Release candidates**, or use:
 
 ```sh
-# Trigger a build
-gh api repos/curtisalexander/readstat-rs/dispatches \
-  -f event_type=build
-
-# Trigger a build with custom version label
-gh api repos/curtisalexander/readstat-rs/dispatches \
-  -f event_type=build \
+gh workflow run release.yml -f version=dev
+gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=build \
   -F client_payload='{"version":"test-build-123"}'
 ```
 
-### Using `curl`
+API event types `build`, `test`, and `release` are aliases and never publish.
 
-```sh
-curl -X POST \
-  -H "Authorization: token $GITHUB_TOKEN" \
-  -H "Accept: application/vnd.github.v3+json" \
-  https://api.github.com/repos/curtisalexander/readstat-rs/dispatches \
-  -d '{"event_type": "build", "client_payload": {"version": "dev"}}'
-```
+## Bindings (`.github/workflows/readstat-sys-ci.yml`)
 
-## 4. Claude Code Integration
+This workflow runs monthly (day 1 at 05:23 UTC), manually, and for relevant PRs or
+`main`/`dev` pushes. Six consume jobs immediately build/test committed bindings on
+Linux x86/ARM, macOS x86/ARM, and Windows MSVC/GNU. An independent detector uses
+event SHAs to decide whether ReadStat's six-target regeneration matrix and/or the
+Windows iconv regeneration is needed; uncertainty fails open and regenerates both.
+Regeneration uploads bindings before enforcing tracked-file and drift checks. Only
+superseded PR runs are canceled.
 
-To have Claude Code trigger a CI build, use this prompt:
+To refresh bindings, run the workflow (or push a sensitive change), download each
+`bindings-<target>` / `iconv-bindings-windows` artifact from an intentionally failed
+drift job, commit the files under the crates' `src/bindings/` directories, and rerun.
+`READSTAT_REGEN_BINDINGS=1 cargo build -p <sys-crate> --features buildtime_bindgen`
+performs the equivalent operation for the native host.
 
-> Trigger a CI build for readstat-rs by running: `gh api repos/curtisalexander/readstat-rs/dispatches -f event_type=build`
+## Fuzzing and Pages
 
-## Event Types
-
-Repository dispatch event types for API triggers:
-
-| Event Type | Description |
-|------------|-------------|
-| `build`    | Build all targets and upload artifacts |
-| `test`     | Same as `build` (alias for clarity) |
-| `release`  | Same as `build` (reserved for future use) |
-
-:memo: API triggers only build artifacts and do not create GitHub releases. To create a release, use a [tag push](#1-tag-push-release).
-
-## Required CI tiers (`.github/workflows/main.yml`)
-
-Every PR runs three independent required gates in parallel:
-
-| Job | Responsibility |
-|-----|----------------|
-| `verify` | Fast feedback: formatting, non-SQL format clippy/check, minimal-feature build and tests, book, host WASM lint, and package contents. |
-| `sql` | The one authoritative all-feature clippy, workspace test, and rustdoc build, including default DataFusion SQL, followed by the advertised Rust server and PyO3 extension builds using a shared target directory. |
-| `wasm` | A real Emscripten release build for `wasm32-unknown-emscripten` plus a Node smoke test against a SAS fixture. |
-
-Rust and rustdoc warnings are denied throughout CI. Release-producing tag jobs
-depend on all three gates plus the blocking Miri and AddressSanitizer jobs
-before creating release notes or binaries. The specialized cross-platform sys
-workflow remains separate and deliberately does not rebuild DataFusion on each
-native target.
-
-## MSRV Check (`msrv` job in `.github/workflows/main.yml`)
-
-Non-tag pushes and PRs also run an `msrv` job that type-checks the workspace on
-the exact toolchain declared in `[workspace.package] rust-version` (currently
-`1.88`): `cargo check --workspace --all-targets` with default features, plus
-`cargo check -p readstat -p readstat-cli --all-features --all-targets` (kept
-per-crate so `readstat-sys/buildtime_bindgen` stays off). A dependency or
-language-feature bump that silently raises the real MSRV fails this job instead
-of surprising downstream users. `scripts/release-check.sh` runs the same check
-locally when the MSRV toolchain is installed.
-
-## Fuzz Testing (`.github/workflows/fuzz.yml`)
-
-A separate workflow runs [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) (libFuzzer) targets against the `readstat` library's byte-parsing paths.
-
-- **Schedule**: Weekly, Monday 3am UTC
-- **Manual trigger**: `gh workflow run fuzz.yml` or via the Actions UI
-- **Duration**: 30 minutes per target (~90 min total)
-- **Targets**: `fuzz_read_metadata`, `fuzz_read_data`, `fuzz_read_data_filtered`
-- **On crash**: uploads crash artifacts and automatically opens a GitHub issue labeled `bug` + `fuzz`
-
-See [TESTING.md](TESTING.md#fuzz-testing) for local usage and target details.
-
-## Artifacts
-
-All builds (regardless of trigger method) upload artifacts that can be downloaded from the workflow run page. Artifacts are retained for the default GitHub Actions retention period.
-
-## readstat-sys Cross-Platform CI (`.github/workflows/readstat-sys-ci.yml`)
-
-A separate workflow guards the FFI bindings. The `readstat-sys` and `readstat-iconv-sys` crates ship **checked-in, per-target pre-generated bindings** so that downstream builds need no `libclang`. This workflow proves those files are correct and reproducible. It runs weekly, supports `workflow_dispatch`, and runs on PRs / pushes touching `crates/readstat-sys/**`, `crates/readstat-iconv-sys/**`, platform-sensitive integration tests, `Cargo.toml`, `Cargo.lock`, or the workflow file.
-
-Three jobs:
-
-| Job | Runs on | What it does |
-|-----|---------|--------------|
-| `consume` | linux x86_64/aarch64, macOS x86_64/aarch64, windows-msvc x86_64, windows-gnu x86_64 | Builds the workspace without default features and runs focused parser, encoding, and malformed-input tests using the **committed** bindings. SQL is tested once by the main `sql` job instead of compiling DataFusion six times. |
-| `regen` | same matrix | Regenerates each target's bindings with `--features buildtime_bindgen` + `READSTAT_REGEN_BINDINGS=1`, uploads the result as artifact `bindings-<target>`, and **fails on drift** if it differs from the committed file. |
-| `regen-iconv` | windows x86_64 | Same idea for `readstat-iconv-sys`; artifact `iconv-bindings-windows`. |
-
-Both Windows flavors run on the same `windows-latest` host (the binaries execute
-natively either way); the gnu entries install the MSYS2 MinGW GCC and pass an
-explicit `--target x86_64-pc-windows-gnu`.
-
-The checked-in files live in:
-- `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs` (`<os>` ∈ linux/macos/windows, `<arch>` ∈ x86_64/aarch64). Windows is additionally keyed by env: the un-suffixed `bindings_windows_x86_64.rs` is MSVC-ABI and `bindings_windows_gnu_x86_64.rs` is GNU-ABI — MSVC emits C enums as `signed int`, GCC/Clang as `unsigned int`, so the two flavors cannot share a file.
-- `crates/readstat-iconv-sys/src/bindings/bindings_windows_x86_64.rs` — shared by both Windows flavors: the iconv surface is enum-free (`void*`, `size_t`, `char*` only), so its ABI is identical under MSVC and GNU.
-
-### Updating bindgen (or the vendored C) — regenerating bindings
-
-`bindgen` is **exact-pinned** in the workspace `Cargo.toml` (`bindgen = "=x.y.z"`) because its output *is* the checked-in bindings; a different bindgen version can change that output. The exact pin means `cargo update` and `scripts/check-updates.sh` never bump it — it is always a deliberate, manual change, paired with regenerating every target's bindings. The same procedure applies when you bump the vendored `ReadStat` / `win-iconv` submodule and its C surface changes.
-
-You can only regenerate **your own host target** locally (cross-compiling the others needs each platform's toolchain + `libclang`, and Windows for iconv). So: verify locally, then let CI regenerate the rest.
-
-**Do locally:**
-
-1. Edit the pin in `Cargo.toml`: `bindgen = "=<new-version>"`.
-2. Regenerate + sanity-check your host target (needs `libclang` installed).
-   `READSTAT_REGEN_BINDINGS=1` opts in to rewriting the checked-in file — the
-   feature alone only writes to `OUT_DIR`:
-   ```sh
-   READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen
-   # On Windows, also:
-   READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-iconv-sys --features buildtime_bindgen
-   ```
-   With the env var set, the build script writes the regenerated file to both `OUT_DIR` and the
-   checked-in `src/bindings/bindings_<host-os>_<host-arch>.rs`, so it shows up as a working-tree change.
-3. Confirm it still works: `cargo test --workspace`.
-4. Commit the `Cargo.toml` change together with your host target's regenerated file. (The other targets will still be stale — that's expected; CI produces them next.)
-
-**Let CI do (the targets you can't build locally):**
-
-5. Push the branch. The `regen` matrix (6 targets) and `regen-iconv` run on real runners with `libclang`. For every target whose committed file you didn't refresh, the **drift check fails on purpose** — that failure is the signal, and each job still uploads its freshly-generated file as an artifact (`bindings-<target>`, `iconv-bindings-windows`).
-6. Download those artifacts, drop them into the two `src/bindings/` directories above, commit, and push.
-7. On the next run the `regen` / `regen-iconv` drift checks pass and the `consume` jobs build + test green on all platforms. The bindgen bump is complete.
-
-> :bulb: You can cut the regenerated files on demand without a PR via **Actions → readstat-sys cross-platform CI → Run workflow** (`workflow_dispatch`), then grab the artifacts.
-
-`scripts/check-updates.sh` (and `.ps1`) print an advisory pointing here whenever a newer `bindgen` than the pin is available.
+`fuzz.yml` runs three parallel cargo-fuzz campaigns every Monday at 03:00 UTC or
+manually. Each campaign lasts 15 minutes; crashes upload artifacts and open an issue.
+Each invocation has unique non-canceling concurrency. `pages.yml` remains separate
+and deploys the mdBook on `main` pushes or manual dispatch.
