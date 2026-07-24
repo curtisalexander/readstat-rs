@@ -6,9 +6,10 @@ This project contains unsafe Rust code (FFI callbacks, pointer casts, memory-map
 
 ## CI Jobs
 
-All five jobs run nightly, on every workflow dispatch, and on every tag push,
-in parallel with the build jobs. Any memory error fails the job with a nonzero
-exit code — except the experimental `asan-windows-full` job, which is marked
+All five jobs run weekly, on every Safety workflow dispatch, and through every
+release workflow call, in parallel with the build jobs. Any memory error fails
+the job with a nonzero exit code — except the experimental
+`asan-windows-readstat-c-rust-experimental` job, which is marked
 `continue-on-error` and does not block the workflow.
 
 ### Miri (Rust undefined behavior)
@@ -60,12 +61,12 @@ Configuration:
 - LeakSanitizer is not supported on Windows
 - Doctests excluded for the same reason as Linux
 
-### AddressSanitizer — Windows (full C + Rust, experimental)
+### AddressSanitizer — Windows (ReadStat C + Rust, experimental)
 
-- **Job**: `asan-windows-full` — marked `continue-on-error`, so a failure does not block the workflow
+- **Job**: `asan-windows-readstat-c-rust-experimental` — marked `continue-on-error`, so a failure does not block the workflow
 - **Platform**: Windows (x86_64, MSVC toolchain)
 - **Scope**: Full workspace, with the ReadStat C library **also** instrumented (`READSTAT_SANITIZE_ADDRESS=1` → `/fsanitize=address`)
-- **Why experimental**: full Rust + C ASan on Windows MSVC *should* work since both use the same MSVC ASan runtime, but the combination is not widely documented as working — hence `continue-on-error` while it is validated. Once stable it would match Linux's full C + Rust coverage (see [Future Work](#future-work-windows-c-instrumentation)).
+- **Why experimental**: ReadStat C + Rust ASan on Windows MSVC *should* work since both use the same MSVC ASan runtime, but the combination is not widely documented as working — hence `continue-on-error` while it is validated. This does not claim instrumentation of win-iconv or every native dependency. Once stable it would approach Linux's broader C + Rust coverage (see [Future Work](#future-work-windows-c-instrumentation)).
 
 ## How `READSTAT_SANITIZE_ADDRESS` Works
 
@@ -75,7 +76,7 @@ The flags are platform-specific:
 - **Linux/macOS**: `-fsanitize=address -fno-omit-frame-pointer` (GCC/Clang syntax)
 - **Windows MSVC**: `/fsanitize=address` (MSVC syntax)
 
-The Linux CI job sets `READSTAT_SANITIZE_ADDRESS=1` (validated, blocking) and the experimental `asan-windows-full` job sets it too (`continue-on-error` while being validated). macOS does not, because of the runtime mismatch described below.
+The Linux CI job sets `READSTAT_SANITIZE_ADDRESS=1` (validated, blocking) and the experimental `asan-windows-readstat-c-rust-experimental` job sets it too (`continue-on-error` while being validated). macOS does not, because of the runtime mismatch described below.
 
 ## ASan Runtime Mismatch (macOS)
 
@@ -143,7 +144,7 @@ valgrind ./target/debug/deps/parse_cars_md_test-<hash>
 | Miri | Linux | Unit tests only | No (FFI excluded) | No |
 | ASan | Linux | Full workspace | Yes (instrumented) | Yes |
 | ASan | macOS | Full workspace | No (runtime mismatch) | No |
-| ASan | Windows | Full workspace | Experimental (`asan-windows-full`, `continue-on-error` — see [future work](#future-work-windows-c-instrumentation)) | No |
+| ASan | Windows | Full workspace | Experimental (`asan-windows-readstat-c-rust-experimental`, `continue-on-error` — see [future work](#future-work-windows-c-instrumentation)) | No |
 | Valgrind | Linux (manual) | Full | Full | Yes |
 | cargo-fuzz | Linux (CI, weekly) | Full | Full | No |
 

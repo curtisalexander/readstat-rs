@@ -22,8 +22,8 @@ name: readstat-sys cross-platform CI
 
 on:
   schedule:
-    # Weekly comprehensive native/bindings validation.
-    - cron: "0 5 * * 0"
+    # Monthly comprehensive native/bindings validation.
+    - cron: "23 5 1 * *"
   pull_request:
     paths:
       - 'crates/readstat-sys/**'
@@ -35,6 +35,8 @@ on:
       - 'crates/readstat-tests/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.gitattributes'
       - '.github/workflows/readstat-sys-ci.yml'
   push:
     branches: [main, dev]
@@ -44,8 +46,17 @@ on:
       - 'crates/readstat-tests/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.gitattributes'
       - '.github/workflows/readstat-sys-ci.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('readstat-sys-pr-{0}', github.event.pull_request.number) || format('readstat-sys-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -53,6 +64,46 @@ env:
   RUSTDOCFLAGS: "-D warnings"
 
 jobs:
+  detect-binding-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      regen_readstat: ${{ steps.detect.outputs.regen_readstat }}
+      regen_iconv: ${{ steps.detect.outputs.regen_iconv }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect binding-sensitive changes
+        id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: |
+          set +e
+          both() { echo 'regen_readstat=true' >> "$GITHUB_OUTPUT"; echo 'regen_iconv=true' >> "$GITHUB_OUTPUT"; exit 0; }
+          case "$EVENT" in
+            schedule|workflow_dispatch) both ;;
+            pull_request)
+              git cat-file -e "$BASE_SHA^{commit}" && git cat-file -e "$HEAD_SHA^{commit}" || both
+              base=$(git merge-base "$BASE_SHA" "$HEAD_SHA") || both
+              range="$base..$HEAD_SHA" ;;
+            push)
+              [[ "$BEFORE_SHA" != 0000000000000000000000000000000000000000 ]] || both
+              git cat-file -e "$BEFORE_SHA^{commit}" && git cat-file -e "$AFTER_SHA^{commit}" || both
+              range="$BEFORE_SHA..$AFTER_SHA" ;;
+            *) both ;;
+          esac
+          files=$(git diff --name-only --no-renames "$range") || both
+          common='^(Cargo.toml|Cargo.lock|rust-toolchain.toml|\.gitattributes|\.github/workflows/readstat-sys-ci.yml)$'
+          echo "$files" | grep -Eq "$common" && both
+          echo "$files" | grep -Eq '^crates/readstat-sys/' && readstat=true || readstat=false
+          echo "$files" | grep -Eq '^crates/readstat-iconv-sys/' && iconv=true || iconv=false
+          echo "regen_readstat=$readstat" >> "$GITHUB_OUTPUT"
+          echo "regen_iconv=$iconv" >> "$GITHUB_OUTPUT"
+
   consume:
     strategy:
       fail-fast: false
@@ -111,6 +162,8 @@ jobs:
           cargo test -p readstat-tests --no-default-features --target ${{ matrix.target }} --test parse_encoding_test --test parse_malformed_utf8_test
 
   regen:
+    needs: detect-binding-changes
+    if: needs.detect-binding-changes.outputs.regen_readstat == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -224,6 +277,8 @@ jobs:
   # artifact to commit the file when first creating it or after a libiconv /
   # bindgen change.
   regen-iconv:
+    needs: detect-binding-changes
+    if: needs.detect-binding-changes.outputs.regen_iconv == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -271,6 +326,10 @@ jobs:
           if [ ! -f "$file" ]; then
             echo "::error::$file does not exist yet."
             echo "::error::Download the 'iconv-bindings-windows' artifact from this run, copy it into crates/readstat-iconv-sys/src/bindings/, commit, and push."
+            exit 1
+          fi
+          if ! git ls-files --error-unmatch -- "$file" >/dev/null 2>&1; then
+            echo "::error::$file is untracked — commit the generated bindings."
             exit 1
           fi
           if git --no-pager diff --no-color --exit-code "$file"; then

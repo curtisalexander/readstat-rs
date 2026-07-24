@@ -1,0 +1,190 @@
+name: Release candidates
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Safe artifact version label
+        required: false
+        default: dev
+  repository_dispatch:
+    types: [build, test, release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.run_id }}-${{ github.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate release identity
+        id: validate
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          MANUAL_VERSION: ${{ inputs.version }}
+          API_VERSION: ${{ github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+          git fetch origin main:refs/remotes/origin/main --no-tags
+          if [ "$EVENT" = push ]; then
+            [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '::error::Release tags must be vN.N.N'; exit 1; }
+            version=${REF_NAME#v}
+            readstat=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat") | .version')
+            cli=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat-cli") | .version')
+            [ "$version" = "$readstat" ] && [ "$version" = "$cli" ] || { echo "::error::Tag/package versions differ ($version, $readstat, $cli)"; exit 1; }
+            git merge-base --is-ancestor "${GITHUB_SHA}^{commit}" origin/main || { echo '::error::Tagged commit is not in origin/main'; exit 1; }
+            label=$REF_NAME
+          elif [ "$EVENT" = workflow_dispatch ]; then label=${MANUAL_VERSION:-dev}
+          else label=${API_VERSION:-dev}
+          fi
+          [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || { echo '::error::Unsafe artifact label'; exit 1; }
+          echo "version=$label" >> "$GITHUB_OUTPUT"
+
+  validation:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+    with:
+      release_call: true
+
+  safety:
+    needs: prepare
+    uses: ./.github/workflows/safety.yml
+
+  candidate:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, ext: tar.gz, native: true }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, ext: tar.gz, native: true }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, ext: tar.gz, native: true }
+          - { os: macos-latest, target: x86_64-apple-darwin, ext: tar.gz, native: false }
+          - { os: macos-latest, target: aarch64-apple-darwin, ext: tar.gz, native: true }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: zip, native: true }
+          - { os: windows-latest, target: x86_64-pc-windows-gnu, ext: zip, native: true }
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: -D warnings
+      TARGET: ${{ matrix.target }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: candidate-${{ matrix.target }}
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install MinGW
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-gcc
+          Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
+      - name: Build candidate
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Strip Unix candidate
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: strip "target/$TARGET/release/readstat"
+      - name: Native CLI smoke test
+        if: matrix.native
+        shell: bash
+        run: |
+          exe="target/$TARGET/release/readstat"
+          [[ "$TARGET" == *windows* ]] && exe="$exe.exe"
+          "$exe" --version
+          "$exe" metadata crates/readstat-tests/tests/data/cars.sas7bdat
+      - name: Verify cross-built macOS x86 architecture
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: file target/${{ matrix.target }}/release/readstat | grep -q 'x86_64'
+      - name: Archive Unix candidate
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: tar czf "readstat-$VERSION-$TARGET.tar.gz" -C "target/$TARGET/release" readstat
+      - name: Archive Windows candidate
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: Compress-Archive "target/$env:TARGET/release/readstat.exe" "readstat-$env:VERSION-$env:TARGET.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: candidate-${{ matrix.target }}
+          path: readstat-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.${{ matrix.ext }}
+          if-no-files-found: error
+
+  assemble-publish:
+    needs: [prepare, validation, safety, candidate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: candidate-*
+          path: dist
+          merge-multiple: true
+      - name: Verify bundle and generate checksums
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          cat > expected <<EOF
+          readstat-$VERSION-x86_64-unknown-linux-gnu.tar.gz
+          readstat-$VERSION-x86_64-unknown-linux-musl.tar.gz
+          readstat-$VERSION-aarch64-unknown-linux-gnu.tar.gz
+          readstat-$VERSION-x86_64-apple-darwin.tar.gz
+          readstat-$VERSION-aarch64-apple-darwin.tar.gz
+          readstat-$VERSION-x86_64-pc-windows-msvc.zip
+          readstat-$VERSION-x86_64-pc-windows-gnu.zip
+          EOF
+          (cd dist && for file in *; do [ -f "$file" ] && printf '%s\n' "$file"; done | sort) > actual
+          sort expected -o expected
+          diff -u expected actual
+          if command -v sha256sum >/dev/null; then checksum() { sha256sum "$1"; }
+          else checksum() { shasum -a 256 "$1"; }; fi
+          export -f checksum
+          (cd dist && while IFS= read -r file; do checksum "$file"; done < ../expected > SHA256SUMS)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: assembled-${{ needs.prepare.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+      - name: Refuse an existing published release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: '! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1'
+      - name: Generate notes from reachable strict tags
+        if: github.event_name == 'push'
+        run: |
+          previous=$(git tag --merged "$GITHUB_SHA" --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -Fxv "$GITHUB_REF_NAME" | head -1 || true)
+          range="$GITHUB_REF_NAME"; [ -n "$previous" ] && range="$previous..$GITHUB_REF_NAME"
+          { echo "## What's Changed in $GITHUB_REF_NAME"; echo; git log --no-merges --pretty='- %s (%h)' "$range"; } > release-notes.md
+      - name: Publish complete release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: release-notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

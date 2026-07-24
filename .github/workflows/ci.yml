@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_call:
+        description: Use release-safe concurrency
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ (inputs.release_call || github.event_name == 'workflow_dispatch') && format('ci-run-{0}-{1}', github.run_id, github.run_attempt) || format('ci-{0}', github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: ${{ !inputs.release_call && (github.event_name == 'push' || github.event_name == 'pull_request') }}
+
+env:
+  PACKAGE_NAME: readstat
+  CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: "-D warnings"
+
+jobs:
+  # Fast, required feedback for every branch, PR, and tag. SQL's expensive
+  # code generation and tests run independently below so both jobs start at
+  # once and failures are attributed to the owning subsystem.
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Check Arrow/DataFusion lockstep
+        run: ./scripts/check-arrow-lockstep.sh
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential clang
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy without SQL
+        run: |
+          cargo clippy -p readstat --all-targets --no-default-features --features csv,parquet,feather,ndjson -- -D warnings
+          cargo clippy -p readstat-cli --all-targets --no-default-features --features csv,parquet,feather,ndjson -- -D warnings
+          cargo clippy -p readstat-sys -p readstat-iconv-sys --all-targets -- -D warnings
+      - name: Check format features without SQL
+        run: |
+          cargo check -p readstat --all-targets --no-default-features --features csv,parquet,feather,ndjson
+          cargo check -p readstat-cli --all-targets --no-default-features --features csv,parquet,feather,ndjson
+      - name: Check minimal feature builds
+        run: |
+          cargo check -p readstat --no-default-features
+          cargo check -p readstat-cli --no-default-features
+      - name: Test core library without default features
+        run: cargo test -p readstat --no-default-features
+      - name: Install mdBook
+        uses: taiki-e/install-action@mdbook
+      - name: Build documentation book
+        run: bash scripts/build-book.sh
+      - name: Check WASM crate on host
+        run: |
+          cargo fmt --manifest-path crates/readstat-wasm/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/readstat-wasm/Cargo.toml --all-targets -- -D warnings
+      - name: Check package contents
+        run: |
+          for crate in readstat-iconv-sys readstat-sys readstat readstat-cli; do
+            cargo package -p "$crate" --allow-dirty --list >/dev/null
+          done
+
+  # SQL is part of the default API and remains a required PR gate. Keep its
+  # full code-generation/linking cost in one Linux job instead of repeating it
+  # in every native-platform binding job. The standalone examples share this
+  # job's target directory so their default-feature builds reuse DataFusion.
+  sql:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential clang
+      - name: Clippy with all features
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Test workspace with all features
+        run: cargo test --workspace --all-features
+      - name: Rustdoc with all features
+        run: cargo doc --workspace --all-features --no-deps
+      - name: Check advertised API examples
+        run: |
+          cargo check --manifest-path examples/api-demo/rust-server/Cargo.toml
+          cargo check --manifest-path examples/api-demo/python-server/readstat_py/Cargo.toml
+
+  # The WASM crate is excluded from the workspace and needs Emscripten to link,
+  # so host clippy alone cannot establish that the published JS artifact builds.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/readstat-wasm
+      - name: Install Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+      - name: Build WASM crate
+        working-directory: crates/readstat-wasm
+        run: cargo build --target wasm32-unknown-emscripten --release
+      - name: Smoke-test generated WASM package
+        working-directory: crates/readstat-wasm
+        run: |
+          cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/readstat_wasm.wasm
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { init, read_metadata } from "./pkg/readstat_wasm.js";
+
+          await init();
+          const input = readFileSync("../readstat-tests/tests/data/cars.sas7bdat");
+          const metadata = JSON.parse(read_metadata(input));
+          if (metadata.row_count <= 0 || metadata.var_count <= 0) {
+            throw new Error(`unexpected metadata: ${JSON.stringify(metadata)}`);
+          }
+          NODE
+
+  # Enforce the MSRV declared in `[workspace.package] rust-version` (and
+  # advertised in the READMEs): the workspace must at least type-check on that
+  # exact toolchain. `--all-features` is applied per-crate (not workspace-wide)
+  # so `readstat-sys/buildtime_bindgen` stays off — it would drag in
+  # bindgen/libclang, which is irrelevant to the MSRV contract.
+  msrv:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential
+      - name: Check workspace (default features)
+        run: cargo check --workspace --all-targets
+      - name: Check readstat + readstat-cli (all features, incl. sql)
+        run: cargo check -p readstat -p readstat-cli --all-features --all-targets

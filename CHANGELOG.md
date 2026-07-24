@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Split GitHub Actions by lifecycle into focused CI, safety, release, bindings, fuzzing, and Pages workflows. Superseded PR work is canceled, binding regeneration is input-sensitive, and release candidates now build in parallel with validation before a single all-or-nothing publication step.
+
 ## [0.26.0] - 2026-07-23
 
 ### Added
