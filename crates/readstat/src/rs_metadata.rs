@@ -3,7 +3,7 @@
 //! [`ReadStatMetadata`] holds file-level properties (row/variable counts, encoding,
 //! compression, timestamps) and per-variable metadata ([`ReadStatVarMetadata`]) including
 //! names, types, labels, and SAS format strings. After parsing, it builds an Arrow
-//! [`Schema`](arrow::datatypes::Schema) that maps SAS types to Arrow data types.
+//! [`Schema`] that maps SAS types to Arrow data types.
 
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use log::debug;

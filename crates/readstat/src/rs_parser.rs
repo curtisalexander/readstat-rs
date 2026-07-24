@@ -181,8 +181,8 @@ impl ReadStatParser {
 
     /// Parses a `.sas7bdat` file, invoking registered callbacks as data is read.
     ///
-    /// Returns the raw `ReadStat` error code. Use [`check_c_error`](crate::err::check_c_error)
-    /// to convert to a `Result`.
+    /// Returns the raw `ReadStat` error code. Use [`check_c_error`] to convert to a
+    /// `Result`.
     pub(crate) fn parse_sas7bdat(
         &mut self,
         path: *const c_char,

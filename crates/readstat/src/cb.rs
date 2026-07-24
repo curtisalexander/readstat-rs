@@ -3,8 +3,8 @@
 //! The `ReadStat` C parser uses a callback-driven architecture: as it reads a `.sas7bdat`
 //! file, it invokes registered callbacks for metadata, variables, and values. Each
 //! callback receives a raw `*mut c_void` context pointer that is cast back to the
-//! appropriate Rust struct ([`ReadStatMetadata`](crate::ReadStatMetadata) or
-//! [`ReadStatData`](crate::ReadStatData)) to accumulate parsed results.
+//! appropriate Rust struct ([`ReadStatMetadata`] or [`ReadStatData`]) to accumulate
+//! parsed results.
 
 use chrono::DateTime;
 use log::debug;

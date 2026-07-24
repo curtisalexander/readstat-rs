@@ -1,5 +1,5 @@
-//! Output writers for converting Arrow [`RecordBatch`](arrow_array::RecordBatch) data
-//! to CSV, Feather (Arrow IPC), NDJSON, or Parquet format.
+//! Output writers for converting Arrow [`RecordBatch`] data to CSV, Feather (Arrow IPC),
+//! NDJSON, or Parquet format.
 //!
 //! [`ReadStatWriter`] manages the lifecycle of format-specific writers, handling
 //! streaming writes across multiple batches. It also supports metadata output
@@ -698,7 +698,7 @@ fn csv_escape_field(field: &str) -> String {
     }
 }
 
-/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to CSV bytes (with header).
+/// Serialize a [`RecordBatch`] to CSV bytes (with header).
 ///
 /// # Errors
 ///
@@ -714,7 +714,7 @@ pub fn write_batch_to_csv_bytes(
     Ok(buf)
 }
 
-/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to NDJSON bytes.
+/// Serialize a [`RecordBatch`] to NDJSON bytes.
 ///
 /// # Errors
 ///
@@ -730,7 +730,7 @@ pub fn write_batch_to_ndjson_bytes(
     Ok(buf)
 }
 
-/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to Parquet bytes with Snappy compression.
+/// Serialize a [`RecordBatch`] to Parquet bytes with Snappy compression.
 ///
 /// # Errors
 ///
@@ -747,7 +747,7 @@ pub fn write_batch_to_parquet_bytes(batch: &RecordBatch) -> Result<Vec<u8>, Read
     Ok(buf)
 }
 
-/// Serialize a [`RecordBatch`](arrow_array::RecordBatch) to Feather (Arrow IPC) bytes.
+/// Serialize a [`RecordBatch`] to Feather (Arrow IPC) bytes.
 ///
 /// # Errors
 ///

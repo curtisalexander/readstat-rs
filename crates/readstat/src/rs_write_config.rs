@@ -1,7 +1,8 @@
 //! Output configuration for writing Arrow data to various formats.
 //!
 //! [`WriteConfig`] captures the output file path, format, compression settings,
-//! and overwrite behavior, decoupled from input path validation ([`ReadStatPath`]).
+//! and overwrite behavior, decoupled from input path validation
+//! ([`crate::ReadStatPath`]).
 
 use std::path::{Path, PathBuf};
 
@@ -14,8 +15,7 @@ use crate::err::ReadStatError;
 ///
 /// All variants are always present regardless of which writer features are
 /// enabled. Attempting to *write* a format whose feature is disabled returns a
-/// runtime [`ReadStatError`](crate::ReadStatError) from the writer rather than
-/// failing to compile.
+/// runtime [`ReadStatError`] from the writer rather than failing to compile.
 ///
 /// This enum is `#[non_exhaustive]`: new format variants may be added in
 /// minor releases. Match with a wildcard arm to remain forward-compatible.

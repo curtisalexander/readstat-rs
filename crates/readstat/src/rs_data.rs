@@ -1,4 +1,4 @@
-//! Data reading and Arrow [`RecordBatch`](arrow_array::RecordBatch) conversion.
+//! Data reading and Arrow [`RecordBatch`] conversion.
 //!
 //! [`ReadStatData`] coordinates the FFI parsing of row values from a `.sas7bdat` file,
 //! accumulating them directly into typed Arrow builders via the `handle_value`
