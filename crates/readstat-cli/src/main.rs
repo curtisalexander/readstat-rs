@@ -1,6 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use clap::Parser;
+use std::io::Write as _;
 
 mod cli;
 mod run;
@@ -11,7 +12,9 @@ fn main() {
         if is_broken_pipe(&e) {
             return;
         }
-        eprintln!("Stopping with error: {e}");
+        let stderr = std::io::stderr();
+        let mut stderr = stderr.lock();
+        let _ = writeln!(stderr, "Stopping with error: {e}");
         // Exit 1 for runtime failures. clap reserves exit code 2 for
         // usage/argument errors, so keep those distinct.
         std::process::exit(1);

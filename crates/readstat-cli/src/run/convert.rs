@@ -6,6 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use rayon::prelude::*;
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -54,7 +55,10 @@ fn print_write_summary(rows: usize, in_path: &std::path::Path, out_path: Option<
     let out_f = out_path
         .and_then(std::path::Path::file_name)
         .map_or_else(|| "___".to_string(), |f| f.to_string_lossy().to_string());
-    eprintln!(
+    let stderr = std::io::stderr();
+    let mut stderr = stderr.lock();
+    let _ = writeln!(
+        stderr,
         "In total, wrote {} rows from file {in_f} into {out_f}",
         format_with_commas(rows)
     );
@@ -215,7 +219,10 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     match wc.out_path() {
         None | Some(_) => {
             if let Some(p) = wc.out_path() {
-                eprintln!(
+                let stderr = std::io::stderr();
+                let mut stderr = stderr.lock();
+                let _ = writeln!(
+                    stderr,
                     "Writing parsed data to file {}",
                     p.to_string_lossy().bright_yellow()
                 );

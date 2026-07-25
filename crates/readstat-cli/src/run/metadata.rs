@@ -4,6 +4,7 @@ use crate::cli::ReadStatCliCommands;
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
 use readstat::{ReadStatError, ReadStatMetadata, ReadStatPath};
+use std::io::Write as _;
 
 fn metadata_to_string(
     md: &ReadStatMetadata,
@@ -71,6 +72,9 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     let rsp = ReadStatPath::new(sas_path)?;
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, skip_row_count)?;
-    println!("{}", metadata_to_string(&md, &rsp, as_json)?);
+    let output = metadata_to_string(&md, &rsp, as_json)?;
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    writeln!(stdout, "{output}")?;
     Ok(())
 }

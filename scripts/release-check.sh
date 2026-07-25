@@ -170,7 +170,7 @@ else
 fi
 
 # Check that readstat depends on the current readstat-sys version
-READSTAT_SYS_DEP=$(grep 'readstat-sys' "$ROOT_DIR/crates/readstat/Cargo.toml" | grep 'version' | sed 's/.*version = "\(.*\)".*/\1/')
+READSTAT_SYS_DEP=$(grep 'readstat-sys' "$ROOT_DIR/crates/readstat/Cargo.toml" | grep 'version' | head -1 | sed 's/.*version = "\(.*\)".*/\1/')
 if [ "$READSTAT_SYS_DEP" = "$SYS_VER" ]; then
     pass "readstat depends on readstat-sys $READSTAT_SYS_DEP (matches)"
 else

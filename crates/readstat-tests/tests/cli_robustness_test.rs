@@ -10,20 +10,48 @@ use std::sync::OnceLock;
 /// Cache the built binary path to avoid rebuilding for each test.
 static READSTAT_BIN: OnceLock<PathBuf> = OnceLock::new();
 
+fn readstat_bin() -> &'static std::path::Path {
+    READSTAT_BIN
+        .get_or_init(|| {
+            let bin = escargot::CargoBuild::new()
+                .bin("readstat")
+                .current_release()
+                .current_target()
+                .manifest_path("../readstat-cli/Cargo.toml")
+                .run()
+                .expect("Failed to build readstat binary");
+
+            bin.path().to_path_buf()
+        })
+        .as_path()
+}
+
 fn readstat_cmd() -> Command {
-    let bin_path = READSTAT_BIN.get_or_init(|| {
-        let bin = escargot::CargoBuild::new()
-            .bin("readstat")
-            .current_release()
-            .current_target()
-            .manifest_path("../readstat-cli/Cargo.toml")
-            .run()
-            .expect("Failed to build readstat binary");
+    Command::new(readstat_bin())
+}
 
-        bin.path().to_path_buf()
-    });
+#[cfg(unix)]
+fn run_with_closed_stdout(args: &[&str]) -> std::process::Output {
+    let (reader, writer) = std::io::pipe().expect("failed to create stdout pipe");
+    drop(reader);
 
-    Command::new(bin_path)
+    std::process::Command::new(readstat_bin())
+        .args(args)
+        .stdout(writer)
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .expect("failed to run readstat")
+}
+
+#[cfg(unix)]
+fn assert_closed_stdout_success(args: &[&str]) {
+    let output = run_with_closed_stdout(args);
+    assert!(
+        output.status.success(),
+        "status: {}; stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 /// `--rows 0` must still create a header-only CSV file.
@@ -162,4 +190,59 @@ fn ineffective_option_combinations_are_rejected() {
         .stderr(predicate::str::contains(
             "only CSV may be written to stdout",
         ));
+}
+
+#[cfg(unix)]
+#[test]
+fn stdout_commands_accept_an_early_closed_pipe() {
+    let input = "tests/data/cars.sas7bdat";
+
+    assert_closed_stdout_success(&["metadata", input, "--as-json"]);
+    assert_closed_stdout_success(&["preview", input, "--rows", "428", "--no-progress"]);
+    assert_closed_stdout_success(&["convert", input, "--rows", "1", "--no-progress"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn closed_stderr_does_not_fail_a_valid_conversion() {
+    let output = NamedTempFile::new("closed-stderr.csv").unwrap();
+    let (reader, writer) = std::io::pipe().expect("failed to create stderr pipe");
+    drop(reader);
+
+    let status = std::process::Command::new(readstat_bin())
+        .args([
+            "convert",
+            "tests/data/cars.sas7bdat",
+            "--rows",
+            "1",
+            "--output",
+        ])
+        .arg(output.path())
+        .args(["--overwrite", "--no-progress"])
+        .stdout(std::process::Stdio::null())
+        .stderr(writer)
+        .status()
+        .expect("failed to run readstat");
+
+    assert!(status.success(), "status was {status}");
+    assert!(
+        std::fs::metadata(output.path()).unwrap().len() > 0,
+        "conversion did not produce output"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn closed_stderr_preserves_a_runtime_error_exit_code() {
+    let (reader, writer) = std::io::pipe().expect("failed to create stderr pipe");
+    drop(reader);
+
+    let status = std::process::Command::new(readstat_bin())
+        .args(["metadata", "tests/data/definitely-missing.sas7bdat"])
+        .stdout(std::process::Stdio::null())
+        .stderr(writer)
+        .status()
+        .expect("failed to run readstat");
+
+    assert_eq!(status.code(), Some(1), "status was {status}");
 }

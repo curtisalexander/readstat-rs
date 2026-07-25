@@ -6,8 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-07-25
+
 ### Changed
 - Split GitHub Actions by lifecycle into focused CI, safety, release, bindings, fuzzing, and Pages workflows. Superseded PR work is canceled, binding regeneration is input-sensitive, and release candidates now build in parallel with validation before a single all-or-nothing publication step.
+- Updated the README CLI capture to demonstrate the canonical `convert` subcommand and extension-based output format inference.
+
+### Fixed
+- Made metadata output handle an early-closed stdout pipe without panicking, and made stderr diagnostics best-effort so a closed diagnostic stream cannot abort conversion or alter runtime error exit codes.
+- Fixed release version validation when a crate declares the same sys dependency under both normal and build dependency sections.
 
 ## [0.26.0] - 2026-07-23
 

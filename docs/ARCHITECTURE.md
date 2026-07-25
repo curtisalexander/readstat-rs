@@ -32,7 +32,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.26.0) — Library Crate
+### `readstat` (v0.27.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -70,7 +70,7 @@ Key public types:
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.26.0) — CLI Binary
+### `readstat-cli` (v0.27.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
