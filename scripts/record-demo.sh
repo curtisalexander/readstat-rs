@@ -11,7 +11,7 @@
 #
 # Prerequisites (one-time):
 #   brew install vhs gifsicle          # vhs pulls in ffmpeg + ttyd
-#   cargo build --release -p readstat-cli
+#   cargo build --release -p readstat-cli --features sql
 #
 # Usage:
 #   ./scripts/record-demo.sh           # → docs/demo.gif
@@ -32,7 +32,7 @@ done
 if [ ! -x "target/release/readstat" ]; then
     echo "note: target/release/readstat not found — the demo will fall back to" >&2
     echo "      'cargo run', which is slower and noisier on screen. Build first:" >&2
-    echo "      cargo build --release -p readstat-cli" >&2
+    echo "      cargo build --release -p readstat-cli --features sql" >&2
 fi
 
 RAW="$(mktemp -t readstat-demo-raw.XXXXXX).gif"

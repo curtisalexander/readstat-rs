@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-07-26
+
+### Changed
+- Made DataFusion SQL support opt-in for `readstat-cli` to restore a substantially smaller default binary. `cargo install readstat-cli --features sql` retains `--sql` and `--sql-file`; the `readstat` library's defaults are unchanged. Official release candidates now build only the CLI package so workspace feature unification cannot accidentally include SQL.
+
 ## [0.27.0] - 2026-07-25
 
 ### Changed

@@ -119,7 +119,7 @@ This runs:
 - `cargo fmt --all -- --check` — formatting
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` — linting
 - `readstat-wasm` fmt and clippy (excluded from workspace, checked separately)
-- all-feature/all-target workspace checks and tests (including default SQL)
+- all-feature/all-target workspace checks and tests (including the CLI's opt-in SQL feature)
 - Arrow/DataFusion lockstep, all-feature rustdocs, and mdBook
 - advertised Rust API-server and PyO3 checks
 - WASM host fmt/clippy and an Emscripten release build when that toolchain is available (otherwise a prominent warning)

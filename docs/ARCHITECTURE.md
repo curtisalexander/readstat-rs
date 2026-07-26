@@ -32,7 +32,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.27.0) — Library Crate
+### `readstat` (v0.28.0) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -70,7 +70,7 @@ Key public types:
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.27.0) — CLI Binary
+### `readstat-cli` (v0.28.0) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -82,6 +82,8 @@ Owns CLI arg parsing, progress bars, colored output, and reader-writer thread or
 Human metadata formatting and `--columns-file` parsing intentionally live here rather than in the library.
 
 Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, path_abs.
+The default CLI build includes all output formats but omits the substantially
+larger DataFusion SQL engine. The `sql` feature enables `--sql` and `--sql-file`.
 
 ### `readstat-sys` (v0.5.1) — FFI Bindings
 **Path**: `crates/readstat-sys/`
@@ -151,5 +153,5 @@ Test data lives in `tests/data/*.sas7bdat` (16 datasets). Scripts to regenerate 
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format
 - **Multiple I/O strategies**: file path (default), memory-mapped files (`memmap2`), and in-memory byte slices — all feed into the same FFI parsing pipeline
-- **SQL**: DataFusion support is default and exposes sync and async APIs. Buffered input supports repeated scans; only channel-backed streaming input is limited to one execution.
+- **SQL**: DataFusion support is enabled by default in the library and opt-in for the CLI. It exposes sync and async APIs. Buffered input supports repeated scans; only channel-backed streaming input is limited to one execution.
 - **Metadata preservation**: SAS variable labels, format strings, and storage widths are persisted as Arrow field metadata, surviving round-trips through Parquet and Feather. See [TECHNICAL.md](TECHNICAL.md#column-metadata-in-arrow-and-parquet) for details.

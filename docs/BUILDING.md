@@ -24,7 +24,7 @@ sudo apt install build-essential
 
 Build
 ```sh
-cargo build
+cargo build -p readstat-cli
 ```
 
 **iconv**: Linked dynamically against the system-provided library. On most distributions it is available by default. No explicit link directives are emitted in the build script &mdash; the system linker resolves it automatically.
@@ -40,7 +40,7 @@ xcode-select --install
 
 Build
 ```sh
-cargo build
+cargo build -p readstat-cli
 ```
 
 **iconv**: Linked dynamically against the system-provided library that ships with macOS (via `cargo:rustc-link-lib=iconv` in the [readstat-sys build script](../crates/readstat-sys/build.rs)). No additional packages need to be installed.
@@ -52,7 +52,7 @@ Building on Windows requires [Visual Studio C++ Build tools](https://visualstudi
 
 Build
 ```sh
-cargo build
+cargo build -p readstat-cli
 ```
 
 **iconv**: Compiled from source using the vendored [win-iconv](https://github.com/win-iconv/win-iconv) submodule (located at `crates/readstat-iconv-sys/vendor/win-iconv/`; public domain, so static linking carries no copyleft obligations) via the [readstat-iconv-sys](../crates/readstat-iconv-sys/) crate. `readstat-iconv-sys` is a Windows-only dependency (gated behind `[target.'cfg(windows)'.dependencies]` in [readstat-sys/Cargo.toml](../crates/readstat-sys/Cargo.toml)).

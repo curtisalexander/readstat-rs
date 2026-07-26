@@ -100,7 +100,9 @@ jobs:
           C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-gcc
           Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
       - name: Build candidate
-        run: cargo build --release --target ${{ matrix.target }}
+        # Build only the CLI package so the library workspace member's default
+        # SQL feature cannot be unified into the lean release binary.
+        run: cargo build -p readstat-cli --release --target ${{ matrix.target }}
       - name: Strip Unix candidate
         if: matrix.ext == 'tar.gz'
         shell: bash

@@ -341,7 +341,7 @@ Parallel Write (--parallel --parallel-write)
 
 ### SQL Queries (`--sql` / `--sql-file`)
 
-SQL is enabled by default. Library users have synchronous and asynchronous buffered and streaming APIs. Buffered batches support repeated scans; only channel-backed streaming input is single-execution because execution consumes its receiver.
+SQL is an opt-in CLI feature because its DataFusion query engine substantially increases the binary size. Official release binaries and a normal `cargo install readstat-cli` omit it. Install an SQL-enabled CLI with `cargo install readstat-cli --features sql`. The `readstat` library continues to enable SQL by default and offers synchronous and asynchronous buffered and streaming APIs. Buffered batches support repeated scans; only channel-backed streaming input is single-execution because execution consumes its receiver.
 
 Provide the query inline with `--sql "SELECT ..."`, or point at a file containing the query with `--sql-file path/to/query.sql`. The table name is the input file stem (e.g. `cars` for `cars.sas7bdat`). `--sql` and `--sql-file` are mutually exclusive with each other and with `--columns`/`--columns-file`.
 

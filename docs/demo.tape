@@ -6,7 +6,7 @@
 #
 # Prerequisites (one-time, local):
 #   brew install vhs          # pulls in ffmpeg + ttyd
-#   cargo build --release -p readstat-cli
+#   cargo build --release -p readstat-cli --features sql
 #
 # Regenerate the GIF:
 #   vhs docs/demo.tape        # run from the repo root
@@ -14,7 +14,7 @@
 # Notes:
 #   * demo.sh handles its own typewriter pacing via DEMO_SPEED, so we let it
 #     drive the timing and just record the result here.
-#   * DEMO_SQL=1 includes the SQL beat (enabled by default).
+#   * DEMO_SQL=1 includes the SQL beat (requires the `sql` feature).
 
 Output docs/demo.gif
 

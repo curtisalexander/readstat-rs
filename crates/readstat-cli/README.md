@@ -15,10 +15,17 @@ Binary crate producing the `readstat` CLI tool for converting SAS binary files (
 - Column selection (`--columns`, `--columns-file`)
 - Streaming reads with configurable chunk size (`--stream-rows`)
 - Parallel reading (`--parallel`) and parallel Parquet writing (`--parallel-write`)
-- SQL queries via DataFusion (`--sql`, enabled by default)
+- Optional SQL queries via DataFusion (`--sql`, `--sql-file`)
 - Parquet compression settings (`--compression`, `--compression-level`)
 
 With no `--output`, conversion writes CSV to stdout. Progress, logs, and other diagnostics go to stderr, so stdout can be piped safely. An explicit format must agree with `.csv`, `.feather`, `.ndjson`, or `.parquet`; unknown extensions and mismatches are errors.
+
+The default CLI omits DataFusion to keep the binary and dependency graph small.
+Enable SQL when installing from Cargo with:
+
+```sh
+cargo install readstat-cli --features sql
+```
 
 ## Documentation
 

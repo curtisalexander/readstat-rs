@@ -37,8 +37,16 @@ If you have Rust installed, the easiest way to install is via `cargo`:
 cargo install readstat-cli
 ```
 
+The default CLI omits the substantially larger DataFusion SQL engine. To add
+the `--sql` and `--sql-file` options, install with the opt-in `sql` feature:
+
+```sh
+cargo install readstat-cli --features sql
+```
+
 ### Download a Release
 \[Mostly\] static binaries for Linux, macOS, and Windows may be found at the [Releases page](https://github.com/curtisalexander/readstat-rs/releases/).
+Release binaries use the CLI's lean default feature set and do not include SQL.
 
 ### Setup
 Move the `readstat` binary to a known directory and add the binary to the user's [PATH](https://en.wikipedia.org/wiki/PATH_(variable)).

@@ -12,13 +12,13 @@
 # Usage:
 #   ./scripts/demo.sh              # paced for recording (typewriter pauses)
 #   DEMO_SPEED=0 ./scripts/demo.sh # no pauses — CI smoke test
-#   DEMO_SQL=1 ./scripts/demo.sh   # include the default SQL beat
+#   DEMO_SQL=1 ./scripts/demo.sh   # include the optional SQL beat
 #
 # Environment:
 #   DEMO_SPEED  Seconds to pause before/after each command (default 1).
 #               Set to 0 for an instant, non-interactive run.
 #   DEMO_SQL    If "1", include the SQL aggregation beat. Requires a binary
-#               built with default features.
+#               built with the `sql` feature.
 #   READSTAT    Override the binary/command used (whitespace-separated, e.g.
 #               "cargo run -q -p readstat-cli --"). Default: release binary if
 #               present, else a cargo-run fallback.
@@ -106,7 +106,7 @@ cat cars.ndjson
 echo; pause
 
 if [ "$DEMO_SQL" = "1" ]; then
-    banner "7. Query with SQL (enabled by default)"
+    banner "7. Query with SQL (optional feature)"
     SQL='SELECT "Brand", ROUND(AVG("CityMPG"),1) AS avg_city_mpg FROM cars GROUP BY "Brand" ORDER BY avg_city_mpg DESC LIMIT 8'
     prompt "readstat convert cars.sas7bdat --sql '$SQL' -o top.csv --overwrite"
     "${RS[@]}" convert cars.sas7bdat --sql "$SQL" -o top.csv --overwrite

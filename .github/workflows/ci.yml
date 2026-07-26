@@ -78,10 +78,11 @@ jobs:
             cargo package -p "$crate" --allow-dirty --list >/dev/null
           done
 
-  # SQL is part of the default API and remains a required PR gate. Keep its
-  # full code-generation/linking cost in one Linux job instead of repeating it
-  # in every native-platform binding job. The standalone examples share this
-  # job's target directory so their default-feature builds reuse DataFusion.
+  # SQL remains part of the library's default API and an opt-in CLI feature,
+  # so it is a required PR gate. Keep its full code-generation/linking cost in
+  # one Linux job instead of repeating it in every native-platform binding job.
+  # The standalone examples share this job's target directory so their
+  # default-feature builds reuse DataFusion.
   sql:
     runs-on: ubuntu-latest
     env:
