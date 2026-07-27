@@ -94,12 +94,12 @@ libname data "&homedir./data";
   PROC CONTENTS. ODS LISTING is opened explicitly because interactive SAS
   environments such as SAS Studio may have it closed by default.
 */
-filename benchmark_manifest
+filename benman
   "&homedir./readstat_benchmark_v1_manifest.txt"
   encoding="utf-8";
 
 ods listing;
-proc printto print=benchmark_manifest new;
+proc printto print=benman new;
 run;
 
 %macro write_optional_environment;
@@ -122,20 +122,20 @@ run;
 
 %macro write_artifact_info;
   %if %upcase(%sysfunc(getoption(xcmd))) = XCMD %then %do;
-    filename benchmark_artifact pipe
+    filename benart pipe
       "LC_ALL=C ls -lh '&homedir./data/readstat_benchmark_v1.sas7bdat' 2>&1 && sha256sum '&homedir./data/readstat_benchmark_v1.sas7bdat' 2>&1"
       lrecl=32767;
 
     data _null_;
       length line $32767;
-      infile benchmark_artifact truncover;
+      infile benart truncover;
       file print;
       input;
       line = _infile_;
       put line;
     run;
 
-    filename benchmark_artifact clear;
+    filename benart clear;
   %end;
   %else %do;
     data _null_;
@@ -195,7 +195,7 @@ run;
 proc printto;
 run;
 
-filename benchmark_manifest clear;
+filename benman clear;
 
 %put NOTE: Benchmark dataset written to &homedir./data/readstat_benchmark_v1.sas7bdat.;
 %put NOTE: Benchmark manifest written to &homedir./readstat_benchmark_v1_manifest.txt.;
