@@ -426,3 +426,143 @@ cargo flamegraph -p readstat-cli --bin readstat -- data crates/readstat-tests/te
 Flamegraph is written to `flamegraph.svg` in the directory you run the command from (the repository root).
 
 :memo: Have yet to utilize flamegraphs in order to improve performance.
+
+## Large external SAS7BDAT baseline (Stage 0)
+
+The `large_sas_benchmark` example is an argument-driven baseline for the
+current high-level `ReadStatReader` path. It streams batches through `visit`,
+counts their rows, and immediately drops them without writing output. Its timed
+region includes the reader's metadata parse and all data parses, but excludes
+argument parsing and the filesystem metadata lookup.
+
+### Census AHS 2021 corpus
+
+From the repository root, download and extract the public U.S. Census 2021
+American Housing Survey National PUF SAS archive into the ignored `target/`
+tree (never commit this corpus):
+
+```bash
+mkdir -p target/benchmark-data/ahs-2021 && \
+curl --fail --location --output target/benchmark-data/ahs-2021/ahs-2021-sas.zip \
+  'https://www2.census.gov/programs-surveys/ahs/2021/AHS%202021%20National%20PUF%20v1.0%20SAS.zip' && \
+unzip -o target/benchmark-data/ahs-2021/ahs-2021-sas.zip \
+  -d target/benchmark-data/ahs-2021
+```
+
+The ZIP is approximately 160 MB and contains `household.sas7bdat`
+(approximately 311,689,216 bytes), `mortgage.sas7bdat`, `person.sas7bdat`, and
+`project.sas7bdat`. Confirm actual sizes with the harness rather than treating
+the approximate published sizes as checksums. If extraction creates a nested
+directory, find the input with:
+
+```bash
+find target/benchmark-data/ahs-2021 -name household.sas7bdat -print
+```
+
+### Running and comparing chunk sizes
+
+```bash
+cargo run --release -p readstat --example large_sas_benchmark -- \
+  target/benchmark-data/ahs-2021/household.sas7bdat --chunk-rows 10000
+
+for rows in 1000 10000 100000; do
+  cargo run --quiet --release -p readstat --example large_sas_benchmark -- \
+    target/benchmark-data/ahs-2021/household.sas7bdat --chunk-rows "$rows"
+done
+```
+
+Each run reports source bytes, exact emitted rows and batches, elapsed wall
+time, rows/s, source MiB/s, and expected parser invocations. The default
+`one-pass` mode uses one metadata parse plus one data parse regardless of batch
+count. `legacy-chunked` preserves the former parser-per-batch behavior as a
+benchmark baseline; its expected parser count is `1 + batches`. Both counts are
+derived rather than instrumented.
+
+Compare the Stage 1 one-pass reader to the former implementation with identical
+batch sizing:
+
+```bash
+for mode in one-pass legacy-chunked; do
+  cargo run --quiet --release -p readstat --example large_sas_benchmark -- \
+    target/benchmark-data/ahs-2021/household.sas7bdat \
+    --chunk-rows 10000 --mode "$mode"
+done
+```
+
+On Linux with `/proc` mounted, current RSS is `/proc/self/status` `VmRSS` and
+process peak RSS is `VmHWM`, both in KiB. Other platforms and Linux containers
+without `/proc` report RSS as unavailable. The process high-water mark includes
+runtime allocations and is not solely Arrow batch memory.
+
+For reproducible comparisons:
+
+- Record the commit, release profile, CPU, OS, storage type, and exact command.
+- Repeat each size and rotate their order. The harness measures one pass rather
+  than providing a statistical framework.
+- Label cache state. The first read may be **cold-cache** and storage-bound;
+  later reads are normally **warm-cache** due to the OS page cache. Dropping
+  Linux caches requires privileges and affects the whole host, so do not do it
+  on shared systems.
+- Avoid concurrent heavy I/O and CPU work; frequency scaling, thermal
+  throttling, and network filesystems can materially affect results.
+- MiB/s divides source file bytes by elapsed time. It is workload throughput,
+  not measured physical I/O: `legacy-chunked` rereads prefixes, while OS caching
+  can serve either mode without issuing storage reads for every source byte.
+
+### Synthetic SAS benchmark corpus
+
+The public Census file is a useful real workload, but its `household.sas7bdat`
+member is unusually wide and has only 64,141 rows. The fixed-seed
+[`create_rand_ds.sas`](../crates/readstat-tests/util/create_rand_ds.sas) program
+defines a complementary canonical profile:
+
+- Dataset: `readstat_benchmark_v1.sas7bdat`
+- Seed: `20260727`
+- Rows: 4,000,000
+- Numeric columns: 12 (SAS numerics occupy 8 bytes each)
+- Character columns: 8, each 32 bytes wide
+- Compression: none
+- Expected raw row payload: 352 bytes, excluding SAS page overhead
+- Expected raw payload total: 1,408,000,000 bytes (approximately 1.31 GiB)
+
+This shape is deliberately tall enough to reveal repeated-prefix parsing and
+reader partitioning costs. Its high-entropy printable strings also exercise
+string conversion and avoid making compression ratio the dominant variable.
+The SAS version, host platform, session encoding, and page settings can affect
+the random-number implementation or binary representation even with a fixed
+seed. The generator writes these details, its parameters, and the complete
+`PROC CONTENTS` listing to `$HOME/readstat_benchmark_v1_manifest.txt` in the
+same run. On Linux, a SAS session with the `XCMD` option also appends `ls -lh`
+and `sha256sum` output through `FILENAME PIPE`. A restricted `NOXCMD` session
+records that limitation and the exact fallback commands instead.
+
+The manifest normally records the output size and digest automatically. If SAS
+reports `NOXCMD`, run the fallback commands printed in the manifest:
+
+```bash
+ls -lh readstat_benchmark_v1.sas7bdat
+sha256sum readstat_benchmark_v1.sas7bdat
+```
+
+Then validate the file with both benchmark modes and several batch sizes before
+publishing it. Exact row counts must agree in every run.
+
+Do **not** commit the generated file or add it to Git LFS. Git LFS charges the
+repository owner for stored versions and download bandwidth, making a frequently
+downloaded benchmark corpus an unnecessary repository cost. Prefer a dedicated
+GitHub release such as `benchmark-data-v1`; GitHub release assets do not consume
+Git history and have no aggregate size or bandwidth limit. Each individual
+release asset must remain under 2 GiB. If the generated SAS file exceeds that
+limit, reduce the canonical row count rather than splitting the file: a split
+archive is awkward for automated benchmark setup and obscures the actual source
+size.
+
+Publish these alongside the SAS file:
+
+- A SHA-256 checksum file.
+- The exact generator program or its repository commit.
+- The generated `readstat_benchmark_v1_manifest.txt` file.
+
+The Census and synthetic datasets answer different questions and should both be
+retained in benchmark reports; the synthetic corpus must not replace validation
+against real files.

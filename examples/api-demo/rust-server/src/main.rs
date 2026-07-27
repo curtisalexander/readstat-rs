@@ -73,7 +73,9 @@ async fn preview(
 
     let csv_bytes = tokio::task::spawn_blocking(move || {
         let reader = ReadStatReader::from_bytes(bytes);
-        let row_count = u32::try_from(reader.metadata()?.row_count)?;
+        let row_count = u32::try_from(reader.metadata()?.row_count.ok_or(
+            readstat::ReadStatError::RowCountUnavailable,
+        )?)?;
         let batch = reader.rows(0, Some(max_rows.min(row_count))).read()?;
         readstat::write_batch_to_csv_bytes(&batch)
     })

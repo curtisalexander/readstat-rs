@@ -14,11 +14,12 @@ git checkout main && git pull origin main
 ./scripts/release-check.sh        # Linux/macOS
 .\scripts\release-check.ps1       # Windows
 
-# 2. Bump versions (updates Cargo.toml files, ARCHITECTURE.md, creates commit + tag)
+# 2. Bump versions (including the excluded WASM manifest and ARCHITECTURE.md)
 cargo release minor -p readstat -p readstat-cli --dry-run   # preview first
 cargo release minor -p readstat -p readstat-cli             # apply
 
-# 3. Review the bump commit and tag, then push to trigger CI release builds.
+# 3. Re-run release-check, review the bump commit and tag, then push.
+./scripts/release-check.sh
 #    Push the release tag EXPLICITLY (not --follow-tags, which would push any
 #    stray local annotated tag). Only readstat/readstat-cli releases are
 #    tagged (`v*`); sys-crate releases are crates.io-only events with no tag.
@@ -67,7 +68,8 @@ bumps that require Cargo.toml edits are still manual.
 
 Use [`cargo-release`](https://github.com/crate-ci/cargo-release) (`cargo install cargo-release`).
 It updates all Cargo.toml version and dependency fields, substitutes the version strings in
-`docs/ARCHITECTURE.md`, and creates a single version-bump commit plus a git tag.
+`docs/ARCHITECTURE.md` and the excluded `readstat-wasm` manifest, and creates a
+single version-bump commit plus a git tag.
 
 ```bash
 # Preview what will change (no files are modified)
@@ -85,7 +87,9 @@ Release build); sys-crate releases set `tag = false` and exist only as a bump co
 a CHANGELOG entry, and a crates.io publish.
 
 **Version conventions:**
-- `readstat` and `readstat-cli` share the same version (e.g. `0.21.0`) — always bump together
+- `readstat`, `readstat-cli`, and `readstat-wasm` share the same version (e.g.
+  `0.28.0`). The WASM crate is excluded from the workspace, but the `readstat`
+  release replacement updates it and release checks enforce parity.
 - `readstat-sys` and `readstat-iconv-sys` version **independently** — bump each
   only when its vendored C library or bindings change (e.g.
   `cargo release minor -p readstat-sys`). Their numbers are not expected to

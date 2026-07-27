@@ -34,7 +34,7 @@
 //! ```no_run
 //! # fn main() -> Result<(), readstat::ReadStatError> {
 //! let md = readstat::read_metadata("data.sas7bdat")?;
-//! println!("{} rows x {} columns", md.row_count, md.var_count);
+//! println!("{:?} rows x {} columns", md.row_count, md.var_count);
 //!
 //! let batch = readstat::read_to_batch("data.sas7bdat")?;
 //! println!("Schema: {:?}", batch.schema());
@@ -75,7 +75,7 @@
 //! let mut md = ReadStatMetadata::new();
 //! md.read_metadata(&rsp, false)?;
 //!
-//! println!("Rows: {}, Variables: {}", md.row_count, md.var_count);
+//! println!("Rows: {:?}, Variables: {}", md.row_count, md.var_count);
 //! println!("Encoding: {}", md.file_encoding);
 //! println!("Compression: {:?}", md.compression);
 //!
@@ -109,7 +109,7 @@
 //! md.read_metadata(&rsp, false)?;
 //!
 //! // Read all rows into a single chunk
-//! let row_count = md.row_count as u32;
+//! let row_count = md.row_count.ok_or(readstat::ReadStatError::RowCountUnavailable)? as u32;
 //! let mut d = ReadStatData::new().init(md, 0, row_count);
 //! d.read_data(&rsp)?;
 //!
@@ -157,7 +157,7 @@
 //! let mut md = ReadStatMetadata::new();
 //! md.read_metadata_from_bytes(sas_bytes, false)?;
 //!
-//! let row_count = md.row_count as u32;
+//! let row_count = md.row_count.ok_or(readstat::ReadStatError::RowCountUnavailable)? as u32;
 //! let mut d = ReadStatData::new().init(md, 0, row_count);
 //! d.read_data_from_bytes(sas_bytes)?;
 //!
@@ -188,7 +188,7 @@
 //! if let Some(mapping) = md.resolve_selected_columns(Some(columns))? {
 //!     // `init_filtered` applies the filter and initializes in the correct
 //!     // order — pass the *original* metadata; filtering happens internally.
-//!     let row_count = u32::try_from(md.row_count)?;
+//!     let row_count = u32::try_from(md.row_count.ok_or(readstat::ReadStatError::RowCountUnavailable)?)?;
 //!     let mut d = ReadStatData::new().init_filtered(md, &mapping, 0, row_count);
 //!     d.read_data(&rsp)?;
 //!
@@ -223,7 +223,7 @@
 //! let mut md = ReadStatMetadata::new();
 //! md.read_metadata(&rsp, false)?;
 //!
-//! let row_count = md.row_count as u32;
+//! let row_count = md.row_count.ok_or(readstat::ReadStatError::RowCountUnavailable)? as u32;
 //! let mut d = ReadStatData::new().init(md, 0, row_count);
 //! d.read_data(&rsp)?;
 //!

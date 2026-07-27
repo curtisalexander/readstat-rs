@@ -213,6 +213,14 @@ pub enum ReadStatError {
     #[error("Date arithmetic overflow")]
     DateOverflow,
 
+    /// An operation requiring an exact row count used fast metadata.
+    #[error("Row count is unavailable; read metadata without skip_row_count")]
+    RowCountUnavailable,
+
+    /// A Rust panic was contained at a ReadStat callback boundary.
+    #[error("Panic in ReadStat callback")]
+    CallbackPanic,
+
     /// Integer conversion error (e.g. `u32` to `i32` overflow).
     #[error("Integer conversion failed: {0}")]
     IntConversion(#[from] std::num::TryFromIntError),

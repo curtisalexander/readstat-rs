@@ -37,7 +37,12 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
     let path = PathAbs::new(input)?.as_path().to_path_buf();
     let reader = ReadStatReader::from_path(&path)?;
-    let available = u32::try_from(reader.metadata()?.row_count)?;
+    let available = u32::try_from(
+        reader
+            .metadata()?
+            .row_count
+            .ok_or(ReadStatError::RowCountUnavailable)?,
+    )?;
     let selected_rows = rows.min(available);
     let mut read = reader.rows(0, Some(selected_rows));
     if let Some(columns) = resolve_columns(columns, columns_file)? {

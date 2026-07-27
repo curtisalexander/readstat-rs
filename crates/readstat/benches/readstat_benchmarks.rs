@@ -61,7 +61,7 @@ fn bench_read_data_single_chunk(c: &mut Criterion) {
         let mut md = ReadStatMetadata::new();
         md.read_metadata(&rsp, false).unwrap();
 
-        let rows = md.row_count as u32;
+        let rows = md.row_count.unwrap() as u32;
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(BenchmarkId::from_parameter(filename), filename, |b, _| {
@@ -82,7 +82,7 @@ fn bench_read_data_chunked(c: &mut Criterion) {
     let rsp = setup_path("cars.sas7bdat");
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let total_rows = md.row_count as u32;
+    let total_rows = md.row_count.unwrap() as u32;
 
     for chunk_size in &[1000, 5000, 10000] {
         group.throughput(Throughput::Elements(total_rows as u64));
@@ -114,7 +114,7 @@ fn bench_arrow_conversion(c: &mut Criterion) {
     let rsp = setup_path("cars.sas7bdat");
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let rows = md.row_count as u32;
+    let rows = md.row_count.unwrap() as u32;
 
     // Pre-read the data
     let mut d = ReadStatData::new().init(md.clone(), 0, rows);
@@ -143,7 +143,7 @@ fn bench_write_csv(c: &mut Criterion) {
     let rsp_in = setup_path("cars.sas7bdat");
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
-    let rows = md.row_count as u32;
+    let rows = md.row_count.unwrap() as u32;
 
     // Pre-read the data
     let mut d = ReadStatData::new().init(md.clone(), 0, rows);
@@ -170,7 +170,7 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
     let rsp_in = setup_path("cars.sas7bdat");
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
-    let rows = md.row_count as u32;
+    let rows = md.row_count.unwrap() as u32;
 
     // Pre-read the data
     let mut d = ReadStatData::new().init(md.clone(), 0, rows);
@@ -220,7 +220,7 @@ fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
     let rsp_in = setup_path("cars.sas7bdat");
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
-    let rows = md.row_count as u32;
+    let rows = md.row_count.unwrap() as u32;
 
     // Pre-read the data
     let mut d = ReadStatData::new().init(md.clone(), 0, rows);
@@ -267,7 +267,7 @@ fn bench_write_formats(c: &mut Criterion) {
     let rsp_in = setup_path("cars.sas7bdat");
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
-    let rows = md.row_count as u32;
+    let rows = md.row_count.unwrap() as u32;
 
     // Pre-read the data
     let mut d = ReadStatData::new().init(md.clone(), 0, rows);
@@ -306,7 +306,7 @@ fn bench_end_to_end_conversion(c: &mut Criterion) {
     let rsp_in = setup_path("cars.sas7bdat");
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
-    let rows = md.row_count as u32;
+    let rows = md.row_count.unwrap() as u32;
 
     group.throughput(Throughput::Elements(rows as u64));
 
@@ -394,7 +394,7 @@ fn bench_io_read_data(c: &mut Criterion) {
         let rsp = setup_path(filename);
         let mut md = ReadStatMetadata::new();
         md.read_metadata(&rsp, false).unwrap();
-        let rows = md.row_count as u32;
+        let rows = md.row_count.unwrap() as u32;
         let file_size = std::fs::metadata(&path).unwrap().len();
 
         group.throughput(Throughput::Bytes(file_size));
@@ -440,7 +440,7 @@ fn bench_io_chunked(c: &mut Criterion) {
     let rsp = setup_path(filename);
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let total_rows = md.row_count as u32;
+    let total_rows = md.row_count.unwrap() as u32;
     let chunk_size = 500u32;
 
     group.throughput(Throughput::Elements(total_rows as u64));

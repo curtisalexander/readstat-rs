@@ -22,7 +22,7 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
 
     // parse sas7bdat
     // read the entire dataset
-    let d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
 
     (rsp, md, d)
 }
@@ -35,7 +35,7 @@ fn parse_largepage_ok() {
     assert!(error.is_ok());
 
     // row count
-    assert_eq!(md.row_count, 2000);
+    assert_eq!(md.row_count, Some(2000));
 
     // variable count
     assert_eq!(md.var_count, 110);

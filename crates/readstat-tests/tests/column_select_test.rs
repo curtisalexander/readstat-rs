@@ -31,7 +31,7 @@ fn read_cars_with_columns(
 
     let mut d = ReadStatData::new()
         .set_column_filter(column_filter.map(Arc::new), original_var_count)
-        .init(md.clone(), 0, md.row_count as u32);
+        .init(md.clone(), 0, md.row_count.unwrap() as u32);
 
     d.read_data(&rsp)?;
     Ok((md, d))

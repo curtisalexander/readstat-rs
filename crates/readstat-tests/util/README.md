@@ -24,6 +24,15 @@ Utility programs to aid development
     - Number of numeric columns (vars)
     - Number of character columns (vars)
     - Size of character columns
+    - Random seed
+    - SAS dataset compression setting
+- Uses a fixed default seed so regeneration is repeatable in the same SAS
+  environment
+- Its executable example creates the canonical, tall `readstat_benchmark_v1`
+  performance corpus; see [the benchmarking guide](../../../docs/BENCHMARKING.md#synthetic-sas-benchmark-corpus)
+- The same run writes `$HOME/readstat_benchmark_v1_manifest.txt` with generator
+  parameters, SAS/OS/session details, `ls -lh` and `sha256sum` output, and the
+  complete `PROC CONTENTS` output
 - Useful for generating test files
 
 ### [create_scientific_notation_ds.sas](create_scientific_notation.sas)

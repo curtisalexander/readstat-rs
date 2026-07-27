@@ -32,8 +32,8 @@ use crate::rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClas
 /// all fields and build the Arrow [`Schema`].
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadStatMetadata {
-    /// Number of rows (observations) in the dataset.
-    pub row_count: i32,
+    /// Exact number of rows, or `None` when counting was skipped or ReadStat reports it unknown.
+    pub row_count: Option<i32>,
     /// Number of variables (columns) in the dataset.
     pub var_count: i32,
     /// Internal table name from the SAS file header.
@@ -75,7 +75,7 @@ impl ReadStatMetadata {
     /// Creates a new `ReadStatMetadata` with default (empty) values.
     pub fn new() -> Self {
         Self {
-            row_count: 0,
+            row_count: None,
             var_count: 0,
             table_name: String::new(),
             file_label: String::new(),
@@ -197,6 +197,10 @@ impl ReadStatMetadata {
 
         check_c_error(error as i32)?;
 
+        if skip_row_count {
+            parsed.row_count = None;
+        }
+
         // if successful, initialize schema
         parsed.schema = parsed.initialize_schema();
         *self = parsed;
@@ -245,6 +249,10 @@ impl ReadStatMetadata {
             .parse_sas7bdat(dummy_path.as_ptr(), ctx);
 
         check_c_error(error as i32)?;
+
+        if skip_row_count {
+            parsed.row_count = None;
+        }
 
         // if successful, initialize schema
         parsed.schema = parsed.initialize_schema();
@@ -757,7 +765,7 @@ mod tests {
     #[test]
     fn default_metadata() {
         let md = ReadStatMetadata::new();
-        assert_eq!(md.row_count, 0);
+        assert_eq!(md.row_count, None);
         assert_eq!(md.var_count, 0);
         assert!(md.table_name.is_empty());
         assert!(md.vars.is_empty());

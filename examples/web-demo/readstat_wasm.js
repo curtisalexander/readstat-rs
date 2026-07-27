@@ -178,7 +178,7 @@ export function read_metadata(bytes) {
  * Read metadata, skipping the full row count for speed.
  *
  * @param {Uint8Array} bytes - The raw file contents.
- * @returns {string} A JSON string containing metadata (row_count may be inaccurate).
+ * @returns {string} A JSON string containing metadata (`row_count` is null).
  */
 export function read_metadata_fast(bytes) {
   return _callWasmStringFn(instance.exports.read_metadata_fast, bytes);

@@ -43,7 +43,8 @@ jobs:
             version=${REF_NAME#v}
             readstat=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat") | .version')
             cli=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat-cli") | .version')
-            [ "$version" = "$readstat" ] && [ "$version" = "$cli" ] || { echo "::error::Tag/package versions differ ($version, $readstat, $cli)"; exit 1; }
+            wasm=$(cargo metadata --manifest-path crates/readstat-wasm/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat-wasm") | .version')
+            [ "$version" = "$readstat" ] && [ "$version" = "$cli" ] && [ "$version" = "$wasm" ] || { echo "::error::Tag/package versions differ (tag=$version, readstat=$readstat, cli=$cli, wasm=$wasm)"; exit 1; }
             git merge-base --is-ancestor "${GITHUB_SHA}^{commit}" origin/main || { echo '::error::Tagged commit is not in origin/main'; exit 1; }
             label=$REF_NAME
           elif [ "$EVENT" = workflow_dispatch ]; then label=${MANUAL_VERSION:-dev}

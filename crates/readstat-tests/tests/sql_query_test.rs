@@ -21,7 +21,7 @@ fn read_cars_batches() -> (ReadStatMetadata, Vec<arrow_array::RecordBatch>) {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data(&rsp).unwrap();
 
     let batch = d.batch.unwrap();
@@ -178,30 +178,24 @@ fn sql_invalid_query_returns_error() {
 
 #[test]
 fn sql_read_sql_file() {
-    let temp_dir = std::env::temp_dir();
-    let sql_file = temp_dir.join("test_query.sql");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let sql_file = temp_dir.path().join("test_query.sql");
 
     std::fs::write(&sql_file, "SELECT \"Brand\", \"Model\" FROM cars LIMIT 3").unwrap();
 
     let sql = readstat::read_sql_file(&sql_file).unwrap();
     assert_eq!(sql, "SELECT \"Brand\", \"Model\" FROM cars LIMIT 3");
-
-    // Clean up
-    let _ = std::fs::remove_file(&sql_file);
 }
 
 #[test]
 fn sql_read_empty_sql_file_returns_error() {
-    let temp_dir = std::env::temp_dir();
-    let sql_file = temp_dir.join("test_empty_query.sql");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let sql_file = temp_dir.path().join("test_empty_query.sql");
 
     std::fs::write(&sql_file, "   \n  \n  ").unwrap();
 
     let result = readstat::read_sql_file(&sql_file);
     assert!(result.is_err());
-
-    // Clean up
-    let _ = std::fs::remove_file(&sql_file);
 }
 
 // ── Streaming SQL tests ─────────────────────────────────────────────
@@ -214,7 +208,7 @@ fn send_cars_via_channel() -> (readstat::RecordBatchReceiver, arrow_schema::Sche
 
     let schema = Arc::new(md.schema.clone());
 
-    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data(&rsp).unwrap();
 
     let (s, r) = crossbeam::channel::bounded(10);
@@ -300,8 +294,8 @@ fn sql_stream_aggregation() {
 fn sql_stream_and_write() {
     let (receiver, schema) = send_cars_via_channel();
 
-    let temp_dir = std::env::temp_dir();
-    let out_path = temp_dir.join("sql_stream_test_output.parquet");
+    let output_dir = tempfile::tempdir().unwrap();
+    let out_path = output_dir.path().join("output.parquet");
 
     let write_config = readstat::WriteConfig::new(readstat::OutFormat::Parquet)
         .output(out_path.clone())
@@ -325,9 +319,6 @@ fn sql_stream_and_write() {
     let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
     assert!(total_rows > 0);
     assert!(total_rows < 1081);
-
-    // Clean up
-    let _ = std::fs::remove_file(&out_path);
 }
 
 /// A streaming query that returns zero rows must still produce a valid output
@@ -337,8 +328,8 @@ fn sql_stream_and_write() {
 fn sql_stream_and_write_zero_rows() {
     let (receiver, schema) = send_cars_via_channel();
 
-    let temp_dir = std::env::temp_dir();
-    let out_path = temp_dir.join("sql_stream_test_zero_rows.parquet");
+    let output_dir = tempfile::tempdir().unwrap();
+    let out_path = output_dir.path().join("output.parquet");
 
     let write_config = readstat::WriteConfig::new(readstat::OutFormat::Parquet)
         .output(out_path.clone())
@@ -365,7 +356,4 @@ fn sql_stream_and_write_zero_rows() {
     assert_eq!(out_schema.field(0).name(), "Brand");
     let total_rows: usize = reader.into_iter().map(|b| b.unwrap().num_rows()).sum();
     assert_eq!(total_rows, 0);
-
-    // Clean up
-    let _ = std::fs::remove_file(&out_path);
 }

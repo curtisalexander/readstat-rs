@@ -6,6 +6,10 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::slice;
 
+fn catch_export<T>(failure: T, f: impl FnOnce() -> T) -> T {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or(failure)
+}
+
 /// Read metadata from a `.sas7bdat` file provided as a byte buffer.
 ///
 /// # Safety
@@ -16,7 +20,7 @@ use std::slice;
 /// Returns null on error.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_metadata(ptr: *const u8, len: usize) -> *mut c_char {
-    unsafe { read_metadata_inner(ptr, len, false) }
+    catch_export(std::ptr::null_mut(), || unsafe { read_metadata_inner(ptr, len, false) })
 }
 
 /// Read metadata, skipping the full row count for speed.
@@ -26,7 +30,7 @@ pub unsafe extern "C" fn read_metadata(ptr: *const u8, len: usize) -> *mut c_cha
 /// Same contract as [`read_metadata`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_metadata_fast(ptr: *const u8, len: usize) -> *mut c_char {
-    unsafe { read_metadata_inner(ptr, len, true) }
+    catch_export(std::ptr::null_mut(), || unsafe { read_metadata_inner(ptr, len, true) })
 }
 
 /// Read data from a `.sas7bdat` file and return it as CSV.
@@ -39,7 +43,7 @@ pub unsafe extern "C" fn read_metadata_fast(ptr: *const u8, len: usize) -> *mut 
 /// Returns null on error.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
-    unsafe { read_data_inner(ptr, len, &OutputFormat::Csv) }
+    catch_export(std::ptr::null_mut(), || unsafe { read_data_inner(ptr, len, &OutputFormat::Csv) })
 }
 
 /// Read data from a `.sas7bdat` file and return it as NDJSON.
@@ -49,7 +53,7 @@ pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
 /// Same contract as [`read_data`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data_ndjson(ptr: *const u8, len: usize) -> *mut c_char {
-    unsafe { read_data_inner(ptr, len, &OutputFormat::Ndjson) }
+    catch_export(std::ptr::null_mut(), || unsafe { read_data_inner(ptr, len, &OutputFormat::Ndjson) })
 }
 
 /// Read data from a `.sas7bdat` file and return it as Parquet bytes.
@@ -67,7 +71,13 @@ pub unsafe extern "C" fn read_data_parquet(
     len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
-    unsafe { read_data_binary_inner(ptr, len, &BinaryOutputFormat::Parquet, out_len) }
+    if out_len.is_null() {
+        return std::ptr::null_mut();
+    }
+    unsafe { *out_len = 0 };
+    catch_export(std::ptr::null_mut(), || unsafe {
+        read_data_binary_inner(ptr, len, &BinaryOutputFormat::Parquet, out_len)
+    })
 }
 
 /// Read data from a `.sas7bdat` file and return it as Feather (Arrow IPC) bytes.
@@ -81,7 +91,13 @@ pub unsafe extern "C" fn read_data_feather(
     len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
-    unsafe { read_data_binary_inner(ptr, len, &BinaryOutputFormat::Feather, out_len) }
+    if out_len.is_null() {
+        return std::ptr::null_mut();
+    }
+    unsafe { *out_len = 0 };
+    catch_export(std::ptr::null_mut(), || unsafe {
+        read_data_binary_inner(ptr, len, &BinaryOutputFormat::Feather, out_len)
+    })
 }
 
 /// Free a string previously returned by any of the `read_*` string functions.

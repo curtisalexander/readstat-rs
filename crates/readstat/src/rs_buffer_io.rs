@@ -17,6 +17,7 @@ use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::ptr;
 
+use crate::cb::catch_callback;
 use crate::err::ReadStatError;
 use crate::rs_parser::ReadStatParser;
 
@@ -71,16 +72,24 @@ impl<'a> ReadStatBufferCtx<'a> {
 
 /// No-op open handler — the buffer is already "open".
 unsafe extern "C" fn buffer_open(_path: *const c_char, _io_ctx: *mut c_void) -> c_int {
-    0
+    catch_callback(-1, || 0)
 }
 
 /// No-op close handler — nothing to close for an in-memory buffer.
 unsafe extern "C" fn buffer_close(_io_ctx: *mut c_void) -> c_int {
-    0
+    catch_callback(-1, || 0)
 }
 
 /// Seek handler that repositions the read cursor within the buffer.
 unsafe extern "C" fn buffer_seek(
+    offset: readstat_sys::readstat_off_t,
+    whence: readstat_sys::readstat_io_flags_t,
+    io_ctx: *mut c_void,
+) -> readstat_sys::readstat_off_t {
+    catch_callback(-1, || unsafe { buffer_seek_inner(offset, whence, io_ctx) })
+}
+
+unsafe fn buffer_seek_inner(
     offset: readstat_sys::readstat_off_t,
     whence: readstat_sys::readstat_io_flags_t,
     io_ctx: *mut c_void,
@@ -124,6 +133,10 @@ unsafe extern "C" fn buffer_seek(
 
 /// Read handler that copies bytes from the buffer into the caller's buffer.
 unsafe extern "C" fn buffer_read(buf: *mut c_void, nbytes: usize, io_ctx: *mut c_void) -> isize {
+    catch_callback(-1, || unsafe { buffer_read_inner(buf, nbytes, io_ctx) })
+}
+
+unsafe fn buffer_read_inner(buf: *mut c_void, nbytes: usize, io_ctx: *mut c_void) -> isize {
     let ctx = unsafe { &mut *(io_ctx as *mut ReadStatBufferCtx<'_>) };
     let bytes_left = ctx.len.saturating_sub(ctx.pos);
 
@@ -144,6 +157,18 @@ unsafe extern "C" fn buffer_read(buf: *mut c_void, nbytes: usize, io_ctx: *mut c
 
 /// Update/progress handler for buffer I/O.
 unsafe extern "C" fn buffer_update(
+    _file_size: c_long,
+    progress_handler: readstat_sys::readstat_progress_handler,
+    user_ctx: *mut c_void,
+    io_ctx: *mut c_void,
+) -> readstat_sys::readstat_error_t {
+    catch_callback(
+        readstat_sys::readstat_error_e_READSTAT_ERROR_USER_ABORT,
+        || unsafe { buffer_update_inner(_file_size, progress_handler, user_ctx, io_ctx) },
+    )
+}
+
+unsafe fn buffer_update_inner(
     _file_size: c_long,
     progress_handler: readstat_sys::readstat_progress_handler,
     user_ctx: *mut c_void,

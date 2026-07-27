@@ -10,12 +10,13 @@ use chrono::DateTime;
 use log::debug;
 use num_traits::FromPrimitive;
 use std::os::raw::{c_char, c_int, c_void};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::{
     common::ptr_to_string,
     err::ReadStatError,
     formats,
-    rs_data::{ColumnBuilder, ReadStatData},
+    rs_data::{ColumnBuilder, ReadStatData, StreamingData},
     rs_metadata::{ReadStatCompress, ReadStatEndian, ReadStatMetadata, ReadStatVarMetadata},
     rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass},
 };
@@ -36,6 +37,15 @@ enum ReadStatHandler {
 
 // C callback functions
 
+/// Contains Rust panics before they can unwind through C.
+pub(crate) fn catch_callback<T>(failure: T, f: impl FnOnce() -> T) -> T {
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or(failure)
+}
+
+fn row_count_from_c(row_count: c_int) -> Option<i32> {
+    (row_count != -1).then_some(row_count)
+}
+
 /// FFI callback that extracts file-level metadata from the `ReadStat` C parser.
 ///
 /// Called once during parsing. Populates the [`ReadStatMetadata`] struct
@@ -53,6 +63,15 @@ enum ReadStatHandler {
     clippy::cast_possible_wrap
 )]
 pub(crate) extern "C" fn handle_metadata(
+    metadata: *mut readstat_sys::readstat_metadata_t,
+    ctx: *mut c_void,
+) -> c_int {
+    catch_callback(ReadStatHandler::READSTAT_HANDLER_ABORT as c_int, || {
+        handle_metadata_inner(metadata, ctx)
+    })
+}
+
+fn handle_metadata_inner(
     metadata: *mut readstat_sys::readstat_metadata_t,
     ctx: *mut c_void,
 ) -> c_int {
@@ -106,7 +125,7 @@ pub(crate) extern "C" fn handle_metadata(
     debug!("endianness is {endianness:#?}");
 
     // insert into ReadStatMetadata struct
-    m.row_count = rc;
+    m.row_count = row_count_from_c(rc);
     m.var_count = vc;
     m.table_name = table_name;
     m.file_label = file_label;
@@ -140,6 +159,17 @@ pub(crate) extern "C" fn handle_metadata(
     clippy::cast_possible_wrap
 )]
 pub(crate) extern "C" fn handle_variable(
+    index: c_int,
+    variable: *mut readstat_sys::readstat_variable_t,
+    #[allow(unused_variables)] val_labels: *const c_char,
+    ctx: *mut c_void,
+) -> c_int {
+    catch_callback(ReadStatHandler::READSTAT_HANDLER_ABORT as c_int, || {
+        handle_variable_inner(index, variable, val_labels, ctx)
+    })
+}
+
+fn handle_variable_inner(
     index: c_int,
     variable: *mut readstat_sys::readstat_variable_t,
     #[allow(unused_variables)] val_labels: *const c_char,
@@ -331,6 +361,64 @@ pub(crate) extern "C" fn handle_value(
     value: readstat_sys::readstat_value_t,
     ctx: *mut c_void,
 ) -> c_int {
+    match catch_unwind(AssertUnwindSafe(|| {
+        handle_value_inner(obs_index, variable, value, ctx)
+    })) {
+        Ok(result) => result,
+        Err(_) => {
+            if !ctx.is_null() {
+                unsafe { &mut *ctx.cast::<ReadStatData>() }.abort_error =
+                    Some(ReadStatError::CallbackPanic);
+            }
+            ReadStatHandler::READSTAT_HANDLER_ABORT as c_int
+        }
+    }
+}
+
+pub(crate) extern "C" fn handle_streaming_value(
+    obs_index: c_int,
+    variable: *mut readstat_sys::readstat_variable_t,
+    value: readstat_sys::readstat_value_t,
+    ctx: *mut c_void,
+) -> c_int {
+    match catch_unwind(AssertUnwindSafe(|| {
+        let stream = unsafe { &mut *ctx.cast::<StreamingData<'_>>() };
+        let var_index = unsafe { readstat_sys::readstat_variable_get_index(variable) };
+        let result = handle_value_inner(
+            obs_index,
+            variable,
+            value,
+            std::ptr::from_mut(&mut stream.data).cast(),
+        );
+        if result != ReadStatHandler::READSTAT_HANDLER_OK as c_int {
+            return result;
+        }
+        if var_index == stream.data.total_var_count - 1
+            && let Err(error) = stream.row_complete()
+        {
+            stream.data.abort_error = Some(error);
+            return ReadStatHandler::READSTAT_HANDLER_ABORT as c_int;
+        }
+        result
+    })) {
+        Ok(result) => result,
+        Err(_) => {
+            if !ctx.is_null() {
+                unsafe { &mut *ctx.cast::<StreamingData<'_>>() }
+                    .data
+                    .abort_error = Some(ReadStatError::CallbackPanic);
+            }
+            ReadStatHandler::READSTAT_HANDLER_ABORT as c_int
+        }
+    }
+}
+
+fn handle_value_inner(
+    obs_index: c_int,
+    variable: *mut readstat_sys::readstat_variable_t,
+    value: readstat_sys::readstat_value_t,
+    ctx: *mut c_void,
+) -> c_int {
     // dereference ctx pointer
     let d = unsafe { &mut *ctx.cast::<ReadStatData>() };
 
@@ -338,7 +426,7 @@ pub(crate) extern "C" fn handle_value(
     let var_index: c_int = unsafe { readstat_sys::readstat_variable_get_index(variable) };
     let value_type: readstat_sys::readstat_type_t =
         unsafe { readstat_sys::readstat_value_type(value) };
-    let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_system_missing(value) };
+    let is_missing: c_int = unsafe { readstat_sys::readstat_value_is_missing(value, variable) };
 
     debug!("chunk_rows_to_process is {}", d.chunk_rows_to_process);
     debug!("chunk_row_start is {}", d.chunk_row_start);
@@ -603,6 +691,36 @@ pub(crate) extern "C" fn handle_value(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn catch_callback_converts_panic_to_failure() {
+        assert_eq!(catch_callback(-1, || panic!("test panic")), -1);
+        assert_eq!(catch_callback(-1, || 7), 7);
+    }
+
+    #[test]
+    fn tagged_missing_uses_combined_predicate() {
+        let mut value: readstat_sys::readstat_value_t = unsafe { std::mem::zeroed() };
+        value.type_ = readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE;
+        value.set_is_tagged_missing(1);
+        value.tag = b'A' as c_char;
+        assert_eq!(
+            unsafe { readstat_sys::readstat_value_is_system_missing(value) },
+            0
+        );
+        // The combined C predicate checks tagged missing before consulting variable
+        // missing ranges, so null is valid for this focused bitfield test.
+        assert_eq!(
+            unsafe { readstat_sys::readstat_value_is_missing(value, std::ptr::null_mut()) },
+            1
+        );
+    }
+
+    #[test]
+    fn unknown_row_count_sentinel_is_none() {
+        assert_eq!(row_count_from_c(-1), None);
+        assert_eq!(row_count_from_c(42), Some(42));
+    }
 
     mod property_tests {
         use super::*;

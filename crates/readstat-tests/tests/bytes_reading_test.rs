@@ -31,7 +31,7 @@ fn setup_and_read_from_bytes(
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata_from_bytes(&bytes, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data_from_bytes(&bytes).unwrap();
 
     (md, d)
@@ -159,7 +159,7 @@ fn bytes_streaming_chunks() {
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata_from_bytes(&bytes, false).unwrap();
 
-    let total_rows = md.row_count as u32;
+    let total_rows = md.row_count.unwrap() as u32;
     let offsets = readstat::build_offsets(total_rows, 500);
     let mut total_read = 0usize;
 

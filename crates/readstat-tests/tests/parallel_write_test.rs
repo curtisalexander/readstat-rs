@@ -13,28 +13,17 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatWriter};
 use std::fs;
 use std::path::PathBuf;
+use tempfile::TempDir;
 
 mod common;
 
-fn setup_test_output(filename: &str) -> PathBuf {
-    let test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("output");
-
-    // Create output directory if it doesn't exist
-    fs::create_dir_all(&test_dir).unwrap();
-
-    test_dir.join(filename)
-}
-
-fn cleanup_test_output(path: &PathBuf) {
-    if path.exists() {
-        fs::remove_file(path).ok();
-    }
+fn setup_test_output(dir: &TempDir, filename: &str) -> PathBuf {
+    dir.path().join(filename)
 }
 
 #[test]
 fn test_parallel_write_parquet_basic() {
+    let output_dir = tempfile::tempdir().unwrap();
     // Setup input path
     let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
 
@@ -43,12 +32,11 @@ fn test_parallel_write_parquet_basic() {
     md.read_metadata(&rsp_in, false).unwrap();
 
     // Setup output path
-    let output_path = setup_test_output("parallel_write_test.parquet");
-    cleanup_test_output(&output_path);
+    let output_path = setup_test_output(&output_dir, "parallel_write_test.parquet");
 
     // Write data using parallel writes by simulating the batch write
     // We'll read data in chunks and write them
-    let row_count = md.row_count as u32;
+    let row_count = md.row_count.unwrap() as u32;
     let chunk_size = 1; // Small chunks to test parallel write
 
     let mut temp_files = Vec::new();
@@ -68,7 +56,7 @@ fn test_parallel_write_parquet_basic() {
         d.read_data(&rsp_in).unwrap();
 
         if let Some(batch) = &d.batch {
-            let temp_file = setup_test_output(&format!("temp_{i}.parquet"));
+            let temp_file = setup_test_output(&output_dir, &format!("temp_{i}.parquet"));
             ReadStatWriter::write_batch_to_parquet(
                 batch,
                 &schema,
@@ -103,13 +91,11 @@ fn test_parallel_write_parquet_basic() {
 
     // Verify we got all rows
     assert_eq!(total_rows, row_count as usize);
-
-    // Cleanup
-    cleanup_test_output(&output_path);
 }
 
 #[test]
-fn test_parallel_write_parquet_out_of_order() {
+fn test_parallel_write_parquet_preserves_reversed_input_order() {
+    let output_dir = tempfile::tempdir().unwrap();
     // Setup input path
     let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
 
@@ -118,11 +104,10 @@ fn test_parallel_write_parquet_out_of_order() {
     md.read_metadata(&rsp_in, false).unwrap();
 
     // Setup output path
-    let output_path = setup_test_output("parallel_write_out_of_order.parquet");
-    cleanup_test_output(&output_path);
+    let output_path = setup_test_output(&output_dir, "parallel_write_out_of_order.parquet");
 
     // Read all data first
-    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data(&rsp_in).unwrap();
 
     let batch = d.batch.as_ref().unwrap();
@@ -130,6 +115,7 @@ fn test_parallel_write_parquet_out_of_order() {
 
     // Write batches in reverse order to simulate out-of-order parallel writes
     let mut temp_files = Vec::new();
+    let mut expected_batches = Vec::new();
     let num_rows = batch.num_rows();
 
     // Split into 3 batches
@@ -142,7 +128,7 @@ fn test_parallel_write_parquet_out_of_order() {
 
         if start < num_rows {
             let slice = batch.slice(start, end - start);
-            let temp_file = setup_test_output(&format!("temp_ooo_{i}.parquet"));
+            let temp_file = setup_test_output(&output_dir, &format!("temp_ooo_{i}.parquet"));
 
             ReadStatWriter::write_batch_to_parquet(
                 &slice,
@@ -156,6 +142,7 @@ fn test_parallel_write_parquet_out_of_order() {
             .unwrap();
 
             temp_files.push(temp_file);
+            expected_batches.push(slice);
         }
     }
 
@@ -171,24 +158,21 @@ fn test_parallel_write_parquet_out_of_order() {
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let reader = builder.build().unwrap();
 
-    let mut total_rows = 0;
+    let mut actual_batches = Vec::new();
     for batch_result in reader {
         let batch: RecordBatch = batch_result.unwrap();
-        total_rows += batch.num_rows();
-
-        // Verify we can read the data
-        assert!(batch.num_columns() > 0);
+        actual_batches.push(batch);
     }
 
-    // Verify we got all rows (even though written out of order)
-    assert!(total_rows > 0);
-
-    // Cleanup
-    cleanup_test_output(&output_path);
+    let actual = arrow::compute::concat_batches(schema, &actual_batches).unwrap();
+    let expected = arrow::compute::concat_batches(schema, &expected_batches).unwrap();
+    assert_eq!(actual.num_rows(), num_rows);
+    assert_eq!(actual, expected, "merge must preserve supplied file order");
 }
 
 #[test]
 fn test_parallel_write_parquet_with_compression() {
+    let output_dir = tempfile::tempdir().unwrap();
     // Setup input path
     let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
 
@@ -197,11 +181,10 @@ fn test_parallel_write_parquet_with_compression() {
     md.read_metadata(&rsp_in, false).unwrap();
 
     // Setup output path
-    let output_path = setup_test_output("parallel_write_compressed.parquet");
-    cleanup_test_output(&output_path);
+    let output_path = setup_test_output(&output_dir, "parallel_write_compressed.parquet");
 
     // Read data
-    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {
@@ -251,11 +234,11 @@ fn test_parallel_write_parquet_with_compression() {
     }
 
     // Cleanup
-    cleanup_test_output(&output_path);
 }
 
 #[test]
 fn single_batch_parallel_helper_honors_overwrite() {
+    let output_dir = tempfile::tempdir().unwrap();
     let rsp_in = common::setup_path("cars.sas7bdat").unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
@@ -263,7 +246,7 @@ fn single_batch_parallel_helper_honors_overwrite() {
     data.read_data(&rsp_in).unwrap();
     let batch = data.batch.as_ref().unwrap();
 
-    let output_path = setup_test_output("parallel_write_overwrite.parquet");
+    let output_path = setup_test_output(&output_dir, "parallel_write_overwrite.parquet");
     std::fs::write(&output_path, b"sentinel").unwrap();
     let result = ReadStatWriter::write_batch_to_parquet(
         batch,
@@ -291,55 +274,20 @@ fn single_batch_parallel_helper_honors_overwrite() {
     )
     .unwrap();
     assert_eq!(&std::fs::read(&output_path).unwrap()[..4], b"PAR1");
-    cleanup_test_output(&output_path);
-}
-
-#[test]
-fn test_bufwriter_optimization_verification() {
-    // This test verifies that BufWriter is being used by checking that writes complete successfully
-    // The performance benefit would be measured in benchmarks
-
-    let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
-    let mut md = ReadStatMetadata::new();
-    md.read_metadata(&rsp_in, false).unwrap();
-
-    let output_path = setup_test_output("bufwriter_test.parquet");
-    cleanup_test_output(&output_path);
-
-    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
-    d.read_data(&rsp_in).unwrap();
-
-    if let Some(batch) = &d.batch {
-        // Write using the method that should use SpooledTempFile internally
-        ReadStatWriter::write_batch_to_parquet(
-            batch,
-            &d.schema,
-            &output_path,
-            None,
-            None,
-            100 * 1024 * 1024, // 100 MB buffer
-            false,
-        )
-        .unwrap();
-
-        assert!(output_path.exists());
-    }
-
-    cleanup_test_output(&output_path);
 }
 
 #[test]
 fn test_spooled_tempfile_small_buffer() {
+    let output_dir = tempfile::tempdir().unwrap();
     // Test with a very small buffer to ensure spilling to disk works
     // This verifies that data larger than the buffer still writes correctly
     let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
 
-    let output_path = setup_test_output("spooled_small_buffer.parquet");
-    cleanup_test_output(&output_path);
+    let output_path = setup_test_output(&output_dir, "spooled_small_buffer.parquet");
 
-    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {
@@ -367,21 +315,19 @@ fn test_spooled_tempfile_small_buffer() {
             assert_eq!(read_batch.num_rows(), batch.num_rows());
         }
     }
-
-    cleanup_test_output(&output_path);
 }
 
 #[test]
 fn test_spooled_tempfile_large_buffer() {
+    let output_dir = tempfile::tempdir().unwrap();
     // Test with a large buffer to keep everything in memory
     let rsp_in = common::setup_path("all_types.sas7bdat").unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp_in, false).unwrap();
 
-    let output_path = setup_test_output("spooled_large_buffer.parquet");
-    cleanup_test_output(&output_path);
+    let output_path = setup_test_output(&output_dir, "spooled_large_buffer.parquet");
 
-    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data(&rsp_in).unwrap();
 
     if let Some(batch) = &d.batch {
@@ -409,6 +355,4 @@ fn test_spooled_tempfile_large_buffer() {
             assert_eq!(read_batch.num_rows(), batch.num_rows());
         }
     }
-
-    cleanup_test_output(&output_path);
 }

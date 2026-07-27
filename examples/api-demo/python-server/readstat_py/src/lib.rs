@@ -8,7 +8,9 @@ fn err_to_py(e: ReadStatError) -> PyErr {
 
 fn read_batch(bytes: &[u8], row_limit: Option<u32>) -> Result<RecordBatch, ReadStatError> {
     let reader = ReadStatReader::from_bytes(bytes);
-    let row_count = u32::try_from(reader.metadata()?.row_count)?;
+    let row_count = u32::try_from(
+        reader.metadata()?.row_count.ok_or(ReadStatError::RowCountUnavailable)?,
+    )?;
     reader
         .rows(0, row_limit.map(|limit| limit.min(row_count)))
         .read()

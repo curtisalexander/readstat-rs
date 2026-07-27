@@ -149,14 +149,15 @@ fi
 echo "Checking version consistency..."
 READSTAT_VER=$(grep '^version' "$ROOT_DIR/crates/readstat/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 CLI_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-cli/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+WASM_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-wasm/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 SYS_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 ICONV_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-iconv-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
-# readstat and readstat-cli should match
-if [ "$READSTAT_VER" = "$CLI_VER" ]; then
-    pass "readstat ($READSTAT_VER) and readstat-cli ($CLI_VER) versions match"
+# readstat, readstat-cli, and the WASM artifact should match
+if [ "$READSTAT_VER" = "$CLI_VER" ] && [ "$READSTAT_VER" = "$WASM_VER" ]; then
+    pass "readstat, readstat-cli, and readstat-wasm versions match ($READSTAT_VER)"
 else
-    fail "Version mismatch: readstat=$READSTAT_VER, readstat-cli=$CLI_VER"
+    fail "Version mismatch: readstat=$READSTAT_VER, readstat-cli=$CLI_VER, readstat-wasm=$WASM_VER"
 fi
 
 # readstat-sys and readstat-iconv-sys version independently (each is bumped

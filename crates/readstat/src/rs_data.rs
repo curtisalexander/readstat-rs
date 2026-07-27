@@ -41,6 +41,29 @@ use crate::{
 /// files. 1,000,000 rows is far beyond the default 10k streaming chunk while
 /// keeping the worst-case empty-builder reservation bounded.
 const MAX_PREALLOC_ROWS: usize = 1_000_000;
+/// Maximum aggregate initial row capacity across all string columns.
+const MAX_STRING_PREALLOC_ROWS: usize = 1_000_000;
+/// Maximum initial value-byte reservation across all string columns.
+const MAX_STRING_PREALLOC_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum share of the aggregate reservation assigned to one string column.
+const MAX_STRING_COLUMN_PREALLOC_BYTES: usize = 1024 * 1024;
+
+fn string_column_byte_budget(string_columns: usize) -> usize {
+    MAX_STRING_PREALLOC_BYTES
+        .checked_div(string_columns)
+        .unwrap_or(0)
+        .min(MAX_STRING_COLUMN_PREALLOC_BYTES)
+}
+
+fn string_column_row_budget(string_columns: usize) -> usize {
+    MAX_STRING_PREALLOC_ROWS
+        .checked_div(string_columns)
+        .unwrap_or(0)
+}
+
+fn string_value_capacity(capacity: usize, storage_width: usize, byte_budget: usize) -> usize {
+    capacity.saturating_mul(storage_width).min(byte_budget)
+}
 
 /// A typed Arrow array builder for a single column.
 ///
@@ -124,14 +147,20 @@ impl ColumnBuilder {
     /// Uses `var_type`, `var_type_class`, and `var_format_class` to select the
     /// correct builder variant, and pre-sizes it with `capacity` rows.
     /// For string columns, `storage_width` provides a byte-level capacity hint.
-    fn from_metadata(vm: &ReadStatVarMetadata, capacity: usize) -> Self {
+    fn from_metadata(
+        vm: &ReadStatVarMetadata,
+        capacity: usize,
+        string_row_budget: usize,
+        string_byte_budget: usize,
+    ) -> Self {
         match vm.var_type_class {
-            ReadStatVarTypeClass::String => Self::Str(StringBuilder::with_capacity(
-                capacity,
-                // saturating_mul: storage_width is an untrusted file-header
-                // field, so guard the byte hint against usize overflow.
-                capacity.saturating_mul(vm.storage_width),
-            )),
+            ReadStatVarTypeClass::String => {
+                let string_capacity = capacity.min(string_row_budget);
+                Self::Str(StringBuilder::with_capacity(
+                    string_capacity,
+                    string_value_capacity(string_capacity, vm.storage_width, string_byte_budget),
+                ))
+            }
             ReadStatVarTypeClass::Numeric => {
                 match vm.var_format_class {
                     Some(ReadStatVarFormatClass::Date) => {
@@ -190,9 +219,10 @@ impl ColumnBuilder {
 
 /// Holds parsed row data from a `.sas7bdat` file and converts it to Arrow format.
 ///
-/// Each instance processes one streaming chunk of rows. Values are appended
-/// directly into typed Arrow `ColumnBuilder`s during the `handle_value`
-/// callback, then finished into an Arrow [`RecordBatch`] via `cols_to_batch`.
+/// Values are appended directly into typed Arrow `ColumnBuilder`s during the
+/// `handle_value` callback, then finished into an Arrow [`RecordBatch`] via
+/// `cols_to_batch`. The high-level streaming reader reuses the parse context
+/// while rotating these builders between bounded output batches.
 pub struct ReadStatData {
     /// Number of variables (columns) in the dataset.
     pub var_count: i32,
@@ -231,6 +261,49 @@ pub struct ReadStatData {
     /// Used for row-boundary detection in `handle_value` when filtering is active.
     /// Defaults to `var_count` when no filter is set.
     pub(crate) total_var_count: i32,
+}
+
+/// Callback context used by the high-level reader to rotate builders while a
+/// single ReadStat parse is in progress.
+pub(crate) struct StreamingData<'a> {
+    pub(crate) data: ReadStatData,
+    chunk_rows: usize,
+    expected_rows: usize,
+    rows_emitted: usize,
+    sink: &'a mut dyn FnMut(RecordBatch) -> Result<(), ReadStatError>,
+}
+
+impl StreamingData<'_> {
+    pub(crate) fn finish_chunk(&mut self) -> Result<(), ReadStatError> {
+        if self.data.chunk_rows_processed == 0 {
+            return Ok(());
+        }
+        self.data.cols_to_batch()?;
+        let batch = self
+            .data
+            .batch
+            .take()
+            .ok_or_else(|| ReadStatError::Other("no record batch was produced".into()))?;
+        let rows = batch.num_rows();
+        (self.sink)(batch)?;
+        self.rows_emitted += rows;
+        if let Some(progress) = &self.data.progress {
+            progress.inc(rows as u64);
+        }
+        self.data.chunk_rows_processed = 0;
+        if self.rows_emitted < self.expected_rows {
+            let data = std::mem::take(&mut self.data);
+            self.data = data.allocate_builders_with_capacity(self.chunk_rows);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn row_complete(&mut self) -> Result<(), ReadStatError> {
+        if self.data.chunk_rows_processed == self.chunk_rows {
+            self.finish_chunk()?;
+        }
+        Ok(())
+    }
 }
 
 impl Default for ReadStatData {
@@ -279,11 +352,27 @@ impl ReadStatData {
     /// Builders grow on demand, so clamping costs honest files nothing.
     #[must_use]
     pub fn allocate_builders(self) -> Self {
-        let capacity = self.chunk_rows_to_process.min(MAX_PREALLOC_ROWS);
+        let capacity = self.chunk_rows_to_process;
+        self.allocate_builders_with_capacity(capacity)
+    }
+
+    fn allocate_builders_with_capacity(self, capacity: usize) -> Self {
+        let capacity = capacity
+            .min(self.chunk_rows_to_process)
+            .min(MAX_PREALLOC_ROWS);
+        let string_columns = self
+            .vars
+            .values()
+            .filter(|vm| matches!(vm.var_type_class, ReadStatVarTypeClass::String))
+            .count();
+        let string_byte_budget = string_column_byte_budget(string_columns);
+        let string_row_budget = string_column_row_budget(string_columns);
         let builders: Vec<ColumnBuilder> = self
             .vars
             .values()
-            .map(|vm| ColumnBuilder::from_metadata(vm, capacity))
+            .map(|vm| {
+                ColumnBuilder::from_metadata(vm, capacity, string_row_budget, string_byte_budget)
+            })
             .collect();
         Self { builders, ..self }
     }
@@ -378,6 +467,83 @@ impl ReadStatData {
         let file = std::fs::File::open(path)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         self.read_data_from_bytes(&mmap)
+    }
+
+    pub(crate) fn visit_data(
+        self,
+        rsp: &ReadStatPath,
+        chunk_rows: usize,
+        sink: &mut dyn FnMut(RecordBatch) -> Result<(), ReadStatError>,
+    ) -> Result<(), ReadStatError> {
+        let ppath = rsp.cstring_path.as_ptr();
+        self.visit_parse(chunk_rows, sink, |mut parser, ctx| {
+            Ok(parser.parse_sas7bdat(ppath, ctx))
+        })
+    }
+
+    pub(crate) fn visit_data_from_bytes(
+        self,
+        bytes: &[u8],
+        chunk_rows: usize,
+        sink: &mut dyn FnMut(RecordBatch) -> Result<(), ReadStatError>,
+    ) -> Result<(), ReadStatError> {
+        let mut buffer_ctx = ReadStatBufferCtx::new(bytes);
+        self.visit_parse(chunk_rows, sink, |parser, ctx| {
+            buffer_ctx
+                .configure_parser(parser)
+                .map(|mut p| p.parse_sas7bdat(std::ptr::null(), ctx))
+        })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn visit_data_from_mmap(
+        self,
+        path: &std::path::Path,
+        chunk_rows: usize,
+        sink: &mut dyn FnMut(RecordBatch) -> Result<(), ReadStatError>,
+    ) -> Result<(), ReadStatError> {
+        let file = std::fs::File::open(path)?;
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+        self.visit_data_from_bytes(&mmap, chunk_rows, sink)
+    }
+
+    fn visit_parse(
+        self,
+        chunk_rows: usize,
+        sink: &mut dyn FnMut(RecordBatch) -> Result<(), ReadStatError>,
+        parse: impl FnOnce(
+            ReadStatParser,
+            *mut c_void,
+        ) -> Result<readstat_sys::readstat_error_t, ReadStatError>,
+    ) -> Result<(), ReadStatError> {
+        let offset = self.chunk_row_start.try_into()?;
+        let limit = self.chunk_rows_to_process.try_into()?;
+        let expected_rows = self.chunk_rows_to_process;
+        let mut stream = StreamingData {
+            data: self,
+            chunk_rows,
+            expected_rows,
+            rows_emitted: 0,
+            sink,
+        };
+        let ctx = std::ptr::from_mut(&mut stream).cast::<c_void>();
+        let parser = ReadStatParser::new()?
+            .set_value_handler(Some(cb::handle_streaming_value))?
+            .set_row_limit(Some(limit))?
+            .set_row_offset(Some(offset))?;
+        let result = parse(parser, ctx);
+        if let Some(error) = stream.data.abort_error.take() {
+            return Err(error);
+        }
+        check_c_error(result? as i32)?;
+        stream.finish_chunk()?;
+        if stream.rows_emitted != stream.expected_rows {
+            return Err(ReadStatError::Other(format!(
+                "ReadStat emitted {} rows, expected {}",
+                stream.rows_emitted, stream.expected_rows
+            )));
+        }
+        Ok(())
     }
 
     /// Parses row data from the file via FFI callbacks (without Arrow conversion).
@@ -484,7 +650,7 @@ impl ReadStatData {
     /// md.read_metadata(&rsp, false)?;
     ///
     /// if let Some(mapping) = md.resolve_selected_columns(Some(vec!["name".into(), "age".into()]))? {
-    ///     let row_count = u32::try_from(md.row_count)?;
+    ///     let row_count = u32::try_from(md.row_count.ok_or(readstat::ReadStatError::RowCountUnavailable)?)?;
     ///     let mut d = ReadStatData::new().init_filtered(md, &mapping, 0, row_count);
     ///     d.read_data(&rsp)?;
     /// }
@@ -503,6 +669,26 @@ impl ReadStatData {
         let filtered = md.filter_to_selected_columns(mapping);
         self.set_column_filter(Some(Arc::new(mapping.clone())), original_var_count)
             .init(filtered, row_start, row_end)
+    }
+
+    pub(crate) fn init_for_visit(
+        self,
+        md: ReadStatMetadata,
+        mapping: Option<&BTreeMap<i32, i32>>,
+        row_start: u32,
+        row_end: u32,
+        batch_rows: usize,
+    ) -> Self {
+        let data = if let Some(mapping) = mapping {
+            let original_var_count = md.var_count;
+            let filtered = md.filter_to_selected_columns(mapping);
+            self.set_column_filter(Some(Arc::new(mapping.clone())), original_var_count)
+                .set_metadata(filtered)
+        } else {
+            self.set_metadata(md)
+        };
+        data.set_chunk_counts(row_start, row_end)
+            .allocate_builders_with_capacity(batch_rows)
     }
 
     /// Initializes this instance with pre-shared metadata and chunk boundaries.
@@ -610,5 +796,45 @@ impl ReadStatData {
             progress: Some(progress),
             ..self
         }
+    }
+}
+
+#[cfg(test)]
+mod allocation_tests {
+    use super::*;
+
+    #[test]
+    fn string_byte_hint_is_normal_for_small_columns() {
+        assert_eq!(string_value_capacity(100, 20, 1024 * 1024), 2_000);
+    }
+
+    #[test]
+    fn string_byte_hint_caps_max_sas_width() {
+        assert_eq!(
+            string_value_capacity(1_000_000, 32_767, MAX_STRING_COLUMN_PREALLOC_BYTES),
+            MAX_STRING_COLUMN_PREALLOC_BYTES
+        );
+    }
+
+    #[test]
+    fn string_byte_hint_caps_hostile_overflow() {
+        assert_eq!(
+            string_value_capacity(usize::MAX, usize::MAX, MAX_STRING_COLUMN_PREALLOC_BYTES),
+            MAX_STRING_COLUMN_PREALLOC_BYTES
+        );
+    }
+
+    #[test]
+    fn string_byte_budget_is_bounded_across_many_columns() {
+        let columns = 32_767;
+        let per_column = string_column_byte_budget(columns);
+        assert!(per_column * columns <= MAX_STRING_PREALLOC_BYTES);
+    }
+
+    #[test]
+    fn string_row_budget_is_bounded_across_many_columns() {
+        let columns = 32_767;
+        let per_column = string_column_row_budget(columns);
+        assert!(per_column * columns <= MAX_STRING_PREALLOC_ROWS);
     }
 }

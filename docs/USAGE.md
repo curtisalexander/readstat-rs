@@ -50,7 +50,9 @@ Computing the row count requires traversing the entire file.  If only variable-l
 readstat metadata /some/dir/to/example.sas7bdat --skip-row-count
 ```
 
-In that mode the reported row count is `0` and parsing returns as soon as the header and variable definitions have been read.
+In that mode the human-readable output reports the row count as `unknown` and JSON
+uses `"row_count": null`. Parsing returns as soon as the header and variable
+definitions have been read.
 
 ### Suppressing the progress bar
 

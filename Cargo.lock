@@ -3127,6 +3127,8 @@ dependencies = [
  "predicates",
  "proptest",
  "readstat",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

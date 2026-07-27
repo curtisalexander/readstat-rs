@@ -156,13 +156,14 @@ if ($denyPath) {
 Write-Host "Checking version consistency..."
 $readstatVer = (Select-String -Path "$RootDir\crates\readstat\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $cliVer = (Select-String -Path "$RootDir\crates\readstat-cli\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
+$wasmVer = (Select-String -Path "$RootDir\crates\readstat-wasm\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $sysVer = (Select-String -Path "$RootDir\crates\readstat-sys\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $iconvVer = (Select-String -Path "$RootDir\crates\readstat-iconv-sys\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 
-if ($readstatVer -eq $cliVer) {
-    Write-Pass "readstat ($readstatVer) and readstat-cli ($cliVer) versions match"
+if (($readstatVer -eq $cliVer) -and ($readstatVer -eq $wasmVer)) {
+    Write-Pass "readstat, readstat-cli, and readstat-wasm versions match ($readstatVer)"
 } else {
-    Write-Fail "Version mismatch: readstat=$readstatVer, readstat-cli=$cliVer"
+    Write-Fail "Version mismatch: readstat=$readstatVer, readstat-cli=$cliVer, readstat-wasm=$wasmVer"
 }
 
 # readstat-sys and readstat-iconv-sys version independently (each is bumped

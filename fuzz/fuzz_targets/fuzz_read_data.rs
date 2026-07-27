@@ -16,7 +16,7 @@ fuzz_target!(|data: &[u8]| {
     if md.var_count > MAX_VARS {
         return;
     }
-    let row_count = (md.row_count as u32).min(MAX_ROWS);
+    let row_count = (md.row_count.expect("exact metadata") as u32).min(MAX_ROWS);
     let mut d = ReadStatData::new().init(md, 0, row_count);
     let _ = d.read_data_from_bytes(data);
 });

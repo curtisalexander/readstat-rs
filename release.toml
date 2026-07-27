@@ -1,7 +1,9 @@
 # cargo-release configuration
 # https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
 #
-# Typical release command (readstat and readstat-cli always share a version):
+# Typical release command (readstat, readstat-cli, and readstat-wasm always
+# share a version; the readstat release replacement updates the excluded WASM
+# manifest):
 #
 #   cargo release minor -p readstat -p readstat-cli --dry-run   # preview
 #   cargo release minor -p readstat -p readstat-cli             # apply

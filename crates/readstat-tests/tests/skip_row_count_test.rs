@@ -9,8 +9,6 @@
 #![allow(clippy::cast_lossless)]
 
 use arrow::datatypes::{DataType, TimeUnit};
-use arrow_array::Array;
-use chrono::{NaiveDate, TimeZone, Utc};
 use common::ExpectedMetadata;
 
 mod common;
@@ -19,9 +17,16 @@ mod common;
 fn parse_all_types_metadata() {
     let (_rsp, md, d) = common::setup_and_read_skip_row_count("all_types.sas7bdat");
 
-    // skip_row_count=true sets row_count to 1
+    // skip_row_count=true reports the count honestly as unknown.
+    assert_eq!(md.row_count, None);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&md.to_json().unwrap()).unwrap()["row_count"],
+        serde_json::Value::Null
+    );
+    let mut comparable = md.clone();
+    comparable.row_count = Some(1);
     common::assert_metadata(
-        &md,
+        &comparable,
         &ExpectedMetadata {
             row_count: 1,
             var_count: 10,
@@ -85,39 +90,4 @@ fn parse_all_types_metadata() {
         Some(readstat::ReadStatVarFormatClass::TimeWithMicroseconds)
     );
     assert!(matches!(adt, DataType::Time64(TimeUnit::Microsecond)));
-}
-
-/// Data tests use normal (non-skip) read to verify values are correct
-#[test]
-fn skip_row_count_int() {
-    let (_rsp, _md, d) = common::setup_and_read("all_types.sas7bdat");
-    let batch = d.batch.as_ref().unwrap();
-
-    let col = common::get_f64_col(batch, 0);
-    assert_eq!(col.value(0), 1234f64);
-    assert!(col.is_null(2));
-}
-
-#[test]
-fn skip_row_count_string() {
-    let (_rsp, _md, d) = common::setup_and_read("all_types.sas7bdat");
-    let batch = d.batch.as_ref().unwrap();
-
-    let col = common::get_string_col(batch, 3);
-    assert_eq!(col.value(0), "string");
-    assert_eq!(col.value(2), "stringy string");
-}
-
-#[test]
-fn skip_row_count_datetime() {
-    let (_rsp, _md, d) = common::setup_and_read("all_types.sas7bdat");
-    let batch = d.batch.as_ref().unwrap();
-
-    let col = common::get_ts_sec_col(batch, 5);
-    let dt = Utc.timestamp_opt(col.value(1), 0).unwrap().naive_utc();
-    let expected = NaiveDate::from_ymd_opt(2021, 6, 1)
-        .unwrap()
-        .and_hms_milli_opt(13, 42, 25, 0)
-        .unwrap();
-    assert_eq!(dt, expected);
 }

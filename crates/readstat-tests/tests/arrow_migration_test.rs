@@ -27,7 +27,7 @@ fn init_all_types() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
 
     (rsp, md, d)
 }
@@ -55,7 +55,7 @@ fn migration_record_batch_structure() {
     // Verify row count matches
     assert_eq!(
         batch.num_rows(),
-        md.row_count as usize,
+        md.row_count.unwrap() as usize,
         "Row count should match metadata"
     );
 
@@ -450,7 +450,7 @@ fn migration_larger_dataset() {
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
 
     let error = d.read_data(&rsp);
     assert!(error.is_ok(), "Should read cars.sas7bdat successfully");
@@ -497,10 +497,17 @@ fn migration_metadata_skip_row_count() {
     );
 
     // Full read should have accurate row count
-    assert_eq!(md_full.row_count, 3, "Full metadata should report 3 rows");
+    assert_eq!(
+        md_full.row_count,
+        Some(3),
+        "Full metadata should report 3 rows"
+    );
 
     // Skip read returns 1 (it reads only 1 row to get metadata)
-    assert_eq!(md_skip.row_count, 1, "Skip metadata should report 1 row");
+    assert_eq!(
+        md_skip.row_count, None,
+        "Skip metadata should report an unknown row count"
+    );
 }
 
 /// Test: Verify `RecordBatch` can be cloned (important for data sharing)

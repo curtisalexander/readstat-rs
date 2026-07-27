@@ -105,12 +105,24 @@ Header include paths are propagated between crates using Cargo's `links` key:
 
 Windows-target-only (gated on `CARGO_CFG_TARGET_OS == "windows"` so cross-compilation works). Compiles [win-iconv](https://github.com/win-iconv/win-iconv) — a public-domain iconv implementation backed by the Win32 conversion APIs — from the `vendor/win-iconv/` git submodule using the `cc` crate, producing a static library. On non-Windows targets the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
 
-### `readstat-wasm` (v0.1.0) — WebAssembly Build
+### `readstat-wasm` (v0.28.0) — WebAssembly Build
 **Path**: `crates/readstat-wasm/`
 
 WebAssembly build of the `readstat` library for parsing SAS `.sas7bdat` files in JavaScript. Compiles the ReadStat C library and the Rust `readstat` library to WebAssembly via the `wasm32-unknown-emscripten` target. Excluded from the Cargo workspace (built separately with Emscripten).
 
 Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_ndjson`, `read_data_parquet`, `read_data_feather`, `free_string`, `free_binary`. Not published to crates.io (`publish = false`).
+
+The WASM package version mirrors `readstat` and `readstat-cli`. Release checks and
+tag validation enforce parity, and the `readstat` release replacement updates the
+excluded WASM manifest during a version bump.
+
+### Future SAS Explorer
+
+A future SAS Explorer should process local files entirely in the browser (no server
+upload), visualize metadata/headers, provide data summaries and previews, and may
+offer in-browser SQL. GitHub Pages is preferred, with a custom subdomain as a
+fallback. It should reuse the canonical WASM artifact. Implementation is deferred
+until the WASM release, error-reporting, and versioning work is complete.
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
@@ -148,7 +160,9 @@ Test data lives in `tests/data/*.sas7bdat` (16 datasets). Scripts to regenerate 
 ## Key Architectural Patterns
 
 - **FFI callback pattern**: ReadStat C library calls Rust callbacks (`cb.rs`) during parsing; data accumulates in `ReadStatData` via raw pointer casts
-- **Streaming**: default reader streams rows in chunks (10k) to manage memory
+- **Streaming**: `ReadStatReader::visit` uses one ReadStat data-parser invocation
+  and rotates bounded Arrow builders at complete row boundaries (10k rows by
+  default); `chunks` and `read` are explicit collecting conveniences over it
 - **Parallel processing**: Rayon for parallel reading, Crossbeam channels for reader-writer coordination
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format

@@ -28,7 +28,7 @@ Or read just the file/variable metadata, without loading any rows:
 fn main() -> Result<(), readstat::ReadStatError> {
     let reader = readstat::ReadStatReader::from_path("data.sas7bdat")?;
     let md = reader.metadata()?;
-    println!("{} rows x {} columns", md.row_count, md.var_count);
+    println!("{:?} rows x {} columns", md.row_count, md.var_count);
     Ok(())
 }
 ```

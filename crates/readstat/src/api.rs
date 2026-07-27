@@ -123,7 +123,7 @@ impl ReadStatReader {
             return Err(ReadStatError::InvalidChunkSize);
         }
         let md = self.metadata()?;
-        let total = u32::try_from(md.row_count)?;
+        let total = u32::try_from(md.row_count.ok_or(ReadStatError::RowCountUnavailable)?)?;
         if self.offset > total {
             return Err(ReadStatError::InvalidRowRange {
                 offset: self.offset,
@@ -176,34 +176,33 @@ impl ReadStatReader {
             };
             progress.parsing_started(&label);
         }
-        for relative in crate::build_offsets(*count, self.chunk_rows).windows(2) {
-            let start = self
-                .offset
-                .checked_add(relative[0])
-                .ok_or_else(|| ReadStatError::Other("row offset overflow".into()))?;
-            let end = self
-                .offset
-                .checked_add(relative[1])
-                .ok_or_else(|| ReadStatError::Other("row offset overflow".into()))?;
-            let mut data = match &mapping {
-                Some(map) => ReadStatData::new().init_filtered(md.clone(), map, start, end),
-                None => ReadStatData::new().init(md.clone(), start, end),
-            };
-            if let Some(progress) = &self.progress {
-                data = data.set_progress(progress.clone());
-            }
-            match &self.source {
-                Source::Path(path) => data.read_data(path)?,
-                Source::Bytes(bytes) => data.read_data_from_bytes(bytes)?,
-                #[cfg(not(target_arch = "wasm32"))]
-                Source::Mmap(path) => data.read_data_from_mmap(path)?,
-            }
-            visitor(
-                data.batch
-                    .ok_or_else(|| ReadStatError::Other("no record batch was produced".into()))?,
-            )?;
+        if *count == 0 {
+            return Ok(());
         }
-        Ok(())
+        let end = self
+            .offset
+            .checked_add(*count)
+            .ok_or_else(|| ReadStatError::Other("row offset overflow".into()))?;
+        let mut data = ReadStatData::new().init_for_visit(
+            md.clone(),
+            mapping.as_ref(),
+            self.offset,
+            end,
+            self.chunk_rows as usize,
+        );
+        if let Some(progress) = &self.progress {
+            data = data.set_progress(progress.clone());
+        }
+        match &self.source {
+            Source::Path(path) => data.visit_data(path, self.chunk_rows as usize, &mut visitor),
+            Source::Bytes(bytes) => {
+                data.visit_data_from_bytes(bytes, self.chunk_rows as usize, &mut visitor)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Source::Mmap(path) => {
+                data.visit_data_from_mmap(path, self.chunk_rows as usize, &mut visitor)
+            }
+        }
     }
 
     /// Collects all chunks.
@@ -256,7 +255,7 @@ impl ReadStatReader {
 /// ```no_run
 /// # fn main() -> Result<(), readstat::ReadStatError> {
 /// let md = readstat::read_metadata("data.sas7bdat")?;
-/// println!("{} rows x {} columns", md.row_count, md.var_count);
+/// println!("{:?} rows x {} columns", md.row_count, md.var_count);
 /// # Ok(())
 /// # }
 /// ```

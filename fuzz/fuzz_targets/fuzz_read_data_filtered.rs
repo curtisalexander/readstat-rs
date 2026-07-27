@@ -75,7 +75,7 @@ fuzz_target!(|input: FuzzInput| {
     md.var_count = selected.len() as i32;
     md.schema = Schema::new(filtered_fields);
 
-    let row_count = (md.row_count as u32).min(MAX_ROWS);
+    let row_count = (md.row_count.expect("exact metadata") as u32).min(MAX_ROWS);
     let mut d = ReadStatData::new()
         .set_column_filter(Some(Arc::new(filter)), total_var_count)
         .init(md, 0, row_count);

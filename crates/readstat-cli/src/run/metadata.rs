@@ -16,7 +16,12 @@ fn metadata_to_string(
     }
     use std::fmt::Write;
     let mut out = format!("Metadata for the file {}\n\n", rsp.path.display());
-    let _ = writeln!(out, "Row count: {}", md.row_count);
+    let _ = writeln!(
+        out,
+        "Row count: {}",
+        md.row_count
+            .map_or_else(|| "unknown".into(), |n| n.to_string())
+    );
     let _ = writeln!(out, "Variable count: {}", md.var_count);
     let _ = writeln!(out, "Table name: {}", md.table_name);
     let _ = writeln!(out, "Table label: {}", md.file_label);

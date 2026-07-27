@@ -18,7 +18,7 @@ fn init(ds: &str) -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     let rsp = common::setup_path(ds).unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     (rsp, md, d)
 }
 
@@ -99,7 +99,7 @@ fn parse_encoding_euctw_platform_split() {
                 true
             }
             Ok(()) => {
-                let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+                let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
                 match d.read_data(&rsp) {
                     Err(e) => {
                         assert_unsupported_charset(&e);
@@ -122,7 +122,7 @@ fn parse_encoding_euctw_platform_split() {
         md_result.unwrap();
         assert_eq!(md.file_encoding, String::from("EUC-TW"));
 
-        let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+        let mut d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
         d.read_data(&rsp).unwrap();
 
         let batch = d.batch.unwrap();

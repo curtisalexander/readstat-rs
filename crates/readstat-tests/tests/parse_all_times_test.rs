@@ -17,7 +17,7 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     let rsp = common::setup_path("all_times.sas7bdat").unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     (rsp, md, d)
 }
 
@@ -69,7 +69,7 @@ fn parse_all_times_metadata() {
     md.read_metadata(&rsp, false).unwrap();
 
     // row count
-    assert_eq!(md.row_count, 1);
+    assert_eq!(md.row_count, Some(1));
 
     // variable count
     assert_eq!(md.var_count, 38);

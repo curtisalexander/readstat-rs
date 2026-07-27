@@ -18,7 +18,7 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
     let rsp = common::setup_path("intel.sas7bdat").unwrap();
     let mut md = ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let d = ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let d = ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     (rsp, md, d)
 }
 
@@ -30,7 +30,7 @@ fn parse_intel_metadata() {
     assert!(error.is_ok());
 
     // row count
-    assert_eq!(md.row_count, 200);
+    assert_eq!(md.row_count, Some(200));
 
     // variable count
     assert_eq!(md.var_count, 6);

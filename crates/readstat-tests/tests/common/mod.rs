@@ -37,7 +37,7 @@ pub fn setup_and_read(
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
-    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }
@@ -71,7 +71,7 @@ pub fn setup_and_read_skip_row_count(
     let rsp = setup_path(dataset).unwrap();
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, true).unwrap();
-    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, 1);
     d.read_data(&rsp).unwrap();
     (rsp, md, d)
 }
@@ -124,7 +124,7 @@ pub struct ExpectedMetadata<'a> {
 
 /// Asserts all file-level metadata fields match expected values.
 pub fn assert_metadata(md: &readstat::ReadStatMetadata, expected: &ExpectedMetadata) {
-    assert_eq!(md.row_count, expected.row_count, "row_count");
+    assert_eq!(md.row_count, Some(expected.row_count), "row_count");
     assert_eq!(md.var_count, expected.var_count, "var_count");
     assert_eq!(md.table_name, expected.table_name, "table_name");
     assert_eq!(md.file_label, expected.file_label, "file_label");

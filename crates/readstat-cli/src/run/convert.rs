@@ -240,7 +240,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             // Determine row count. try_from (not `as`): a corrupt header
             // reporting a negative row count must surface as an error, not
             // wrap to ~4 billion rows.
-            let row_count = u32::try_from(md.row_count)?;
+            let row_count = u32::try_from(md.row_count.ok_or(ReadStatError::RowCountUnavailable)?)?;
             let total_rows_to_process = if let Some(r) = rows {
                 std::cmp::min(r, row_count)
             } else {

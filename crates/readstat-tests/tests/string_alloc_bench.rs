@@ -47,18 +47,19 @@ fn bench_ahs_string_allocation() {
     println!("\n=== AHS 2019 String Allocation Benchmark ===");
     println!(
         "Rows: {}, Columns: {} ({string_cols} string, {numeric_cols} numeric)",
-        md.row_count, md.var_count
+        md.row_count.unwrap(),
+        md.var_count
     );
     println!(
         "Total string cells: {}",
-        string_cols as i64 * md.row_count as i64
+        string_cols as i64 * i64::from(md.row_count.unwrap())
     );
     println!();
     println!("Phase 1 — Metadata:       {t_metadata:>8.2?}");
 
     // Phase 2: Read data in streaming chunks
     let stream_rows: u32 = 10_000;
-    let offsets = readstat::build_offsets(md.row_count as u32, stream_rows);
+    let offsets = readstat::build_offsets(md.row_count.unwrap() as u32, stream_rows);
     let chunks = offsets.windows(2).count();
 
     let mut total_read = std::time::Duration::ZERO;
@@ -116,7 +117,7 @@ fn bench_cars_string_allocation() {
     let mut md = readstat::ReadStatMetadata::new();
     md.read_metadata(&rsp, false).unwrap();
 
-    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count as u32);
+    let mut d = readstat::ReadStatData::new().init(md.clone(), 0, md.row_count.unwrap() as u32);
 
     let t1 = Instant::now();
     d.read_data(&rsp).unwrap();
@@ -131,7 +132,8 @@ fn bench_cars_string_allocation() {
     println!("\n=== Cars String Allocation Benchmark ===");
     println!(
         "Rows: {}, Columns: {} ({string_cols} string)",
-        md.row_count, md.var_count
+        md.row_count.unwrap(),
+        md.var_count
     );
     println!("Read:    {t_read:>8.2?}");
 
