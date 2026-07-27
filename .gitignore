@@ -1,6 +1,8 @@
 # OS
 .DS_Store
 # data
+/benchmark-data/*
+!/benchmark-data/README.md
 /crates/readstat-tests/tests/data/*.csv
 /crates/readstat-tests/tests/data/*.feather
 /crates/readstat-tests/tests/data/*.ndjson

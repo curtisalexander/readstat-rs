@@ -534,14 +534,19 @@ seed. The generator writes these details, its parameters, and the complete
 `PROC CONTENTS` listing to `$HOME/readstat_benchmark_v1_manifest.txt` in the
 same run. On Linux, a SAS session with the `XCMD` option also appends `ls -lh`
 and `sha256sum` output through `FILENAME PIPE`. A restricted `NOXCMD` session
-records that limitation and the exact fallback commands instead.
+records that limitation; download the dataset and manifest together, then let
+the publication script calculate and verify the size and SHA-256 locally.
 
-The manifest normally records the output size and digest automatically. If SAS
-reports `NOXCMD`, run the fallback commands printed in the manifest:
+The manifest normally records the output size and digest automatically. With
+`NOXCMD`, the same information can be calculated after downloading. On macOS,
+`du` reports allocated disk usage while `stat` reports the exact logical size
+used for GitHub's asset limit:
 
 ```bash
-ls -lh readstat_benchmark_v1.sas7bdat
-sha256sum readstat_benchmark_v1.sas7bdat
+ls -lh readstat_benchmark_v1.sas7bdat       # human-readable logical size
+du -h readstat_benchmark_v1.sas7bdat        # allocated disk usage
+stat -f '%z bytes' readstat_benchmark_v1.sas7bdat
+shasum -a 256 readstat_benchmark_v1.sas7bdat
 ```
 
 Then validate the file with both benchmark modes and several batch sizes before
@@ -562,6 +567,33 @@ Publish these alongside the SAS file:
 - A SHA-256 checksum file.
 - The exact generator program or its repository commit.
 - The generated `readstat_benchmark_v1_manifest.txt` file.
+
+The publication script validates all three, confirms the dataset has exactly
+4,000,000 readable rows, checks the 2 GiB asset limit and current `origin/main`,
+and refuses to replace an existing benchmark release. Run it without arguments
+for a non-destructive preview, then opt in to publication explicitly. First
+download the SAS file and manifest into the repository's ignored local data
+directory:
+
+```text
+benchmark-data/readstat_benchmark_v1.sas7bdat
+benchmark-data/readstat_benchmark_v1_manifest.txt
+```
+
+Then run:
+
+```bash
+./scripts/publish-benchmark.sh
+./scripts/publish-benchmark.sh --publish
+```
+
+It creates the immutable `benchmark-data-v1` tag and release, uploads the SAS
+file, manifest, and generated checksum sidecar, and marks the release as not
+“Latest” so it does not displace the current software release. Override the
+repository-local paths only when necessary with `BENCHMARK_DATASET` and
+`BENCHMARK_MANIFEST`. The script uses `sha256sum` on Linux or `shasum -a 256`
+on macOS. The generated files are ignored by Git and must never be force-added
+or placed in Git LFS.
 
 The Census and synthetic datasets answer different questions and should both be
 retained in benchmark reports; the synthetic corpus must not replace validation
