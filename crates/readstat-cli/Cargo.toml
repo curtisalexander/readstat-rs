@@ -37,12 +37,11 @@ indicatif = "0.18"
 log = { workspace = true }
 path_abs = { workspace = true }
 rayon = { workspace = true }
-tempfile = { version = "3", optional = true }
 
 [features]
 default = ["csv", "parquet", "feather", "ndjson"]
 csv = ["readstat/csv", "dep:arrow-csv"]
-parquet = ["readstat/parquet", "dep:tempfile"]
+parquet = ["readstat/parquet"]
 feather = ["readstat/feather"]
 ndjson = ["readstat/ndjson"]
 sql = ["readstat/sql"]

@@ -32,7 +32,8 @@ open target/criterion/report/index.html
 - **Format Comparison** - CSV vs Parquet vs Feather vs NDJSON
 
 ### 4. Parallel Write Optimization
-- **Buffer Sizes** - SpooledTempFile memory thresholds (1MB, 10MB, 100MB, 500MB)
+- **Row-Group Sizes** - Native parallel Parquet column encoding with different
+  rows per group
 
 ### 5. End-to-End Pipeline
 - **Complete Conversion** - Read + Write combined (most important)
@@ -396,6 +397,19 @@ For comprehensive benchmarking, consider adding:
 
 ## Benchmarking with hyperfine
 Benchmarking performed with [hyperfine](https://github.com/sharkdp/hyperfine).
+
+For the canonical 4-million-row conversion benchmark, use the repository script:
+
+```bash
+./scripts/benchmark-conversion.sh --quick  # smoke run
+./scripts/benchmark-conversion.sh          # full writer, CPU, and batch-size sweeps
+```
+
+It downloads and verifies the immutable benchmark corpus, records the machine
+and toolchain configuration, builds the release CLI, compares serial and native
+parallel Parquet encoding, measures peak memory, sweeps Rayon worker counts and
+input batch sizes, and writes JSON plus Markdown reports under
+`target/benchmark-results/<timestamp>/`.
 
 This example compares the performance of the Rust binary with the performance of the C binary built from the `ReadStat` repository.  In general, hope that performance is fairly close to that of the C binary.
 

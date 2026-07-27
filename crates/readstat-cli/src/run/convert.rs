@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::thread;
 
 use readstat::{
-    OutFormat, ProgressCallback, ReadStatData, ReadStatError, ReadStatMetadata, ReadStatPath,
+    OutFormat, ProgressCallback, ReadStatData, ReadStatError, ReadStatPath, ReadStatReader,
     ReadStatWriter, WriteConfig, build_offsets,
 };
 
@@ -25,8 +25,13 @@ use crate::cli::{ReadStatCliCommands, Reader};
 const STREAM_ROWS: u32 = 10000;
 
 /// Capacity of the bounded channel between reader and writer threads.
-/// Also used as the batch size for bounded-batch parallel writes.
 const CHANNEL_CAPACITY: usize = 10;
+
+/// Rows per native parallel Parquet row group. This is intentionally separate
+/// from parser batch sizing: larger row groups improve compression but retain
+/// more Arrow and encoded page memory while their columns are processed.
+#[cfg(feature = "parquet")]
+const PARALLEL_PARQUET_ROW_GROUP_ROWS: usize = 100_000;
 
 /// Writes a valid empty output file (header-only CSV, empty Parquet/Feather/
 /// NDJSON) when the input contributed zero rows. Without this, a zero-row
@@ -86,7 +91,7 @@ fn format_with_commas(n: usize) -> String {
 fn resolve_stream_rows(reader: Option<Reader>, stream_rows: Option<u32>, total_rows: u32) -> u32 {
     match reader {
         Some(Reader::Stream) | None => stream_rows.unwrap_or(STREAM_ROWS),
-        Some(Reader::Mem) => total_rows,
+        Some(Reader::Mem) => total_rows.max(1),
     }
 }
 
@@ -146,10 +151,6 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
         overwrite,
         parallel,
         parallel_write,
-        #[cfg(feature = "parquet")]
-        parallel_write_buffer_mb,
-        #[cfg(not(feature = "parquet"))]
-            parallel_write_buffer_mb: _,
         compression,
         compression_level,
         columns,
@@ -174,6 +175,12 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     if matches!(reader, Some(Reader::Mem)) && parallel {
         return Err(ReadStatError::Other(
             "--parallel cannot be used with --reader mem; use --reader stream or omit --reader"
+                .into(),
+        ));
+    }
+    if matches!(reader, Some(Reader::Mem)) && parallel_write {
+        return Err(ReadStatError::Other(
+            "--parallel-write cannot be used with --reader mem; use --reader stream or omit --reader"
                 .into(),
         ));
     }
@@ -212,8 +219,10 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
         ));
     }
 
-    let mut md = ReadStatMetadata::new();
-    md.read_metadata(&rsp, false)?;
+    // Reuse this reader for metadata and one-pass data streaming. Its metadata
+    // cache keeps both operations on one snapshot and one metadata parse.
+    let mut one_pass_reader = ReadStatReader::from_path(&rsp.path)?;
+    let mut md = one_pass_reader.metadata()?;
 
     // CSV is streamed to stdout when no output path is supplied.
     match wc.out_path() {
@@ -230,7 +239,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
             // Resolve column selection (only meaningful when writing data).
             let col_names = resolve_columns(columns, columns_file)?;
-            let column_filter = md.resolve_selected_columns(col_names)?;
+            let column_filter = md.resolve_selected_columns(col_names.clone())?;
             let original_var_count = md.var_count;
             if let Some(ref mapping) = column_filter {
                 md = md.filter_to_selected_columns(mapping);
@@ -254,8 +263,17 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream);
 
-            let use_parallel_writes =
-                parallel && parallel_write && matches!(wc.format(), OutFormat::Parquet);
+            let use_parallel_writes = parallel_write && matches!(wc.format(), OutFormat::Parquet);
+
+            one_pass_reader = one_pass_reader
+                .rows(0, Some(total_rows_to_process))
+                .chunk_rows(total_rows_to_stream);
+            if let Some(names) = col_names {
+                one_pass_reader = one_pass_reader.columns(names);
+            }
+            if let Some(ref p) = progress {
+                one_pass_reader = one_pass_reader.progress(p.clone());
+            }
 
             let input_path = rsp.path.clone();
 
@@ -269,8 +287,6 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
             let (s, r) = bounded(CHANNEL_CAPACITY);
             let progress_thread = progress.clone();
-            let wc_thread = wc.clone();
-
             // Arc handles for the writer side (the originals move into the
             // reader thread); used to produce a valid empty output file when
             // the input has zero rows.
@@ -280,7 +296,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             // Signal "parsing started" exactly once (the library no longer does
             // this per-chunk). Must happen before `rsp` moves into the reader
             // thread below.
-            if let Some(ref p) = progress {
+            if parallel && let Some(ref p) = progress {
                 p.parsing_started(&rsp.path.to_string_lossy());
             }
 
@@ -299,7 +315,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                     vars: vars_shared,
                     schema: schema_shared,
                     progress: progress_thread,
-                    wc: wc_thread,
+                    one_pass_reader: Some(one_pass_reader),
                 },
                 s,
             );
@@ -334,11 +350,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             } else if use_parallel_writes {
                 #[cfg(feature = "parquet")]
                 {
-                    // clap caps the flag at 10240 MB, so this only fails on a
-                    // 32-bit usize — where >4 GiB genuinely can't be buffered.
-                    let buffer_size_bytes =
-                        usize::try_from(parallel_write_buffer_mb.unwrap_or(100) * 1024 * 1024)?;
-                    write_parallel_parquet(ctx, buffer_size_bytes)?;
+                    write_parallel_parquet(ctx)?;
                 }
                 #[cfg(not(feature = "parquet"))]
                 {
@@ -384,8 +396,8 @@ struct ReaderConfig {
     schema: Arc<arrow_schema::Schema>,
     /// Optional progress callback.
     progress: Option<Arc<IndicatifProgress>>,
-    /// Output configuration, sent alongside each chunk for the writer.
-    wc: WriteConfig,
+    /// Canonical one-pass reader used unless legacy parallel reading is requested.
+    one_pass_reader: Option<ReadStatReader>,
 }
 
 /// Spawns the reader thread that parses row chunks and sends them to `sender`.
@@ -396,7 +408,7 @@ struct ReaderConfig {
 /// write strategy drains the channel.
 fn spawn_reader(
     cfg: ReaderConfig,
-    sender: crossbeam::channel::Sender<(ReadStatData, WriteConfig, usize)>,
+    sender: crossbeam::channel::Sender<arrow_array::RecordBatch>,
 ) -> thread::JoinHandle<Result<(), ReadStatError>> {
     let ReaderConfig {
         rsp,
@@ -409,12 +421,21 @@ fn spawn_reader(
         vars,
         schema,
         progress,
-        wc,
+        one_pass_reader,
     } = cfg;
 
     thread::spawn(move || -> Result<(), ReadStatError> {
+        let send_err = || {
+            ReadStatError::Other("Error when attempting to send read data for writing".to_string())
+        };
+
+        if !parallel {
+            return one_pass_reader
+                .ok_or_else(|| ReadStatError::Other("one-pass reader is unavailable".into()))?
+                .visit(|batch| sender.send(batch).map_err(|_| send_err()));
+        }
+
         let offsets_pairs: Vec<_> = offsets.windows(2).collect();
-        let pairs_cnt = offsets_pairs.len();
 
         let parse_chunk = |w: &[u32]| -> Result<ReadStatData, ReadStatError> {
             let row_start = w[0];
@@ -434,33 +455,17 @@ fn spawn_reader(
             Ok(d)
         };
 
-        let send_err = || {
-            ReadStatError::Other("Error when attempting to send read data for writing".to_string())
-        };
+        // Parse chunks concurrently on the global rayon pool. This legacy path
+        // buffers all chunks before sending so it remains available for direct
+        // benchmark comparison with the bounded one-pass reader.
+        let results: Vec<Result<ReadStatData, ReadStatError>> =
+            offsets_pairs.par_iter().map(|w| parse_chunk(w)).collect();
 
-        if parallel {
-            // Parse chunks concurrently on the global rayon pool. This buffers
-            // all chunks before sending — output order must be preserved for
-            // the writer, so --parallel trades memory for parse speed.
-            let results: Vec<Result<ReadStatData, ReadStatError>> =
-                offsets_pairs.par_iter().map(|w| parse_chunk(w)).collect();
-
-            for result in results {
-                let d = result?;
-                sender
-                    .send((d, wc.clone(), pairs_cnt))
-                    .map_err(|_| send_err())?;
-            }
-        } else {
-            // Default streaming mode: parse and send one chunk at a time. The
-            // bounded channel provides backpressure, so memory stays at
-            // ~CHANNEL_CAPACITY chunks regardless of file size.
-            for w in &offsets_pairs {
-                let d = parse_chunk(w)?;
-                sender
-                    .send((d, wc.clone(), pairs_cnt))
-                    .map_err(|_| send_err())?;
-            }
+        for result in results {
+            let batch = result?
+                .batch
+                .ok_or_else(|| ReadStatError::Other("no record batch was produced".into()))?;
+            sender.send(batch).map_err(|_| send_err())?;
         }
 
         Ok(())
@@ -475,7 +480,7 @@ fn spawn_reader(
 /// rows; the SQL path ignores them.
 struct WriteContext {
     /// Receiver of parsed chunks from the reader thread.
-    rx: crossbeam::channel::Receiver<(ReadStatData, WriteConfig, usize)>,
+    rx: crossbeam::channel::Receiver<arrow_array::RecordBatch>,
     /// Handle to the reader thread, joined before output is finalized.
     reader: thread::JoinHandle<Result<(), ReadStatError>>,
     /// Output configuration (path, format, compression).
@@ -502,9 +507,8 @@ fn join_reader(handle: thread::JoinHandle<Result<(), ReadStatError>>) -> Result<
     }
 }
 
-/// Default write path: consume chunks in order, streaming each to the format
-/// writer, then finalize. Memory stays bounded because only the most recent
-/// chunk is retained — kept solely so `finish` can report the row total.
+/// Default write path: consume batches in order, stream each to the format
+/// writer, then finalize. The channel and one-pass reader bound memory.
 fn write_sequential(ctx: WriteContext) -> Result<(), ReadStatError> {
     let WriteContext {
         rx,
@@ -516,21 +520,31 @@ fn write_sequential(ctx: WriteContext) -> Result<(), ReadStatError> {
         schema,
     } = ctx;
 
-    let mut wtr = ReadStatWriter::new(wc.clone(), schema.clone())?;
-
-    // Each chunk replaces `last`, dropping the previous chunk's RecordBatch
-    // memory; `last` is kept so `finish` can report the row total after the
-    // channel drains.
-    let mut wrote_any = false;
-    for (d, _chunk_wc, _pairs_cnt) in rx.iter() {
-        if let Some(batch) = &d.batch {
-            wtr.write(batch)?;
+    let write_result = (|| {
+        let mut wtr = ReadStatWriter::new(wc.clone(), schema.clone())?;
+        let mut wrote_any = false;
+        for batch in rx.iter() {
+            wtr.write(&batch)?;
             wrote_any = true;
         }
-    }
+        Ok::<_, ReadStatError>((wtr, wrote_any))
+    })();
 
-    // Check the reader result before finalizing the output file.
-    join_reader(reader)?;
+    // On writer failure, dropping the receiver cancels a reader blocked on a
+    // full channel. Always join it, but keep the originating writer error as
+    // primary over the expected secondary channel-disconnected error.
+    drop(rx);
+    let reader_result = join_reader(reader);
+    let (wtr, wrote_any) = match write_result {
+        Ok(state) => {
+            reader_result?;
+            state
+        }
+        Err(error) => {
+            let _ = reader_result;
+            return Err(error);
+        }
+    };
 
     match wrote_any {
         true => {
@@ -546,137 +560,45 @@ fn write_sequential(ctx: WriteContext) -> Result<(), ReadStatError> {
     Ok(())
 }
 
-/// Parallel Parquet write path (only for `--parallel --parallel-write` with
-/// Parquet output): write each buffered batch group to a temp file
-/// concurrently, then merge the temp files into the final output.
+/// Native parallel Parquet path: encode each row group's columns concurrently,
+/// then append their encoded pages once to the final file in schema order.
 #[cfg(feature = "parquet")]
-fn write_parallel_parquet(
-    ctx: WriteContext,
-    buffer_size_bytes: usize,
-) -> Result<(), ReadStatError> {
+fn write_parallel_parquet(ctx: WriteContext) -> Result<(), ReadStatError> {
     let WriteContext {
         rx,
         reader,
         wc,
         input_path,
-        var_count,
-        vars,
         schema,
+        ..
     } = ctx;
 
-    let out_path = wc.out_path().map(std::path::Path::to_path_buf);
-    let compression = wc.compression_codec();
-    let compression_level = wc.compression_level();
-
-    let temp_dir = if let Some(out_path) = &out_path {
-        // Fully qualified std call: with `path_abs::PathInfo` in scope, plain
-        // `out_path.parent()` would resolve to the trait's Result-returning
-        // method instead of std's Option-returning one.
-        match std::path::Path::parent(out_path) {
-            Some(parent) => parent.to_path_buf(),
-            None => std::env::current_dir()?,
-        }
-    } else {
-        return Err(ReadStatError::Other(
-            "No output path specified for parallel write".to_string(),
-        ));
-    };
-
-    // Stage temp files inside a uniquely-named RAII directory alongside the
-    // output. The random suffix prevents two concurrent runs in the same
-    // directory from clobbering each other's temp files, and `TempDir`'s Drop
-    // removes the directory (and any leftover temp files) even if we bail out
-    // early via `?` before the merge.
-    let staging = tempfile::Builder::new()
-        .prefix(".readstat-parquet-")
-        .tempdir_in(&temp_dir)?;
-
-    let mut all_temp_files: Vec<PathBuf> = Vec::new();
-    let mut merged_schema: Option<Arc<arrow_schema::Schema>> = None;
-    let mut batch_idx: usize = 0;
-    // Rows actually written across all batch groups, for the final summary —
-    // mirrors what `finish` reports on the sequential path.
-    let mut total_rows: usize = 0;
-
-    loop {
-        let mut batch_group: Vec<(ReadStatData, WriteConfig, usize)> =
-            Vec::with_capacity(CHANNEL_CAPACITY);
-        for item in &rx {
-            batch_group.push(item);
-            if batch_group.len() >= CHANNEL_CAPACITY {
-                break;
-            }
-        }
-
-        if batch_group.is_empty() {
-            break;
-        }
-
-        if merged_schema.is_none() {
-            merged_schema = Some(batch_group[0].0.schema.clone());
-        }
-        total_rows += batch_group
-            .iter()
-            .map(|(d, _, _)| {
-                d.batch
-                    .as_ref()
-                    .map_or(0, arrow_array::RecordBatch::num_rows)
-            })
-            .sum::<usize>();
-        let schema_ref = merged_schema
-            .as_ref()
-            .expect("schema must be set after first batch group");
-
-        let temp_files: Vec<PathBuf> = batch_group
-            .par_iter()
-            .enumerate()
-            .map(|(i, (d, _wc, _))| -> Result<PathBuf, ReadStatError> {
-                let temp_file = staging
-                    .path()
-                    .join(format!("part_{}.parquet", batch_idx + i));
-
-                if let Some(batch) = &d.batch {
-                    ReadStatWriter::write_batch_to_parquet(
-                        batch,
-                        schema_ref,
-                        &temp_file,
-                        compression,
-                        compression_level,
-                        buffer_size_bytes,
-                        false,
-                    )?;
-                }
-
-                Ok(temp_file)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        batch_idx += batch_group.len();
-        // batch_group is implicitly dropped here at the end of the loop body,
-        // freeing ReadStatData/RecordBatch memory before the next iteration
-        all_temp_files.extend(temp_files);
-    }
-
-    // Check the reader result before producing final output.
-    join_reader(reader)?;
-
-    // Merge all temp files into final output
-    if all_temp_files.is_empty() {
-        // Zero rows: still produce a valid (empty) Parquet file.
-        write_empty_output(var_count, vars, schema, &wc, &input_path)?;
-    } else if let Some(out_path) = &out_path {
-        ReadStatWriter::merge_parquet_files(
-            &all_temp_files,
-            out_path,
-            merged_schema
-                .as_ref()
-                .expect("schema must be set when temp files exist"),
-            compression,
-            compression_level,
-            wc.is_overwrite(),
+    let write_result = (|| {
+        let mut writer = readstat::ParallelParquetWriter::new(
+            wc.clone(),
+            schema,
+            PARALLEL_PARQUET_ROW_GROUP_ROWS,
         )?;
-        print_write_summary(total_rows, &input_path, Some(out_path));
-    }
+        for batch in rx.iter() {
+            writer.write(&batch)?;
+        }
+        Ok::<_, ReadStatError>(writer)
+    })();
+
+    drop(rx);
+    let reader_result = join_reader(reader);
+    let writer = match write_result {
+        Ok(writer) => {
+            reader_result?;
+            writer
+        }
+        Err(error) => {
+            let _ = reader_result;
+            return Err(error);
+        }
+    };
+    let rows = writer.finish()?;
+    print_write_summary(rows, &input_path, wc.out_path());
 
     Ok(())
 }
@@ -694,11 +616,7 @@ fn write_with_sql(ctx: WriteContext, query: &str, table_name: &str) -> Result<()
     } = ctx;
 
     let mut all_batches = Vec::new();
-    for (d, _wc, _) in rx.iter() {
-        if let Some(batch) = d.batch {
-            all_batches.push(batch);
-        }
-    }
+    all_batches.extend(rx.iter());
 
     join_reader(reader)?;
 

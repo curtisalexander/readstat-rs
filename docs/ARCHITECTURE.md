@@ -163,7 +163,10 @@ Test data lives in `tests/data/*.sas7bdat` (16 datasets). Scripts to regenerate 
 - **Streaming**: `ReadStatReader::visit` uses one ReadStat data-parser invocation
   and rotates bounded Arrow builders at complete row boundaries (10k rows by
   default); `chunks` and `read` are explicit collecting conveniences over it
-- **Parallel processing**: Rayon for parallel reading, Crossbeam channels for reader-writer coordination
+- **Parallel processing**: the default CLI pipeline feeds the one-pass reader
+  through a bounded Crossbeam channel so parsing overlaps writing; optional
+  Parquet workers encode bounded batch groups with Rayon. The legacy
+  `--parallel` reader remains an explicit, unbounded benchmark alternative.
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format
 - **Multiple I/O strategies**: file path (default), memory-mapped files (`memmap2`), and in-memory byte slices — all feed into the same FFI parsing pipeline

@@ -1,6 +1,9 @@
 #![allow(clippy::cast_sign_loss, clippy::cast_lossless)]
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter, WriteConfig};
+use readstat::{
+    ParallelParquetWriter, ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatWriter,
+    WriteConfig,
+};
 use std::hint::black_box;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -212,9 +215,9 @@ fn bench_write_parquet_compression(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: Parallel write with `SpooledTempFile` (different buffer sizes)
-fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
-    let mut group = c.benchmark_group("parallel_write_buffer_sizes");
+/// Benchmark native parallel Parquet encoding with different row-group sizes.
+fn bench_parallel_write_row_group_sizes(c: &mut Criterion) {
+    let mut group = c.benchmark_group("parallel_write_row_group_sizes");
 
     let temp_dir = TempDir::new().unwrap();
     let rsp_in = setup_path("cars.sas7bdat");
@@ -228,28 +231,29 @@ fn bench_parallel_write_buffer_sizes(c: &mut Criterion) {
 
     group.throughput(Throughput::Elements(rows as u64));
 
-    for buffer_mb in &[1, 10, 100, 500] {
+    for row_group_rows in &[10, 100, 1_000, 10_000] {
         group.bench_with_input(
-            BenchmarkId::new("buffer_mb", buffer_mb),
-            buffer_mb,
-            |b, &buffer_mb| {
+            BenchmarkId::new("rows", row_group_rows),
+            row_group_rows,
+            |b, &row_group_rows| {
                 b.iter(|| {
                     let output_path = temp_dir
                         .path()
-                        .join(format!("output_buf_{buffer_mb}.parquet"));
-                    let buffer_bytes = buffer_mb * 1024 * 1024;
+                        .join(format!("output_rows_{row_group_rows}.parquet"));
 
                     if let Some(batch) = &d.batch {
-                        ReadStatWriter::write_batch_to_parquet(
-                            black_box(batch),
-                            black_box(&d.schema),
-                            black_box(&output_path),
-                            None,
-                            None,
-                            buffer_bytes,
-                            true,
+                        let config = WriteConfig::new(readstat::OutFormat::Parquet)
+                            .output(black_box(&output_path))
+                            .unwrap()
+                            .overwrite(true);
+                        let mut writer = ParallelParquetWriter::new(
+                            config,
+                            black_box(d.schema.clone()),
+                            row_group_rows,
                         )
                         .unwrap();
+                        writer.write(black_box(batch)).unwrap();
+                        writer.finish().unwrap();
                     }
                 });
             },
@@ -496,7 +500,7 @@ criterion_group!(
     bench_arrow_conversion,
     bench_write_csv,
     bench_write_parquet_compression,
-    bench_parallel_write_buffer_sizes,
+    bench_parallel_write_row_group_sizes,
     bench_write_formats,
     bench_end_to_end_conversion,
     bench_io_metadata,

@@ -307,6 +307,8 @@ pub use rs_query::{
     execute_sql_stream_async, read_sql_file, record_batch_channel,
 };
 pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
+#[cfg(feature = "parquet")]
+pub use rs_write::ParallelParquetWriter;
 pub use rs_write::ReadStatWriter;
 #[cfg(feature = "csv")]
 #[cfg_attr(docsrs, doc(cfg(feature = "csv")))]

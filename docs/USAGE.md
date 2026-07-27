@@ -230,43 +230,44 @@ readstat preview /some/dir/to/example.sas7bdat --columns Brand,Model,EngineSize
 The `convert` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
 
 ### Parallel Reading (`--parallel`)
-If invoked, the _**reading**_ of a `sas7bdat` will occur in parallel.  If the total rows to process is greater than `stream-rows` (if unset, the default rows to stream is 10,000), then each chunk of rows is read in parallel.  Note that all processors on the user's machine are used with the `--parallel` option.  In the future, may consider allowing the user to throttle this number.
+The default reader is the recommended path: it scans the SAS file once and emits
+bounded batches while the writer consumes earlier batches. `--parallel` retains
+the older partitioned reader for workloads where benchmarking proves it faster.
+It starts one ReadStat parser per `stream-rows` partition and uses all processors
+in Rayon's global pool.
 
-:heavy_exclamation_mark: Utilizing the `--parallel` parameter will increase memory usage &mdash; all chunks are read in parallel and collected in memory before being sent to the writer.  In addition, because all processors are utilized, CPU usage may be maxed out during reading.  Row ordering from the original `sas7bdat` is preserved.
+:heavy_exclamation_mark: ReadStat row offsets do not seek directly to a SAS row:
+each partition scans from the beginning and skips its prefix. `--parallel` can
+therefore repeat substantial work. It also collects all parsed partitions in
+memory before sending them to the writer. Original row order is preserved, but
+this mode is not bounded-memory and should not be assumed faster.
 
 ### Parallel Writing (`--parallel-write`)
-When combined with `--parallel`, the `--parallel-write` flag enables _**parallel writing**_ for Parquet format files. This can significantly improve write performance for large datasets by:
-- Writing record batches to temporary files in parallel using all available processors
-- Merging the temporary files into the final output
-- Using spooled temporary files that keep data in memory until a threshold is reached
+`--parallel-write` enables parallel writing for Parquet without requiring
+parallel reads. It encodes the columns of each Parquet row group concurrently,
+then appends the encoded column chunks to one output file in schema order. It
+does not create intermediate Parquet files and never decodes or re-encodes its
+own output. Input row order is preserved.
 
-**Note:** Parallel writing currently only supports the Parquet format. Other formats (CSV, Feather, NDJSON) will use optimized sequential writes with BufWriter.
+Parallel writing currently supports only Parquet. CSV, Feather, and NDJSON use
+incremental sequential writers. This is intentional: enable parallelism only
+where the format has a supported ordered assembly mechanism and benchmarks show
+an end-to-end benefit.
 
 Example usage:
 ```sh
-readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --parallel --parallel-write
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --parallel-write
 ```
-
-### Memory Buffer Size (`--parallel-write-buffer-mb`)
-Controls the memory buffer size (in MB) before spilling to disk during parallel writes. Defaults to 100 MB. Valid range: 1-10240 MB.
-
-Smaller buffers will cause data to spill to disk sooner, while larger buffers keep more data in memory. Choose based on your available memory and dataset size:
-- **Small datasets (< 100 MB)**: Use default or larger buffer to keep everything in memory
-- **Large datasets (> 1 GB)**: Consider smaller buffer (10-50 MB) to manage memory usage
-- **Memory-constrained systems**: Use smaller buffer (1-10 MB)
-
-Example with custom buffer size:
-```sh
-readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --parallel --parallel-write --parallel-write-buffer-mb 200
-```
-
-:heavy_exclamation_mark: Parallel writing may write batches out of order. This is acceptable for Parquet files as the row order is preserved when merged.
 
 ## Memory Considerations
 
 ### Default: Sequential Writes
 
-In the default sequential write mode, a bounded channel (capacity 10) connects the reader thread to the writer.  This means at most 10 chunks (each containing up to `stream-rows` rows) are held in memory at any time, providing natural backpressure when the writer is slower than the reader.  For most workloads this keeps memory usage reasonable, but for very wide datasets (hundreds of columns, string-heavy) each chunk can be large &mdash; consider lowering `--stream-rows` if memory is a concern.
+In the default mode, one ReadStat parser emits batches into a bounded channel
+(capacity 10) while the writer consumes them. At most 10 queued batches plus
+the active reader and writer batches are held, providing backpressure when the
+writer is slower. For very wide, string-heavy datasets, lower `--stream-rows`
+to reduce each batch's memory footprint.
 
 ```
 Sequential Write (default)
@@ -296,49 +297,26 @@ Sequential Write (default)
 
 ### Parallel Writes (`--parallel-write`)
 
-:memo: **`--parallel-write`**: Uses bounded-batch processing &mdash; batches are pulled from the channel in groups (up to 10 at a time), written in parallel to temporary Parquet files, then the next group is pulled.  This preserves the channel's backpressure so that memory usage stays bounded rather than loading the entire dataset at once.  All temporary files are merged into the final output at the end.
+The channel remains bounded. The writer retains at most one incomplete Parquet
+row group in addition to queued input batches. Arrow slices share their source
+buffers, and a full row group's leaf columns are encoded concurrently. Encoded
+chunks are committed in deterministic schema order before the next row group.
+This is a row-count bound, not a strict byte bound: unusually wide or
+string-heavy rows can still make a 100,000-row group large in memory.
 
 ```
-Parallel Write (--parallel --parallel-write)
-============================================
+Parallel Write (--parallel-write)
+==================================
 
- Reader Thread              Bounded Channel (cap 10)              Main Thread
-+------------------+       +------------------------+       +-------------------------+
-|                  |       |                        |       |                         |
-| +----------+     | send  |                        | recv  |  Pull <= 10 batches     |
-| | chunk  1 |-----|------>|  +-+-+-+-+-+-+-+-+-+-+ |------>|  +----+----+----+----+  |
-| +----------+     |       |  | | | | | | | | | | | |       |  | b1 | b2 | .. | bN |  |
-| +----------+     | send  |  +-+-+-+-+-+-+-+-+-+-+ |       |  +----+----+----+----+  |
-| | chunk  2 |-----|------>|                        |       |    |    |         |      |
-| +----------+     |       +------------------------+       |    v    v         v      |
-| +----------+     |                                        |  Write in parallel      |
-| | chunk  3 |-----|----> ...                               |  to temp .parquet files |
-| +----------+     |                                        |    |    |         |      |
-|     ...          |                                        |    v    v         v      |
-|                  |                                        |  tmp_0 tmp_1 ... tmp_N   |
-|                  |       +------------------------+       |                         |
-| +----------+     | send  |                        | recv  |  Pull next <= 10        |
-| | chunk 11 |-----|------>|  +-+-+-+-+-+-+-+-+-+-+ |------>|  +----+----+----+----+  |
-| +----------+     |       |  | | | | | | | | | | | |       |  |b11 |b12 | .. | bM |  |
-| +----------+     | send  |  +-+-+-+-+-+-+-+-+-+-+ |       |  +----+----+----+----+  |
-| | chunk 12 |-----|------>|                        |       |    |    |         |      |
-| +----------+     |       +------------------------+       |    v    v         v      |
-|     ...          |                                        |  tmp_N+1  ...  tmp_M     |
-+------------------+                                        |                         |
-                                                            |  ... repeat until done  |
-                                                            +-------------------------+
-                                                                       |
-                              +----------------------------------------+
-                              |
-                              v
-                    +-------------------+       +--------------------+
-                    |   Merge all temp  |       |                    |
-                    |   .parquet files  |------>|  final output.pqt  |
-                    |   in order        |       |                    |
-                    +-------------------+       +--------------------+
-
- Memory at any moment: <= 10 chunks in channel + 10 being written
- Backpressure: preserved -- reader blocks while a batch group is being written
+ Reader ──> bounded channel ──> row-group accumulator
+                                      |
+                         parallel column encoding
+                         /         |          \
+                      column 0  column 1  ... column N
+                         \         |          /
+                          ordered row-group commit
+                                      |
+                               final Parquet file
 ```
 
 ### SQL Queries (`--sql` / `--sql-file`)

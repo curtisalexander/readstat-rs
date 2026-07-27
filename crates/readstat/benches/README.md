@@ -11,7 +11,7 @@ The benchmarks measure performance across key operations:
 3. **Arrow Conversion** - Converting SAS data to Arrow RecordBatch format
 4. **Writing** - Output performance for CSV, Parquet, Feather, and NDJSON
 5. **Compression** - Parquet compression algorithm comparison
-6. **Buffer Sizes** - SpooledTempFile buffer size optimization
+6. **Parallel Row Groups** - Native Parquet column encoding at different row-group sizes
 7. **End-to-End** - Complete read + write pipeline
 
 ## Running Benchmarks
@@ -36,8 +36,8 @@ cargo bench write_csv
 cargo bench write_parquet_compression
 cargo bench write_formats
 
-# Parallel write buffer sizes
-cargo bench parallel_write_buffer_sizes
+# Parallel Parquet row-group sizes
+cargo bench parallel_write_row_group_sizes
 
 # End-to-end conversion
 cargo bench end_to_end_conversion
@@ -145,19 +145,19 @@ metadata_reading/all_types.sas7bdat
 - Choose default compression based on typical use case
 - Consider compression level tuning
 
-### 7. Parallel Write Buffer Sizes (`parallel_write_buffer_sizes`)
-**Purpose:** Find optimal SpooledTempFile buffer size.
+### 7. Parallel Parquet Row-Group Sizes (`parallel_write_row_group_sizes`)
+**Purpose:** Measure native parallel column encoding at different row-group sizes.
 
-**Tests:** 1 MB / 10 MB / 100 MB / 500 MB buffers
+**Tests:** 10 / 100 / 1,000 / 10,000 rows per group on the fixture dataset
 
 **What to look for:**
-- **Small buffers:** More disk I/O, potentially slower
-- **Large buffers:** Better performance but higher memory
-- **Inflection point:** Where performance plateaus
+- **Small groups:** More scheduling and Parquet metadata overhead
+- **Large groups:** Better encoding throughput but higher retained memory
+- **Inflection point:** Where throughput plateaus for the available cores
 
 **What to optimize:**
-- Adjust default `parallel_write_buffer_mb` (currently 100 MB)
-- Document recommended values for different scenarios
+- Choose a row-group target that balances throughput and bounded memory
+- Confirm the choice with the end-to-end benchmark corpus, not only fixtures
 
 ### 8. Write Formats (`write_formats`)
 **Purpose:** Compare output format performance.
@@ -272,7 +272,7 @@ cargo flamegraph --bench readstat_benchmarks -- --bench
 - Writing uncompressed formats
 
 **Optimization strategies:**
-- Larger buffers (BufWriter, SpooledTempFile)
+- Appropriately sized buffered writes and Parquet row groups
 - Memory-mapped files (for reads)
 - Async I/O (future consideration)
 

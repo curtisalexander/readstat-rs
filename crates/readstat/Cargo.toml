@@ -40,7 +40,6 @@ arrow-csv = { workspace = true, optional = true }
 arrow-ipc = { workspace = true, optional = true }
 arrow-json = { workspace = true, optional = true }
 parquet = { workspace = true, optional = true }
-tempfile = { version = "3", optional = true }
 
 chrono = { workspace = true }
 crossbeam = { workspace = true }
@@ -55,7 +54,7 @@ thiserror = "2"
 [features]
 default = ["csv", "parquet", "feather", "ndjson", "sql"]
 csv = ["dep:arrow-csv"]
-parquet = ["dep:parquet", "dep:tempfile"]
+parquet = ["dep:parquet"]
 feather = ["dep:arrow-ipc"]
 ndjson = ["dep:arrow-json"]
 # SQL output delegates to ReadStatWriter, so enable its supported formats.

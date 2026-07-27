@@ -3,7 +3,7 @@
 //!
 //! [`ReadStatWriter`] manages the lifecycle of format-specific writers, handling
 //! streaming writes across multiple batches. It also supports metadata output
-//! (pretty-printed or JSON) and parallel Parquet writes via temporary files.
+//! (pretty-printed or JSON) and native parallel Parquet column encoding.
 
 use arrow_array::RecordBatch;
 #[cfg(feature = "csv")]
@@ -12,16 +12,22 @@ use arrow_csv::WriterBuilder as CsvWriterBuilder;
 use arrow_ipc::writer::FileWriter as IpcFileWriter;
 #[cfg(feature = "ndjson")]
 use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
-#[cfg(feature = "parquet")]
+#[cfg(test)]
 use arrow_schema::Schema;
 use arrow_schema::SchemaRef;
 #[cfg(feature = "parquet")]
 use parquet::{
-    arrow::ArrowWriter as ParquetArrowWriter, basic::Compression as ParquetCompressionCodec,
-    file::properties::WriterProperties,
+    arrow::{
+        ArrowWriter as ParquetArrowWriter,
+        arrow_writer::{
+            ArrowColumnChunk, ArrowLeafColumn, ArrowRowGroupWriterFactory, compute_leaves,
+        },
+    },
+    basic::Compression as ParquetCompressionCodec,
+    file::{properties::WriterProperties, writer::SerializedFileWriter},
 };
 #[cfg(feature = "parquet")]
-use std::fs;
+use rayon::prelude::*;
 #[cfg(any(
     feature = "csv",
     feature = "feather",
@@ -38,19 +44,15 @@ use std::fs::File;
 use std::io::BufWriter;
 #[cfg(feature = "csv")]
 use std::io::stdout;
-#[cfg(feature = "parquet")]
-use std::io::{Seek, SeekFrom};
 #[cfg(any(
     feature = "csv",
     feature = "feather",
     feature = "ndjson",
     feature = "parquet"
 ))]
-use std::path::{Path, PathBuf};
-#[cfg(feature = "parquet")]
+use std::path::PathBuf;
+#[cfg(test)]
 use std::sync::Arc;
-#[cfg(feature = "parquet")]
-use tempfile::SpooledTempFile;
 
 use crate::err::ReadStatError;
 #[cfg(any(
@@ -71,7 +73,7 @@ struct StagingGuard(Option<PathBuf>);
 impl Drop for StagingGuard {
     fn drop(&mut self) {
         if let Some(path) = self.0.take() {
-            let _ = fs::remove_file(path);
+            let _ = std::fs::remove_file(path);
         }
     }
 }
@@ -86,6 +88,206 @@ pub(crate) struct ReadStatParquetWriter {
 impl ReadStatParquetWriter {
     fn new(wtr: ParquetArrowWriter<BufWriter<std::fs::File>>) -> Self {
         Self { wtr: Some(wtr) }
+    }
+}
+
+/// Parquet writer that encodes columns concurrently and commits each row group
+/// once, in order, to a single output file.
+///
+/// Input batches remain ordered and memory is bounded by `row_group_rows` plus
+/// upstream buffering. Unlike temporary-file fan-out, encoded pages are copied
+/// directly into the final Parquet row group without decoding or re-encoding.
+#[cfg(feature = "parquet")]
+pub struct ParallelParquetWriter {
+    writer: Option<SerializedFileWriter<BufWriter<File>>>,
+    factory: ArrowRowGroupWriterFactory,
+    schema: SchemaRef,
+    pending: Vec<RecordBatch>,
+    pending_rows: usize,
+    row_group_rows: usize,
+    row_group_index: usize,
+    rows_written: usize,
+    staging_path: Option<PathBuf>,
+    destination: PathBuf,
+    overwrite: bool,
+}
+
+#[cfg(feature = "parquet")]
+impl ParallelParquetWriter {
+    /// Creates a native parallel Parquet writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid output configuration, a zero row-group
+    /// target, staging-file failures, or invalid Parquet properties.
+    pub fn new(
+        config: WriteConfig,
+        schema: SchemaRef,
+        row_group_rows: usize,
+    ) -> Result<Self, ReadStatError> {
+        config.validate()?;
+        if !matches!(config.format, OutFormat::Parquet) {
+            return Err(ReadStatError::InvalidOutputConfig(
+                "parallel Parquet writer requires Parquet output".into(),
+            ));
+        }
+        if row_group_rows == 0 {
+            return Err(ReadStatError::Other(
+                "Parquet row-group rows must be greater than zero".into(),
+            ));
+        }
+
+        let destination = config
+            .out_path
+            .clone()
+            .ok_or_else(|| ReadStatError::InvalidOutputConfig("Parquet requires output".into()))?;
+        let compression = crate::rs_write_config::resolve_parquet_compression(
+            config.compression,
+            config.compression_level,
+        )?;
+        let (file, staging_path) = crate::rs_write_config::open_output(&config)?;
+        let mut staging = StagingGuard(Some(staging_path));
+        let properties = WriterProperties::builder()
+            .set_compression(compression)
+            .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
+            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
+            .build();
+        let (writer, factory) =
+            ParquetArrowWriter::try_new(BufWriter::new(file), schema.clone(), Some(properties))?
+                .into_serialized_writer()?;
+
+        Ok(Self {
+            writer: Some(writer),
+            factory,
+            schema,
+            pending: Vec::new(),
+            pending_rows: 0,
+            row_group_rows,
+            row_group_index: 0,
+            rows_written: 0,
+            staging_path: staging.0.take(),
+            destination,
+            overwrite: config.overwrite,
+        })
+    }
+
+    /// Queues a batch and flushes complete row groups with parallel column
+    /// encoding. Batches crossing a row-group boundary are sliced without
+    /// copying their Arrow buffers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a schema mismatch, row-count overflow, or Parquet
+    /// encoding/write failure.
+    pub fn write(&mut self, batch: &RecordBatch) -> Result<(), ReadStatError> {
+        if batch.schema() != self.schema {
+            return Err(ReadStatError::SchemaMismatch);
+        }
+        if self.schema.fields().is_empty() && batch.num_rows() != 0 {
+            return Err(ReadStatError::Other(
+                "Parquet cannot represent rows without columns".into(),
+            ));
+        }
+
+        let mut offset = 0;
+        while offset < batch.num_rows() {
+            let available = self.row_group_rows - self.pending_rows;
+            let rows = available.min(batch.num_rows() - offset);
+            self.pending.push(batch.slice(offset, rows));
+            self.pending_rows += rows;
+            offset += rows;
+            if self.pending_rows == self.row_group_rows {
+                self.flush_row_group()?;
+            }
+        }
+        self.rows_written = self
+            .rows_written
+            .checked_add(batch.num_rows())
+            .ok_or_else(|| ReadStatError::Other("writer row count overflow".into()))?;
+        Ok(())
+    }
+
+    fn flush_row_group(&mut self) -> Result<(), ReadStatError> {
+        if self.pending_rows == 0 {
+            return Ok(());
+        }
+
+        let column_writers = self.factory.create_column_writers(self.row_group_index)?;
+        let mut inputs: Vec<Vec<ArrowLeafColumn>> = (0..column_writers.len())
+            .map(|_| Vec::with_capacity(self.pending.len()))
+            .collect();
+
+        for batch in &self.pending {
+            let mut leaf_index = 0;
+            for (field, array) in self.schema.fields().iter().zip(batch.columns()) {
+                for leaf in compute_leaves(field.as_ref(), array)? {
+                    inputs[leaf_index].push(leaf);
+                    leaf_index += 1;
+                }
+            }
+            if leaf_index != column_writers.len() {
+                return Err(ReadStatError::Other(
+                    "computed Parquet leaf count does not match column writers".into(),
+                ));
+            }
+        }
+
+        let chunks: Vec<ArrowColumnChunk> = column_writers
+            .into_par_iter()
+            .zip(inputs.into_par_iter())
+            .map(|(mut writer, leaves)| {
+                for leaf in &leaves {
+                    writer.write(leaf)?;
+                }
+                writer.close()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let writer = self
+            .writer
+            .as_mut()
+            .ok_or_else(|| ReadStatError::Other("Parquet writer is already closed".into()))?;
+        let mut row_group = writer.next_row_group()?;
+        for chunk in chunks {
+            chunk.append_to_row_group(&mut row_group)?;
+        }
+        row_group.close()?;
+
+        self.pending.clear();
+        self.pending_rows = 0;
+        self.row_group_index += 1;
+        Ok(())
+    }
+
+    /// Flushes the final row group, writes the footer, and atomically publishes
+    /// the output file. Returns the number of accepted rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if encoding, finalization, or publication fails.
+    pub fn finish(mut self) -> Result<usize, ReadStatError> {
+        self.flush_row_group()?;
+        self.writer
+            .take()
+            .ok_or_else(|| ReadStatError::Other("Parquet writer is already closed".into()))?
+            .close()?;
+        let staging = self
+            .staging_path
+            .as_ref()
+            .expect("parallel Parquet staging path is armed");
+        crate::rs_write_config::publish_staging(staging, &self.destination, self.overwrite)?;
+        self.staging_path = None;
+        Ok(self.rows_written)
+    }
+}
+
+#[cfg(feature = "parquet")]
+impl Drop for ParallelParquetWriter {
+    fn drop(&mut self) {
+        if let Some(path) = self.staging_path.take() {
+            self.writer = None;
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -176,120 +378,6 @@ impl ReadStatWriter {
         let (file, staging_path) = crate::rs_write_config::open_output(wc)?;
         self.staging_path = Some(staging_path);
         Ok(file)
-    }
-
-    /// Write a single batch to a Parquet file (for parallel writes).
-    /// Uses `SpooledTempFile` to keep data in memory until `buffer_size_bytes` threshold.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if compression configuration is invalid, writing fails,
-    /// or the output file cannot be created.
-    #[doc(hidden)] // CLI parallel-write orchestration internal; not a stable API.
-    #[cfg(feature = "parquet")]
-    pub fn write_batch_to_parquet(
-        batch: &RecordBatch,
-        schema: &Schema,
-        output_path: &Path,
-        compression: Option<ParquetCompression>,
-        compression_level: Option<u32>,
-        buffer_size_bytes: usize,
-        overwrite: bool,
-    ) -> Result<(), ReadStatError> {
-        // Create a SpooledTempFile that keeps data in memory until buffer_size_bytes
-        let mut spooled_file = SpooledTempFile::new(buffer_size_bytes);
-
-        let compression_codec = Self::resolve_compression(compression, compression_level)?;
-
-        let props = WriterProperties::builder()
-            .set_compression(compression_codec)
-            .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
-            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
-            .build();
-
-        // Write to SpooledTempFile (in memory until threshold, then spills to temp disk file)
-        let mut wtr =
-            ParquetArrowWriter::try_new(&mut spooled_file, Arc::new(schema.clone()), Some(props))?;
-
-        wtr.write(batch)?;
-        wtr.close()?;
-
-        // Copy into a sibling staging file and publish only after the complete
-        // Parquet payload has been copied successfully.
-        spooled_file.seek(SeekFrom::Start(0))?;
-        let (mut output_file, staging_path) =
-            crate::rs_write_config::create_staging_file(output_path)?;
-        let mut staging = StagingGuard(Some(staging_path));
-        if let Err(error) = std::io::copy(&mut spooled_file, &mut output_file) {
-            return Err(error.into());
-        }
-        drop(output_file);
-        crate::rs_write_config::publish_staging(
-            staging.0.as_deref().expect("staging is armed"),
-            output_path,
-            overwrite,
-        )?;
-        staging.0 = None;
-
-        Ok(())
-    }
-
-    /// Merge multiple Parquet files into one by reading and rewriting all batches.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any temp file cannot be read, the output file cannot
-    /// be created, or writing fails.
-    #[doc(hidden)] // CLI parallel-write orchestration internal; not a stable API.
-    #[cfg(feature = "parquet")]
-    pub fn merge_parquet_files(
-        temp_files: &[PathBuf],
-        output_path: &Path,
-        schema: &Schema,
-        compression: Option<ParquetCompression>,
-        compression_level: Option<u32>,
-        overwrite: bool,
-    ) -> Result<(), ReadStatError> {
-        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-
-        let (f, staging_path) = crate::rs_write_config::create_staging_file(output_path)?;
-        let mut staging = StagingGuard(Some(staging_path));
-
-        let compression_codec = Self::resolve_compression(compression, compression_level)?;
-
-        let props = WriterProperties::builder()
-            .set_compression(compression_codec)
-            .set_statistics_enabled(parquet::file::properties::EnabledStatistics::Page)
-            .set_writer_version(parquet::file::properties::WriterVersion::PARQUET_2_0)
-            .build();
-
-        let mut writer =
-            ParquetArrowWriter::try_new(BufWriter::new(f), Arc::new(schema.clone()), Some(props))?;
-
-        // Read each temp file and write its batches to the final file
-        for temp_file in temp_files {
-            let file = File::open(temp_file)?;
-            let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-            let reader = builder.build()?;
-
-            for batch in reader {
-                writer.write(&batch?)?;
-            }
-        }
-
-        if let Err(error) = writer.close() {
-            return Err(error.into());
-        }
-        crate::rs_write_config::publish_staging(
-            staging.0.as_deref().expect("staging is armed"),
-            output_path,
-            overwrite,
-        )?;
-        staging.0 = None;
-        for temp_file in temp_files {
-            fs::remove_file(temp_file)?;
-        }
-        Ok(())
     }
 
     #[cfg(feature = "parquet")]
@@ -577,6 +665,11 @@ impl ReadStatWriter {
         batch: &RecordBatch,
         wc: &WriteConfig,
     ) -> Result<(), ReadStatError> {
+        if self.schema.fields().is_empty() && batch.num_rows() != 0 {
+            return Err(ReadStatError::Other(
+                "Parquet cannot represent rows without columns".into(),
+            ));
+        }
         if wc.out_path.is_some() {
             // setup writer — open the file only on the first batch (see
             // write_data_to_csv).

@@ -93,12 +93,9 @@ pub enum ReadStatCliCommands {
         /// Convert sas7bdat data in parallel
         #[arg(action, long)]
         parallel: bool,
-        /// Write Parquet output in parallel{n}Requires --parallel and Parquet output; preserves row order
-        #[arg(action, long, requires = "parallel")]
+        /// Write Parquet output batches in parallel; preserves row order{n}Can be combined with either the default one-pass reader or --parallel
+        #[arg(action, long)]
         parallel_write: bool,
-        /// Memory buffer size in MB before spilling to disk (default: 100){n}Requires --parallel-write
-        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=10240), requires = "parallel_write")]
-        parallel_write_buffer_mb: Option<u64>,
         /// Parquet compression algorithm
         #[arg(long, value_enum, value_parser)]
         compression: Option<CliParquetCompression>,

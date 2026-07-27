@@ -3,7 +3,10 @@
 //! [`ReadStatReader`] is the primary reading API. The free functions are concise
 //! equivalents for reading a path with default settings.
 
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
@@ -35,6 +38,7 @@ struct ReadPlan {
 /// current chunk and is therefore the bounded-memory option.
 pub struct ReadStatReader {
     source: Source,
+    metadata: Mutex<Option<ReadStatMetadata>>,
     offset: u32,
     limit: Option<u32>,
     columns: Option<Vec<String>>,
@@ -65,6 +69,7 @@ impl ReadStatReader {
     fn new(source: Source) -> Self {
         Self {
             source,
+            metadata: Mutex::new(None),
             offset: 0,
             limit: None,
             columns: None,
@@ -106,8 +111,21 @@ impl ReadStatReader {
         self
     }
 
-    /// Reads metadata transactionally.
+    /// Reads and caches metadata transactionally.
+    ///
+    /// Reusing the same reader for metadata and data uses one cached metadata
+    /// snapshot for planning and avoids a second metadata parse. For path-backed
+    /// sources, callers must still prevent the file from being replaced between
+    /// metadata and data parsing, or between repeated reads with this reader.
     pub fn metadata(&self) -> Result<ReadStatMetadata, ReadStatError> {
+        let mut cached = self
+            .metadata
+            .lock()
+            .map_err(|_| ReadStatError::Other("reader metadata cache is poisoned".into()))?;
+        if let Some(md) = cached.as_ref() {
+            return Ok(md.clone());
+        }
+
         let mut md = ReadStatMetadata::new();
         match &self.source {
             Source::Path(path) => md.read_metadata(path, false)?,
@@ -115,6 +133,7 @@ impl ReadStatReader {
             #[cfg(not(target_arch = "wasm32"))]
             Source::Mmap(path) => md.read_metadata_from_mmap(path, false)?,
         }
+        *cached = Some(md.clone());
         Ok(md)
     }
 
