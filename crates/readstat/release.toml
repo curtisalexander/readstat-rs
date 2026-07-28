@@ -23,6 +23,24 @@ replace = 'version = "{{version}}"'
 exactly = 1
 
 [[pre-release-replacements]]
+file = "../readstat-wasm/pkg/package.json"
+search = '(?m)^  "version": "[0-9]+\.[0-9]+\.[0-9]+",$'
+replace = '  "version": "{{version}}",'
+exactly = 1
+
+[[pre-release-replacements]]
+file = "../readstat-wasm/Cargo.lock"
+search = '(?m)(name = "readstat"\n)version = "[0-9]+\.[0-9]+\.[0-9]+"'
+replace = '${1}version = "{{version}}"'
+exactly = 1
+
+[[pre-release-replacements]]
+file = "../readstat-wasm/Cargo.lock"
+search = '(?m)(name = "readstat-wasm"\n)version = "[0-9]+\.[0-9]+\.[0-9]+"'
+replace = '${1}version = "{{version}}"'
+exactly = 1
+
+[[pre-release-replacements]]
 file = "../../docs/ARCHITECTURE.md"
 search = "### `readstat-wasm` \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)"
 replace = "### `readstat-wasm` (v{{version}})"

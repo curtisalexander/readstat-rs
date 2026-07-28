@@ -1,10 +1,16 @@
-# Plan: Numeric Type Narrowing for SAS Columns
+# Research decision: Numeric Type Narrowing for SAS Columns
+
+**Status (2026-07-28): do not implement automatic narrowing.** This document
+records the evaluated options and the evidence required to reconsider. The
+current `Float64` mapping remains the honest, streaming-compatible default.
 
 ## Problem Statement
 
-All numeric values in SAS `.sas7bdat` files are stored as 64-bit IEEE 754
-doubles. The ReadStat C library reports them as `READSTAT_TYPE_DOUBLE`, and
-`readstat-rs` maps every unformatted numeric column to Arrow `Float64`.
+SAS numeric values are logically IEEE 754 doubles, but `.sas7bdat` columns may
+store only 3–8 bytes of that representation. ReadStat reconstructs them and
+reports `READSTAT_TYPE_DOUBLE`; `readstat-rs` maps every unformatted numeric
+column to Arrow `Float64`. Storage width is a precision hint, not evidence that
+a column contains integers.
 
 In practice many SAS columns contain only values that could be represented with
 a smaller or more precise type:
@@ -266,11 +272,11 @@ no type information.
 
 ### 4. Missing Values
 
-SAS has 28 distinct missing values (`.`, `.A`–`.Z`, `._`). ReadStat reports
-them all as `readstat_value_is_system_missing() == 1`. In Arrow, nulls are
-represented by a validity bitmap, orthogonal to the data type. A column with
-missing values can still be narrowed — but the scanner must handle them
-(skip, don't treat as 0.0 or NaN).
+SAS has 28 distinct missing values (`.`, `.A`–`.Z`, `._`). ReadStat distinguishes
+system and tagged/user-defined missing values; `readstat-rs` deliberately uses
+the combined `readstat_value_is_missing()` predicate and maps all of them to
+Arrow nulls. A hypothetical scanner would have to use the same predicate rather
+than infer missingness from raw `NaN` values.
 
 ### 5. Boolean Representation
 
@@ -345,16 +351,20 @@ Given the trade-offs, I'd rank the approaches:
    too dangerous for a tool that converts production data. CSV readers accept
    this risk because they have no choice; we do.
 
-**My honest assessment:** this feature would add meaningful complexity for a
+**Decision:** this feature would add meaningful complexity for a
 narrow benefit. The main beneficiaries are users who (a) load the output into
 Arrow/Feather (not Parquet, which compresses well regardless), (b) have large
 datasets with many integer-only columns, and (c) are memory-constrained. For
 most users, the Float64 output is correct, expected, and compatible with
 everything.
 
-If we were to proceed, Approach D (user overrides) offers the best
-complexity-to-value ratio as a first step, with Approach A (opt-in two-pass
-scan) as a possible future addition if demand materializes.
+Do not implement automatic, sample-based, or two-pass narrowing without measured
+user demand. If that demand materializes, Approach D (exact user overrides,
+erroring on fractional/non-finite/out-of-range values) offers the best
+complexity-to-value ratio. Before reconsidering, measure eligibility, peak RSS,
+wall time, output size, and downstream query performance on representative
+customer, AHS, and canonical datasets. Include exact `Float32` round-trip
+failures and fractional/non-finite counts rather than relying on min/max alone.
 
 ---
 

@@ -36,10 +36,11 @@ and repository-dispatch `build`, `test`, and `release` events are build-only dry
 runs. Preparation rejects malformed tags/labels, package-version mismatches, and
 tagged commits not contained in `origin/main`.
 
-After preparation, CI, safety, and seven candidate builds run concurrently: Linux
+After preparation, CI, safety, seven CLI candidate builds, and one canonical
+WASM bundle build run concurrently. CLI targets are Linux
 GNU x86_64, Linux musl x86_64, Linux GNU ARM64, macOS x86_64/ARM64, and Windows
 MSVC/GNU. Candidates only upload `candidate-*` workflow artifacts. A single final
-job downloads those artifacts, verifies the exact seven archive names, creates
+job downloads those artifacts, verifies the exact eight archive names, creates
 `SHA256SUMS`, and uploads the assembled bundle on every trigger. Only on a strict
 tag push does that final job check that no release already exists, generate notes
 from strict reachable version tags, and publish once. Thus a failed platform or

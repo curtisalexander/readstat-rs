@@ -179,8 +179,14 @@ fn ineffective_option_combinations_are_rejected() {
         .args(["convert", input, "--reader", "mem", "--parallel"])
         .assert()
         .failure()
+        .stderr(predicate::str::contains("unexpected argument '--parallel'"));
+
+    readstat_cmd()
+        .args(["convert", input, "--parallel-write"])
+        .assert()
+        .failure()
         .stderr(predicate::str::contains(
-            "--parallel cannot be used with --reader mem",
+            "unexpected argument '--parallel-write'",
         ));
 
     readstat_cmd()

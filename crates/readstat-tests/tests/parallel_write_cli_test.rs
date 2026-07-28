@@ -48,7 +48,7 @@ fn read_parquet(path: &std::path::Path) -> arrow_array::RecordBatch {
 }
 
 #[test]
-fn test_parallel_write_cli_option() {
+fn default_parallel_parquet_matches_serial_output() {
     let temp = assert_fs::TempDir::new().unwrap();
     let parallel_output = temp.child("parallel.parquet");
     let serial_output = temp.child("serial.parquet");
@@ -65,7 +65,6 @@ fn test_parallel_write_cli_option() {
         .arg(parallel_output.path())
         .args(["--rows", "100", "--stream-rows", "17"])
         .args(["--columns", "Brand,Model,EngineSize"])
-        .arg("--parallel-write")
         .arg("--overwrite");
     cmd.assert().success();
 
@@ -76,6 +75,7 @@ fn test_parallel_write_cli_option() {
         .arg(serial_output.path())
         .args(["--rows", "100", "--stream-rows", "17"])
         .args(["--columns", "Brand,Model,EngineSize"])
+        .arg("--serial-write")
         .arg("--overwrite")
         .assert()
         .success();
@@ -89,41 +89,7 @@ fn test_parallel_write_cli_option() {
 }
 
 #[test]
-fn test_parallel_reader_and_writer_remain_compatible() {
-    // Create a temp directory for output
-    let temp = assert_fs::TempDir::new().unwrap();
-    let output_file = temp.child("output.parquet");
-
-    // Get path to test data
-    let test_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("data")
-        .join("all_types.sas7bdat");
-
-    let mut cmd = readstat_cmd();
-    cmd.arg("convert")
-        .arg(&test_data_path)
-        .arg("--output")
-        .arg(output_file.path())
-        .arg("--format")
-        .arg("parquet")
-        // The two flags remain compatible while parallel reading is retained
-        // for benchmark comparison.
-        .arg("--parallel")
-        .arg("--parallel-write")
-        .arg("--overwrite");
-
-    let assert = cmd.assert();
-    assert.success();
-
-    // Verify the output file was created
-    output_file.assert(predicates::path::exists());
-
-    temp.close().unwrap();
-}
-
-#[test]
-fn test_parallel_write_csv_matches_serial_bytes() {
+fn default_parallel_csv_matches_serial_bytes() {
     let temp = assert_fs::TempDir::new().unwrap();
     let parallel_output = temp.child("parallel.csv");
     let serial_output = temp.child("serial.csv");
@@ -140,7 +106,6 @@ fn test_parallel_write_csv_matches_serial_bytes() {
         .arg(parallel_output.path())
         .args(["--rows", "100", "--stream-rows", "17"])
         .args(["--columns", "Brand,Model,EngineSize"])
-        .arg("--parallel-write")
         .arg("--overwrite");
     cmd.assert().success();
 
@@ -151,6 +116,7 @@ fn test_parallel_write_csv_matches_serial_bytes() {
         .arg(serial_output.path())
         .args(["--rows", "100", "--stream-rows", "17"])
         .args(["--columns", "Brand,Model,EngineSize"])
+        .arg("--serial-write")
         .arg("--overwrite")
         .assert()
         .success();
@@ -164,7 +130,7 @@ fn test_parallel_write_csv_matches_serial_bytes() {
 }
 
 #[test]
-fn test_parallel_write_ndjson_matches_serial_bytes() {
+fn default_parallel_ndjson_matches_serial_bytes() {
     let temp = assert_fs::TempDir::new().unwrap();
     let parallel_output = temp.child("parallel.ndjson");
     let serial_output = temp.child("serial.ndjson");
@@ -180,7 +146,6 @@ fn test_parallel_write_ndjson_matches_serial_bytes() {
         .arg(parallel_output.path())
         .args(["--rows", "100", "--stream-rows", "17"])
         .args(["--columns", "Brand,Model,EngineSize"])
-        .arg("--parallel-write")
         .arg("--overwrite")
         .assert()
         .success();
@@ -192,6 +157,7 @@ fn test_parallel_write_ndjson_matches_serial_bytes() {
         .arg(serial_output.path())
         .args(["--rows", "100", "--stream-rows", "17"])
         .args(["--columns", "Brand,Model,EngineSize"])
+        .arg("--serial-write")
         .arg("--overwrite")
         .assert()
         .success();
@@ -205,7 +171,7 @@ fn test_parallel_write_ndjson_matches_serial_bytes() {
 }
 
 #[test]
-fn test_parallel_write_rejects_unsupported_output() {
+fn feather_remains_supported_with_serial_writer() {
     let temp = assert_fs::TempDir::new().unwrap();
     let output_file = temp.child("output.feather");
     let test_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -218,21 +184,17 @@ fn test_parallel_write_rejects_unsupported_output() {
         .arg(test_data_path)
         .arg("--output")
         .arg(output_file.path())
-        .arg("--parallel-write")
         .arg("--overwrite")
         .assert()
-        .failure()
-        .stderr(predicates::str::contains(
-            "only supported for CSV, NDJSON, and Parquet",
-        ));
+        .success();
+
+    output_file.assert(predicates::path::exists());
 
     temp.close().unwrap();
 }
 
 #[test]
-fn test_parallel_write_rejects_whole_file_reader() {
-    // A whole-file batch cannot provide useful write parallelism and defeats
-    // the bounded-memory contract.
+fn default_writer_supports_whole_file_reader() {
     let temp = assert_fs::TempDir::new().unwrap();
     let output_file = temp.child("output.parquet");
 
@@ -250,12 +212,10 @@ fn test_parallel_write_rejects_whole_file_reader() {
         .arg("parquet")
         .arg("--reader")
         .arg("mem")
-        .arg("--parallel-write")
         .arg("--overwrite");
 
-    cmd.assert()
-        .failure()
-        .stderr(predicates::str::contains("--reader mem"));
+    cmd.assert().success();
+    output_file.assert(predicates::path::exists());
 
     temp.close().unwrap();
 }

@@ -44,7 +44,8 @@ jobs:
             readstat=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat") | .version')
             cli=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat-cli") | .version')
             wasm=$(cargo metadata --manifest-path crates/readstat-wasm/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="readstat-wasm") | .version')
-            [ "$version" = "$readstat" ] && [ "$version" = "$cli" ] && [ "$version" = "$wasm" ] || { echo "::error::Tag/package versions differ (tag=$version, readstat=$readstat, cli=$cli, wasm=$wasm)"; exit 1; }
+            wasm_pkg=$(jq -r .version crates/readstat-wasm/pkg/package.json)
+            [ "$version" = "$readstat" ] && [ "$version" = "$cli" ] && [ "$version" = "$wasm" ] && [ "$version" = "$wasm_pkg" ] || { echo "::error::Tag/package versions differ (tag=$version, readstat=$readstat, cli=$cli, wasm=$wasm, wasm-package=$wasm_pkg)"; exit 1; }
             git merge-base --is-ancestor "${GITHUB_SHA}^{commit}" origin/main || { echo '::error::Tagged commit is not in origin/main'; exit 1; }
             label=$REF_NAME
           elif [ "$EVENT" = workflow_dispatch ]; then label=${MANUAL_VERSION:-dev}
@@ -133,8 +134,37 @@ jobs:
           path: readstat-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.${{ matrix.ext }}
           if-no-files-found: error
 
+  wasm-candidate:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+      - uses: emscripten-core/setup-emsdk@v16
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/readstat-wasm
+      - name: Build canonical WASM bundle
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        working-directory: crates/readstat-wasm
+        run: |
+          set -euo pipefail
+          cargo build --locked --target wasm32-unknown-emscripten --release
+          cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/readstat_wasm.wasm
+          tar czf "readstat-$VERSION-wasm.tar.gz" -C pkg readstat_wasm.js readstat_wasm.wasm package.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: candidate-wasm
+          path: crates/readstat-wasm/readstat-${{ needs.prepare.outputs.version }}-wasm.tar.gz
+          if-no-files-found: error
+
   assemble-publish:
-    needs: [prepare, validation, safety, candidate]
+    needs: [prepare, validation, safety, candidate, wasm-candidate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -160,6 +190,7 @@ jobs:
           readstat-$VERSION-aarch64-apple-darwin.tar.gz
           readstat-$VERSION-x86_64-pc-windows-msvc.zip
           readstat-$VERSION-x86_64-pc-windows-gnu.zip
+          readstat-$VERSION-wasm.tar.gz
           EOF
           (cd dist && for file in *; do [ -f "$file" ] && printf '%s\n' "$file"; done | sort) > actual
           sort expected -o expected

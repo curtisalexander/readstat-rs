@@ -5,15 +5,14 @@ use crossbeam::channel::bounded;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use path_abs::{PathAbs, PathInfo};
-use rayon::prelude::*;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 
 use readstat::{
-    OutFormat, ProgressCallback, ReadStatData, ReadStatError, ReadStatPath, ReadStatReader,
-    ReadStatWriter, WriteConfig, build_offsets,
+    OutFormat, ProgressCallback, ReadStatError, ReadStatPath, ReadStatReader, ReadStatWriter,
+    WriteConfig,
 };
 
 use super::support::resolve_columns;
@@ -155,8 +154,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
         stream_rows,
         no_progress,
         overwrite,
-        parallel,
-        parallel_write,
+        serial_write,
         compression,
         compression_level,
         columns,
@@ -178,19 +176,6 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             "--stream-rows cannot be used with --reader mem".into(),
         ));
     }
-    if matches!(reader, Some(Reader::Mem)) && parallel {
-        return Err(ReadStatError::Other(
-            "--parallel cannot be used with --reader mem; use --reader stream or omit --reader"
-                .into(),
-        ));
-    }
-    if matches!(reader, Some(Reader::Mem)) && parallel_write {
-        return Err(ReadStatError::Other(
-            "--parallel-write cannot be used with --reader mem; use --reader stream or omit --reader"
-                .into(),
-        ));
-    }
-
     let sas_path = PathAbs::new(input)?.as_path().to_path_buf();
     debug!(
         "Generating data from the file {}",
@@ -213,28 +198,6 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             "only CSV may be written to stdout; provide --output for this format".into(),
         ));
     }
-    if parallel_write
-        && !matches!(
-            wc.format(),
-            OutFormat::Csv | OutFormat::Ndjson | OutFormat::Parquet
-        )
-    {
-        return Err(ReadStatError::Other(
-            "--parallel-write is only supported for CSV, NDJSON, and Parquet output".into(),
-        ));
-    }
-    if parallel_write && matches!(wc.format(), OutFormat::Csv) && wc.out_path().is_none() {
-        return Err(ReadStatError::Other(
-            "--parallel-write requires file output; CSV stdout remains sequential".into(),
-        ));
-    }
-    #[cfg(feature = "sql")]
-    if parallel_write && sql_query.is_some() {
-        return Err(ReadStatError::Other(
-            "--parallel-write cannot be combined with --sql or --sql-file".into(),
-        ));
-    }
-
     // Reuse this reader for metadata and one-pass data streaming. Its metadata
     // cache keeps both operations on one snapshot and one metadata parse.
     let mut one_pass_reader = ReadStatReader::from_path(&rsp.path)?;
@@ -256,11 +219,9 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             // Resolve column selection (only meaningful when writing data).
             let col_names = resolve_columns(columns, columns_file)?;
             let column_filter = md.resolve_selected_columns(col_names.clone())?;
-            let original_var_count = md.var_count;
             if let Some(ref mapping) = column_filter {
                 md = md.filter_to_selected_columns(mapping);
             }
-            let column_filter = column_filter.map(Arc::new);
 
             // Determine row count. try_from (not `as`): a corrupt header
             // reporting a negative row count must surface as an error, not
@@ -274,12 +235,18 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
             let total_rows_to_stream =
                 resolve_stream_rows(reader, stream_rows, total_rows_to_process);
-            let total_rows_processed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let progress = create_progress(no_progress, total_rows_to_process)?;
 
-            let offsets = build_offsets(total_rows_to_process, total_rows_to_stream);
-
-            let parallel_format = parallel_write.then(|| wc.format());
+            // Parallel writing is the default for file formats where it has a
+            // supported bounded implementation. Feather, CSV stdout, SQL, and
+            // explicit --serial-write conversions use the sequential writer.
+            let parallel_format = (!serial_write
+                && wc.out_path().is_some()
+                && matches!(
+                    wc.format(),
+                    OutFormat::Csv | OutFormat::Ndjson | OutFormat::Parquet
+                ))
+            .then(|| wc.format());
 
             one_pass_reader = one_pass_reader
                 .rows(0, Some(total_rows_to_process))
@@ -302,39 +269,14 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             let sql_table_name = table_name_from_path(&rsp.path);
 
             let (s, r) = bounded(CHANNEL_CAPACITY);
-            let progress_thread = progress.clone();
-            // Arc handles for the writer side (the originals move into the
-            // reader thread); used to produce a valid empty output file when
-            // the input has zero rows.
+            // Arc handles for the writer side are used to produce a valid empty
+            // output file when the input has zero rows.
             let vars_writer = vars_shared.clone();
             let schema_writer = schema_shared.clone();
 
-            // Signal "parsing started" exactly once (the library no longer does
-            // this per-chunk). Must happen before `rsp` moves into the reader
-            // thread below.
-            if parallel && let Some(ref p) = progress {
-                p.parsing_started(&rsp.path.to_string_lossy());
-            }
-
             // Spawn the reader thread: it parses chunks and sends them down the
-            // channel. `rsp` and the shared metadata move into it here, so all
-            // uses of `rsp.path` above must already have happened.
-            let reader_handle = spawn_reader(
-                ReaderConfig {
-                    rsp,
-                    offsets,
-                    parallel,
-                    column_filter,
-                    original_var_count,
-                    total_rows_processed,
-                    var_count,
-                    vars: vars_shared,
-                    schema: schema_shared,
-                    progress: progress_thread,
-                    one_pass_reader: Some(one_pass_reader),
-                },
-                s,
-            );
+            // channel using the canonical bounded one-pass parser.
+            let reader_handle = spawn_reader(one_pass_reader, s);
 
             // Everything the write strategies share. `ctx` owns the channel
             // receiver and the reader-thread handle, so it moves into whichever
@@ -398,35 +340,6 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
     }
 }
 
-/// Inputs to the conversion reader thread.
-///
-/// Bundles the parse configuration so [`spawn_reader`] takes a single named
-/// value rather than a long positional argument list.
-struct ReaderConfig {
-    /// Validated input path; moves into the reader thread.
-    rsp: ReadStatPath,
-    /// Chunk boundaries from [`build_offsets`]; consumed as `windows(2)` pairs.
-    offsets: Vec<u32>,
-    /// Whether to parse chunks concurrently on the rayon pool.
-    parallel: bool,
-    /// Optional original-index → filtered-index column mapping.
-    column_filter: Option<Arc<std::collections::BTreeMap<i32, i32>>>,
-    /// Unfiltered variable count, for row-boundary detection under filtering.
-    original_var_count: i32,
-    /// Shared counter of rows processed across all chunks.
-    total_rows_processed: Arc<std::sync::atomic::AtomicUsize>,
-    /// (Possibly filtered) variable count.
-    var_count: i32,
-    /// Shared variable metadata.
-    vars: Arc<std::collections::BTreeMap<i32, readstat::ReadStatVarMetadata>>,
-    /// Shared Arrow schema.
-    schema: Arc<arrow_schema::Schema>,
-    /// Optional progress callback.
-    progress: Option<Arc<IndicatifProgress>>,
-    /// Canonical one-pass reader used unless legacy parallel reading is requested.
-    one_pass_reader: Option<ReadStatReader>,
-}
-
 /// Spawns the reader thread that parses row chunks and sends them to `sender`.
 ///
 /// Any chunk error is returned from the thread so it propagates to the exit
@@ -434,68 +347,14 @@ struct ReaderConfig {
 /// output. The returned handle is joined (via [`join_reader`]) by whichever
 /// write strategy drains the channel.
 fn spawn_reader(
-    cfg: ReaderConfig,
+    reader: ReadStatReader,
     sender: crossbeam::channel::Sender<arrow_array::RecordBatch>,
 ) -> thread::JoinHandle<Result<(), ReadStatError>> {
-    let ReaderConfig {
-        rsp,
-        offsets,
-        parallel,
-        column_filter,
-        original_var_count,
-        total_rows_processed,
-        var_count,
-        vars,
-        schema,
-        progress,
-        one_pass_reader,
-    } = cfg;
-
     thread::spawn(move || -> Result<(), ReadStatError> {
         let send_err = || {
             ReadStatError::Other("Error when attempting to send read data for writing".to_string())
         };
-
-        if !parallel {
-            return one_pass_reader
-                .ok_or_else(|| ReadStatError::Other("one-pass reader is unavailable".into()))?
-                .visit(|batch| sender.send(batch).map_err(|_| send_err()));
-        }
-
-        let offsets_pairs: Vec<_> = offsets.windows(2).collect();
-
-        let parse_chunk = |w: &[u32]| -> Result<ReadStatData, ReadStatError> {
-            let row_start = w[0];
-            let row_end = w[1];
-
-            let mut d = ReadStatData::new()
-                .set_column_filter(column_filter.clone(), original_var_count)
-                .set_total_rows_processed(total_rows_processed.clone())
-                .init_shared(var_count, vars.clone(), schema.clone(), row_start, row_end);
-
-            if let Some(ref p) = progress {
-                d = d.set_progress(p.clone() as Arc<dyn ProgressCallback>);
-            }
-
-            d.read_data(&rsp)?;
-
-            Ok(d)
-        };
-
-        // Parse chunks concurrently on the global rayon pool. This legacy path
-        // buffers all chunks before sending so it remains available for direct
-        // benchmark comparison with the bounded one-pass reader.
-        let results: Vec<Result<ReadStatData, ReadStatError>> =
-            offsets_pairs.par_iter().map(|w| parse_chunk(w)).collect();
-
-        for result in results {
-            let batch = result?
-                .batch
-                .ok_or_else(|| ReadStatError::Other("no record batch was produced".into()))?;
-            sender.send(batch).map_err(|_| send_err())?;
-        }
-
-        Ok(())
+        reader.visit(|batch| sender.send(batch).map_err(|_| send_err()))
     })
 }
 

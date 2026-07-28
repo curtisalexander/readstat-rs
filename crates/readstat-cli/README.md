@@ -14,7 +14,7 @@ Binary crate producing the `readstat` CLI tool for converting SAS binary files (
 
 - Column selection (`--columns`, `--columns-file`)
 - Streaming reads with configurable chunk size (`--stream-rows`)
-- Deprecated benchmark-only partitioned reading (`--parallel`) and bounded parallel CSV/NDJSON/Parquet writing (`--parallel-write`)
+- Bounded parallel CSV/NDJSON/Parquet writing by default, with `--serial-write` for memory-sensitive workloads
 - Optional SQL queries via DataFusion (`--sql`, `--sql-file`)
 - Parquet compression settings (`--compression`, `--compression-level`)
 

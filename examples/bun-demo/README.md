@@ -34,7 +34,7 @@ git submodule update --init --recursive
 
 # Build the wasm package
 cd crates/readstat-wasm
-cargo build --target wasm32-unknown-emscripten --release
+cargo build --locked --target wasm32-unknown-emscripten --release
 cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
 
 # Run the demo
@@ -58,7 +58,7 @@ git submodule update --init --recursive
 
 # Build the wasm package
 cd crates/readstat-wasm
-cargo build --target wasm32-unknown-emscripten --release
+cargo build --locked --target wasm32-unknown-emscripten --release
 cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
 
 # Run the demo
@@ -82,7 +82,7 @@ git submodule update --init --recursive
 
 # Build the wasm package
 cd crates\readstat-wasm
-cargo build --target wasm32-unknown-emscripten --release
+cargo build --locked --target wasm32-unknown-emscripten --release
 copy target\wasm32-unknown-emscripten\release\readstat_wasm.wasm pkg\
 
 # Run the demo
@@ -168,7 +168,7 @@ git submodule update --init --recursive
 cd crates/readstat-wasm
 
 # Build with Emscripten target (release mode)
-cargo build --target wasm32-unknown-emscripten --release
+cargo build --locked --target wasm32-unknown-emscripten --release
 
 # Copy the .wasm binary into the pkg/ directory
 # macOS / Linux
@@ -229,7 +229,7 @@ Wrote 1081 rows to cars.csv
 
 The `readstat-wasm` crate compiles the ReadStat C library and the Rust `readstat` parsing library to WebAssembly using the `wasm32-unknown-emscripten` target. Emscripten is required because the underlying ReadStat C code needs a C standard library (libc, iconv) — which Emscripten provides for wasm. (Note: zlib is only needed for SPSS zsav support, which is not included in the current wasm build.)
 
-The crate exports eight C-compatible functions:
+The crate exports nine C-compatible functions:
 
 | Export | Signature | Purpose |
 |--------|-----------|---------|
@@ -239,6 +239,7 @@ The crate exports eight C-compatible functions:
 | `read_data_ndjson` | `(ptr, len) -> *char` | Parse data and return as NDJSON string |
 | `read_data_parquet` | `(ptr, len, out_len) -> *u8` | Parse data and return as Parquet bytes |
 | `read_data_feather` | `(ptr, len, out_len) -> *u8` | Parse data and return as Feather bytes |
+| `readstat_last_error` | `() -> *const char` | Return the actionable error from the most recent failed read call (borrowed; do not free) |
 | `free_string` | `(ptr)` | Free a string returned by the string functions |
 | `free_binary` | `(ptr, len)` | Free binary data returned by parquet/feather |
 

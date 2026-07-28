@@ -419,14 +419,14 @@ native parallel Parquet writing was 1.30x faster than serial writing (1.511 s
 versus 1.966 s) and used 201 MB rather than 553 MB peak RSS. Four Rayon workers
 were nominally fastest, but 4 through 18 workers were within approximately 2%.
 Input batches from 10,000 through 100,000 rows were also effectively tied; 5,000
-rows was 14% slower. The one-pass reader was 2.36x faster than the legacy
-partitioned `--parallel` reader.
+rows was 14% slower. The one-pass reader was 2.36x faster than the removed
+partitioned reader.
 
 The real Census AHS 2021 `household.sas7bdat` workload (64,141 rows, 1,078
 columns) reversed the memory result: serial writing used 757 MB peak RSS,
 parallel 100,000-row groups used 1.38 GB, and parallel 25,000-row groups used
 1.15 GB. Smaller groups also made every tested Parquet output 6-7% larger, so
-the 100,000-row parallel default remains unchanged. Prefer serial writes and a
+the 100,000-row parallel default remains unchanged. Prefer `--serial-write` and a
 smaller `--stream-rows` value for unusually wide data.
 
 Format baselines on the canonical corpus were 1.446 s for source-only parsing,

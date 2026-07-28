@@ -10,6 +10,9 @@ The `pkg/` directory contains everything needed to use the library from JavaScri
 |------|-------------|
 | `readstat_wasm.wasm` | Pre-built WASM binary (Emscripten target) |
 | `readstat_wasm.js` | JS wrapper handling module loading, memory management, and type conversion |
+| `package.json` | Package identity and version, kept in lockstep with the Rust crate |
+
+Versioned bundles containing these three files are attached to GitHub Releases.
 
 ## JS API
 
@@ -66,8 +69,14 @@ The WASM module exposes these C-compatible functions (used internally by the JS 
 | `read_data_ndjson` | `(ptr, len) -> *char` | Parse data, return as NDJSON |
 | `read_data_parquet` | `(ptr, len, out_len) -> *u8` | Parse data, return as Parquet bytes |
 | `read_data_feather` | `(ptr, len, out_len) -> *u8` | Parse data, return as Feather bytes |
+| `readstat_last_error` | `() -> *char` | Borrow the last native error for the current thread |
 | `free_string` | `(ptr)` | Free a string returned by the above |
 | `free_binary` | `(ptr, len)` | Free a binary buffer returned by parquet/feather |
+
+Read functions return null on failure. `readstat_last_error` then returns an
+actionable borrowed message, valid until the next read call on that thread. The
+caller must not free that pointer. The JavaScript wrapper converts it to an
+`Error` automatically.
 
 ## Building from source
 
@@ -84,7 +93,7 @@ rustup target add wasm32-unknown-emscripten
 git submodule update --init --recursive
 
 # Build
-cargo build --target wasm32-unknown-emscripten --release
+cargo build --locked --target wasm32-unknown-emscripten --release
 
 # Copy binary to pkg/
 cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/

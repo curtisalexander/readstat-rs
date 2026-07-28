@@ -5,9 +5,52 @@ use readstat::{write_batch_to_feather_bytes, write_batch_to_parquet_bytes};
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::slice;
+use std::{cell::RefCell, panic::UnwindSafe};
 
-fn catch_export<T>(failure: T, f: impl FnOnce() -> T) -> T {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or(failure)
+thread_local! {
+    static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
+}
+
+fn set_last_error(message: impl ToString) {
+    let message = message.to_string().replace('\0', "\\0");
+    LAST_ERROR.with(|error| *error.borrow_mut() = CString::new(message).ok());
+}
+
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|message| (*message).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".to_owned())
+}
+
+fn catch_export<T: Copy>(failure: T, f: impl FnOnce() -> Result<T, String> + UnwindSafe) -> T {
+    LAST_ERROR.with(|error| *error.borrow_mut() = None);
+    match std::panic::catch_unwind(f) {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => {
+            set_last_error(error);
+            failure
+        }
+        Err(payload) => {
+            set_last_error(format!("WASM export panicked: {}", panic_message(payload)));
+            failure
+        }
+    }
+}
+
+/// Return the most recent error for this thread, or null if the last call succeeded.
+///
+/// The returned pointer is borrowed and remains valid until the next exported read call
+/// on the same thread. The caller must not free it.
+#[unsafe(no_mangle)]
+pub extern "C" fn readstat_last_error() -> *const c_char {
+    LAST_ERROR.with(|error| {
+        error
+            .borrow()
+            .as_ref()
+            .map_or(std::ptr::null(), |message| message.as_ptr())
+    })
 }
 
 /// Read metadata from a `.sas7bdat` file provided as a byte buffer.
@@ -20,7 +63,9 @@ fn catch_export<T>(failure: T, f: impl FnOnce() -> T) -> T {
 /// Returns null on error.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_metadata(ptr: *const u8, len: usize) -> *mut c_char {
-    catch_export(std::ptr::null_mut(), || unsafe { read_metadata_inner(ptr, len, false) })
+    catch_export(std::ptr::null_mut(), || unsafe {
+        read_metadata_inner(ptr, len, false)
+    })
 }
 
 /// Read metadata, skipping the full row count for speed.
@@ -30,7 +75,9 @@ pub unsafe extern "C" fn read_metadata(ptr: *const u8, len: usize) -> *mut c_cha
 /// Same contract as [`read_metadata`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_metadata_fast(ptr: *const u8, len: usize) -> *mut c_char {
-    catch_export(std::ptr::null_mut(), || unsafe { read_metadata_inner(ptr, len, true) })
+    catch_export(std::ptr::null_mut(), || unsafe {
+        read_metadata_inner(ptr, len, true)
+    })
 }
 
 /// Read data from a `.sas7bdat` file and return it as CSV.
@@ -43,7 +90,9 @@ pub unsafe extern "C" fn read_metadata_fast(ptr: *const u8, len: usize) -> *mut 
 /// Returns null on error.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
-    catch_export(std::ptr::null_mut(), || unsafe { read_data_inner(ptr, len, &OutputFormat::Csv) })
+    catch_export(std::ptr::null_mut(), || unsafe {
+        read_data_inner(ptr, len, &OutputFormat::Csv)
+    })
 }
 
 /// Read data from a `.sas7bdat` file and return it as NDJSON.
@@ -53,7 +102,9 @@ pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
 /// Same contract as [`read_data`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data_ndjson(ptr: *const u8, len: usize) -> *mut c_char {
-    catch_export(std::ptr::null_mut(), || unsafe { read_data_inner(ptr, len, &OutputFormat::Ndjson) })
+    catch_export(std::ptr::null_mut(), || unsafe {
+        read_data_inner(ptr, len, &OutputFormat::Ndjson)
+    })
 }
 
 /// Read data from a `.sas7bdat` file and return it as Parquet bytes.
@@ -71,11 +122,11 @@ pub unsafe extern "C" fn read_data_parquet(
     len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
-    if out_len.is_null() {
-        return std::ptr::null_mut();
-    }
-    unsafe { *out_len = 0 };
     catch_export(std::ptr::null_mut(), || unsafe {
+        if out_len.is_null() {
+            return Err("out_len must not be null".to_owned());
+        }
+        *out_len = 0;
         read_data_binary_inner(ptr, len, &BinaryOutputFormat::Parquet, out_len)
     })
 }
@@ -91,11 +142,11 @@ pub unsafe extern "C" fn read_data_feather(
     len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
-    if out_len.is_null() {
-        return std::ptr::null_mut();
-    }
-    unsafe { *out_len = 0 };
     catch_export(std::ptr::null_mut(), || unsafe {
+        if out_len.is_null() {
+            return Err("out_len must not be null".to_owned());
+        }
+        *out_len = 0;
         read_data_binary_inner(ptr, len, &BinaryOutputFormat::Feather, out_len)
     })
 }
@@ -131,9 +182,13 @@ pub unsafe extern "C" fn free_binary(ptr: *mut u8, len: usize) {
     }
 }
 
-unsafe fn read_metadata_inner(ptr: *const u8, len: usize, skip_row_count: bool) -> *mut c_char {
+unsafe fn read_metadata_inner(
+    ptr: *const u8,
+    len: usize,
+    skip_row_count: bool,
+) -> Result<*mut c_char, String> {
     if ptr.is_null() || len == 0 {
-        return std::ptr::null_mut();
+        return Err("input buffer must not be null or empty".to_owned());
     }
 
     // SAFETY: The caller guarantees `ptr` is valid for `len` bytes (see public fn docs).
@@ -144,24 +199,19 @@ unsafe fn read_metadata_inner(ptr: *const u8, len: usize, skip_row_count: bool) 
         // The high-level reader intentionally always computes the exact row count.
         // Keep the low-level metadata call for this fast-path export only.
         let mut md = ReadStatMetadata::new();
-        if md.read_metadata_from_bytes(bytes, true).is_err() {
-            return std::ptr::null_mut();
-        }
+        md.read_metadata_from_bytes(bytes, true)
+            .map_err(|error| error.to_string())?;
         md
     } else {
-        let Ok(md) = ReadStatReader::from_bytes(bytes).metadata() else {
-            return std::ptr::null_mut();
-        };
-        md
+        ReadStatReader::from_bytes(bytes)
+            .metadata()
+            .map_err(|error| error.to_string())?
     };
 
-    match serde_json::to_string(&md) {
-        Ok(json) => match CString::new(json) {
-            Ok(c) => c.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        },
-        Err(_) => std::ptr::null_mut(),
-    }
+    let json = serde_json::to_string(&md).map_err(|error| error.to_string())?;
+    CString::new(json)
+        .map(CString::into_raw)
+        .map_err(|error| error.to_string())
 }
 
 enum OutputFormat {
@@ -174,31 +224,32 @@ enum BinaryOutputFormat {
     Feather,
 }
 
-unsafe fn read_data_inner(ptr: *const u8, len: usize, format: &OutputFormat) -> *mut c_char {
+unsafe fn read_data_inner(
+    ptr: *const u8,
+    len: usize,
+    format: &OutputFormat,
+) -> Result<*mut c_char, String> {
     if ptr.is_null() || len == 0 {
-        return std::ptr::null_mut();
+        return Err("input buffer must not be null or empty".to_owned());
     }
 
     // SAFETY: The caller guarantees `ptr` is valid for `len` bytes (see public fn docs).
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    let Ok(batch) = ReadStatReader::from_bytes(bytes).read() else {
-        return std::ptr::null_mut();
-    };
+    let batch = ReadStatReader::from_bytes(bytes)
+        .read()
+        .map_err(|error| error.to_string())?;
 
     let output_bytes = match format {
         OutputFormat::Csv => write_batch_to_csv_bytes(&batch),
         OutputFormat::Ndjson => write_batch_to_ndjson_bytes(&batch),
     };
 
-    match output_bytes {
-        Ok(bytes) => match CString::new(bytes) {
-            Ok(c) => c.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        },
-        Err(_) => std::ptr::null_mut(),
-    }
+    let bytes = output_bytes.map_err(|error| error.to_string())?;
+    CString::new(bytes)
+        .map(CString::into_raw)
+        .map_err(|error| error.to_string())
 }
 
 unsafe fn read_data_binary_inner(
@@ -206,25 +257,27 @@ unsafe fn read_data_binary_inner(
     len: usize,
     format: &BinaryOutputFormat,
     out_len: *mut usize,
-) -> *mut u8 {
+) -> Result<*mut u8, String> {
     if ptr.is_null() || len == 0 || out_len.is_null() {
-        return std::ptr::null_mut();
+        return Err(
+            "input buffer and out_len must not be null; input must not be empty".to_owned(),
+        );
     }
 
     // SAFETY: The caller guarantees `ptr` is valid for `len` bytes (see public fn docs).
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    let Ok(batch) = ReadStatReader::from_bytes(bytes).read() else {
-        return std::ptr::null_mut();
-    };
+    let batch = ReadStatReader::from_bytes(bytes)
+        .read()
+        .map_err(|error| error.to_string())?;
 
     let output_bytes = match format {
         BinaryOutputFormat::Parquet => write_batch_to_parquet_bytes(&batch),
         BinaryOutputFormat::Feather => write_batch_to_feather_bytes(&batch),
     };
 
-    match output_bytes {
+    match output_bytes.map_err(|error| error.to_string()) {
         Ok(vec) => {
             // Convert to a boxed slice so that the allocation size equals the
             // data length exactly.  `free_binary` reconstructs this `Box<[u8]>`
@@ -234,8 +287,35 @@ unsafe fn read_data_binary_inner(
             let data_ptr = Box::into_raw(boxed) as *mut u8;
             // SAFETY: `out_len` was checked non-null at the top of this function.
             unsafe { *out_len = data_len };
-            data_ptr
+            Ok(data_ptr)
         }
-        Err(_) => std::ptr::null_mut(),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_errors_are_actionable_and_success_clears_them() {
+        let result = catch_export(0, || Err("bad input".to_owned()));
+        assert_eq!(result, 0);
+        assert_eq!(
+            unsafe { std::ffi::CStr::from_ptr(readstat_last_error()) }
+                .to_str()
+                .unwrap(),
+            "bad input"
+        );
+
+        assert_eq!(catch_export(0, || Ok(7)), 7);
+        assert!(readstat_last_error().is_null());
+    }
+
+    #[test]
+    fn export_panics_are_caught() {
+        assert_eq!(catch_export(0, || panic!("broken parser")), 0);
+        let error = unsafe { std::ffi::CStr::from_ptr(readstat_last_error()) };
+        assert!(error.to_string_lossy().contains("broken parser"));
     }
 }

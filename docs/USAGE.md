@@ -227,24 +227,11 @@ readstat preview /some/dir/to/example.sas7bdat --columns Brand,Model,EngineSize
 ```
 
 ## Parallelism
-The `convert` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
 
-### Legacy Parallel Reading (`--parallel`, Deprecated)
-The default reader is the recommended path: it scans the SAS file once and emits
-bounded batches while the writer consumes earlier batches. The deprecated
-`--parallel` option retains the older partitioned reader temporarily for CLI
-compatibility and benchmark comparison. It starts one ReadStat parser per
-`stream-rows` partition and uses all processors in Rayon's global pool.
-
-:heavy_exclamation_mark: ReadStat row offsets do not seek directly to a SAS row:
-each partition scans from the beginning and skips its prefix. `--parallel` can
-therefore repeat substantial work. It also collects all parsed partitions in
-memory before sending them to the writer. Original row order is preserved, but
-this mode is not bounded-memory and should not be assumed faster.
-
-### Parallel Writing (`--parallel-write`)
-`--parallel-write` enables bounded parallel writing for CSV, NDJSON, and
-Parquet files without requiring parallel reads. Input row order is preserved.
+The `convert` subcommand uses bounded parallel writing by default for CSV,
+NDJSON, and Parquet files. The one-pass reader remains single-parser and feeds
+ordered batches through a bounded channel, so write parallelism does not change
+input row order.
 
 - For CSV and NDJSON, groups of at most four input batches are encoded
   concurrently into independent byte buffers, then committed in order. CSV
@@ -255,28 +242,28 @@ Parquet files without requiring parallel reads. Input row order is preserved.
 CSV stdout remains sequential because transactional ordered assembly requires
 file output. Feather remains sequential: its writer is already hidden behind
 parsing in the canonical benchmark and Arrow IPC has no public zero-reencode
-file assembly API comparable to Parquet column-chunk append.
+file assembly API comparable to Parquet column-chunk append. SQL output also
+remains sequential.
 
-Example usage:
+For unusually wide or string-heavy datasets, disable parallel encoding to
+reduce peak memory:
 ```sh
-readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --parallel-write
-readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson --parallel-write
-readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --parallel-write
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --serial-write
 ```
 
 ## Memory Considerations
 
-### Default: Sequential Writes
+### Bounded Reader/Writer Pipeline
 
-In the default mode, one ReadStat parser emits batches into a bounded channel
+One ReadStat parser emits batches into a bounded channel
 (capacity 10) while the writer consumes them. At most 10 queued batches plus
 the active reader and writer batches are held, providing backpressure when the
 writer is slower. For very wide, string-heavy datasets, lower `--stream-rows`
 to reduce each batch's memory footprint.
 
 ```
-Sequential Write (default)
-==========================
+Bounded Conversion Pipeline
+===========================
 
  Reader Thread                 Bounded Channel (cap 10)            Main Thread
 +---------------------+       +------------------------+       +---------------------+
@@ -300,7 +287,7 @@ Sequential Write (default)
  Backpressure: reader blocks when channel is full
 ```
 
-### Parallel Writes (`--parallel-write`)
+### Default Parallel Writes
 
 The channel remains bounded. Parallel CSV/NDJSON retains at most four input
 batches and their encoded byte buffers in addition to the channel; lower
@@ -312,8 +299,8 @@ These are row-count bounds, not strict byte bounds: unusually wide or
 string-heavy rows can still consume substantial memory.
 
 ```
-Parallel Parquet Write (--parallel-write)
-==========================================
+Default Parallel Parquet Write
+==============================
 
  Reader ──> bounded channel ──> row-group accumulator
                                       |

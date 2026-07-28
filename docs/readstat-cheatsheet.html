@@ -338,10 +338,9 @@
     <!-- ── Parallelism ── -->
     <section class="section theme-emerald">
       <h2>Parallelism</h2>
-      <div class="row"><span class="k">--parallel</span><span class="d">Read chunks in parallel</span></div>
-      <div class="row"><span class="k">--parallel-write</span><span class="d">Write in parallel (Parquet)</span></div>
-      <div class="row"><span class="k">--parallel-write-buffer-mb N</span><span class="d">Buffer before spill (default 100)</span></div>
-      <div class="tip"><strong>Note:</strong> <span class="cmd">--parallel</span> increases memory (all chunks in memory). <span class="cmd">--parallel-write</span> currently supports Parquet only. Row order is preserved.</div>
+      <div class="row"><span class="k">default</span><span class="d">Parallel CSV, NDJSON, and Parquet file writing</span></div>
+      <div class="row"><span class="k">--serial-write</span><span class="d">Reduce memory pressure on unusually wide data</span></div>
+      <div class="tip"><strong>Note:</strong> Row order is preserved. CSV stdout, Feather, and SQL output remain sequential.</div>
     </section>
 
     <!-- ── Reader Modes ── -->
@@ -398,7 +397,7 @@
         <div class="scenario">
           <div class="scenario-title">Production conversion</div>
           <div class="row"><span class="k">readstat convert big.sas7bdat -o big.parquet --compression zstd</span></div>
-          <div class="row"><span class="k">... --parallel --parallel-write</span><span class="d">Max throughput</span></div>
+          <div class="row"><span class="k">... --serial-write --stream-rows 5000</span><span class="d">Lower memory for very wide data</span></div>
           <div class="row"><span class="k">... --columns-file keep.txt</span><span class="d">Only needed columns</span></div>
           <div class="row"><span class="k">... --rows 100000</span><span class="d">Partial extract</span></div>
         </div>

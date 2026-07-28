@@ -61,7 +61,7 @@ if (Test-Path $WasmDir) {
     } else {
         Write-Fail "readstat-wasm fmt — run 'cargo fmt' in crates\readstat-wasm\"
     }
-    cargo clippy --all-targets -- -D warnings *>$null
+    cargo clippy --locked --all-targets -- -D warnings *>$null
     if ($LASTEXITCODE -eq 0) {
         Write-Pass "readstat-wasm clippy"
     } else {
@@ -70,7 +70,7 @@ if (Test-Path $WasmDir) {
     $emcc = Get-Command emcc -ErrorAction SilentlyContinue
     $targets = rustup target list --installed 2>$null
     if ($emcc -and ($targets -contains "wasm32-unknown-emscripten")) {
-        cargo build --target wasm32-unknown-emscripten --release *>$null
+        cargo build --locked --target wasm32-unknown-emscripten --release *>$null
         if ($LASTEXITCODE -eq 0) { Write-Pass "readstat-wasm Emscripten build" } else { Write-Fail "readstat-wasm Emscripten build failed" }
     } else {
         Write-Warn "Emscripten/emcc or wasm32-unknown-emscripten unavailable — skipping actual WASM build"
@@ -157,13 +157,14 @@ Write-Host "Checking version consistency..."
 $readstatVer = (Select-String -Path "$RootDir\crates\readstat\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $cliVer = (Select-String -Path "$RootDir\crates\readstat-cli\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $wasmVer = (Select-String -Path "$RootDir\crates\readstat-wasm\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
+$wasmPkgVer = (Get-Content "$RootDir\crates\readstat-wasm\pkg\package.json" -Raw | ConvertFrom-Json).version
 $sysVer = (Select-String -Path "$RootDir\crates\readstat-sys\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $iconvVer = (Select-String -Path "$RootDir\crates\readstat-iconv-sys\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 
-if (($readstatVer -eq $cliVer) -and ($readstatVer -eq $wasmVer)) {
-    Write-Pass "readstat, readstat-cli, and readstat-wasm versions match ($readstatVer)"
+if (($readstatVer -eq $cliVer) -and ($readstatVer -eq $wasmVer) -and ($wasmVer -eq $wasmPkgVer)) {
+    Write-Pass "readstat, readstat-cli, readstat-wasm, and WASM package versions match ($readstatVer)"
 } else {
-    Write-Fail "Version mismatch: readstat=$readstatVer, readstat-cli=$cliVer, readstat-wasm=$wasmVer"
+    Write-Fail "Version mismatch: readstat=$readstatVer, readstat-cli=$cliVer, readstat-wasm=$wasmVer, wasm-package=$wasmPkgVer"
 }
 
 # readstat-sys and readstat-iconv-sys version independently (each is bumped

@@ -23,9 +23,11 @@ The `ReadStat` library is used to parse and read `sas7bdat` files, and the `arro
 
 ## :rocket: CLI Quickstart
 
-Convert the first 50,000 rows of `example.sas7bdat` (by performing the read in parallel) to the file `example.parquet`, overwriting the file if it already exists.
+Convert the first 50,000 rows of `example.sas7bdat` to the file
+`example.parquet`, overwriting the file if it already exists. File output uses
+bounded parallel writing by default while preserving row order.
 ```sh
-readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --rows 50000 --overwrite --parallel
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --rows 50000 --overwrite
 ```
 
 ## :package: CLI Install

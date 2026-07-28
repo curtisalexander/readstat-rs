@@ -1,6 +1,6 @@
 {
   "name": "readstat-wasm",
-  "version": "0.1.0",
+  "version": "0.28.0",
   "type": "module",
   "main": "readstat_wasm.js",
   "files": ["readstat_wasm.js", "readstat_wasm.wasm"]

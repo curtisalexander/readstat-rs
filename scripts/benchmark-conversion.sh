@@ -160,8 +160,8 @@ dataset="benchmark-data/readstat_benchmark_v1.sas7bdat"
 benchmark_output="target/benchmark-output.parquet"
 prepare="rm -f '$benchmark_output'"
 cleanup="$prepare"
-serial_command="$binary convert $dataset --output $benchmark_output --overwrite --no-progress --stream-rows 10000"
-parallel_command="$serial_command --parallel-write"
+parallel_command="$binary convert $dataset --output $benchmark_output --overwrite --no-progress --stream-rows 10000"
+serial_command="$parallel_command --serial-write"
 
 cleanup_output() {
     rm -f "$OUTPUT"
@@ -259,8 +259,8 @@ done
 echo
 echo "Sweeping input batch sizes: $stream_rows_values"
 for stream_rows in $stream_rows_values; do
-    serial_rows_command="$binary convert $dataset --output $benchmark_output --overwrite --no-progress --stream-rows $stream_rows"
-    parallel_rows_command="$serial_rows_command --parallel-write"
+    parallel_rows_command="$binary convert $dataset --output $benchmark_output --overwrite --no-progress --stream-rows $stream_rows"
+    serial_rows_command="$parallel_rows_command --serial-write"
     hyperfine \
         --warmup "$warmup" \
         --runs "$runs" \

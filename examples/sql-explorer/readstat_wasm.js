@@ -69,6 +69,16 @@ function readCString(ptr) {
   return new TextDecoder().decode(mem.slice(ptr, end));
 }
 
+/** Read the borrowed native last-error string before another export replaces it. */
+function getLastError() {
+  const lastError = instance.exports.readstat_last_error;
+  if (typeof lastError !== "function") {
+    return "WASM function returned null — parsing failed";
+  }
+  const ptr = lastError();
+  return ptr === 0 ? "WASM function returned null — parsing failed" : readCString(ptr);
+}
+
 /**
  * Call a WASM function that accepts (ptr, len) and returns a C string pointer.
  */
@@ -84,17 +94,22 @@ function _callWasmStringFn(wasmFn, bytes) {
 
   new Uint8Array(memory.buffer).set(bytes, inputPtr);
 
-  const resultPtr = wasmFn(inputPtr, bytes.length);
-
-  instance.exports.free(inputPtr);
-
-  if (resultPtr === 0) {
-    throw new Error("WASM function returned null — parsing failed");
+  let resultPtr;
+  try {
+    resultPtr = wasmFn(inputPtr, bytes.length);
+  } finally {
+    instance.exports.free(inputPtr);
   }
 
-  const result = readCString(resultPtr);
-  free_string(resultPtr);
-  return result;
+  if (resultPtr === 0) {
+    throw new Error(getLastError());
+  }
+
+  try {
+    return readCString(resultPtr);
+  } finally {
+    free_string(resultPtr);
+  }
 }
 
 /**
@@ -119,24 +134,33 @@ function _callWasmBinaryFn(wasmFn, bytes) {
     throw new Error("malloc failed for out_len");
   }
 
-  const resultPtr = wasmFn(inputPtr, bytes.length, outLenPtr);
-
-  instance.exports.free(inputPtr);
+  let resultPtr;
+  try {
+    resultPtr = wasmFn(inputPtr, bytes.length, outLenPtr);
+  } catch (error) {
+    instance.exports.free(outLenPtr);
+    throw error;
+  } finally {
+    instance.exports.free(inputPtr);
+  }
 
   if (resultPtr === 0) {
     instance.exports.free(outLenPtr);
-    throw new Error("WASM function returned null — parsing failed");
+    throw new Error(getLastError());
   }
 
-  const view = new DataView(memory.buffer);
-  const resultLen = view.getUint32(outLenPtr, true);
-  instance.exports.free(outLenPtr);
+  let resultLen;
+  try {
+    resultLen = new DataView(memory.buffer).getUint32(outLenPtr, true);
+  } finally {
+    instance.exports.free(outLenPtr);
+  }
 
-  const result = new Uint8Array(memory.buffer, resultPtr, resultLen).slice();
-
-  free_binary(resultPtr, resultLen);
-
-  return result;
+  try {
+    return new Uint8Array(memory.buffer, resultPtr, resultLen).slice();
+  } finally {
+    free_binary(resultPtr, resultLen);
+  }
 }
 
 /**
@@ -178,7 +202,7 @@ export function read_metadata(bytes) {
  * Read metadata, skipping the full row count for speed.
  *
  * @param {Uint8Array} bytes - The raw file contents.
- * @returns {string} A JSON string containing metadata (row_count may be inaccurate).
+ * @returns {string} A JSON string containing metadata (`row_count` is null).
  */
 export function read_metadata_fast(bytes) {
   return _callWasmStringFn(instance.exports.read_metadata_fast, bytes);

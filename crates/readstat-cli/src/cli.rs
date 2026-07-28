@@ -90,12 +90,9 @@ pub enum ReadStatCliCommands {
         /// Do not display progress bar
         #[arg(action, long)]
         no_progress: bool,
-        /// Deprecated benchmark-only partitioned reader; rescans source prefixes and is usually slower
+        /// Disable parallel CSV/NDJSON batch or Parquet column encoding{n}CSV stdout, Feather, and SQL output are always written sequentially
         #[arg(action, long)]
-        parallel: bool,
-        /// Write CSV/NDJSON batches or Parquet columns in parallel; preserves row order{n}Requires file output; supports streaming or --parallel, not --reader mem
-        #[arg(action, long)]
-        parallel_write: bool,
+        serial_write: bool,
         /// Parquet compression algorithm
         #[arg(long, value_enum, value_parser)]
         compression: Option<CliParquetCompression>,
@@ -108,11 +105,11 @@ pub enum ReadStatCliCommands {
         /// Path to a file containing column names (one per line, # comments)
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with = "columns")]
         columns_file: Option<PathBuf>,
-        /// SQL query to run against the data{n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file and --parallel-write
+        /// SQL query to run against the data{n}The table name is the input file stem (e.g. "cars" for cars.sas7bdat){n}Mutually exclusive with --columns/--columns-file
         #[cfg(feature = "sql")]
         #[arg(long, conflicts_with_all = ["columns", "columns_file"])]
         sql: Option<String>,
-        /// Path to a file containing a SQL query{n}Mutually exclusive with --sql, --columns/--columns-file, and --parallel-write
+        /// Path to a file containing a SQL query{n}Mutually exclusive with --sql and --columns/--columns-file
         #[cfg(feature = "sql")]
         #[arg(long, value_hint = ValueHint::FilePath, conflicts_with_all = ["sql", "columns", "columns_file"])]
         sql_file: Option<PathBuf>,

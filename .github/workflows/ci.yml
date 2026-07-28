@@ -71,7 +71,7 @@ jobs:
       - name: Check WASM crate on host
         run: |
           cargo fmt --manifest-path crates/readstat-wasm/Cargo.toml -- --check
-          cargo clippy --manifest-path crates/readstat-wasm/Cargo.toml --all-targets -- -D warnings
+          cargo clippy --locked --manifest-path crates/readstat-wasm/Cargo.toml --all-targets -- -D warnings
       - name: Check package contents
         run: |
           for crate in readstat-iconv-sys readstat-sys readstat readstat-cli; do
@@ -131,7 +131,7 @@ jobs:
         uses: emscripten-core/setup-emsdk@v16
       - name: Build WASM crate
         working-directory: crates/readstat-wasm
-        run: cargo build --target wasm32-unknown-emscripten --release
+        run: cargo build --locked --target wasm32-unknown-emscripten --release
       - name: Smoke-test generated WASM package
         working-directory: crates/readstat-wasm
         run: |
@@ -145,6 +145,18 @@ jobs:
           const metadata = JSON.parse(read_metadata(input));
           if (metadata.row_count <= 0 || metadata.var_count <= 0) {
             throw new Error(`unexpected metadata: ${JSON.stringify(metadata)}`);
+          }
+          let nativeError;
+          try {
+            read_metadata(new Uint8Array([1, 2, 3]));
+          } catch (error) {
+            nativeError = error;
+          }
+          if (!nativeError) {
+            throw new Error("invalid input unexpectedly succeeded");
+          }
+          if (!nativeError.message || nativeError.message.includes("returned null")) {
+            throw new Error(`WASM did not surface its native error: ${nativeError.message}`);
           }
           NODE
 

@@ -13,7 +13,13 @@ use arrow_csv::WriterBuilder as CsvWriterBuilder;
 use arrow_ipc::writer::FileWriter as IpcFileWriter;
 #[cfg(feature = "ndjson")]
 use arrow_json::LineDelimitedWriter as JsonLineDelimitedWriter;
-#[cfg(test)]
+#[cfg(all(
+    test,
+    feature = "csv",
+    feature = "feather",
+    feature = "ndjson",
+    feature = "parquet"
+))]
 use arrow_schema::Schema;
 use arrow_schema::SchemaRef;
 #[cfg(feature = "parquet")]
@@ -27,9 +33,9 @@ use parquet::{
     basic::Compression as ParquetCompressionCodec,
     file::{properties::WriterProperties, writer::SerializedFileWriter},
 };
-#[cfg(any(
-    feature = "parquet",
-    all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32"))
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "parquet", feature = "csv", feature = "ndjson")
 ))]
 use rayon::prelude::*;
 #[cfg(any(
@@ -57,7 +63,13 @@ use std::io::stdout;
     feature = "parquet"
 ))]
 use std::path::PathBuf;
-#[cfg(test)]
+#[cfg(all(
+    test,
+    feature = "csv",
+    feature = "feather",
+    feature = "ndjson",
+    feature = "parquet"
+))]
 use std::sync::Arc;
 
 use crate::err::ReadStatError;
@@ -422,9 +434,17 @@ impl ParallelParquetWriter {
             }
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let column_writers = column_writers.into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let column_writers = column_writers.into_iter();
+        #[cfg(not(target_arch = "wasm32"))]
+        let inputs = inputs.into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let inputs = inputs.into_iter();
+
         let chunks: Vec<ArrowColumnChunk> = column_writers
-            .into_par_iter()
-            .zip(inputs.into_par_iter())
+            .zip(inputs)
             .map(|(mut writer, leaves)| {
                 for leaf in &leaves {
                     writer.write(leaf)?;

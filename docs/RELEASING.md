@@ -89,7 +89,8 @@ a CHANGELOG entry, and a crates.io publish.
 **Version conventions:**
 - `readstat`, `readstat-cli`, and `readstat-wasm` share the same version (e.g.
   `0.28.0`). The WASM crate is excluded from the workspace, but the `readstat`
-  release replacement updates it and release checks enforce parity.
+  release replacement updates its Rust manifest, package manifest, and standalone
+  lockfile package entries; locked release checks enforce parity.
 - `readstat-sys` and `readstat-iconv-sys` version **independently** — bump each
   only when its vendored C library or bindings change (e.g.
   `cargo release minor -p readstat-sys`). Their numbers are not expected to
@@ -237,7 +238,7 @@ Check build status and browse the rendered docs at:
 
 ### 4. Verify the GitHub release
 
-The tag push triggers `.github/workflows/release.yml`. It validates the tag and versions, then runs CI, safety checks, and seven candidate builds in parallel. A single final fan-in verifies every expected archive and checksum before creating the GitHub Release; candidate jobs never publish, so partial releases cannot be created. Confirm everything looks right on the
+The tag push triggers `.github/workflows/release.yml`. It validates the tag and versions, then runs CI, safety checks, seven CLI candidate builds, and one canonical WASM bundle build. A single final fan-in verifies every expected archive and checksum before creating the GitHub Release; candidate jobs never publish, so partial releases cannot be created. Confirm everything looks right on the
 [Releases page](https://github.com/curtisalexander/readstat-rs/releases).
 
 ### 5. Clean up

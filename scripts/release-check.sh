@@ -63,13 +63,13 @@ if [ -d "$WASM_DIR" ]; then
     else
         fail "readstat-wasm fmt — run 'cargo fmt' in crates/readstat-wasm/"
     fi
-    if (cd "$WASM_DIR" && cargo clippy --all-targets -- -D warnings) &>/dev/null; then
+    if (cd "$WASM_DIR" && cargo clippy --locked --all-targets -- -D warnings) &>/dev/null; then
         pass "readstat-wasm clippy"
     else
         fail "readstat-wasm clippy — warnings or errors found"
     fi
     if command -v emcc &>/dev/null && rustup target list --installed | grep -qx wasm32-unknown-emscripten; then
-        if (cd "$WASM_DIR" && cargo build --target wasm32-unknown-emscripten --release) &>/dev/null; then
+        if (cd "$WASM_DIR" && cargo build --locked --target wasm32-unknown-emscripten --release) &>/dev/null; then
             pass "readstat-wasm Emscripten build"
         else
             fail "readstat-wasm Emscripten build failed"
@@ -150,14 +150,15 @@ echo "Checking version consistency..."
 READSTAT_VER=$(grep '^version' "$ROOT_DIR/crates/readstat/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 CLI_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-cli/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 WASM_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-wasm/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+WASM_PKG_VER=$(grep '"version"' "$ROOT_DIR/crates/readstat-wasm/pkg/package.json" | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
 SYS_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 ICONV_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-iconv-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
 # readstat, readstat-cli, and the WASM artifact should match
-if [ "$READSTAT_VER" = "$CLI_VER" ] && [ "$READSTAT_VER" = "$WASM_VER" ]; then
-    pass "readstat, readstat-cli, and readstat-wasm versions match ($READSTAT_VER)"
+if [ "$READSTAT_VER" = "$CLI_VER" ] && [ "$READSTAT_VER" = "$WASM_VER" ] && [ "$WASM_VER" = "$WASM_PKG_VER" ]; then
+    pass "readstat, readstat-cli, readstat-wasm, and WASM package versions match ($READSTAT_VER)"
 else
-    fail "Version mismatch: readstat=$READSTAT_VER, readstat-cli=$CLI_VER, readstat-wasm=$WASM_VER"
+    fail "Version mismatch: readstat=$READSTAT_VER, readstat-cli=$CLI_VER, readstat-wasm=$WASM_VER, wasm-package=$WASM_PKG_VER"
 fi
 
 # readstat-sys and readstat-iconv-sys version independently (each is bumped

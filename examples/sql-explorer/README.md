@@ -45,15 +45,18 @@ Then open `http://localhost:8000` in your browser.
 
 ## WASM Files
 
-The `readstat_wasm.js` and `readstat_wasm.wasm` files are pre-built and checked into the repository — no action is needed to get started. They are copies from `examples/web-demo/`. If you rebuild the WASM module, copy the updated files here as well.
+The browser-compatible `readstat_wasm.js` wrapper and a pre-built `readstat_wasm.wasm` are checked into the repository, so no action is needed to get started. The WASM binary is kept byte-for-byte identical to the canonical copy in `crates/readstat-wasm/pkg/` and the copy in `examples/web-demo/`.
 
 To rebuild from source (requires Emscripten):
 
 ```bash
 cd crates/readstat-wasm
-./build.sh
-cp pkg/readstat_wasm.js pkg/readstat_wasm.wasm ../../examples/sql-explorer/
+cargo build --locked --target wasm32-unknown-emscripten --release
+cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/
+cp pkg/readstat_wasm.wasm ../../examples/sql-explorer/
 ```
+
+Do **not** copy `pkg/readstat_wasm.js` into this directory: that wrapper uses Node.js APIs. Keep the browser wrapper here, and update it separately if the exported ABI changes.
 
 ## CDN Dependencies
 

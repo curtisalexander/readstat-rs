@@ -213,3 +213,36 @@ Known non-product failures/risks:
   creation if staging unlink fails (pre-existing edge case).
 - Positive-row/zero-column Parquet output is rejected because Parquet cannot
   represent its row count without inventing a column.
+
+## Follow-up decisions (2026-07-28)
+
+The next stabilization review resolved the recommendations above as follows:
+
+1. **Cross-machine benchmarking is deferred.** Representative 4/8-core Linux
+   and Windows hardware is not currently available. The reproducible benchmark
+   script remains available when that changes; GitHub-hosted runners are not a
+   substitute for stable performance hardware.
+2. **Parallel file writing is now the default.** CSV, NDJSON, and Parquet file
+   output use their bounded ordered parallel writers automatically. Row order
+   remains deterministic. `--serial-write` is the explicit escape hatch for
+   unusually wide or memory-constrained workloads. CSV stdout, Feather, and SQL
+   output remain sequential.
+3. **The legacy partitioned CLI reader is removed.** Its `--parallel` flag and
+   parser-per-partition implementation were removed rather than carried into
+   the next release. The public low-level row-offset APIs remain available.
+4. **Disk-full fault injection is deferred.** A deterministic test would require
+   either filesystem quota/loop-device privileges or making the production
+   writer generic solely to inject a failing sink. Existing tests cover writer
+   poisoning after format/schema failures and transactional staging cleanup;
+   add an I/O fault seam only if this contract changes or a natural abstraction
+   appears.
+5. **Automatic numeric narrowing is not planned.** The research conclusion is
+   recorded in [plan-numeric-type-narrowing.md](plan-numeric-type-narrowing.md).
+   It would change declared Arrow schemas, conflict with one-pass streaming, and
+   provide no CSV/NDJSON size benefit. Reconsider only with measured user demand;
+   exact opt-in type overrides are the least risky future option.
+
+WASM releases now include a canonical versioned bundle and native errors are
+available to JavaScript callers. SAS Explorer product work remains separate in
+[SAS-EXPLORER.md](SAS-EXPLORER.md); its first milestone is a minimal
+GitHub Pages compatibility proof, not a full application.

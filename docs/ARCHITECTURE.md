@@ -122,7 +122,7 @@ A future SAS Explorer should process local files entirely in the browser (no ser
 upload), visualize metadata/headers, provide data summaries and previews, and may
 offer in-browser SQL. GitHub Pages is preferred, with a custom subdomain as a
 fallback. It should reuse the canonical WASM artifact. Implementation is deferred
-until the WASM release, error-reporting, and versioning work is complete.
+pending the staged design in [SAS-EXPLORER.md](SAS-EXPLORER.md).
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`
@@ -164,10 +164,10 @@ Test data lives in `tests/data/*.sas7bdat` (16 datasets). Scripts to regenerate 
   and rotates bounded Arrow builders at complete row boundaries (10k rows by
   default); `chunks` and `read` are explicit collecting conveniences over it
 - **Parallel processing**: the default CLI pipeline feeds the one-pass reader
-  through a bounded Crossbeam channel so parsing overlaps writing; optional
+  through a bounded Crossbeam channel so parsing overlaps writing; default
   CSV/NDJSON workers encode bounded batch groups and Parquet workers encode
-  bounded column groups with Rayon. The legacy `--parallel` reader remains an
-  explicit, unbounded benchmark alternative.
+  bounded column groups with Rayon. Feather, CSV stdout, SQL output, and
+  `--serial-write` conversions use the sequential writer.
 - **Column filtering**: optional `--columns` / `--columns-file` flags restrict parsing to selected variables; unselected values are skipped in the `handle_value` callback while row-boundary detection uses the original (unfiltered) variable count
 - **Arrow pipeline**: SAS data → typed Arrow builders (direct append in FFI callbacks) → Arrow RecordBatch → output format
 - **Multiple I/O strategies**: file path (default), memory-mapped files (`memmap2`), and in-memory byte slices — all feed into the same FFI parsing pipeline
