@@ -1,6 +1,6 @@
 [package]
 name = "readstat-cli"
-version = "0.28.0"
+version = "0.29.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -23,7 +23,7 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-readstat = { path = "../readstat", version = "0.28.0", default-features = false }
+readstat = { path = "../readstat", version = "0.29.0", default-features = false }
 
 arrow-array = { workspace = true }
 arrow-csv = { workspace = true, optional = true }

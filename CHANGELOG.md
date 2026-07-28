@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-07-28
+
+This release also bumps `readstat-sys` to 0.5.2 and `readstat-iconv-sys` to
+0.4.2 for their vendored C updates.
+
+### Added
+- Added bounded, transactional parallel CSV and NDJSON writers and native parallel Parquet column encoding while preserving deterministic row order.
+- Added a canonical versioned WASM release bundle with checksums and a borrowed `readstat_last_error()` ABI that exposes parser, serialization, writer, and panic errors to JavaScript callers.
+- Added reproducible large-file benchmark tooling and a separate design for a minimal local-only SAS Explorer compatibility proof on GitHub Pages.
+
+### Changed
+- Made bounded parallel writing the default for CSV, NDJSON, and Parquet file output. Added `--serial-write` for unusually wide or memory-constrained datasets; Feather, stdout, and SQL output remain sequential.
+- Routed default CLI conversions through one ReadStat parser and a bounded ordered batch pipeline instead of parser-per-partition prefix rescans.
+- Updated the vendored ReadStat development snapshot from `3add3a5` to `3c68974`, adding allocation-failure checks in SAS and other parser/writer paths.
+- Updated vendored win-iconv from `9d16924` to `70a279d`, including a fix for undefined signed left shifts during UTF-32 conversion.
+- Kept Arrow and Parquet at 58 because DataFusion 54 does not support Arrow 59.
+
+### Fixed
+- Contained Rust panics at ReadStat callback and WASM export boundaries, represented unknown row counts explicitly, used ReadStat's combined missing-value predicate, and bounded string preallocation for hostile or very wide metadata.
+- Preserved native WASM errors in Node and browser wrappers while making temporary input, output, string, and binary allocation cleanup exception-safe.
+- Fixed zero-row conversion behavior, transactional staging cleanup, destination preservation, writer poisoning, and minimal-feature/Emscripten CI compilation.
+
+### Removed
+- Removed the deprecated CLI `--parallel` parser-per-partition reader and the temporary `--parallel-write` opt-in flag. Public low-level row-offset APIs remain available.
+- Removed the slower temporary-Parquet-file merge path that decoded and re-encoded its own output.
+
 ## [0.28.0] - 2026-07-26
 
 ### Changed

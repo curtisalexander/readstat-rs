@@ -1,6 +1,6 @@
 [package]
 name = "readstat"
-version = "0.28.0"
+version = "0.29.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -79,12 +79,12 @@ path_abs = { workspace = true }
 rayon = { workspace = true }
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
-readstat-sys = { path = "../readstat-sys", version = "0.5.1" }
+readstat-sys = { path = "../readstat-sys", version = "0.5.2" }
 
 # Emscripten has no portable pre-generated bindings because its sysroot is part
 # of emsdk. Enable target-local generation automatically for WASM consumers.
 [target.'cfg(target_os = "emscripten")'.dependencies]
-readstat-sys = { path = "../readstat-sys", version = "0.5.1", features = ["buildtime_bindgen"] }
+readstat-sys = { path = "../readstat-sys", version = "0.5.2", features = ["buildtime_bindgen"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

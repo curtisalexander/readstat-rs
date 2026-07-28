@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "readstat"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -1107,14 +1107,14 @@ dependencies = [
 
 [[package]]
 name = "readstat-iconv-sys"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "cc",
 ]
 
 [[package]]
 name = "readstat-sys"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "bindgen",
  "cc",
@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "readstat-wasm"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "readstat",
  "serde_json",

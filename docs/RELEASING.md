@@ -88,7 +88,7 @@ a CHANGELOG entry, and a crates.io publish.
 
 **Version conventions:**
 - `readstat`, `readstat-cli`, and `readstat-wasm` share the same version (e.g.
-  `0.28.0`). The WASM crate is excluded from the workspace, but the `readstat`
+  `0.29.0`). The WASM crate is excluded from the workspace, but the `readstat`
   release replacement updates its Rust manifest, package manifest, and standalone
   lockfile package entries; locked release checks enforce parity.
 - `readstat-sys` and `readstat-iconv-sys` version **independently** — bump each
