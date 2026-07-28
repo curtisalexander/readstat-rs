@@ -699,6 +699,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "calls ReadStat C FFI, which Miri cannot execute")]
     fn tagged_missing_uses_combined_predicate() {
         let mut value: readstat_sys::readstat_value_t = unsafe { std::mem::zeroed() };
         value.type_ = readstat_sys::readstat_type_e_READSTAT_TYPE_DOUBLE;
