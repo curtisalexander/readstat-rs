@@ -123,28 +123,108 @@ fn test_parallel_reader_and_writer_remain_compatible() {
 }
 
 #[test]
-fn test_parallel_write_rejects_non_parquet_output() {
+fn test_parallel_write_csv_matches_serial_bytes() {
     let temp = assert_fs::TempDir::new().unwrap();
-    let output_file = temp.child("output.csv");
+    let parallel_output = temp.child("parallel.csv");
+    let serial_output = temp.child("serial.csv");
 
     let test_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("data")
-        .join("all_types.sas7bdat");
+        .join("cars.sas7bdat");
 
     let mut cmd = readstat_cmd();
     cmd.arg("convert")
         .arg(&test_data_path)
         .arg("--output")
-        .arg(output_file.path())
-        .arg("--format")
-        .arg("csv")
+        .arg(parallel_output.path())
+        .args(["--rows", "100", "--stream-rows", "17"])
+        .args(["--columns", "Brand,Model,EngineSize"])
         .arg("--parallel-write")
         .arg("--overwrite");
+    cmd.assert().success();
 
-    cmd.assert()
+    readstat_cmd()
+        .arg("convert")
+        .arg(&test_data_path)
+        .arg("--output")
+        .arg(serial_output.path())
+        .args(["--rows", "100", "--stream-rows", "17"])
+        .args(["--columns", "Brand,Model,EngineSize"])
+        .arg("--overwrite")
+        .assert()
+        .success();
+
+    assert_eq!(
+        std::fs::read(parallel_output.path()).unwrap(),
+        std::fs::read(serial_output.path()).unwrap()
+    );
+
+    temp.close().unwrap();
+}
+
+#[test]
+fn test_parallel_write_ndjson_matches_serial_bytes() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let parallel_output = temp.child("parallel.ndjson");
+    let serial_output = temp.child("serial.ndjson");
+    let test_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("data")
+        .join("cars.sas7bdat");
+
+    readstat_cmd()
+        .arg("convert")
+        .arg(&test_data_path)
+        .arg("--output")
+        .arg(parallel_output.path())
+        .args(["--rows", "100", "--stream-rows", "17"])
+        .args(["--columns", "Brand,Model,EngineSize"])
+        .arg("--parallel-write")
+        .arg("--overwrite")
+        .assert()
+        .success();
+
+    readstat_cmd()
+        .arg("convert")
+        .arg(test_data_path)
+        .arg("--output")
+        .arg(serial_output.path())
+        .args(["--rows", "100", "--stream-rows", "17"])
+        .args(["--columns", "Brand,Model,EngineSize"])
+        .arg("--overwrite")
+        .assert()
+        .success();
+
+    assert_eq!(
+        std::fs::read(parallel_output.path()).unwrap(),
+        std::fs::read(serial_output.path()).unwrap()
+    );
+
+    temp.close().unwrap();
+}
+
+#[test]
+fn test_parallel_write_rejects_unsupported_output() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let output_file = temp.child("output.feather");
+    let test_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("data")
+        .join("all_types.sas7bdat");
+
+    readstat_cmd()
+        .arg("convert")
+        .arg(test_data_path)
+        .arg("--output")
+        .arg(output_file.path())
+        .arg("--parallel-write")
+        .arg("--overwrite")
+        .assert()
         .failure()
-        .stderr(predicates::str::contains("only supported for Parquet"));
+        .stderr(predicates::str::contains(
+            "only supported for CSV, NDJSON, and Parquet",
+        ));
 
     temp.close().unwrap();
 }

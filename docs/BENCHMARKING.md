@@ -411,6 +411,34 @@ parallel Parquet encoding, measures peak memory, sweeps Rayon worker counts and
 input batch sizes, and writes JSON plus Markdown reports under
 `target/benchmark-results/<timestamp>/`.
 
+### 2026-07-27 conversion baseline
+
+Commit `487547285c61cf5aa412e915796fdaa0875e6c40` was measured on an 18-core
+Apple Silicon Mac with 64 GiB of memory. On the canonical 4-million-row corpus,
+native parallel Parquet writing was 1.30x faster than serial writing (1.511 s
+versus 1.966 s) and used 201 MB rather than 553 MB peak RSS. Four Rayon workers
+were nominally fastest, but 4 through 18 workers were within approximately 2%.
+Input batches from 10,000 through 100,000 rows were also effectively tied; 5,000
+rows was 14% slower. The one-pass reader was 2.36x faster than the legacy
+partitioned `--parallel` reader.
+
+The real Census AHS 2021 `household.sas7bdat` workload (64,141 rows, 1,078
+columns) reversed the memory result: serial writing used 757 MB peak RSS,
+parallel 100,000-row groups used 1.38 GB, and parallel 25,000-row groups used
+1.15 GB. Smaller groups also made every tested Parquet output 6-7% larger, so
+the 100,000-row parallel default remains unchanged. Prefer serial writes and a
+smaller `--stream-rows` value for unusually wide data.
+
+Format baselines on the canonical corpus were 1.446 s for source-only parsing,
+1.431 s for Feather, 3.245 s for NDJSON, and 3.416 s for CSV. Feather remains
+serial because its writer is already hidden behind parsing and Arrow IPC has no
+public zero-reencode file assembly API comparable to Parquet column-chunk
+append. Bounded four-batch parallel text encoding reduced CSV from 3.393 s to
+1.551 s (2.19x) and NDJSON from 3.247 s to 1.564 s (2.08x). Complete serial and
+parallel outputs were byte-identical. Peak RSS increased from 61 MB to 90 MB for
+CSV and from 62 MB to 99 MB for NDJSON. Four workers saturated both formats;
+eight provided no further improvement.
+
 This example compares the performance of the Rust binary with the performance of the C binary built from the `ReadStat` repository.  In general, hope that performance is fairly close to that of the C binary.
 
 To run, execute the following from within the `readstat` directory.

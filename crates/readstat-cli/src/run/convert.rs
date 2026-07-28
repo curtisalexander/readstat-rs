@@ -27,6 +27,12 @@ const STREAM_ROWS: u32 = 10000;
 /// Capacity of the bounded channel between reader and writer threads.
 const CHANNEL_CAPACITY: usize = 10;
 
+/// Maximum number of input batches encoded concurrently for CSV/NDJSON. Together
+/// with `--stream-rows`, this bounds the additional Arrow and encoded-byte
+/// memory retained by the parallel writer.
+#[cfg(any(feature = "csv", feature = "ndjson"))]
+const PARALLEL_TEXT_BATCHES: usize = 4;
+
 /// Rows per native parallel Parquet row group. This is intentionally separate
 /// from parser batch sizing: larger row groups improve compression but retain
 /// more Arrow and encoded page memory while their columns are processed.
@@ -207,9 +213,19 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
             "only CSV may be written to stdout; provide --output for this format".into(),
         ));
     }
-    if parallel_write && !matches!(wc.format(), OutFormat::Parquet) {
+    if parallel_write
+        && !matches!(
+            wc.format(),
+            OutFormat::Csv | OutFormat::Ndjson | OutFormat::Parquet
+        )
+    {
         return Err(ReadStatError::Other(
-            "--parallel-write is only supported for Parquet output".into(),
+            "--parallel-write is only supported for CSV, NDJSON, and Parquet output".into(),
+        ));
+    }
+    if parallel_write && matches!(wc.format(), OutFormat::Csv) && wc.out_path().is_none() {
+        return Err(ReadStatError::Other(
+            "--parallel-write requires file output; CSV stdout remains sequential".into(),
         ));
     }
     #[cfg(feature = "sql")]
@@ -263,7 +279,7 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
 
             let offsets = build_offsets(total_rows_to_process, total_rows_to_stream);
 
-            let use_parallel_writes = parallel_write && matches!(wc.format(), OutFormat::Parquet);
+            let parallel_format = parallel_write.then(|| wc.format());
 
             one_pass_reader = one_pass_reader
                 .rows(0, Some(total_rows_to_process))
@@ -347,7 +363,18 @@ pub(super) fn run(cmd: ReadStatCliCommands) -> Result<(), ReadStatError> {
                         .expect("sql_query must be set when has_sql is true");
                     write_with_sql(ctx, query, &sql_table_name)?;
                 }
-            } else if use_parallel_writes {
+            } else if matches!(parallel_format, Some(OutFormat::Csv | OutFormat::Ndjson)) {
+                #[cfg(any(feature = "csv", feature = "ndjson"))]
+                {
+                    write_parallel_text(ctx)?;
+                }
+                #[cfg(not(any(feature = "csv", feature = "ndjson")))]
+                {
+                    return Err(ReadStatError::Other(
+                        "Parallel text writes require the corresponding format feature".to_string(),
+                    ));
+                }
+            } else if matches!(parallel_format, Some(OutFormat::Parquet)) {
                 #[cfg(feature = "parquet")]
                 {
                     write_parallel_parquet(ctx)?;
@@ -556,6 +583,51 @@ fn write_sequential(ctx: WriteContext) -> Result<(), ReadStatError> {
             write_empty_output(var_count, vars, schema, &wc, &input_path)?;
         }
     }
+
+    Ok(())
+}
+
+/// Parallel text path: encode a bounded group of independent batches on Rayon,
+/// then commit their bytes in input order (with one header for CSV).
+#[cfg(any(feature = "csv", feature = "ndjson"))]
+fn write_parallel_text(ctx: WriteContext) -> Result<(), ReadStatError> {
+    let WriteContext {
+        rx,
+        reader,
+        wc,
+        input_path,
+        schema,
+        ..
+    } = ctx;
+
+    let write_result = (|| {
+        let mut writer = readstat::ParallelTextWriter::new(wc.clone(), schema)?;
+        let mut batches = Vec::with_capacity(PARALLEL_TEXT_BATCHES);
+        for batch in rx.iter() {
+            batches.push(batch);
+            if batches.len() == PARALLEL_TEXT_BATCHES {
+                writer.write(&batches)?;
+                batches.clear();
+            }
+        }
+        writer.write(&batches)?;
+        Ok::<_, ReadStatError>(writer)
+    })();
+
+    drop(rx);
+    let reader_result = join_reader(reader);
+    let writer = match write_result {
+        Ok(writer) => {
+            reader_result?;
+            writer
+        }
+        Err(error) => {
+            let _ = reader_result;
+            return Err(error);
+        }
+    };
+    let rows = writer.finish()?;
+    print_write_summary(rows, &input_path, wc.out_path());
 
     Ok(())
 }

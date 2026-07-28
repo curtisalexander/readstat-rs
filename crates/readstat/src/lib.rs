@@ -309,6 +309,8 @@ pub use rs_query::{
 pub use rs_var::{ReadStatVarFormatClass, ReadStatVarType, ReadStatVarTypeClass};
 #[cfg(feature = "parquet")]
 pub use rs_write::ParallelParquetWriter;
+#[cfg(all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32")))]
+pub use rs_write::ParallelTextWriter;
 pub use rs_write::ReadStatWriter;
 #[cfg(feature = "csv")]
 #[cfg_attr(docsrs, doc(cfg(feature = "csv")))]

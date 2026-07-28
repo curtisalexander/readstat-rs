@@ -90,10 +90,10 @@ pub enum ReadStatCliCommands {
         /// Do not display progress bar
         #[arg(action, long)]
         no_progress: bool,
-        /// Convert sas7bdat data in parallel
+        /// Deprecated benchmark-only partitioned reader; rescans source prefixes and is usually slower
         #[arg(action, long)]
         parallel: bool,
-        /// Write Parquet output batches in parallel; preserves row order{n}Can be combined with either the default one-pass reader or --parallel
+        /// Write CSV/NDJSON batches or Parquet columns in parallel; preserves row order{n}Requires file output; supports streaming or --parallel, not --reader mem
         #[arg(action, long)]
         parallel_write: bool,
         /// Parquet compression algorithm

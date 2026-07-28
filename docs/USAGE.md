@@ -229,12 +229,12 @@ readstat preview /some/dir/to/example.sas7bdat --columns Brand,Model,EngineSize
 ## Parallelism
 The `convert` subcommand includes parameters for both _**parallel reading**_ and _**parallel writing**_:
 
-### Parallel Reading (`--parallel`)
+### Legacy Parallel Reading (`--parallel`, Deprecated)
 The default reader is the recommended path: it scans the SAS file once and emits
-bounded batches while the writer consumes earlier batches. `--parallel` retains
-the older partitioned reader for workloads where benchmarking proves it faster.
-It starts one ReadStat parser per `stream-rows` partition and uses all processors
-in Rayon's global pool.
+bounded batches while the writer consumes earlier batches. The deprecated
+`--parallel` option retains the older partitioned reader temporarily for CLI
+compatibility and benchmark comparison. It starts one ReadStat parser per
+`stream-rows` partition and uses all processors in Rayon's global pool.
 
 :heavy_exclamation_mark: ReadStat row offsets do not seek directly to a SAS row:
 each partition scans from the beginning and skips its prefix. `--parallel` can
@@ -243,19 +243,24 @@ memory before sending them to the writer. Original row order is preserved, but
 this mode is not bounded-memory and should not be assumed faster.
 
 ### Parallel Writing (`--parallel-write`)
-`--parallel-write` enables parallel writing for Parquet without requiring
-parallel reads. It encodes the columns of each Parquet row group concurrently,
-then appends the encoded column chunks to one output file in schema order. It
-does not create intermediate Parquet files and never decodes or re-encodes its
-own output. Input row order is preserved.
+`--parallel-write` enables bounded parallel writing for CSV, NDJSON, and
+Parquet files without requiring parallel reads. Input row order is preserved.
 
-Parallel writing currently supports only Parquet. CSV, Feather, and NDJSON use
-incremental sequential writers. This is intentional: enable parallelism only
-where the format has a supported ordered assembly mechanism and benchmarks show
-an end-to-end benefit.
+- For CSV and NDJSON, groups of at most four input batches are encoded
+  concurrently into independent byte buffers, then committed in order. CSV
+  emits exactly one header.
+- For Parquet, the columns of each row group are encoded concurrently, then
+  appended to one output file in schema order without decoding or re-encoding.
+
+CSV stdout remains sequential because transactional ordered assembly requires
+file output. Feather remains sequential: its writer is already hidden behind
+parsing in the canonical benchmark and Arrow IPC has no public zero-reencode
+file assembly API comparable to Parquet column-chunk append.
 
 Example usage:
 ```sh
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.csv --parallel-write
+readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.ndjson --parallel-write
 readstat convert /some/dir/to/example.sas7bdat --output /some/dir/to/example.parquet --parallel-write
 ```
 
@@ -297,16 +302,18 @@ Sequential Write (default)
 
 ### Parallel Writes (`--parallel-write`)
 
-The channel remains bounded. The writer retains at most one incomplete Parquet
+The channel remains bounded. Parallel CSV/NDJSON retains at most four input
+batches and their encoded byte buffers in addition to the channel; lower
+`--stream-rows` for wide rows. Parallel Parquet retains at most one incomplete
 row group in addition to queued input batches. Arrow slices share their source
 buffers, and a full row group's leaf columns are encoded concurrently. Encoded
 chunks are committed in deterministic schema order before the next row group.
-This is a row-count bound, not a strict byte bound: unusually wide or
-string-heavy rows can still make a 100,000-row group large in memory.
+These are row-count bounds, not strict byte bounds: unusually wide or
+string-heavy rows can still consume substantial memory.
 
 ```
-Parallel Write (--parallel-write)
-==================================
+Parallel Parquet Write (--parallel-write)
+==========================================
 
  Reader ──> bounded channel ──> row-group accumulator
                                       |

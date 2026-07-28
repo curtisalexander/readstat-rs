@@ -3,7 +3,8 @@
 //!
 //! [`ReadStatWriter`] manages the lifecycle of format-specific writers, handling
 //! streaming writes across multiple batches. It also supports metadata output
-//! (pretty-printed or JSON) and native parallel Parquet column encoding.
+//! (pretty-printed or JSON), parallel CSV/NDJSON batch encoding, and native
+//! parallel Parquet column encoding.
 
 use arrow_array::RecordBatch;
 #[cfg(feature = "csv")]
@@ -26,7 +27,10 @@ use parquet::{
     basic::Compression as ParquetCompressionCodec,
     file::{properties::WriterProperties, writer::SerializedFileWriter},
 };
-#[cfg(feature = "parquet")]
+#[cfg(any(
+    feature = "parquet",
+    all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32"))
+))]
 use rayon::prelude::*;
 #[cfg(any(
     feature = "csv",
@@ -42,6 +46,8 @@ use std::fs::File;
     feature = "parquet"
 ))]
 use std::io::BufWriter;
+#[cfg(all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32")))]
+use std::io::Write as _;
 #[cfg(feature = "csv")]
 use std::io::stdout;
 #[cfg(any(
@@ -66,10 +72,16 @@ use crate::rs_write_config::OutFormat;
 use crate::rs_write_config::ParquetCompression;
 use crate::rs_write_config::WriteConfig;
 
-#[cfg(feature = "parquet")]
+#[cfg(any(
+    feature = "parquet",
+    all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32"))
+))]
 struct StagingGuard(Option<PathBuf>);
 
-#[cfg(feature = "parquet")]
+#[cfg(any(
+    feature = "parquet",
+    all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32"))
+))]
 impl Drop for StagingGuard {
     fn drop(&mut self) {
         if let Some(path) = self.0.take() {
@@ -89,6 +101,184 @@ impl ReadStatParquetWriter {
     fn new(wtr: ParquetArrowWriter<BufWriter<std::fs::File>>) -> Self {
         Self { wtr: Some(wtr) }
     }
+}
+
+/// CSV/NDJSON writer that encodes independent batches concurrently and commits
+/// their bytes in input order.
+///
+/// Each call to [`write`](Self::write) is one bounded parallel work group. The
+/// caller controls memory by limiting the number and size of batches in that
+/// group. CSV emits exactly one header; NDJSON batches require no shared format
+/// state.
+#[cfg(all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32")))]
+pub struct ParallelTextWriter {
+    writer: Option<BufWriter<File>>,
+    schema: SchemaRef,
+    format: OutFormat,
+    wrote_batch: bool,
+    rows_written: usize,
+    staging_path: Option<PathBuf>,
+    destination: PathBuf,
+    overwrite: bool,
+}
+
+#[cfg(all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32")))]
+impl ParallelTextWriter {
+    /// Creates a transactional parallel CSV or NDJSON writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid output configuration or staging-file
+    /// creation failure.
+    pub fn new(config: WriteConfig, schema: SchemaRef) -> Result<Self, ReadStatError> {
+        config.validate()?;
+        let supported = match config.format {
+            #[cfg(feature = "csv")]
+            OutFormat::Csv => true,
+            #[cfg(feature = "ndjson")]
+            OutFormat::Ndjson => true,
+            _ => false,
+        };
+        if !supported {
+            return Err(ReadStatError::InvalidOutputConfig(
+                "parallel text writer requires CSV or NDJSON output".into(),
+            ));
+        }
+
+        let destination = config.out_path.clone().ok_or_else(|| {
+            ReadStatError::InvalidOutputConfig(
+                "parallel text writer requires an output file".into(),
+            )
+        })?;
+        let (file, staging_path) = crate::rs_write_config::open_output(&config)?;
+        let mut staging = StagingGuard(Some(staging_path));
+
+        Ok(Self {
+            writer: Some(BufWriter::new(file)),
+            schema,
+            format: config.format,
+            wrote_batch: false,
+            rows_written: 0,
+            staging_path: staging.0.take(),
+            destination,
+            overwrite: config.overwrite,
+        })
+    }
+
+    /// Encodes a bounded group of batches concurrently and writes the encoded
+    /// buffers in the same order as `batches`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a schema mismatch, row-count overflow, text
+    /// encoding failure, or output I/O failure.
+    pub fn write(&mut self, batches: &[RecordBatch]) -> Result<(), ReadStatError> {
+        if batches.is_empty() {
+            return Ok(());
+        }
+        if batches.iter().any(|batch| batch.schema() != self.schema) {
+            return Err(ReadStatError::SchemaMismatch);
+        }
+        let next_rows = batches.iter().try_fold(self.rows_written, |rows, batch| {
+            rows.checked_add(batch.num_rows())
+                .ok_or_else(|| ReadStatError::Other("writer row count overflow".into()))
+        })?;
+
+        let include_header = !self.wrote_batch && matches!(self.format, OutFormat::Csv);
+        let format = self.format;
+        let encoded = batches
+            .par_iter()
+            .enumerate()
+            .map(|(index, batch)| encode_text_batch(format, batch, include_header && index == 0))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let write_result = {
+            let writer = self
+                .writer
+                .as_mut()
+                .ok_or_else(|| ReadStatError::Other("text writer is already closed".into()))?;
+            encoded
+                .into_iter()
+                .try_for_each(|bytes| writer.write_all(&bytes))
+        };
+        if let Err(error) = write_result {
+            // A failed write may already have modified the staging file. Poison
+            // the writer so finish() cannot publish truncated output; Drop
+            // removes the staging path.
+            self.writer = None;
+            return Err(error.into());
+        }
+        self.wrote_batch = true;
+        self.rows_written = next_rows;
+        Ok(())
+    }
+
+    /// Flushes and atomically publishes the output file. Returns the number of
+    /// accepted rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if empty-output encoding, flushing, or publication
+    /// fails.
+    pub fn finish(mut self) -> Result<usize, ReadStatError> {
+        if !self.wrote_batch && matches!(self.format, OutFormat::Csv) {
+            let empty = RecordBatch::new_empty(self.schema.clone());
+            self.write(std::slice::from_ref(&empty))?;
+        }
+        self.writer
+            .take()
+            .ok_or_else(|| ReadStatError::Other("text writer is already closed".into()))?
+            .flush()?;
+        let staging = self
+            .staging_path
+            .as_ref()
+            .expect("parallel text staging path is armed");
+        crate::rs_write_config::publish_staging(staging, &self.destination, self.overwrite)?;
+        self.staging_path = None;
+        Ok(self.rows_written)
+    }
+}
+
+#[cfg(all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32")))]
+impl Drop for ParallelTextWriter {
+    fn drop(&mut self) {
+        if let Some(path) = self.staging_path.take() {
+            self.writer = None;
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+#[cfg(all(any(feature = "csv", feature = "ndjson"), not(target_arch = "wasm32")))]
+fn encode_text_batch(
+    format: OutFormat,
+    batch: &RecordBatch,
+    include_header: bool,
+) -> Result<Vec<u8>, ReadStatError> {
+    #[cfg(not(feature = "csv"))]
+    let _ = include_header;
+    let mut bytes = Vec::new();
+    match format {
+        #[cfg(feature = "csv")]
+        OutFormat::Csv => {
+            let mut writer = CsvWriterBuilder::new()
+                .with_header(include_header)
+                .build(&mut bytes);
+            writer.write(batch)?;
+        }
+        #[cfg(feature = "ndjson")]
+        OutFormat::Ndjson => {
+            let mut writer = JsonLineDelimitedWriter::new(&mut bytes);
+            writer.write(batch)?;
+            writer.finish()?;
+        }
+        _ => {
+            return Err(ReadStatError::InvalidOutputConfig(
+                "parallel text writer requires CSV or NDJSON output".into(),
+            ));
+        }
+    }
+    Ok(bytes)
 }
 
 /// Parquet writer that encodes columns concurrently and commits each row group
@@ -329,6 +519,7 @@ pub struct ReadStatWriter {
     /// The format-specific writer, created on first write.
     pub(crate) wtr: Option<ReadStatWriterFormat>,
     /// Whether the CSV header row has been written.
+    #[cfg(feature = "csv")]
     pub(crate) wrote_header: bool,
     /// Whether any data has been written (controls file creation vs. append).
     pub(crate) wrote_start: bool,
@@ -350,6 +541,7 @@ impl ReadStatWriter {
         config.validate()?;
         Ok(Self {
             wtr: None,
+            #[cfg(feature = "csv")]
             wrote_header: false,
             wrote_start: false,
             config,
@@ -977,6 +1169,113 @@ mod tests {
             .unwrap();
         writer.write(&test_batch(schema.clone(), &["c"])).unwrap();
         assert_eq!(writer.finish().unwrap(), 3);
+    }
+
+    #[test]
+    fn parallel_csv_matches_serial_bytes_and_row_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let serial_path = dir.path().join("serial.csv");
+        let parallel_path = dir.path().join("parallel.csv");
+        let schema = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "x",
+            arrow_schema::DataType::Utf8,
+            false,
+        )]));
+        let empty = test_batch(schema.clone(), &[]);
+        let first = test_batch(schema.clone(), &["a", "b"]);
+        let second = test_batch(schema.clone(), &["c"]);
+
+        let mut serial = ReadStatWriter::new(
+            WriteConfig::new(OutFormat::Csv)
+                .output(&serial_path)
+                .unwrap(),
+            schema.clone(),
+        )
+        .unwrap();
+        for batch in [&empty, &first, &second] {
+            serial.write(batch).unwrap();
+        }
+        assert_eq!(serial.finish().unwrap(), 3);
+
+        let mut parallel = ParallelTextWriter::new(
+            WriteConfig::new(OutFormat::Csv)
+                .output(&parallel_path)
+                .unwrap(),
+            schema,
+        )
+        .unwrap();
+        parallel.write(std::slice::from_ref(&empty)).unwrap();
+        parallel.write(std::slice::from_ref(&first)).unwrap();
+        parallel.write(std::slice::from_ref(&second)).unwrap();
+        assert_eq!(parallel.finish().unwrap(), 3);
+
+        assert_eq!(
+            std::fs::read(serial_path).unwrap(),
+            std::fs::read(parallel_path).unwrap()
+        );
+    }
+
+    #[test]
+    fn parallel_csv_schema_error_preserves_destination_and_cleans_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("preserve.csv");
+        std::fs::write(&path, "sentinel").unwrap();
+        let schema = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "x",
+            arrow_schema::DataType::Utf8,
+            false,
+        )]));
+        let other = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "y",
+            arrow_schema::DataType::Utf8,
+            false,
+        )]));
+        let config = WriteConfig::new(OutFormat::Csv)
+            .output(&path)
+            .unwrap()
+            .overwrite(true);
+        let mut writer = ParallelTextWriter::new(config, schema.clone()).unwrap();
+        writer.write(&[test_batch(schema, &["staged"])]).unwrap();
+        assert!(matches!(
+            writer.write(&[test_batch(other, &["new"])]),
+            Err(ReadStatError::SchemaMismatch)
+        ));
+        drop(writer);
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "sentinel");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn parallel_text_empty_outputs_match_serial() {
+        let dir = tempfile::tempdir().unwrap();
+        let schema = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "x",
+            arrow_schema::DataType::Utf8,
+            false,
+        )]));
+        for format in [OutFormat::Csv, OutFormat::Ndjson] {
+            let serial_path = dir.path().join(format!("serial.{format}"));
+            let parallel_path = dir.path().join(format!("parallel.{format}"));
+            let serial = ReadStatWriter::new(
+                WriteConfig::new(format).output(&serial_path).unwrap(),
+                schema.clone(),
+            )
+            .unwrap();
+            assert_eq!(serial.finish().unwrap(), 0);
+
+            let parallel = ParallelTextWriter::new(
+                WriteConfig::new(format).output(&parallel_path).unwrap(),
+                schema.clone(),
+            )
+            .unwrap();
+            assert_eq!(parallel.finish().unwrap(), 0);
+
+            assert_eq!(
+                std::fs::read(serial_path).unwrap(),
+                std::fs::read(parallel_path).unwrap()
+            );
+        }
     }
 
     #[test]
