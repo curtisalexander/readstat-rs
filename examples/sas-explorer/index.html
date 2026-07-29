@@ -10,7 +10,7 @@
     header { background:linear-gradient(120deg,#101a31,#172c57); color:white; padding:28px max(24px,calc((100vw - 1320px)/2)); border-bottom:3px solid #3769dc }
     h1 { margin:0; font-size:28px; letter-spacing:-.025em } header p { margin:5px 0 0; color:#c9d4e9; font-size:15px } header strong { color:white }
     main { max-width:1320px; margin:24px auto; padding:0 24px 48px } .card { background:white; border:1px solid var(--line); border-radius:12px; box-shadow:0 4px 18px #1b29440d; padding:20px; margin-bottom:18px }
-    #dropZone { border:2px dashed #9eacc2; text-align:center; padding:32px; cursor:pointer; transition:border-color .15s,background .15s,transform .15s } #dropZone:hover,#dropZone.drag { border-color:var(--blue); background:#f5f8ff } #dropZone.drag { transform:translateY(-1px) } #dropZone.disabled { opacity:.65; cursor:wait }
+    #dropZone { border:2px dashed #9eacc2; text-align:center; padding:32px; cursor:pointer; transition:border-color .15s,background .15s,transform .15s } #dropZone:hover,#dropZone.drag { border-color:var(--blue); background:#f5f8ff } #dropZone.drag { transform:translateY(-1px) } #dropZone.disabled { opacity:.65; cursor:wait } .upload-action { display:flex; justify-content:center; align-items:center; gap:7px; margin:12px 0 10px }
     button,.button,select,input { font:inherit } button,.button { border:0; border-radius:7px; background:var(--blue); color:white; padding:9px 14px; font-weight:650; cursor:pointer; transition:background .15s,box-shadow .15s } button:hover:not(:disabled),.button:hover { background:var(--blue-dark); box-shadow:0 2px 8px #2457d633 } button:disabled,.button.disabled { opacity:.5; cursor:not-allowed }
     button.secondary { color:var(--blue); background:#edf3ff; border:1px solid #c9d8fa } button.secondary:hover:not(:disabled) { color:white; background:var(--blue) } button.quiet { color:var(--muted); background:white; border:1px solid var(--line) } button.quiet:hover:not(:disabled) { color:var(--ink); background:var(--pale); box-shadow:none }
     input[type=file] { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0) } .hint,.muted { color:var(--muted) }
@@ -32,7 +32,8 @@
   <header><h1>SAS Explorer</h1><p>Inspect SAS datasets <strong>privately</strong>, directly in your browser—your file is processed locally and never leaves your browser.</p></header>
   <main>
     <section id="dropZone" class="card disabled" tabindex="0" role="button" aria-controls="filePicker" aria-disabled="true">
-      <strong>Drop a .sas7bdat file here</strong><br><span class="hint">or </span><label class="button disabled" id="pickLabel" for="filePicker">Choose a file</label>
+      <strong>Drop a .sas7bdat file here</strong>
+      <div class="upload-action"><span class="hint">or</span><label class="button disabled" id="pickLabel" for="filePicker">Choose a file</label></div>
       <input id="filePicker" type="file" accept=".sas7bdat" disabled>
       <div class="hint" id="policyText">Starting the local analysis engine…</div>
     </section>
