@@ -2,9 +2,10 @@
 # record-demo.sh — Record scripts/demo.sh into an optimized docs/demo.gif.
 #
 # Drives the whole pipeline reproducibly:
-#   1. vhs renders docs/demo.tape into a raw (50fps) GIF.
-#   2. ffmpeg downsamples to 20fps with a flat 64-color palette (no dither —
-#      terminal output compresses far better without it).
+#   1. vhs renders docs/demo.tape into a raw GIF.
+#   2. ffmpeg slows playback to half speed and downsamples to 20fps with a
+#      flat 64-color palette (no dither — terminal output compresses far
+#      better without it).
 #   3. gifsicle does a final lossy optimization pass.
 # A bare `vhs docs/demo.tape` also works but yields the larger raw GIF; this
 # script is the canonical, size-optimized path.
@@ -37,6 +38,8 @@ fi
 
 RAW="$(mktemp -t readstat-demo-raw.XXXXXX).gif"
 PALETTE="$(mktemp -t readstat-demo-pal.XXXXXX).png"
+# VHS expects to create its output path; mktemp reserves the name first.
+rm -f "$RAW"
 cleanup() { rm -f "$RAW" "$PALETTE"; }
 trap cleanup EXIT
 
@@ -62,10 +65,13 @@ for attempt in $(seq 1 "$attempts"); do
     sleep 1
 done
 
-echo "==> Downsampling to 20fps (flat 64-color palette, no dither)…"
-ffmpeg -y -i "$RAW" -vf "fps=20,palettegen=max_colors=64:stats_mode=diff" "$PALETTE" 2>/dev/null
+echo "==> Slowing to half speed and downsampling to 20fps (flat 64-color palette, no dither)…"
+ffmpeg -y -i "$RAW" \
+    -vf "setpts=2*PTS,fps=20,palettegen=max_colors=64:stats_mode=diff" \
+    -frames:v 1 -update 1 "$PALETTE"
 ffmpeg -y -i "$RAW" -i "$PALETTE" \
-    -lavfi "fps=20[x];[x][1:v]paletteuse=dither=none" /tmp/readstat-demo-20.gif 2>/dev/null
+    -lavfi "setpts=2*PTS,fps=20[x];[x][1:v]paletteuse=dither=none" \
+    /tmp/readstat-demo-20.gif
 
 echo "==> Final gifsicle optimization pass…"
 gifsicle -O3 --lossy=40 /tmp/readstat-demo-20.gif -o docs/demo.gif

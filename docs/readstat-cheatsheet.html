@@ -81,7 +81,7 @@
   /* ── Grid ── */
   .grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
   }
 
@@ -356,7 +356,7 @@
     <section class="section theme-teal">
       <h2>Column Selection</h2>
       <div class="sub-heading">Discover columns</div>
-      <div class="row"><span class="k">readstat metadata FILE --as-json | jq '.vars | to_entries[] | .value.var_name'</span></div>
+      <div class="row"><span class="k" style="white-space:normal; overflow-wrap:anywhere; flex-shrink:1; min-width:0;">readstat metadata FILE --as-json | jq '.vars | to_entries[] | .value.var_name'</span></div>
       <div class="sub-heading" style="margin-top:6px">Select inline</div>
       <div class="row"><span class="k">--columns Brand,Model,EngineSize</span></div>
       <div class="sub-heading" style="margin-top:6px">Select from file</div>

@@ -12,8 +12,8 @@
 #   vhs docs/demo.tape        # run from the repo root
 #
 # Notes:
-#   * demo.sh handles its own typewriter pacing via DEMO_SPEED, so we let it
-#     drive the timing and just record the result here.
+#   * demo.sh types its displayed commands via DEMO_TYPING_DELAY and pauses
+#     between commands via DEMO_SPEED, so it drives most of the timing.
 #   * DEMO_SQL=1 includes the SQL beat (requires the `sql` feature).
 
 Output docs/demo.gif
@@ -24,12 +24,12 @@ Set Width 1200
 Set Height 800
 Set Padding 20
 Set Theme "Catppuccin Mocha"
-Set TypingSpeed 0ms
-Set PlaybackSpeed 0.5
+Set TypingSpeed 35ms
+Set PlaybackSpeed 1.0
 
 # Run the demo. demo.sh prints the prompts and paces itself (DEMO_SPEED),
 # so we hand the whole tour off to it in one command.
-Type "DEMO_SPEED=1 DEMO_SQL=1 ./scripts/demo.sh"
+Type "DEMO_SQL=1 ./scripts/demo.sh"
 Enter
 
 # Give the run time to complete on screen before the recording ends.

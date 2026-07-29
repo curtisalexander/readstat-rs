@@ -17,6 +17,9 @@
 # Environment:
 #   DEMO_SPEED  Seconds to pause before/after each command (default 1).
 #               Set to 0 for an instant, non-interactive run.
+#   DEMO_TYPING_DELAY
+#               Seconds between characters when printing command prompts
+#               (default 0.015, or 0 when DEMO_SPEED=0).
 #   DEMO_SQL    If "1", include the SQL aggregation beat. Requires a binary
 #               built with the `sql` feature.
 #   READSTAT    Override the binary/command used (whitespace-separated, e.g.
@@ -29,6 +32,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DEMO_SPEED="${DEMO_SPEED:-1}"
+if [ "$DEMO_SPEED" = "0" ]; then
+    DEMO_TYPING_DELAY="${DEMO_TYPING_DELAY:-0}"
+else
+    DEMO_TYPING_DELAY="${DEMO_TYPING_DELAY:-0.015}"
+fi
 DEMO_SQL="${DEMO_SQL:-0}"
 
 # --- Resolve the binary into an array (so pipes & word-splitting work) -------
@@ -59,11 +67,19 @@ NC='\033[0m'
 
 pause() { [ "$DEMO_SPEED" != "0" ] && sleep "$DEMO_SPEED"; return 0; }
 
-# Print a "$ <command>" prompt line, then pause (typewriter beat).
+# Type a "$ <command>" prompt line character by character, then pause.
 # The actual command is run on the following line(s) by the caller, so
 # pipelines (| head, | jq) read naturally.
 prompt() {
-    printf "${CYAN}\$${NC} ${BOLD}%s${NC}\n" "$1"
+    local command="$1"
+    local i
+
+    printf "${CYAN}\$${NC} ${BOLD}"
+    for ((i = 0; i < ${#command}; i++)); do
+        printf '%s' "${command:i:1}"
+        [ "$DEMO_TYPING_DELAY" = "0" ] || sleep "$DEMO_TYPING_DELAY"
+    done
+    printf "${NC}\n"
     pause
 }
 
@@ -106,7 +122,7 @@ cat cars.ndjson
 echo; pause
 
 if [ "$DEMO_SQL" = "1" ]; then
-    banner "7. Query with SQL (optional feature)"
+    banner "7. Query with SQL (OPTIONAL — enable with --features sql)"
     SQL='SELECT "Brand", ROUND(AVG("CityMPG"),1) AS avg_city_mpg FROM cars GROUP BY "Brand" ORDER BY avg_city_mpg DESC LIMIT 8'
     prompt "readstat convert cars.sas7bdat --sql '$SQL' -o top.csv --overwrite"
     "${RS[@]}" convert cars.sas7bdat --sql "$SQL" -o top.csv --overwrite
