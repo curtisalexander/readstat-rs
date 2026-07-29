@@ -1,16 +1,23 @@
 # SAS Explorer design
 
-## Status and first decision
+## Status and product decisions
 
-This is a deferred product track. Do not start with a full explorer. The first
-milestone is a deliberately minimal GitHub Pages proof that answers one question:
+Implementation is in progress in [`examples/sas-explorer`](../examples/sas-explorer/).
+The first public version is a modestly branded, desktop-oriented static app that:
 
-> Can the canonical single-threaded `readstat-wasm` bundle load on the project's
-> existing GitHub Pages site, parse a local `.sas7bdat` file, and display one
-> metadata value without uploading the file?
+- serves at `/explorer/` beside the existing mdBook GitHub Pages site;
+- reads and parses `.sas7bdat` files only in a dedicated Web Worker;
+- states clearly that the selected file never leaves the browser;
+- shows file metadata, a searchable variable list, and a bounded row preview;
+- reports WASM download, local file read, metadata, preview parse, and preview
+  encoding state without blocking the UI;
+- defaults to 100 preview rows, with choices from 25 through 1,000;
+- recommends files no larger than 250 MiB and enforces a configurable 500 MiB
+  hard maximum until browser measurements justify a different policy.
 
-Only after that proof works in current Chrome, Firefox, Safari, and Edge should
-the project choose an application architecture or add visualization and SQL.
+The implementation intentionally uses plain JavaScript and CSS with no runtime
+third-party dependencies. Export is the next phase, followed by optional light
+SQL for exploration and reduced-result export.
 
 ## Existing assets and lessons
 
@@ -26,6 +33,10 @@ would otherwise need:
 - The release workflow produces a versioned WASM bundle containing the Node
   wrapper, binary, and package manifest. Browser code must keep using a browser
   wrapper: the package wrapper imports Node filesystem modules.
+- `read_preview(bytes, row_limit)` applies the row bound while parsing and
+  returns NDJSON; it does not serialize the whole dataset and truncate in the UI.
+- Browser WASM hosts provide `env.readstat_progress(stage, current, total)`.
+  Stages cover metadata, preview parsing/encoding, and export parsing/encoding.
 - Native WASM failures are available through `readstat_last_error`, so a proof
   and later app can show actionable parse errors rather than a generic null
   result.
@@ -34,53 +45,47 @@ The existing demos intentionally materialize complete outputs in browser memory.
 That is acceptable for a compatibility proof and small-file MVP, but it is not a
 large-file architecture.
 
-## Milestone 0: GitHub Pages compatibility proof
+## Milestone 0: worker-first GitHub Pages explorer
 
 ### User experience
 
-One static page with:
-
-1. A file input restricted to `.sas7bdat`.
-2. A disabled status line that becomes `WASM ready` after initialization.
-3. A `Read metadata` button.
-4. Plain text output for file name, byte size, row count, variable count, and
-   encoding.
-5. A visible error region populated from the native WASM error.
-
-No table library, SQL engine, framework, bundler, service worker, analytics,
-export, drag-and-drop, or persistent storage belongs in this proof.
+One static application with a local file picker and drag/drop, visible operation
+progress, a dataset summary, searchable variable metadata, and a sortable
+bounded preview. There is no SQL engine, framework, bundler, service worker,
+analytics, export UI, or persistent storage in this milestone.
 
 ### Deployment shape
 
-Add the proof under a stable subpath of the existing mdBook Pages artifact, for
-example `/sas-explorer-proof/`. The current Pages workflow already uses GitHub's
-official `upload-pages-artifact` and `deploy-pages` actions. Its build job should:
+Add the app at `/explorer/` in the existing mdBook Pages artifact. The current
+Pages workflow uses GitHub's official `upload-pages-artifact` and `deploy-pages`
+actions. Its build job:
 
-1. Build the book.
-2. Copy the proof's `index.html`, browser wrapper, and canonical
-   `readstat_wasm.wasm` into `target/book/sas-explorer-proof/`.
-3. Assert those three files exist before artifact upload.
+1. Installs Emscripten and source-builds `readstat-wasm`.
+2. Builds the book.
+3. Copies the explorer HTML/JavaScript and newly built canonical WASM module
+   into `target/book/explorer/`.
+4. Asserts the required app, worker, and WASM files exist before artifact upload.
 
-For the first proof, use the checked-in WASM binary so Pages validates hosting,
-paths, MIME behavior, and browser execution independently from an Emscripten
-build. Once proven, switch the Pages build to the same source build or verified
-release artifact used by releases; do not maintain an untraceable fourth binary.
+This avoids deploying a stale duplicate binary and ensures an explorer ABI
+change and its caller are published atomically from the same commit.
 
 Use relative URLs (`./readstat_wasm.wasm`) so project Pages under
 `/<repository>/` and a future custom domain both work.
 
 ### Technical constraints to verify
 
-- The browser wrapper should fetch bytes and call `WebAssembly.instantiate`.
-  `instantiateStreaming` may be added only with a fallback if a host serves an
-  unexpected MIME type.
+- The browser wrapper streams the fetch response to report byte progress, then
+  calls `WebAssembly.instantiate`. If `Content-Length` is unavailable, the UI
+  uses indeterminate download progress.
 - The current module is single-threaded and does not use `SharedArrayBuffer`, so
   cross-origin isolation is not required. WebAssembly threads would require
   COOP/COEP headers; GitHub Pages does not provide general custom response-header
   control. Do not add a service-worker workaround to the proof.
-- No file bytes leave the page. Test this in browser developer tools: after the
-  initial static assets, selecting and parsing a file must cause no network
-  request.
+- The main thread sends the browser `File` handle to a dedicated worker. The
+  worker uses `FileReader` progress events, retains the bytes, and performs every
+  WASM call. No file bytes leave the page. Test this in browser developer tools:
+  after the initial static assets, selecting and parsing a file must cause no
+  network request.
 - Errors from malformed input must include the native parser message.
 - A project-subpath deployment must not 404 its `.wasm` asset.
 
@@ -94,29 +99,30 @@ References:
 
 - Deploys from the normal Pages workflow with no manual asset copy.
 - Loads from the repository's project Pages subpath.
-- Parses `cars.sas7bdat` and reports the expected nonzero row/variable counts.
+- Parses `cars.sas7bdat`, reports nonzero row/variable counts, and returns no
+  more than the requested preview rows.
 - Rejects a three-byte invalid file with a useful native error.
 - Confirmed on current desktop Chrome, Firefox, Safari, and Edge.
 - Browser network logs show no upload after local file selection.
-- A small automated browser smoke test can load the page and initialize WASM;
-  file-picker automation is optional for this first proof.
+- CI source-builds the WASM module and smoke-tests bounded preview and native
+  progress through the package wrapper. A deployed browser smoke test remains
+  desirable after the first Pages deployment.
 
-## MVP after the proof
+## Export phase
 
-The smallest useful explorer should remain metadata-first:
+The next phase adds output selection while remaining worker-first:
 
-1. Local file picker and privacy statement.
-2. File-level metadata summary.
-3. Searchable variable list showing name, logical/Arrow type, storage width,
-   label, SAS format, and display width.
-4. First 100 rows in a plain or virtualized table.
-5. CSV download of the preview or selected data.
-6. Clear file-size guidance and actionable parse/memory errors.
+1. CSV, NDJSON, Parquet, and Feather output choices.
+2. Selected-column and row-range export before SQL is introduced.
+3. Worker-side generation with parse and encoding progress.
+4. Export-specific size guidance because complete serialized output currently
+   remains in memory before browser download.
 
-Parquet/Feather export can follow because the WASM exports already exist. SQL,
-charts, summaries, multi-file support, and saved sessions are post-MVP.
+All four full-data WASM exports already exist. Large output needs separate limits
+and later a chunked/streaming design; accepting a file for metadata and bounded
+preview does not imply that a full CSV export is safe at the same source size.
 
-## Architecture options after MVP
+## Architecture evolution options
 
 ### Option A: Evolve `web-demo` with plain JavaScript
 
@@ -124,7 +130,8 @@ charts, summaries, multi-file support, and saved sessions are post-MVP.
   already proves the flow.
 - **Costs:** the single HTML file will become difficult to test and maintain as
   state, table virtualization, and worker messaging grow.
-- **Use when:** the product remains a focused metadata/preview utility.
+- **Current choice:** use this while the product remains a focused
+  metadata/preview/export utility.
 
 ### Option B: Small TypeScript application with a lightweight UI framework
 
@@ -132,9 +139,8 @@ charts, summaries, multi-file support, and saved sessions are post-MVP.
   and easier worker integration.
 - **Costs:** introduces a package manager, bundler, dependency updates, and base
   path configuration.
-- **Use when:** MVP validation supports sustained product work. This is the
-  likely long-term choice, but selecting a framework before the Pages proof is
-  premature.
+- **Use when:** validation supports sustained product work whose state and UI
+  complexity exceed the plain application.
 
 ### Option C: Evolve `sql-explorer`
 
@@ -165,7 +171,9 @@ proof or metadata-first MVP.
 
 - Server uploads or server-side parsing.
 - Automatic numeric type narrowing.
-- WebAssembly threads or COOP/COEP workarounds.
+- A service worker for CPU work. Parsing belongs in the dedicated Web Worker.
+- WebAssembly threads or COOP/COEP workarounds unless measurements show that a
+  single worker is insufficient.
 - Matching desktop-scale file limits in the first release.
 - Replacing the CLI, Rust API, or current examples.
 - Choosing a framework before the compatibility proof is complete.

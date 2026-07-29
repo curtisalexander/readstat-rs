@@ -1,11 +1,71 @@
 use readstat::{
-    ReadStatMetadata, ReadStatReader, write_batch_to_csv_bytes, write_batch_to_ndjson_bytes,
+    ProgressCallback, ReadStatMetadata, ReadStatReader, write_batch_to_csv_bytes,
+    write_batch_to_ndjson_bytes,
 };
 use readstat::{write_batch_to_feather_bytes, write_batch_to_parquet_bytes};
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::slice;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{cell::RefCell, panic::UnwindSafe};
+
+const STAGE_METADATA: u32 = 1;
+const STAGE_PREVIEW_PARSE: u32 = 2;
+const STAGE_PREVIEW_ENCODE: u32 = 3;
+const STAGE_EXPORT_PARSE: u32 = 4;
+const STAGE_EXPORT_ENCODE: u32 = 5;
+const PREVIEW_PROGRESS_ROWS: u32 = 25;
+
+#[cfg(target_os = "emscripten")]
+#[link(wasm_import_module = "env")]
+unsafe extern "C" {
+    fn readstat_progress(stage: u32, current: u32, total: u32);
+}
+
+fn report_progress(stage: u32, current: u64, total: u64) {
+    #[cfg(target_os = "emscripten")]
+    unsafe {
+        readstat_progress(
+            stage,
+            current.min(u64::from(u32::MAX)) as u32,
+            total.min(u64::from(u32::MAX)) as u32,
+        );
+    }
+
+    #[cfg(not(target_os = "emscripten"))]
+    let _ = (stage, current, total);
+}
+
+struct WasmProgress {
+    stage: u32,
+    current: AtomicU64,
+    total: u64,
+}
+
+impl WasmProgress {
+    const fn new(stage: u32, total: u64) -> Self {
+        Self {
+            stage,
+            current: AtomicU64::new(0),
+            total,
+        }
+    }
+}
+
+impl ProgressCallback for WasmProgress {
+    fn inc(&self, n: u64) {
+        let current = self
+            .current
+            .fetch_add(n, Ordering::Relaxed)
+            .saturating_add(n);
+        report_progress(self.stage, current.min(self.total), self.total);
+    }
+
+    fn parsing_started(&self, _path: &str) {
+        report_progress(self.stage, 0, self.total);
+    }
+}
 
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
@@ -107,6 +167,20 @@ pub unsafe extern "C" fn read_data_ndjson(ptr: *const u8, len: usize) -> *mut c_
     })
 }
 
+/// Read at most `row_limit` rows and return them as NDJSON for browser preview.
+///
+/// # Safety
+///
+/// `ptr` must point to a valid byte buffer of at least `len` bytes. `row_limit`
+/// must be greater than zero. The returned string must be released with
+/// [`free_string`]. Returns null on error.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_preview(ptr: *const u8, len: usize, row_limit: u32) -> *mut c_char {
+    catch_export(std::ptr::null_mut(), || unsafe {
+        read_preview_inner(ptr, len, row_limit)
+    })
+}
+
 /// Read data from a `.sas7bdat` file and return it as Parquet bytes.
 ///
 /// # Safety
@@ -195,6 +269,7 @@ unsafe fn read_metadata_inner(
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
+    report_progress(STAGE_METADATA, 0, 0);
     let md = if skip_row_count {
         // The high-level reader intentionally always computes the exact row count.
         // Keep the low-level metadata call for this fast-path export only.
@@ -207,6 +282,7 @@ unsafe fn read_metadata_inner(
             .metadata()
             .map_err(|error| error.to_string())?
     };
+    report_progress(STAGE_METADATA, 1, 1);
 
     let json = serde_json::to_string(&md).map_err(|error| error.to_string())?;
     CString::new(json)
@@ -224,6 +300,46 @@ enum BinaryOutputFormat {
     Feather,
 }
 
+unsafe fn read_preview_inner(
+    ptr: *const u8,
+    len: usize,
+    row_limit: u32,
+) -> Result<*mut c_char, String> {
+    if ptr.is_null() || len == 0 {
+        return Err("input buffer must not be null or empty".to_owned());
+    }
+    if row_limit == 0 {
+        return Err("preview row limit must be greater than zero".to_owned());
+    }
+
+    // SAFETY: The caller guarantees `ptr` is valid for `len` bytes (see public fn docs).
+    let bytes = unsafe { slice::from_raw_parts(ptr, len) };
+    let reader = ReadStatReader::from_bytes(bytes);
+
+    report_progress(STAGE_METADATA, 0, 0);
+    let metadata = reader.metadata().map_err(|error| error.to_string())?;
+    report_progress(STAGE_METADATA, 1, 1);
+    let available = metadata.row_count.unwrap_or_default().max(0) as u64;
+    let preview_rows = u64::from(row_limit).min(available);
+    let reader = reader
+        .rows(0, Some(preview_rows as u32))
+        .chunk_rows(PREVIEW_PROGRESS_ROWS.min(row_limit).max(1))
+        .progress(Arc::new(WasmProgress::new(
+            STAGE_PREVIEW_PARSE,
+            preview_rows,
+        )));
+
+    let batch = reader.read().map_err(|error| error.to_string())?;
+    report_progress(STAGE_PREVIEW_PARSE, preview_rows, preview_rows);
+    report_progress(STAGE_PREVIEW_ENCODE, 0, 0);
+    let output = write_batch_to_ndjson_bytes(&batch).map_err(|error| error.to_string())?;
+    report_progress(STAGE_PREVIEW_ENCODE, 1, 1);
+
+    CString::new(output)
+        .map(CString::into_raw)
+        .map_err(|error| error.to_string())
+}
+
 unsafe fn read_data_inner(
     ptr: *const u8,
     len: usize,
@@ -237,16 +353,24 @@ unsafe fn read_data_inner(
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    let batch = ReadStatReader::from_bytes(bytes)
+    report_progress(STAGE_METADATA, 0, 0);
+    let reader = ReadStatReader::from_bytes(bytes);
+    let metadata = reader.metadata().map_err(|error| error.to_string())?;
+    report_progress(STAGE_METADATA, 1, 1);
+    let rows = metadata.row_count.unwrap_or_default().max(0) as u64;
+    let batch = reader
+        .progress(Arc::new(WasmProgress::new(STAGE_EXPORT_PARSE, rows)))
         .read()
         .map_err(|error| error.to_string())?;
 
+    report_progress(STAGE_EXPORT_ENCODE, 0, 0);
     let output_bytes = match format {
         OutputFormat::Csv => write_batch_to_csv_bytes(&batch),
         OutputFormat::Ndjson => write_batch_to_ndjson_bytes(&batch),
     };
 
     let bytes = output_bytes.map_err(|error| error.to_string())?;
+    report_progress(STAGE_EXPORT_ENCODE, 1, 1);
     CString::new(bytes)
         .map(CString::into_raw)
         .map_err(|error| error.to_string())
@@ -268,10 +392,17 @@ unsafe fn read_data_binary_inner(
     // We also checked for null/zero above.
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    let batch = ReadStatReader::from_bytes(bytes)
+    report_progress(STAGE_METADATA, 0, 0);
+    let reader = ReadStatReader::from_bytes(bytes);
+    let metadata = reader.metadata().map_err(|error| error.to_string())?;
+    report_progress(STAGE_METADATA, 1, 1);
+    let rows = metadata.row_count.unwrap_or_default().max(0) as u64;
+    let batch = reader
+        .progress(Arc::new(WasmProgress::new(STAGE_EXPORT_PARSE, rows)))
         .read()
         .map_err(|error| error.to_string())?;
 
+    report_progress(STAGE_EXPORT_ENCODE, 0, 0);
     let output_bytes = match format {
         BinaryOutputFormat::Parquet => write_batch_to_parquet_bytes(&batch),
         BinaryOutputFormat::Feather => write_batch_to_feather_bytes(&batch),
@@ -279,6 +410,7 @@ unsafe fn read_data_binary_inner(
 
     match output_bytes.map_err(|error| error.to_string()) {
         Ok(vec) => {
+            report_progress(STAGE_EXPORT_ENCODE, 1, 1);
             // Convert to a boxed slice so that the allocation size equals the
             // data length exactly.  `free_binary` reconstructs this `Box<[u8]>`
             // to deallocate with the correct layout.

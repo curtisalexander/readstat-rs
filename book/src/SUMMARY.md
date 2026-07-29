@@ -2,6 +2,8 @@
 
 [Introduction](introduction.md)
 
+[SAS Explorer](sas-explorer.md)
+
 # User Guide
 
 - [Installation & Building](building.md)

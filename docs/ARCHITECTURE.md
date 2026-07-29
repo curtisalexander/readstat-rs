@@ -110,19 +110,26 @@ Windows-target-only (gated on `CARGO_CFG_TARGET_OS == "windows"` so cross-compil
 
 WebAssembly build of the `readstat` library for parsing SAS `.sas7bdat` files in JavaScript. Compiles the ReadStat C library and the Rust `readstat` library to WebAssembly via the `wasm32-unknown-emscripten` target. Excluded from the Cargo workspace (built separately with Emscripten).
 
-Exports: `read_metadata`, `read_metadata_fast`, `read_data` (CSV), `read_data_ndjson`, `read_data_parquet`, `read_data_feather`, `readstat_last_error`, `free_string`, and `free_binary`. Not published to crates.io (`publish = false`).
+Exports: `read_metadata`, `read_metadata_fast`, bounded NDJSON `read_preview`,
+`read_data` (CSV), `read_data_ndjson`, `read_data_parquet`,
+`read_data_feather`, `readstat_last_error`, `free_string`, and `free_binary`.
+Browser builds import `env.readstat_progress` to report metadata, preview, and
+export stages while native work is running. Not published to crates.io
+(`publish = false`).
 
 The WASM package version mirrors `readstat` and `readstat-cli`. Release checks and
 tag validation enforce parity, and the `readstat` release replacement updates the
 excluded WASM manifest during a version bump.
 
-### Future SAS Explorer
+### SAS Explorer
 
-A future SAS Explorer should process local files entirely in the browser (no server
-upload), visualize metadata/headers, provide data summaries and previews, and may
-offer in-browser SQL. GitHub Pages is preferred, with a custom subdomain as a
-fallback. It should reuse the canonical WASM artifact. Implementation is deferred
-pending the staged design in [SAS-EXPLORER.md](SAS-EXPLORER.md).
+The static SAS Explorer in `examples/sas-explorer/` processes local files
+entirely in a dedicated browser worker. It shows file and variable metadata plus
+a bounded row preview without sending SAS bytes over the network. The normal
+Pages workflow source-builds the canonical WASM module and publishes the app at
+`/explorer/` alongside mdBook. Export and lightweight SQL are staged follow-up
+features. See [SAS-EXPLORER.md](SAS-EXPLORER.md) for the current product and
+technical plan.
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`

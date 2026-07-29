@@ -32,12 +32,35 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+
+      - name: Install Emscripten
+        uses: emscripten-core/setup-emsdk@v16
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential clang
 
+      - name: Build SAS Explorer WASM
+        working-directory: crates/readstat-wasm
+        run: cargo build --locked --target wasm32-unknown-emscripten --release
+
       - name: Copy docs into book/src
         run: bash scripts/build-book.sh --docs
+
+      - name: Add SAS Explorer to Pages artifact
+        run: |
+          mkdir -p target/book/explorer
+          cp examples/sas-explorer/index.html target/book/explorer/
+          cp examples/sas-explorer/app.js target/book/explorer/
+          cp examples/sas-explorer/worker.js target/book/explorer/
+          cp examples/sas-explorer/readstat_wasm.js target/book/explorer/
+          cp crates/readstat-wasm/target/wasm32-unknown-emscripten/release/readstat_wasm.wasm target/book/explorer/
+          test -s target/book/explorer/index.html
+          test -s target/book/explorer/app.js
+          test -s target/book/explorer/worker.js
+          test -s target/book/explorer/readstat_wasm.js
+          test -s target/book/explorer/readstat_wasm.wasm
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

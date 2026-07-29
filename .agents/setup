@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+echo "Installing native and WebAssembly build prerequisites..."
+if [[ "$(id -u)" -eq 0 ]]; then
+    apt=(apt-get)
+else
+    apt=(sudo apt-get)
+fi
+"${apt[@]}" update -y
+"${apt[@]}" install -y build-essential clang libclang-dev cmake pkg-config
+
+export PATH="$HOME/.cargo/bin:$PATH"
+if ! command -v rustup >/dev/null 2>&1; then
+    echo "Installing Rust..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+        sh -s -- -y --profile minimal --default-toolchain stable
+fi
+
+rustup toolchain install stable --profile minimal
+rustup component add rustfmt clippy --toolchain stable
+rustup target add wasm32-unknown-emscripten --toolchain stable
+if ! command -v mdbook >/dev/null 2>&1; then
+    cargo install mdbook --locked
+fi
+
+emsdk_dir="$HOME/.cache/emsdk"
+if [[ ! -d "$emsdk_dir/.git" ]]; then
+    echo "Installing Emscripten SDK..."
+    git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$emsdk_dir"
+fi
+"$emsdk_dir/emsdk" install latest
+"$emsdk_dir/emsdk" activate latest
+
+profile_marker="# readstat-rs Emscripten SDK"
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+    cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+export EMSDK_QUIET=1
+source "$emsdk_dir/emsdk_env.sh" >/dev/null
+EOF
+fi
+
+echo "Initializing git submodules..."
+git submodule update --init --recursive
+
+echo "Orb setup complete."

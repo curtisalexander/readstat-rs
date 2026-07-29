@@ -7,6 +7,7 @@ const __dirname = dirname(__filename);
 
 let instance;
 let memory;
+let progressCallback = () => {};
 
 /** Provide the minimal WASI + Emscripten import stubs the module needs. */
 function getImports() {
@@ -49,6 +50,9 @@ function getImports() {
     },
     env: {
       emscripten_notify_memory_growth() {},
+      readstat_progress(stage, current, total) {
+        progressCallback({ stage, current, total });
+      },
       __syscall_getcwd(buf, size) {
         const cwd = "/\0";
         const bytes = new TextEncoder().encode(cwd);
@@ -81,7 +85,7 @@ function getLastError() {
  * Call a WASM function that accepts (ptr, len) and returns a C string pointer.
  * Handles memory allocation, copying input bytes, and freeing the result.
  */
-function _callWasmStringFn(wasmFn, bytes) {
+function _callWasmStringFn(wasmFn, bytes, ...args) {
   if (!instance) {
     throw new Error("WASM module not initialised — call init() first");
   }
@@ -96,7 +100,7 @@ function _callWasmStringFn(wasmFn, bytes) {
 
   let resultPtr;
   try {
-    resultPtr = wasmFn(inputPtr, bytes.length);
+    resultPtr = wasmFn(inputPtr, bytes.length, ...args);
   } finally {
     // Free the input buffer (reuse malloc/free from emscripten).
     instance.exports.free(inputPtr);
@@ -172,8 +176,9 @@ function _callWasmBinaryFn(wasmFn, bytes) {
  * Initialise the WASM module. Must be called (and awaited) before
  * calling any other exported functions.
  */
-export async function init() {
+export async function init(options = {}) {
   if (instance) return;
+  progressCallback = options.onProgress || progressCallback;
 
   const wasmPath = join(__dirname, "readstat_wasm.wasm");
   const wasmBytes = readFileSync(wasmPath);
@@ -227,6 +232,20 @@ export function read_data(bytes) {
  */
 export function read_data_ndjson(bytes) {
   return _callWasmStringFn(instance.exports.read_data_ndjson, bytes);
+}
+
+/**
+ * Read a bounded row preview as newline-delimited JSON.
+ *
+ * @param {Uint8Array} bytes - The raw file contents.
+ * @param {number} rowLimit - Maximum number of rows to return.
+ * @returns {string} Newline-delimited JSON preview data.
+ */
+export function read_preview(bytes, rowLimit) {
+  if (!Number.isInteger(rowLimit) || rowLimit < 1 || rowLimit > 0xffff_ffff) {
+    throw new RangeError("rowLimit must be an integer between 1 and 4294967295");
+  }
+  return _callWasmStringFn(instance.exports.read_preview, bytes, rowLimit);
 }
 
 /**

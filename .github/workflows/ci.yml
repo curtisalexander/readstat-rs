@@ -68,6 +68,11 @@ jobs:
         uses: taiki-e/install-action@mdbook
       - name: Build documentation book
         run: bash scripts/build-book.sh
+      - name: Check SAS Explorer JavaScript
+        run: |
+          node --input-type=module --check < examples/sas-explorer/app.js
+          node --input-type=module --check < examples/sas-explorer/worker.js
+          node --input-type=module --check < examples/sas-explorer/readstat_wasm.js
       - name: Check WASM crate on host
         run: |
           cargo fmt --manifest-path crates/readstat-wasm/Cargo.toml -- --check
@@ -138,13 +143,21 @@ jobs:
           cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/readstat_wasm.wasm
           node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
-          import { init, read_metadata } from "./pkg/readstat_wasm.js";
+          import { init, read_metadata, read_preview } from "./pkg/readstat_wasm.js";
 
-          await init();
+          const progress = [];
+          await init({ onProgress: event => progress.push(event) });
           const input = readFileSync("../readstat-tests/tests/data/cars.sas7bdat");
           const metadata = JSON.parse(read_metadata(input));
           if (metadata.row_count <= 0 || metadata.var_count <= 0) {
             throw new Error(`unexpected metadata: ${JSON.stringify(metadata)}`);
+          }
+          const preview = read_preview(input, 5).trim().split("\n").filter(Boolean);
+          if (preview.length !== 5 || preview.some(line => !JSON.parse(line))) {
+            throw new Error(`unexpected bounded preview: ${preview.length} rows`);
+          }
+          if (!progress.some(event => event.stage === 2 && event.current === 5)) {
+            throw new Error(`preview progress was not reported: ${JSON.stringify(progress)}`);
           }
           let nativeError;
           try {

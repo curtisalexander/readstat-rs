@@ -10,6 +10,7 @@
 
 let instance;
 let memory;
+let progressCallback = () => {};
 
 /** Provide the minimal WASI + Emscripten import stubs the module needs. */
 function getImports() {
@@ -51,6 +52,9 @@ function getImports() {
     },
     env: {
       emscripten_notify_memory_growth() {},
+      readstat_progress(stage, current, total) {
+        progressCallback({ stage, current, total });
+      },
       __syscall_getcwd(buf, size) {
         const cwd = "/\0";
         const bytes = new TextEncoder().encode(cwd);
@@ -167,8 +171,9 @@ function _callWasmBinaryFn(wasmFn, bytes) {
  * Initialise the WASM module. Must be called (and awaited) before
  * calling any other exported functions.
  */
-export async function init() {
+export async function init(options = {}) {
   if (instance) return;
+  progressCallback = options.onProgress || progressCallback;
 
   const wasmUrl = new URL("readstat_wasm.wasm", import.meta.url);
   const response = await fetch(wasmUrl);

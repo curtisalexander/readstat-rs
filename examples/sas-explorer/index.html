@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SAS Explorer</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#647087; --line:#dce2eb; --blue:#2457d6; --pale:#f4f7fc; --good:#08785b; --warn:#925b00; --bad:#b42318; }
+    * { box-sizing:border-box } body { margin:0; font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; color:var(--ink); background:var(--pale) }
+    header { background:#101a31; color:white; padding:26px max(24px,calc((100vw - 1320px)/2)); display:flex; justify-content:space-between; align-items:center; gap:24px }
+    h1 { margin:0; font-size:26px; letter-spacing:-.02em } header p { margin:3px 0 0; color:#bbc7df } .privacy { font-weight:700; color:#a8f0d6; white-space:nowrap }
+    main { max-width:1320px; margin:24px auto; padding:0 24px 48px } .card { background:white; border:1px solid var(--line); border-radius:12px; box-shadow:0 2px 8px #1b29440b; padding:20px; margin-bottom:18px }
+    #dropZone { border:2px dashed #aab7cc; text-align:center; padding:30px; cursor:pointer; transition:.15s } #dropZone.drag { border-color:var(--blue); background:#edf3ff } #dropZone.disabled { opacity:.65; cursor:wait }
+    button,.button,select,input { font:inherit } button,.button { border:0; border-radius:7px; background:var(--blue); color:white; padding:9px 14px; font-weight:650; cursor:pointer } button:disabled,.button.disabled { opacity:.5; cursor:not-allowed }
+    input[type=file] { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0) } .hint,.muted { color:var(--muted) }
+    .statusrow { display:grid; grid-template-columns:minmax(180px,1fr) 2fr; align-items:center; gap:18px } #status.error { color:var(--bad) } #status.warning { color:var(--warn) }
+    progress { width:100%; height:10px; accent-color:var(--blue) } .hidden { display:none!important } .toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:15px }
+    h2 { margin:0; font-size:18px } dl { display:grid; grid-template-columns:repeat(4,minmax(130px,1fr)); gap:12px; margin:0 } dl div { background:var(--pale); border-radius:8px; padding:11px } dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; font-weight:650; overflow-wrap:anywhere }
+    label { font-weight:600 } input[type=search],select { border:1px solid #b8c2d1; border-radius:6px; padding:7px 9px; background:white; color:var(--ink) }
+    .tablebox { overflow:auto; max-height:440px; border:1px solid var(--line); border-radius:8px } table { border-collapse:collapse; width:100%; white-space:nowrap } th,td { border-bottom:1px solid var(--line); padding:8px 10px; text-align:left; max-width:360px; overflow:hidden; text-overflow:ellipsis } th { position:sticky; top:0; background:#edf1f7; z-index:1; font-size:12px } th button { all:unset; cursor:pointer; font-weight:700 } tbody tr:nth-child(even) { background:#fafbfd }
+    .notice { color:var(--warn); background:#fff5dd; border:1px solid #f0d392; padding:10px 12px; border-radius:7px; margin-top:12px }
+    @media(max-width:800px){ header{align-items:flex-start;flex-direction:column}.statusrow{grid-template-columns:1fr}dl{grid-template-columns:repeat(2,1fr)} }
+  </style>
+</head>
+<body>
+  <header><div><h1>SAS Explorer</h1><p>Inspect SAS datasets privately, directly in your browser.</p></div><div class="privacy">✓ Your file never leaves your browser</div></header>
+  <main>
+    <section id="dropZone" class="card disabled" tabindex="0" role="button" aria-controls="filePicker" aria-disabled="true">
+      <strong>Drop a .sas7bdat file here</strong><br><span class="hint">or </span><label class="button disabled" id="pickLabel" for="filePicker">Choose a file</label>
+      <input id="filePicker" type="file" accept=".sas7bdat" disabled>
+      <div class="hint" id="policyText">Starting the local analysis engine…</div>
+    </section>
+    <section class="card statusrow" aria-live="polite" aria-atomic="true"><div id="status" role="status">Preparing SAS Explorer…</div><div><progress id="progress"></progress><div id="progressText" class="muted"></div></div></section>
+    <div id="warning" class="notice hidden" role="alert"></div>
+    <section id="summaryPanel" class="card hidden"><div class="toolbar"><h2>Dataset summary</h2><span id="fileDetails" class="muted"></span></div><dl id="summary"></dl></section>
+    <section id="variablesPanel" class="card hidden"><div class="toolbar"><h2>Variables <span id="variableCount" class="muted"></span></h2><label>Search variables <input id="variableSearch" type="search" placeholder="Name, type, label, format…"></label></div><div class="tablebox"><table><thead><tr><th>Name</th><th>Logical / type class</th><th>Storage width</th><th>Label</th><th>SAS format</th><th>Display width</th></tr></thead><tbody id="variables"></tbody></table></div></section>
+    <section id="previewPanel" class="card hidden"><div class="toolbar"><div><h2>Data preview</h2><span id="previewNote" class="muted"></span></div><label>Rows <select id="previewLimit" disabled></select></label></div><div class="tablebox"><table><thead id="previewHead"></thead><tbody id="previewBody"></tbody></table></div></section>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
