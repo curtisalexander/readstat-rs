@@ -92,11 +92,23 @@ a CHANGELOG entry, and a crates.io publish.
   release replacement updates its Rust manifest, package manifest, and standalone
   lockfile package entries; locked release checks enforce parity.
 - `readstat-sys` and `readstat-iconv-sys` version **independently** — bump each
-  only when its vendored C library or bindings change (e.g.
-  `cargo release minor -p readstat-sys`). Their numbers are not expected to
-  match; the compatibility contract is `readstat-sys`'s declared dependency
-  requirement on `readstat-iconv-sys`, which `release-check` verifies against
-  the actual crate version (as it does for `readstat` → `readstat-sys`).
+  only when its vendored C library, bindings, build behavior, or linking contract
+  changes. Their versions describe the Rust FFI crate contract; they do not mirror
+  the application crates or the vendored project's release number. For these
+  pre-1.0 crates, Cargo treats `0.x.y` patch releases as compatible and a change
+  from `0.x` to `0.(x+1)` as a new compatibility line. Apply these rules:
+  - **No bump** when the sys crate and its vendored source are unchanged.
+  - **Patch bump** for compatible vendored bug/security fixes, additive bindings,
+    and compatible build-script or platform-support changes (for example,
+    `cargo release patch -p readstat-sys`).
+  - **Minor bump** for breaking or reasonably suspected-incompatible changes to
+    the Rust API, C ABI, bindings, features, linking behavior, or build contract.
+  - Move to **1.0.0** only when the crate is ready to promise a stable public
+    API, ABI, and build/linking contract.
+  Their numbers are not expected to match. The compatibility contract is
+  `readstat-sys`'s declared dependency requirement on `readstat-iconv-sys`, which
+  `release-check` verifies against the actual crate version (as it does for
+  `readstat` → `readstat-sys`).
 
 ### 2. Update CHANGELOG.md
 
