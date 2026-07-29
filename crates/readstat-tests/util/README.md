@@ -16,6 +16,10 @@ Utility programs to aid development
     - `all_dates`
     - `all_times`
     - `all_datetimes`
+- Writes the generated datasets to `$HOME/data`. Copy regenerated files into
+  `tests/data/` before running the integration tests.
+- Aborts generation if a fixture source string cannot be parsed, preventing a
+  dataset of unintentionally missing date/time values.
 
 ### [create_rand_ds.sas](create_rand_ds.sas)
 - SAS macro that creates a `sas7bdat` file containing random data

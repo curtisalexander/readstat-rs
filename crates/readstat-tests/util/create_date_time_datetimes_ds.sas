@@ -4,9 +4,13 @@
                                    ,date_fmt=
                                    ,date_type=);
 
+  %local source_width;
+  %let source_width = 10;
+  %if &date_type. = %str(datetime) %then %let source_width = 22;
+
   data __ds&cnt. ;
     format /* dates */
-           d_as_str $10.
+           d_as_str $&source_width..
            d_as_n best32.
            d_as_d_fmt&cnt._label $15.
            d_as_d_fmt&cnt._value &date_fmt..
@@ -28,6 +32,11 @@
       d_as_str = '20JAN202118:43:54.221';
       d_as_n = input(d_as_str, datetime22.3);
     %end;
+
+    if missing(d_as_n) then do;
+      put "ERROR: Failed to parse &date_type. fixture input" d_as_str=;
+      abort cancel;
+    end;
     
     d_as_d_fmt&cnt._label = "&date_fmt.";
     d_as_d_fmt&cnt._value = d_as_n;
