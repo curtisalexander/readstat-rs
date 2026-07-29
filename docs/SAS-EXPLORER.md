@@ -1,9 +1,11 @@
-# SAS Explorer design
+# SAS Explorer plan
 
 ## Status and product decisions
 
-Implementation is in progress in [`examples/sas-explorer`](../examples/sas-explorer/).
-The first public version is a modestly branded, desktop-oriented static app that:
+Milestone 0 is implemented in
+[`examples/sas-explorer`](../examples/sas-explorer/) and deployed at
+[curtisalexander.github.io/readstat-rs/explorer/](https://curtisalexander.github.io/readstat-rs/explorer/).
+The modestly branded, desktop-oriented static app:
 
 - serves at `/explorer/` beside the existing mdBook GitHub Pages site;
 - reads and parses `.sas7bdat` files only in a dedicated Web Worker;
@@ -16,8 +18,14 @@ The first public version is a modestly branded, desktop-oriented static app that
   hard maximum until browser measurements justify a different policy.
 
 The implementation intentionally uses plain JavaScript and CSS with no runtime
-third-party dependencies. Export is the next phase, followed by optional light
-SQL for exploration and reduced-result export.
+third-party dependencies. The production Pages deployment has been verified to
+serve both the app and its WASM module successfully, including the
+`application/wasm` content type. Pushes to `main` build and deploy the explorer
+with the documentation; no release tag or separate repository is required.
+
+**Next milestone:** add worker-side export with a format selector for CSV,
+NDJSON, Parquet, and Feather. Selected-column/row reduction follows that, then
+optional lightweight SQL.
 
 ## Existing assets and lessons
 
@@ -45,7 +53,7 @@ The existing demos intentionally materialize complete outputs in browser memory.
 That is acceptable for a compatibility proof and small-file MVP, but it is not a
 large-file architecture.
 
-## Milestone 0: worker-first GitHub Pages explorer
+## Milestone 0: worker-first GitHub Pages explorer (deployed)
 
 ### User experience
 
@@ -72,7 +80,7 @@ change and its caller are published atomically from the same commit.
 Use relative URLs (`./readstat_wasm.wasm`) so project Pages under
 `/<repository>/` and a future custom domain both work.
 
-### Technical constraints to verify
+### Technical constraints
 
 - The browser wrapper streams the fetch response to report byte progress, then
   calls `WebAssembly.instantiate`. If `Content-Length` is unavailable, the UI
@@ -95,42 +103,87 @@ References:
 - [MDN `WebAssembly.instantiateStreaming`](https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/JavaScript_interface/instantiateStreaming_static)
 - [MDN shared-memory security requirements](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements)
 
-### Acceptance criteria
+### Acceptance status
 
-- Deploys from the normal Pages workflow with no manual asset copy.
-- Loads from the repository's project Pages subpath.
-- Parses `cars.sas7bdat`, reports nonzero row/variable counts, and returns no
-  more than the requested preview rows.
-- Rejects a three-byte invalid file with a useful native error.
-- Confirmed on current desktop Chrome, Firefox, Safari, and Edge.
-- Browser network logs show no upload after local file selection.
-- CI source-builds the WASM module and smoke-tests bounded preview and native
-  progress through the package wrapper. A deployed browser smoke test remains
-  desirable after the first Pages deployment.
+- [x] Deploys from the normal Pages workflow with no manual asset copy.
+- [x] Loads from the repository's project Pages subpath.
+- [x] Serves the generated WASM with the correct MIME type.
+- [x] Parses `cars.sas7bdat`, reports nonzero row/variable counts, and returns
+  no more than the requested preview rows in the WASM smoke test.
+- [x] Rejects an invalid preview row limit with a useful native error.
+- [x] Reports bounded-preview and native progress through the package wrapper.
+- [ ] Add an automated deployed-browser smoke test.
+- [ ] Confirm current desktop Chrome, Firefox, Safari, and Edge behavior.
+- [ ] Confirm in browser network logs that selecting and parsing a local file
+  causes no network request.
+- [ ] Confirm malformed file input displays the native parser message in the
+  deployed UI.
 
-## Export phase
+The unchecked browser-validation items are release-hardening work, not blockers
+for starting export development.
 
-The next phase adds output selection while remaining worker-first:
+## Milestone 1: selectable export (next thread)
 
-1. CSV, NDJSON, Parquet, and Feather output choices.
-2. Selected-column and row-range export before SQL is introduced.
-3. Worker-side generation with parse and encoding progress.
-4. Export-specific size guidance because complete serialized output currently
-   remains in memory before browser download.
+Keep the current dependency-free, worker-first architecture. The first export
+increment should use the existing full-data WASM exports rather than introducing
+SQL or a new framework:
 
-All four full-data WASM exports already exist. Large output needs separate limits
-and later a chunked/streaming design; accepting a file for metadata and bounded
-preview does not imply that a full CSV export is safe at the same source size.
+1. Add a format selector for CSV, NDJSON, Parquet, and Feather.
+2. Send the export request to the existing dedicated worker; SAS bytes and all
+   WASM calls remain worker-only.
+3. Map the selected format to `read_data`, `read_data_ndjson`,
+   `read_data_parquet`, or `read_data_feather` and return the generated output
+   to the main thread for browser download with the correct extension and MIME
+   type.
+4. Show export parse and encoding progress using the existing native progress
+   stages. Keep the interface responsive while output is generated and prevent
+   overlapping preview/export operations.
+5. Add clear export-specific memory guidance and a configurable export limit.
+   Complete serialized output currently remains in memory, so the preview file
+   limit must not automatically become the full-export limit.
+6. Handle stale operations, allocation failures, parser errors, and download URL
+   cleanup without retaining an old output or duplicate source bytes.
+
+### Milestone 1 acceptance criteria
+
+- Each format downloads with a useful filename, extension, and MIME type.
+- CSV and NDJSON output can be inspected as text; Parquet and Feather output can
+  be read back by the native integration path or another trusted reader.
+- Export parsing and encoding progress is visible, and the UI remains responsive.
+- Selecting/exporting a file causes no network request after static assets load.
+- A failed or disallowed export leaves the loaded dataset available for preview.
+- Export limits and their rationale are visible to the user and configurable in
+  one policy location.
+
+### Milestone 1b: reduced export
+
+After full-data format selection works, add selected-column and bounded row-range
+export without routing the data through the UI thread. This likely requires a
+new WASM API because the current four export functions serialize the complete
+dataset. Define and test that API before adding reduction controls. SQL remains
+out of scope for this increment.
+
+All four full-data WASM exports already exist. Large output ultimately needs a
+chunked/streaming design; accepting a file for metadata and bounded preview does
+not imply that a full CSV export is safe at the same source size.
+
+## Milestone 2: lightweight SQL and result export
+
+SQL is secondary to preview and direct export. Its intended use is light local
+exploration and reducing a dataset to selected rows or columns for re-export,
+not building a full analytics environment. Choose the SQL engine only after the
+bounded/reduced data interface exists, and keep it inside a worker so query work
+does not block the UI.
 
 ## Architecture evolution options
 
-### Option A: Evolve `web-demo` with plain JavaScript
+### Option A: Continue SAS Explorer with plain JavaScript
 
 - **Advantages:** smallest dependency and deployment surface; existing code
-  already proves the flow.
-- **Costs:** the single HTML file will become difficult to test and maintain as
-  state, table virtualization, and worker messaging grow.
-- **Current choice:** use this while the product remains a focused
+  and demos already prove the flow.
+- **Costs:** the application will become difficult to test and maintain if
+  state, table virtualization, and worker messaging grow substantially.
+- **Current choice:** continue this while the product remains a focused
   metadata/preview/export utility.
 
 ### Option B: Small TypeScript application with a lightweight UI framework
@@ -158,14 +211,17 @@ so browser peak memory can include the source file, WASM copy, Arrow data, and
 serialized result simultaneously. Before advertising large-file support:
 
 1. Measure practical limits by browser and device class.
-2. Move parsing off the UI thread with a dedicated Web Worker. A worker does not
-   require shared memory; transfer the source `ArrayBuffer` rather than copy it.
-3. Design a chunk/visitor WASM ABI that returns bounded batches or preview rows.
+2. Keep all parsing and generation in the dedicated Web Worker. The current
+   implementation sends the `File` handle to the worker, which reads and retains
+   the bytes without creating a main-thread source buffer.
+3. Extend the existing bounded preview API with a chunk/visitor WASM ABI for
+   reduced and streaming exports; do not return complete large outputs at once.
 4. Keep SQL optional. Evaluate engines only after a bounded data interface
    exists; do not solve SQL by silently materializing several full copies.
 
-These are separate library/API projects and are not prerequisites for the Pages
-proof or metadata-first MVP.
+The worker and bounded preview portions are complete. Browser limit measurement
+and streaming/reduced export remain separate library/API projects; they are not
+prerequisites for the initial selectable full-data export UI.
 
 ## Explicit non-goals
 
@@ -174,6 +230,8 @@ proof or metadata-first MVP.
 - A service worker for CPU work. Parsing belongs in the dedicated Web Worker.
 - WebAssembly threads or COOP/COEP workarounds unless measurements show that a
   single worker is insufficient.
-- Matching desktop-scale file limits in the first release.
+- Mobile layout or matching native desktop-scale file limits in the first
+  releases.
 - Replacing the CLI, Rust API, or current examples.
-- Choosing a framework before the compatibility proof is complete.
+- Choosing a framework while the focused plain-JavaScript application remains
+  maintainable.
