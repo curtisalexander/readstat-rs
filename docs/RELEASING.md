@@ -152,6 +152,7 @@ Fix any failures before proceeding.
 - [ ] README.md is up to date
 - [ ] Documentation reflects any API changes
 - [ ] Architecture docs (`docs/ARCHITECTURE.md`) are current
+- [ ] CLI cheatsheet footer (`docs/readstat-cheatsheet.html`) shows the new release version
 - [ ] mdbook builds cleanly: `bash scripts/build-book.sh`
 - [ ] `readstat-wasm` builds and exports are up to date (excluded from workspace; not published to crates.io)
 
