@@ -32,7 +32,7 @@ function rerunPreview({operationId,rowLimit}){
   try { if(!bytes) throw new Error("Choose a file before requesting a preview"); state(operationId,"preview"); const ndjson=read_preview(bytes,rowLimit); send("result",{operationId,kind:"preview",ndjson,rowLimit}); state(operationId,"complete") }
   catch(error){ send("error",{operationId,message:error?.message||String(error)}) }
 }
-self.onmessage=e=>{ const m=e.data; if(m.type==="select") selectFile(m); else if(m.type==="preview") rerunPreview(m) };
+self.onmessage=e=>{ const m=e.data; if(m.type==="select") selectFile(m); else if(m.type==="preview") rerunPreview(m); else if(m.type==="reset"){activeOperation=m.operationId;bytes=null} };
 
 state(0,"initializing");
 init({

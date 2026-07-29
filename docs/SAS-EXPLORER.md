@@ -175,6 +175,20 @@ not building a full analytics environment. Choose the SQL engine only after the
 bounded/reduced data interface exists, and keep it inside a worker so query work
 does not block the UI.
 
+## Later: SAS header visualization
+
+Add a compact annotated byte map modeled on the exploratory diagrams in
+`readstat-rs2/docs/phase1-header.html`. Distinguish the variable-size file-header
+zone from the 336–344-byte parsed prefix, then divide that prefix into the fixed
+164-byte start record, alignment-sensitive numeric middle, and fixed 120-byte
+end record. Highlight the decisive bytes: `a2` at `0x20` for 32-/64-bit pointer
+width, `a1` at `0x23` for the optional four-byte alignment pad, endian at `0x25`,
+and encoding at `0x46`. Show how those values determine page-count width,
+page-header size, subheader-pointer size, and the start of page 0 at
+`header_size`. A side-by-side 32-/64-bit example and an annotated hex view of a
+real corpus header would make the interpretation concrete. This is an
+educational, later-stage feature and is not part of the export milestones.
+
 ## Architecture evolution options
 
 ### Option A: Continue SAS Explorer with plain JavaScript
