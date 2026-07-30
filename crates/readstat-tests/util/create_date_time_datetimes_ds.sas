@@ -4,8 +4,7 @@
                                    ,date_fmt=
                                    ,date_type=);
 
-  %local source_width expected_source expected_value resolved_format generated_rows
-         dataset_id generated_vars expected_vars close_result;
+  %local source_width expected_source expected_value resolved_format;
   %if &date_type. = %str(date) %then %do;
     %let source_width = 10;
     %let expected_source = 2021-01-20;
@@ -79,29 +78,27 @@
     %end;
     run;
 
-    proc sql noprint;
-      select count(*) into :generated_rows trimmed from &out_ds.;
-    quit;
-
-    %if &generated_rows. ne 1 %then %do;
-      %put ERROR: &out_ds. contains &generated_rows. rows; expected 1.;
-      %abort cancel;
-    %end;
-
-    %let dataset_id = %sysfunc(open(&out_ds.));
-    %if &dataset_id. = 0 %then %do;
-      %put ERROR: Could not open generated fixture &out_ds..;
-      %abort cancel;
-    %end;
-    %let generated_vars = %sysfunc(attrn(&dataset_id., nvars));
-    %let close_result = %sysfunc(close(&dataset_id.));
-    %let expected_vars = %eval(2 + 2 * &cnt.);
-    %if &generated_vars. ne &expected_vars. %then %do;
-      %put ERROR: &out_ds. contains &generated_vars. variables; expected &expected_vars..;
-      %abort cancel;
-    %end;
-
     data _null_;
+      if 0 then set &out_ds. nobs=generated_rows;
+
+      dataset_id = open("&out_ds.");
+      if dataset_id = 0 then do;
+        put "ERROR: Could not open generated fixture &out_ds..";
+        abort cancel;
+      end;
+      generated_vars = attrn(dataset_id, 'nvars');
+      close_result = close(dataset_id);
+
+      if generated_rows ne 1 then do;
+        put "ERROR: &out_ds. has an unexpected row count" generated_rows=;
+        abort cancel;
+      end;
+
+      if generated_vars ne %eval(2 + 2 * &cnt.) then do;
+        put "ERROR: &out_ds. has an unexpected variable count" generated_vars=;
+        abort cancel;
+      end;
+
       set &out_ds.;
 
       if strip(d_as_str) ne "&expected_source." or
@@ -272,7 +269,13 @@ data _null_;
   set ds(where=(dtype='date')) end=lastobs;
   
   out_ds = "data.all_dates";
-  call execute('%create_date_time_datetime_ds(cnt='||_N_||',last_call='||lastobs||',out_ds='||out_ds||',date_fmt='||fmt||',date_type='||dtype||')');
+  call execute(cats('%create_date_time_datetime_ds(cnt=',
+                    put(_N_, best32.),
+                    ',last_call=', put(lastobs, 1.),
+                    ',out_ds=', out_ds,
+                    ',date_fmt=', fmt,
+                    ',date_type=', dtype,
+                    ')'));
 run;
 
 
@@ -281,7 +284,13 @@ data _null_;
   set ds(where=(dtype='time')) end=lastobs;
   
   out_ds = "data.all_times";
-  call execute('%create_date_time_datetime_ds(cnt='||_N_||',last_call='||lastobs||',out_ds='||out_ds||',date_fmt='||fmt||',date_type='||dtype||')');
+  call execute(cats('%create_date_time_datetime_ds(cnt=',
+                    put(_N_, best32.),
+                    ',last_call=', put(lastobs, 1.),
+                    ',out_ds=', out_ds,
+                    ',date_fmt=', fmt,
+                    ',date_type=', dtype,
+                    ')'));
 run;
 
 
@@ -290,5 +299,11 @@ data _null_;
   set ds(where=(dtype='datetime')) end=lastobs;
   
   out_ds = "data.all_datetimes";
-  call execute('%create_date_time_datetime_ds(cnt='||_N_||',last_call='||lastobs||',out_ds='||out_ds||',date_fmt='||fmt||',date_type='||dtype||')');
+  call execute(cats('%create_date_time_datetime_ds(cnt=',
+                    put(_N_, best32.),
+                    ',last_call=', put(lastobs, 1.),
+                    ',out_ds=', out_ds,
+                    ',date_fmt=', fmt,
+                    ',date_type=', dtype,
+                    ')'));
 run;
