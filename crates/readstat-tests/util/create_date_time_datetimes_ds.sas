@@ -264,13 +264,14 @@ run;
    a listed format is unavailable in the current SAS installation. */
 data ds;
   set ds;
-  length lookup_fmt $20 format_type $1 default_width $5;
+  length lookup_fmt $20 format_type $8 default_width $5;
 
   lookup_fmt = prxchange('s/[0-9]+(\.[0-9]+)?$//', 1, strip(fmt));
   format_type = fmtinfo(lookup_fmt, 'type');
   default_width = fmtinfo(lookup_fmt, 'defw');
 
-  if format_type ne 'F' or missing(default_width) then do;
+  if upcase(format_type) not in ('FORMAT', 'BOTH', 'F') or
+     missing(default_width) then do;
     put 'ERROR: Unsupported SAS format in fixture generator' fmt= lookup_fmt=;
     abort cancel;
   end;
