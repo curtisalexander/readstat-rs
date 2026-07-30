@@ -4,8 +4,7 @@
                                    ,date_fmt=
                                    ,date_type=);
 
-  %local source_width expected_source expected_value format_name format_suffix
-         resolved_format;
+  %local source_width expected_source expected_value format_name resolved_format;
   %if &date_type. = %str(date) %then %do;
     %let source_width = 10;
     %let expected_source = 2021-01-20;
@@ -30,28 +29,9 @@
     %return;
   %end;
 
-  /* The source list follows SAS documentation notation, where W, W.D, and W.P
-     are placeholders rather than literal format-name characters.
-     Remove those placeholders so SAS applies each real format at its default
-     width. Explicit numeric formats such as TIME18.9 remain unchanged. */
+  /* The source list contains concrete default-width SAS format names plus a
+     few explicit numeric w.d formats. */
   %let format_name = &date_fmt.;
-  %let format_suffix = %upcase(%substr(%superq(format_name),
-                                      %eval(%length(%superq(format_name)) - 1),
-                                      2));
-  %if &format_suffix. = WD or
-      &format_suffix. = WP %then %do;
-    %let format_name = %substr(%superq(format_name),
-                               1,
-                               %eval(%length(%superq(format_name)) - 2));
-  %end;
-  %else %if %upcase(%substr(%superq(format_name),
-                            %length(%superq(format_name)),
-                            1)) = W %then %do;
-    %let format_name = %substr(%superq(format_name),
-                               1,
-                               %eval(%length(%superq(format_name)) - 1));
-  %end;
-
   %if %index(%superq(format_name), %str(.)) %then %let resolved_format = &format_name.;
   %else %let resolved_format = &format_name..;
 
@@ -153,127 +133,127 @@
 data ds;
   input fmt :$20. dtype $20.;
   datalines4;
-b8601daw date
-b8601dnw date
-datew date
-dayw date
-ddmmyyw date
-ddmmyydw date
-downamew date
-dtdatew date
-dtmonyyw date
-dtwkdatxw date
-dtyearw date
-dtyyqcw date
-e8601daw date
-e8601dnw date
-juldayw date
-julianw date
-mmddyyw date
-mmddyydw date
-mmyyw date
-mmyydw date
-monnamew date
-monthw date
-monyyw date
-nengow date
+b8601da date
+b8601dn date
+date date
+day date
+ddmmyy date
+ddmmyyd date
+downame date
+dtdate date
+dtmonyy date
+dtwkdatx date
+dtyear date
+dtyyqc date
+e8601da date
+e8601dn date
+julday date
+julian date
+mmddyy date
+mmddyyd date
+mmyy date
+mmyyd date
+monname date
+month date
+monyy date
+nengo date
+nldate date
+nldatecp date
+nldatel date
+nldatem date
+nldatemd date
+nldatemdl date
+nldatemdm date
+nldatemds date
+nldatemn date
+nldates date
 nldatew date
-nldatecpwp date
-nldatelw date
-nldatemw date
-nldatemdw date
-nldatemdlw date
-nldatemdmw date
-nldatemdsw date
-nldatemnw date
-nldatesw date
-nldateww date
-nldatewnw date
-nldateymw date
-nldateymlw date
-nldateymmw date
-nldateymSw date
-nldateyqw date
-nldateyqlw date
-nldateyqmw date
-nldateyqsw date
-nldateyrw date
-nldateyww date
-qtrw date
-qtrrw date
-weekdatxw date
-weekdayw date
-yearw date
-yymmw date
-yymmddw date
-yymmdddw date
-yymmdw date
-yymonw date
-yyqw date
-yyqdw date
-yyqrw date
-yyqrdw date
-yyweekuw date
-yyweekvw date
-yyweekww date
-b8601lzw time
-b8601tmwd time
-b8601txw time
-b8601tzw time
-e8601lzw time
-e8601tmwd time
-e8601txw time
-e8601tzwd time
-hhmmwd time
-hourwd time
-mmsswd time
-nldatmtmw time
-nldatmtzw time
-nltimapw time
-nltimew time
-timewd time
-timeampmwd time
-todwd time
+nldatewn date
+nldateym date
+nldateyml date
+nldateymm date
+nldateyms date
+nldateyq date
+nldateyql date
+nldateyqm date
+nldateyqs date
+nldateyr date
+nldateyw date
+qtr date
+qtrr date
+weekdatx date
+weekday date
+year date
+yymm date
+yymmdd date
+yymmddd date
+yymmd date
+yymon date
+yyq date
+yyqd date
+yyqr date
+yyqrd date
+yyweeku date
+yyweekv date
+yyweekw date
+b8601lz time
+b8601tm time
+b8601tx time
+b8601tz time
+e8601lz time
+e8601tm time
+e8601tx time
+e8601tz time
+hhmm time
+hour time
+mmss time
+nldatmtm time
+nldatmtz time
+nltimap time
+nltime time
+time time
+timeampm time
+tod time
 time12.3 time
 time15.6 time
 time18.9 time
-b8601dtwd datetime
-b8601dxw datetime
-b8601dzw datetime
-b8601lxw datetime
-dateampmwd datetime
-datetimewd datetime
-e8601dtwd datetime
-e8601dxw datetime
-e8601dzw datetime
-e8601lxw datetime
-mdyampmwd datetime
+b8601dt datetime
+b8601dx datetime
+b8601dz datetime
+b8601lx datetime
+dateampm datetime
+datetime datetime
+e8601dt datetime
+e8601dx datetime
+e8601dz datetime
+e8601lx datetime
+mdyampm datetime
+nldatm datetime
+nldatmap datetime
+nldatmcp datetime
+nldatmdt datetime
+nldatml datetime
+nldatmm datetime
+nldatmmd datetime
+nldatmmdl datetime
+nldatmmdm datetime
+nldatmmds datetime
+nldatmmn datetime
+nldatms datetime
 nldatmw datetime
-nldatmapw datetime
-nldatmcpwp datetime
-nldatmdtw datetime
-nldatmlw datetime
-nldatmmw datetime
-nldatmmdw datetime
-nldatmmdlw datetime
-nldatmmdmw datetime
-nldatmmdsw datetime
-nldatmmnw datetime
-nldatmsw datetime
-nldatmww datetime
-nldatmwnw datetime
-nldatmwzw datetime
-nldatmymw datetime
-nldatmymlw datetime
-nldatmymmw datetime
-nldatmymsw datetime
-nldatmyqw datetime
-nldatmyqlw datetime
-nldatmyqmw datetime
-nldatmyqsw datetime
-nldatmyrw datetime
-nldatmyww datetime
-nldatmzw datetime
+nldatmwn datetime
+nldatmwz datetime
+nldatmym datetime
+nldatmyml datetime
+nldatmymm datetime
+nldatmyms datetime
+nldatmyq datetime
+nldatmyql datetime
+nldatmyqm datetime
+nldatmyqs datetime
+nldatmyr datetime
+nldatmyw datetime
+nldatmz datetime
 datetime22.3 datetime
 datetime25.6 datetime
 ;;;;
