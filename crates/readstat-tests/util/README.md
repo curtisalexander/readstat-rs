@@ -26,6 +26,8 @@ Utility programs to aid development
   cannot reliably represent arbitrary nanoseconds.
 - Includes explicit, fully sized subsecond formats: `TIME12.3`, `TIME15.6`,
   `TIME18.9`, `DATETIME22.3`, and `DATETIME25.6`.
+- Normalizes documentation placeholders such as `DATEw.` and `TIMEw.d` to
+  real default-width SAS formats before attaching them to generated variables.
 
 ### [create_rand_ds.sas](create_rand_ds.sas)
 - SAS macro that creates a `sas7bdat` file containing random data

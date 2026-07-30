@@ -4,7 +4,8 @@
                                    ,date_fmt=
                                    ,date_type=);
 
-  %local source_width expected_source expected_value resolved_format;
+  %local source_width expected_source expected_value format_name format_suffix
+         resolved_format;
   %if &date_type. = %str(date) %then %do;
     %let source_width = 10;
     %let expected_source = 2021-01-20;
@@ -29,10 +30,30 @@
     %return;
   %end;
 
-  /* Named placeholder formats need a trailing period; numeric w.d formats
-     already contain their separator and must not receive a second period. */
-  %if %index(%superq(date_fmt), %str(.)) %then %let resolved_format = &date_fmt.;
-  %else %let resolved_format = &date_fmt..;
+  /* The source list follows SAS documentation notation, where W, W.D, and W.P
+     are placeholders rather than literal format-name characters.
+     Remove those placeholders so SAS applies each real format at its default
+     width. Explicit numeric formats such as TIME18.9 remain unchanged. */
+  %let format_name = &date_fmt.;
+  %let format_suffix = %upcase(%substr(%superq(format_name),
+                                      %eval(%length(%superq(format_name)) - 1),
+                                      2));
+  %if &format_suffix. = WD or
+      &format_suffix. = WP %then %do;
+    %let format_name = %substr(%superq(format_name),
+                               1,
+                               %eval(%length(%superq(format_name)) - 2));
+  %end;
+  %else %if %upcase(%substr(%superq(format_name),
+                            %length(%superq(format_name)),
+                            1)) = W %then %do;
+    %let format_name = %substr(%superq(format_name),
+                               1,
+                               %eval(%length(%superq(format_name)) - 1));
+  %end;
+
+  %if %index(%superq(format_name), %str(.)) %then %let resolved_format = &format_name.;
+  %else %let resolved_format = &format_name..;
 
   data __ds&cnt. ;
     format /* dates */
@@ -66,7 +87,7 @@
       abort cancel;
     end;
     
-    d_as_d_fmt&cnt._label = "&date_fmt.";
+    d_as_d_fmt&cnt._label = "&format_name.";
     d_as_d_fmt&cnt._value = d_as_n;
     
   run;
@@ -137,10 +158,10 @@ b8601dnw date
 datew date
 dayw date
 ddmmyyw date
-ddmmyyxw date
+ddmmyydw date
 downamew date
 dtdatew date
-dtmonxyw date
+dtmonyyw date
 dtwkdatxw date
 dtyearw date
 dtyyqcw date
@@ -149,9 +170,9 @@ e8601dnw date
 juldayw date
 julianw date
 mmddyyw date
-mmddyyxw date
+mmddyydw date
 mmyyw date
-mmyyxw date
+mmyydw date
 monnamew date
 monthw date
 monyyw date
@@ -185,13 +206,13 @@ weekdayw date
 yearw date
 yymmw date
 yymmddw date
-yymmddxw date
-yymmxw date
+yymmdddw date
+yymmdw date
 yymonw date
 yyqw date
-yyqxw date
+yyqdw date
 yyqrw date
-yyqrxw date
+yyqrdw date
 yyweekuw date
 yyweekvw date
 yyweekww date
