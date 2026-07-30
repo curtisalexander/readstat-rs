@@ -9,6 +9,7 @@
 #![allow(clippy::cast_lossless)]
 
 use arrow::datatypes::DataType;
+use arrow_array::Array;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatVarFormatClass};
 
 mod common;
@@ -22,12 +23,20 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
 }
 
 #[test]
-fn all_date_value_columns_have_date_format_class() {
+fn all_date_value_columns_have_expected_value_and_format_class() {
     let (rsp, _md, mut d) = init();
     d.read_data(&rsp).unwrap();
 
     // Value columns are at odd indices starting from 3 (3, 5, 7, ...)
     // Structure: d_as_str(0), d_as_n(1), fmt1_label(2), fmt1_value(3), fmt2_label(4), fmt2_value(5), ...
+    let batch = d.batch.as_ref().unwrap();
+    let source = common::get_string_col(batch, 0);
+    let raw = common::get_f64_col(batch, 1);
+    assert!(!source.is_null(0), "Date source string should not be null");
+    assert!(!raw.is_null(0), "Raw SAS date should not be null");
+    assert_eq!(source.value(0), "2021-01-20");
+    assert_eq!(raw.value(0), 22_300.0);
+
     let var_count = d.vars.len() as i32;
     let mut checked = 0;
 
@@ -52,6 +61,14 @@ fn all_date_value_columns_have_date_format_class() {
             "Column {col_name} (format={}) should have Date32 arrow type, got {:?}",
             m.var_format,
             d.schema.fields[idx as usize].data_type()
+        );
+
+        let col = common::get_date32_col(batch, idx as usize);
+        assert!(!col.is_null(0), "Column {col_name} should not be null");
+        assert_eq!(
+            col.value(0),
+            18_647,
+            "Column {col_name} should contain 2021-01-20"
         );
 
         checked += 1;
@@ -89,10 +106,10 @@ fn parse_all_dates_metadata() {
     assert!(md.is_64bit);
 
     // creation time
-    assert_eq!(md.creation_time, "2026-02-16 19:55:11");
+    assert!(!md.creation_time.is_empty());
 
-    // modified time
-    assert_eq!(md.modified_time, "2026-02-16 19:55:11");
+    // A newly generated fixture should not be modified after creation.
+    assert_eq!(md.modified_time, md.creation_time);
 
     // compression
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));

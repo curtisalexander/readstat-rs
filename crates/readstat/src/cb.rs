@@ -870,14 +870,15 @@ mod tests {
 
         #[test]
         fn datetime_ns_rounds_to_f64_precision() {
-            // At ~1.9e9 seconds an f64 holds ~µs precision; the ns conversion
-            // must still round to the nearest representable value rather than
-            // truncate below it.
+            // At ~1.9e9 seconds adjacent f64 values are about 238 ns apart.
+            // Microseconds remain reliable, but arbitrary nanoseconds do not.
+            // The ns conversion must still round to the nearest representable
+            // value rather than truncate below it.
             let sas = 1_926_851_400.123_f64;
             let ns = sas_datetime_to_unix_subsec(sas, 1e9).unwrap();
             let expected = (1_926_851_400 - SEC_SHIFT) * 1_000_000_000 + 123_000_000;
             assert!(
-                (ns - expected).abs() <= 1_000,
+                (ns - expected).abs() <= 256,
                 "ns conversion off by more than f64 precision: {ns} vs {expected}"
             );
         }
@@ -901,13 +902,10 @@ mod tests {
         #[test]
         fn time_ns_rounds_instead_of_truncates() {
             // 13:45:07.123456789 as a SAS time (seconds since midnight). f64 holds
-            // ~ns precision at this magnitude, so allow a tiny tolerance.
+            // substantially better than ns precision at this magnitude.
             let sas = 49_507.123_456_789_f64;
             let ns = sas_time_to_ns(sas).unwrap();
-            assert!(
-                (ns - 49_507_123_456_789).abs() <= 1_000,
-                "ns time conversion off by more than f64 precision: {ns}"
-            );
+            assert_eq!(ns, 49_507_123_456_789);
         }
 
         #[test]

@@ -14,7 +14,8 @@ use regex::Regex;
 
 use crate::rs_var::ReadStatVarFormatClass;
 
-// DATETIME with nanosecond precision (DATETIMEw.d where d=7-9)
+// DATETIME requesting nanosecond output (DATETIMEw.d where d=7-9). The SAS
+// numeric may have less source precision, depending on the datetime magnitude.
 static RE_DATETIME_WITH_NANO: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?xi)^DATETIME[0-9]{1,2}\.[7-9]$").unwrap());
 
@@ -331,7 +332,7 @@ mod tests {
     #[test]
     fn time_precision_formats() {
         // .1-3 → milliseconds
-        for fmt in ["TIME15.1", "TIME15.2", "TIME15.3"] {
+        for fmt in ["TIME10.1", "TIME11.2", "TIME12.3"] {
             assert_eq!(
                 match_var_format(fmt),
                 Some(ReadStatVarFormatClass::TimeWithMilliseconds),
@@ -339,7 +340,7 @@ mod tests {
             );
         }
         // .4-6 → microseconds
-        for fmt in ["TIME15.4", "TIME15.5", "TIME15.6"] {
+        for fmt in ["TIME13.4", "TIME14.5", "TIME15.6"] {
             assert_eq!(
                 match_var_format(fmt),
                 Some(ReadStatVarFormatClass::TimeWithMicroseconds),
@@ -347,7 +348,7 @@ mod tests {
             );
         }
         // .7-9 → nanoseconds
-        for fmt in ["TIME15.7", "TIME15.8", "TIME15.9"] {
+        for fmt in ["TIME16.7", "TIME17.8", "TIME18.9"] {
             assert_eq!(
                 match_var_format(fmt),
                 Some(ReadStatVarFormatClass::TimeWithNanoseconds),
@@ -368,11 +369,11 @@ mod tests {
             Some(ReadStatVarFormatClass::DateTimeWithMilliseconds)
         );
         assert_eq!(
-            match_var_format("DATETIME22.6"),
+            match_var_format("DATETIME25.6"),
             Some(ReadStatVarFormatClass::DateTimeWithMicroseconds)
         );
         assert_eq!(
-            match_var_format("DATETIME22.9"),
+            match_var_format("DATETIME28.9"),
             Some(ReadStatVarFormatClass::DateTimeWithNanoseconds)
         );
     }

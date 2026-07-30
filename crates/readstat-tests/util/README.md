@@ -18,8 +18,14 @@ Utility programs to aid development
     - `all_datetimes`
 - Writes the generated datasets to `$HOME/data`. Copy regenerated files into
   `tests/data/` before running the integration tests.
-- Aborts generation if a fixture source string cannot be parsed, preventing a
-  dataset of unintentionally missing date/time values.
+- Validates each source value before generation, then checks the completed
+  dataset's shape, format labels, and values. Generation aborts rather than
+  writing an unintentionally incomplete or missing-value fixture.
+- Uses nanosecond precision for time-of-day values, but only microsecond
+  precision for datetimes. A modern SAS datetime stored in one 8-byte numeric
+  cannot reliably represent arbitrary nanoseconds.
+- Includes explicit, fully sized subsecond formats: `TIME12.3`, `TIME15.6`,
+  `TIME18.9`, `DATETIME22.3`, and `DATETIME25.6`.
 
 ### [create_rand_ds.sas](create_rand_ds.sas)
 - SAS macro that creates a `sas7bdat` file containing random data

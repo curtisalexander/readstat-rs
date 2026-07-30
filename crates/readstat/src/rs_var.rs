@@ -43,19 +43,23 @@ pub enum ReadStatVarFormatClass {
     Date,
     /// `DateTime` format with second precision (e.g. `DATETIME22`).
     DateTime,
-    /// `DateTime` format with millisecond precision (e.g. `DATETIME22.3`).
+    /// `DateTime` format requesting millisecond output (e.g. `DATETIME22.3`).
     DateTimeWithMilliseconds,
-    /// `DateTime` format with microsecond precision (e.g. `DATETIME22.6`).
+    /// `DateTime` format requesting microsecond output (e.g. `DATETIME25.6`).
     DateTimeWithMicroseconds,
-    /// `DateTime` format with nanosecond precision (e.g. `DATETIME22.9`).
+    /// `DateTime` format requesting nanosecond output (e.g. `DATETIME28.9`).
+    ///
+    /// An 8-byte SAS numeric at modern datetime magnitudes cannot distinguish
+    /// arbitrary nanoseconds. This variant preserves the format's requested
+    /// Arrow unit; it does not guarantee nanosecond fidelity in the source.
     DateTimeWithNanoseconds,
     /// Time format with second precision (e.g. `TIME8`).
     Time,
-    /// Time format with millisecond precision (e.g. `TIME15.3`).
+    /// Time format with millisecond precision (e.g. `TIME12.3`).
     TimeWithMilliseconds,
     /// Time format with microsecond precision (e.g. `TIME15.6`).
     TimeWithMicroseconds,
-    /// Time format with nanosecond precision (e.g. `TIME15.9`).
+    /// Time format with nanosecond precision (e.g. `TIME18.9`).
     TimeWithNanoseconds,
 }
 

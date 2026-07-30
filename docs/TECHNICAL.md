@@ -51,11 +51,28 @@ All 118+ recognized SAS date, time, and datetime formats are parsed appropriatel
 SAS stores [dates, times, and datetimes](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lrcon/p1wj0wt2ebe2a0n1lv4lem9hdc0v.htm) internally as numeric values.  To distinguish among dates, times, datetimes, or numeric values, a SAS format is read from the variable metadata.  If the format matches a recognized SAS date, time, or datetime format then the numeric value is converted and read into memory using one of the Arrow types:
 - [Date32Type](https://docs.rs/arrow/latest/arrow/datatypes/struct.Date32Type.html)
 - [Time32SecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32SecondType.html)
+- [Time32MillisecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time32MillisecondType.html) &mdash; for time formats requesting millisecond output (e.g. `TIME12.3`, decimal places 1&ndash;3)
 - [Time64MicrosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time64MicrosecondType.html) &mdash; for time formats with microsecond precision (e.g. `TIME15.6`, decimal places 4&ndash;6)
+- [Time64NanosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.Time64NanosecondType.html) &mdash; for time formats with nanosecond precision (e.g. `TIME18.9`, decimal places 7&ndash;9)
 - [TimestampSecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampSecondType.html)
-- [TimestampMillisecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMillisecondType.html) &mdash; for datetime formats with millisecond precision (e.g. `DATETIME22.3`, decimal places 1&ndash;3)
-- [TimestampMicrosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMicrosecondType.html) &mdash; for datetime formats with microsecond precision (e.g. `DATETIME22.6`, decimal places 4&ndash;6)
-- [TimestampNanosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampNanosecondType.html) &mdash; for datetime formats with nanosecond precision (e.g. `DATETIME22.9`, decimal places 7&ndash;9)
+- [TimestampMillisecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMillisecondType.html) &mdash; for datetime formats requesting millisecond output (e.g. `DATETIME22.3`, decimal places 1&ndash;3)
+- [TimestampMicrosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampMicrosecondType.html) &mdash; for datetime formats requesting microsecond output (e.g. `DATETIME25.6`, decimal places 4&ndash;6)
+- [TimestampNanosecondType](https://docs.rs/arrow/latest/arrow/datatypes/struct.TimestampNanosecondType.html) &mdash; for datetime formats requesting nanosecond output (e.g. `DATETIME28.9`, decimal places 7&ndash;9)
+
+The decimal count in a SAS format controls display and signals the Arrow output
+unit; it does not increase the precision of the stored 8-byte numeric. Around a
+modern SAS datetime value (~2 billion seconds since 1960), adjacent `f64` values
+are about 238 nanoseconds apart. Milliseconds and microseconds are therefore
+reliable, but arbitrary datetime nanoseconds are not. `TimestampNanosecond`
+preserves the requested unit and the nearest representable SAS value; it does
+not assert that the source had true nanosecond fidelity. SAS Institute recommends
+storing nanoseconds separately when that fidelity is required; see
+[Dealing with Nanoseconds in SAS Datetime Values in Transaction Processing](https://support.sas.com/resources/papers/proceedings16/SAS2802-2016.pdf).
+
+Normal time-of-day values are much smaller (less than 86,400 seconds), so the
+same 8-byte numeric has substantially better than nanosecond resolution. Times
+can therefore be tested through nanoseconds, although very large positive or
+negative time durations lose resolution as their magnitude increases.
 
 If values are read into memory as Arrow date, time, or datetime types, then when they are written &mdash; from an Arrow [`RecordBatch`](https://docs.rs/arrow/latest/arrow/record_batch/struct.RecordBatch.html) to `csv`, `feather`, `ndjson`, or `parquet` &mdash; they are treated as dates, times, or datetimes and not as numeric values.
 

@@ -4,8 +4,8 @@
 use arrow::datatypes::DataType;
 use arrow_array::{
     Array, Date32Array, Float64Array, Int16Array, Int32Array, RecordBatch, StringArray,
-    Time32SecondArray, Time64MicrosecondArray, TimestampMicrosecondArray,
-    TimestampMillisecondArray, TimestampSecondArray,
+    Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray, Time64NanosecondArray,
+    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampSecondArray,
 };
 use std::os::raw::c_int;
 use std::path::PathBuf;
@@ -200,12 +200,30 @@ pub fn get_time32_col(batch: &RecordBatch, col: usize) -> &Time32SecondArray {
         .unwrap()
 }
 
+/// Extracts a `Time32MillisecondArray` from a `RecordBatch` by column index.
+pub fn get_time32_ms_col(batch: &RecordBatch, col: usize) -> &Time32MillisecondArray {
+    batch
+        .column(col)
+        .as_any()
+        .downcast_ref::<Time32MillisecondArray>()
+        .unwrap()
+}
+
 /// Extracts a `Time64MicrosecondArray` from a `RecordBatch` by column index.
 pub fn get_time64_us_col(batch: &RecordBatch, col: usize) -> &Time64MicrosecondArray {
     batch
         .column(col)
         .as_any()
         .downcast_ref::<Time64MicrosecondArray>()
+        .unwrap()
+}
+
+/// Extracts a `Time64NanosecondArray` from a `RecordBatch` by column index.
+pub fn get_time64_ns_col(batch: &RecordBatch, col: usize) -> &Time64NanosecondArray {
+    batch
+        .column(col)
+        .as_any()
+        .downcast_ref::<Time64NanosecondArray>()
         .unwrap()
 }
 

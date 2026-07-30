@@ -9,6 +9,7 @@
 #![allow(clippy::cast_lossless)]
 
 use arrow::datatypes::{DataType, TimeUnit};
+use arrow_array::Array;
 use readstat::{ReadStatData, ReadStatMetadata, ReadStatPath, ReadStatVarFormatClass};
 
 mod common;
@@ -22,9 +23,17 @@ fn init() -> (ReadStatPath, ReadStatMetadata, ReadStatData) {
 }
 
 #[test]
-fn all_time_value_columns_have_time_format_class() {
+fn all_time_value_columns_have_expected_value_and_format_class() {
     let (rsp, _md, mut d) = init();
     d.read_data(&rsp).unwrap();
+
+    let batch = d.batch.as_ref().unwrap();
+    let source = common::get_string_col(batch, 0);
+    let raw = common::get_f64_col(batch, 1);
+    assert!(!source.is_null(0), "Time source string should not be null");
+    assert!(!raw.is_null(0), "Raw SAS time should not be null");
+    assert_eq!(source.value(0), "18:43:54.123456789");
+    assert_eq!(raw.value(0), 67_434.123_456_789);
 
     let var_count = d.vars.len() as i32;
     let mut checked = 0;
@@ -38,28 +47,43 @@ fn all_time_value_columns_have_time_format_class() {
             "Column at index {idx} should be a _value column, got: {col_name}"
         );
 
-        assert_eq!(
-            m.var_format_class,
-            Some(ReadStatVarFormatClass::Time),
-            "Column {col_name} (format={}) should have Time format class",
-            m.var_format
-        );
-
-        assert!(
-            matches!(
-                d.schema.fields[idx as usize].data_type(),
-                DataType::Time32(TimeUnit::Second)
+        let field = &d.schema.fields[idx as usize];
+        match m.var_format_class {
+            Some(ReadStatVarFormatClass::Time) => {
+                assert_eq!(field.data_type(), &DataType::Time32(TimeUnit::Second));
+                let col = common::get_time32_col(batch, idx as usize);
+                assert!(!col.is_null(0), "Column {col_name} should not be null");
+                assert_eq!(col.value(0), 67_434);
+            }
+            Some(ReadStatVarFormatClass::TimeWithMilliseconds) => {
+                assert_eq!(field.data_type(), &DataType::Time32(TimeUnit::Millisecond));
+                let col = common::get_time32_ms_col(batch, idx as usize);
+                assert!(!col.is_null(0), "Column {col_name} should not be null");
+                assert_eq!(col.value(0), 67_434_123);
+            }
+            Some(ReadStatVarFormatClass::TimeWithMicroseconds) => {
+                assert_eq!(field.data_type(), &DataType::Time64(TimeUnit::Microsecond));
+                let col = common::get_time64_us_col(batch, idx as usize);
+                assert!(!col.is_null(0), "Column {col_name} should not be null");
+                assert_eq!(col.value(0), 67_434_123_457);
+            }
+            Some(ReadStatVarFormatClass::TimeWithNanoseconds) => {
+                assert_eq!(field.data_type(), &DataType::Time64(TimeUnit::Nanosecond));
+                let col = common::get_time64_ns_col(batch, idx as usize);
+                assert!(!col.is_null(0), "Column {col_name} should not be null");
+                assert_eq!(col.value(0), 67_434_123_456_789);
+            }
+            other => panic!(
+                "Column {col_name} (format={}) has unexpected format class {other:?}",
+                m.var_format
             ),
-            "Column {col_name} (format={}) should have Time32(Second) arrow type, got {:?}",
-            m.var_format,
-            d.schema.fields[idx as usize].data_type()
-        );
+        }
 
         checked += 1;
     }
 
-    // 18 time formats
-    assert_eq!(checked, 18, "Expected 18 time format columns");
+    // 18 general time formats plus millisecond, microsecond, and nanosecond formats.
+    assert_eq!(checked, 21, "Expected 21 time format columns");
 }
 
 #[test]
@@ -72,7 +96,7 @@ fn parse_all_times_metadata() {
     assert_eq!(md.row_count, Some(1));
 
     // variable count
-    assert_eq!(md.var_count, 38);
+    assert_eq!(md.var_count, 44);
 
     // table name
     assert_eq!(md.table_name, String::new());
@@ -90,10 +114,10 @@ fn parse_all_times_metadata() {
     assert!(md.is_64bit);
 
     // creation time
-    assert_eq!(md.creation_time, "2026-02-16 19:55:11");
+    assert!(!md.creation_time.is_empty());
 
-    // modified time
-    assert_eq!(md.modified_time, "2026-02-16 19:55:11");
+    // A newly generated fixture should not be modified after creation.
+    assert_eq!(md.modified_time, md.creation_time);
 
     // compression
     assert!(matches!(md.compression, readstat::ReadStatCompress::None));
