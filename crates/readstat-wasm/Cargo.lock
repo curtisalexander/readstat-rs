@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "readstat"
-version = "0.29.0"
+version = "0.29.1"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "readstat-wasm"
-version = "0.29.0"
+version = "0.29.1"
 dependencies = [
  "readstat",
  "serde_json",

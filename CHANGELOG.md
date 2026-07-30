@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29.1] - 2026-07-30
+
+### Added
+- Added the browser-local SAS Explorer to GitHub Pages with searchable metadata, bounded previews, operation progress, type-colored columns, explicit dataset replacement, and an expanded view for wide tables.
+
+### Changed
+- Documented the precision limits of SAS 8-byte numeric datetime values and strengthened generated date, datetime, and time fixtures with value-level precision checks.
+
+### Fixed
+- Corrected SAS temporal format recognition to use concrete format names and widths, including `DTMONYY`, instead of documentation placeholders that are not executable SAS formats.
+- Preserved metadata-defined columns that contain only missing values in SAS Explorer previews.
+
 ## [0.29.0] - 2026-07-28
 
 This release also bumps `readstat-sys` to 0.5.2 and `readstat-iconv-sys` to
