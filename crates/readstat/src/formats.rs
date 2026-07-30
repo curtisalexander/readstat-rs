@@ -40,7 +40,7 @@ static RE_TIME_WITH_MILLI: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?xi)^TIME[0-9]{1,2}\.[1-3]$").unwrap());
 
 // All time formats - checked before datetime to catch NLDATMTM and NLDATMTZ
-// Suffix allows letter width/decimal (W, WD) and/or numeric width/decimal (8, 8.2)
+// Suffix allows numeric widths and decimal places (8, 8.2).
 static RE_TIME: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?xi)
@@ -103,7 +103,7 @@ static RE_DATE: LazyLock<Regex> = LazyLock::new(|| {
             DDMMYY    |
             DOWNAME   |
             DTDATE    |
-            DTMONXY   |
+            DTMONYY   |
             DTWKDATX  |
             DTYEAR    |
             DTYYQC    |
@@ -137,8 +137,8 @@ static RE_DATE: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// Returns `Some(class)` for recognized date/time/datetime formats, or `None`
 /// for numeric/character formats that don't represent temporal data.
-/// Matching is case-insensitive and handles both numeric widths (`DATE9`)
-/// and letter-width suffixes (`DATEW`).
+/// Matching is case-insensitive and handles bare names (`DATE`) and numeric
+/// widths (`DATE9`).
 pub(crate) fn match_var_format(v: &str) -> Option<ReadStatVarFormatClass> {
     // Check order matters:
     // 1. DATETIME precision variants (most specific, numeric width only)
@@ -201,72 +201,71 @@ mod tests {
     }
 
     #[test]
-    fn date_formats_with_letter_width() {
-        // Format strings as stored in the test SAS datasets
+    fn recognized_date_format_names() {
         let date_formats = [
-            "B8601DAW",
-            "B8601DNW",
-            "DATEW",
-            "DAYW",
-            "DDMMYYW",
-            "DDMMYYXW",
-            "DOWNAMEW",
-            "DTDATEW",
-            "DTMONXYW",
-            "DTWKDATXW",
-            "DTYEARW",
-            "DTYYQCW",
-            "E8601DAW",
-            "E8601DNW",
-            "JULDAYW",
-            "JULIANW",
-            "MMDDYYW",
-            "MMDDYYXW",
-            "MMYYW",
-            "MMYYXW",
-            "MONNAMEW",
-            "MONTHW",
-            "MONYYW",
-            "NENGOW",
+            "B8601DA",
+            "B8601DN",
+            "DATE",
+            "DAY",
+            "DDMMYY",
+            "DDMMYYD",
+            "DOWNAME",
+            "DTDATE",
+            "DTMONYY",
+            "DTWKDATX",
+            "DTYEAR",
+            "DTYYQC",
+            "E8601DA",
+            "E8601DN",
+            "JULDAY",
+            "JULIAN",
+            "MMDDYY",
+            "MMDDYYD",
+            "MMYY",
+            "MMYYD",
+            "MONNAME",
+            "MONTH",
+            "MONYY",
+            "NENGO",
+            "NLDATE",
+            "NLDATECP",
+            "NLDATEL",
+            "NLDATEM",
+            "NLDATEMD",
+            "NLDATEMDL",
+            "NLDATEMDM",
+            "NLDATEMDS",
+            "NLDATEMN",
+            "NLDATES",
             "NLDATEW",
-            "NLDATECPWP",
-            "NLDATELW",
-            "NLDATEMW",
-            "NLDATEMDW",
-            "NLDATEMDLW",
-            "NLDATEMDMW",
-            "NLDATEMDSW",
-            "NLDATEMNW",
-            "NLDATESW",
-            "NLDATEWW",
-            "NLDATEWNW",
-            "NLDATEYMW",
-            "NLDATEYMLW",
-            "NLDATEYMMW",
-            "NLDATEYMSW",
-            "NLDATEYQW",
-            "NLDATEYQLW",
-            "NLDATEYQMW",
-            "NLDATEYQSW",
-            "NLDATEYRW",
-            "NLDATEYWW",
-            "QTRW",
-            "QTRRW",
-            "WEEKDATXW",
-            "WEEKDAYW",
-            "YEARW",
-            "YYMMW",
-            "YYMMDDW",
-            "YYMMDDXW",
-            "YYMMXW",
-            "YYMONW",
-            "YYQW",
-            "YYQXW",
-            "YYQRW",
-            "YYQRXW",
-            "YYWEEKUW",
-            "YYWEEKVW",
-            "YYWEEKWW",
+            "NLDATEWN",
+            "NLDATEYM",
+            "NLDATEYML",
+            "NLDATEYMM",
+            "NLDATEYMS",
+            "NLDATEYQ",
+            "NLDATEYQL",
+            "NLDATEYQM",
+            "NLDATEYQS",
+            "NLDATEYR",
+            "NLDATEYW",
+            "QTR",
+            "QTRR",
+            "WEEKDATX",
+            "WEEKDAY",
+            "YEAR",
+            "YYMM",
+            "YYMMDD",
+            "YYMMDDD",
+            "YYMMD",
+            "YYMON",
+            "YYQ",
+            "YYQD",
+            "YYQR",
+            "YYQRD",
+            "YYWEEKU",
+            "YYWEEKV",
+            "YYWEEKW",
         ];
         for fmt in &date_formats {
             assert_eq!(
@@ -289,26 +288,11 @@ mod tests {
     }
 
     #[test]
-    fn time_formats_with_letter_width() {
+    fn recognized_time_format_names() {
         let time_formats = [
-            "B8601LZW",
-            "B8601TMWD",
-            "B8601TXW",
-            "B8601TZW",
-            "E8601LZW",
-            "E8601TMWD",
-            "E8601TXW",
-            "E8601TZWD",
-            "HHMMWD",
-            "HOURWD",
-            "MMSSWD",
-            "NLDATMTMW",
-            "NLDATMTZW",
-            "NLTIMAPW",
-            "NLTIMEW",
-            "TIMEWD",
-            "TIMEAMPMWD",
-            "TODWD",
+            "B8601LZ", "B8601TM", "B8601TX", "B8601TZ", "E8601LZ", "E8601TM", "E8601TX", "E8601TZ",
+            "HHMM", "HOUR", "MMSS", "NLDATMTM", "NLDATMTZ", "NLTIMAP", "NLTIME", "TIME",
+            "TIMEAMPM", "TOD",
         ];
         for fmt in &time_formats {
             assert_eq!(
@@ -379,45 +363,45 @@ mod tests {
     }
 
     #[test]
-    fn datetime_formats_with_letter_width() {
+    fn recognized_datetime_format_names() {
         let datetime_formats = [
-            "B8601DTWD",
-            "B8601DXW",
-            "B8601DZW",
-            "B8601LXW",
-            "DATEAMPMWD",
-            "DATETIMEWD",
-            "E8601DTWD",
-            "E8601DXW",
-            "E8601DZW",
-            "E8601LXW",
-            "MDYAMPMWD",
+            "B8601DT",
+            "B8601DX",
+            "B8601DZ",
+            "B8601LX",
+            "DATEAMPM",
+            "DATETIME",
+            "E8601DT",
+            "E8601DX",
+            "E8601DZ",
+            "E8601LX",
+            "MDYAMPM",
+            "NLDATM",
+            "NLDATMAP",
+            "NLDATMCP",
+            "NLDATMDT",
+            "NLDATML",
+            "NLDATMM",
+            "NLDATMMD",
+            "NLDATMMDL",
+            "NLDATMMDM",
+            "NLDATMMDS",
+            "NLDATMMN",
+            "NLDATMS",
             "NLDATMW",
-            "NLDATMAPW",
-            "NLDATMCPWP",
-            "NLDATMDTW",
-            "NLDATMLW",
-            "NLDATMMW",
-            "NLDATMMDW",
-            "NLDATMMDLW",
-            "NLDATMMDMW",
-            "NLDATMMDSW",
-            "NLDATMMNW",
-            "NLDATMSW",
-            "NLDATMWW",
-            "NLDATMWNW",
-            "NLDATMWZW",
-            "NLDATMYMW",
-            "NLDATMYMLW",
-            "NLDATMYMMW",
-            "NLDATMYMSW",
-            "NLDATMYQW",
-            "NLDATMYQLW",
-            "NLDATMYQMW",
-            "NLDATMYQSW",
-            "NLDATMYRW",
-            "NLDATMYWW",
-            "NLDATMZW",
+            "NLDATMWN",
+            "NLDATMWZ",
+            "NLDATMYM",
+            "NLDATMYML",
+            "NLDATMYMM",
+            "NLDATMYMS",
+            "NLDATMYQ",
+            "NLDATMYQL",
+            "NLDATMYQM",
+            "NLDATMYQS",
+            "NLDATMYR",
+            "NLDATMYW",
+            "NLDATMZ",
         ];
         for fmt in &datetime_formats {
             assert_eq!(
