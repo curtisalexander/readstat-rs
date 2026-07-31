@@ -2,7 +2,7 @@
 
 ## Status and product decisions
 
-Milestone 0 is implemented in
+Milestones 0 and 1 are implemented in
 [`examples/sas-explorer`](../examples/sas-explorer/) and deployed at
 [curtisalexander.github.io/readstat-rs/explorer/](https://curtisalexander.github.io/readstat-rs/explorer/).
 The modestly branded, desktop-oriented static app:
@@ -11,11 +11,15 @@ The modestly branded, desktop-oriented static app:
 - reads and parses `.sas7bdat` files only in a dedicated Web Worker;
 - states clearly that the selected file never leaves the browser;
 - shows file metadata, a searchable variable list, and a bounded row preview;
+- exports complete datasets as CSV, NDJSON, Parquet, or Feather inside the
+  existing worker and downloads them with useful filenames and media types;
 - reports WASM download, local file read, metadata, preview parse, and preview
-  encoding state without blocking the UI;
+  encoding state plus export parse and encoding state without blocking the UI;
 - defaults to 100 preview rows, with choices from 25 through 1,000;
 - recommends files no larger than 250 MiB and enforces a configurable 500 MiB
-  hard maximum until browser measurements justify a different policy.
+  hard maximum until browser measurements justify a different policy; and
+- separately limits full export to 100 MiB source files because the current ABI
+  materializes the parsed dataset and complete serialized output in memory.
 
 The implementation intentionally uses plain JavaScript and CSS with no runtime
 third-party dependencies. The production Pages deployment has been verified to
@@ -23,9 +27,8 @@ serve both the app and its WASM module successfully, including the
 `application/wasm` content type. Pushes to `main` build and deploy the explorer
 with the documentation; no release tag or separate repository is required.
 
-**Next milestone:** add worker-side export with a format selector for CSV,
-NDJSON, Parquet, and Feather. Selected-column/row reduction follows that, then
-optional lightweight SQL.
+**Next milestone:** add selected-column and bounded row-range export through a
+new reduced-export WASM API. Optional lightweight SQL follows that.
 
 ## Existing assets and lessons
 
@@ -113,16 +116,17 @@ References:
 - [x] Rejects an invalid preview row limit with a useful native error.
 - [x] Reports bounded-preview and native progress through the package wrapper.
 - [ ] Add an automated deployed-browser smoke test.
-- [ ] Confirm current desktop Chrome, Firefox, Safari, and Edge behavior.
-- [ ] Confirm in browser network logs that selecting and parsing a local file
-  causes no network request.
-- [ ] Confirm malformed file input displays the native parser message in the
-  deployed UI.
+- [x] Confirm current desktop Chromium behavior with the release WASM build.
+- [ ] Confirm current desktop Firefox, Safari, and Edge behavior.
+- [x] Confirm in Chromium network logs that selecting, parsing, and exporting a
+  local file causes no network request.
+- [x] Confirm malformed file input displays the native parser message in a
+  release-build browser smoke test.
 
 The unchecked browser-validation items are release-hardening work, not blockers
 for starting export development.
 
-## Milestone 1: selectable export (next thread)
+## Milestone 1: selectable export (implemented)
 
 Keep the current dependency-free, worker-first architecture. The first export
 increment should use the existing full-data WASM exports rather than introducing
@@ -146,16 +150,28 @@ SQL or a new framework:
 
 ### Milestone 1 acceptance criteria
 
-- Each format downloads with a useful filename, extension, and MIME type.
-- CSV and NDJSON output can be inspected as text; Parquet and Feather output can
-  be read back by the native integration path or another trusted reader.
-- Export parsing and encoding progress is visible, and the UI remains responsive.
-- Selecting/exporting a file causes no network request after static assets load.
-- A failed or disallowed export leaves the loaded dataset available for preview.
-- Export limits and their rationale are visible to the user and configurable in
-  one policy location.
+- [x] Each format downloads with a useful filename, extension, and MIME type.
+- [x] CSV and NDJSON output is complete; downloaded Parquet and Feather output
+  reads back as 1,081 rows by 13 columns in PyArrow for the browser smoke corpus.
+- [x] Export parsing and encoding progress is visible, and the UI remains
+  responsive while the worker performs the export.
+- [x] Selecting/exporting a file causes no network request after static assets
+  load in the Chromium smoke test.
+- [x] A failed or disallowed export leaves the loaded dataset available for
+  preview.
+- [x] Export limits and their rationale are visible to the user and configurable
+  in the worker's single policy object. The initial full-export source limit is
+  100 MiB.
 
-### Milestone 1b: reduced export
+Release hardening remains intentionally light: generated-WASM CI now exercises
+all four export functions, output signatures, row completeness, and native
+progress stages. A local headless Chromium pass covers worker loading, the
+bounded preview, all four browser downloads, malformed-input reporting, WASM
+MIME type, console/page errors, and post-selection network activity. Automated
+testing against the deployed Pages URL and manual Firefox/Safari/Edge coverage
+remain follow-up work rather than Milestone 1 blockers.
+
+### Milestone 1b: reduced export (next)
 
 After full-data format selection works, add selected-column and bounded row-range
 export without routing the data through the UI thread. This likely requires a

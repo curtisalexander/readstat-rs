@@ -143,7 +143,15 @@ jobs:
           cp target/wasm32-unknown-emscripten/release/readstat_wasm.wasm pkg/readstat_wasm.wasm
           node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
-          import { init, read_metadata, read_preview } from "./pkg/readstat_wasm.js";
+          import {
+            init,
+            read_data,
+            read_data_feather,
+            read_data_ndjson,
+            read_data_parquet,
+            read_metadata,
+            read_preview,
+          } from "./pkg/readstat_wasm.js";
 
           const progress = [];
           await init({ onProgress: event => progress.push(event) });
@@ -159,6 +167,22 @@ jobs:
           if (!progress.some(event => event.stage === 2 && event.current === 5)) {
             throw new Error(`preview progress was not reported: ${JSON.stringify(progress)}`);
           }
+          const csv = read_data(input);
+          const ndjson = read_data_ndjson(input);
+          const parquet = read_data_parquet(input);
+          const feather = read_data_feather(input);
+          if (!csv.startsWith("Brand,") || ndjson.trim().split("\n").length !== metadata.row_count) {
+            throw new Error("text exports were not complete");
+          }
+          if (Buffer.from(parquet.subarray(0, 4)).toString() !== "PAR1") {
+            throw new Error("Parquet export has an invalid header");
+          }
+          if (Buffer.from(feather.subarray(0, 6)).toString() !== "ARROW1") {
+            throw new Error("Feather export has an invalid header");
+          }
+          if (!progress.some(event => event.stage === 4) || !progress.some(event => event.stage === 5)) {
+            throw new Error(`export progress was not reported: ${JSON.stringify(progress)}`);
+          }
           let nativeError;
           try {
             read_metadata(new Uint8Array([1, 2, 3]));
@@ -170,6 +194,43 @@ jobs:
           }
           if (!nativeError.message || nativeError.message.includes("returned null")) {
             throw new Error(`WASM did not surface its native error: ${nativeError.message}`);
+          }
+          NODE
+          cp ../../examples/sas-explorer/readstat_wasm.js target/sas_explorer_wrapper.mjs
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const wasm = readFileSync("target/wasm32-unknown-emscripten/release/readstat_wasm.wasm");
+          globalThis.fetch = async () => new Response(wasm, {
+            headers: { "Content-Length": String(wasm.byteLength) },
+          });
+          const {
+            init,
+            read_data,
+            read_data_feather,
+            read_data_ndjson,
+            read_data_parquet,
+          } = await import("./target/sas_explorer_wrapper.mjs");
+
+          const progress = [];
+          await init({ onProgress: event => progress.push(event) });
+          const input = readFileSync("../readstat-tests/tests/data/cars.sas7bdat");
+          const csv = read_data(input);
+          const ndjson = read_data_ndjson(input);
+          const parquet = read_data_parquet(input);
+          const feather = read_data_feather(input);
+          if (!csv.startsWith("Brand,") || ndjson.trim().split("\n").length !== 1081) {
+            throw new Error("SAS Explorer text exports were not complete");
+          }
+          if (Buffer.from(parquet.subarray(0, 4)).toString() !== "PAR1") {
+            throw new Error("SAS Explorer Parquet export has an invalid header");
+          }
+          if (Buffer.from(feather.subarray(0, 6)).toString() !== "ARROW1") {
+            throw new Error("SAS Explorer Feather export has an invalid header");
+          }
+          if (!progress.some(event => event.stage === "export-parse") ||
+              !progress.some(event => event.stage === "export-encode")) {
+            throw new Error(`SAS Explorer export progress was not reported: ${JSON.stringify(progress)}`);
           }
           NODE
 

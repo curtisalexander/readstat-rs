@@ -125,9 +125,10 @@ excluded WASM manifest during a version bump.
 
 The static SAS Explorer in `examples/sas-explorer/` processes local files
 entirely in a dedicated browser worker. It shows file and variable metadata plus
-a bounded row preview without sending SAS bytes over the network. The normal
-Pages workflow source-builds the canonical WASM module and publishes the app at
-`/explorer/` alongside mdBook. Export and lightweight SQL are staged follow-up
+a bounded row preview, and exports complete datasets as CSV, NDJSON, Parquet, or
+Feather without sending SAS bytes over the network. The normal Pages workflow
+source-builds the canonical WASM module and publishes the app at `/explorer/`
+alongside mdBook. Reduced export and lightweight SQL are staged follow-up
 features. See [SAS-EXPLORER.md](SAS-EXPLORER.md) for the current product and
 technical plan.
 

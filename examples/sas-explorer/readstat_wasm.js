@@ -4,7 +4,7 @@ let memory;
 let progressCallback = () => {};
 
 // Native stage ABI: 1 metadata, 2 preview parse, 3 preview encode,
-// 4 export parse, 5 export encode. Export stages are reserved for future UI.
+// 4 export parse, 5 export encode.
 export const STAGES = Object.freeze({1:"metadata",2:"preview-parse",3:"preview-encode",4:"export-parse",5:"export-encode"});
 
 function imports() {
@@ -33,6 +33,19 @@ function call(fn,bytes,...args){
   try { new Uint8Array(memory.buffer).set(bytes,input); output=fn(input,bytes.byteLength,...args); if(!output) throw new Error(lastError()); return cString(output) }
   finally { free(input); if(output) free_string(output) }
 }
+function callBinary(fn,bytes){
+  if(!instance) throw new Error("WASM is not initialized");
+  const {malloc,free,free_binary}=instance.exports;
+  const input=malloc(bytes.byteLength); if(!input) throw new Error("Unable to allocate WASM input memory");
+  const outputLength=malloc(4); if(!outputLength){free(input);throw new Error("Unable to allocate WASM output length")}
+  let output=0,length=0;
+  try {
+    new Uint8Array(memory.buffer).set(bytes,input);
+    output=fn(input,bytes.byteLength,outputLength); if(!output) throw new Error(lastError());
+    length=new DataView(memory.buffer).getUint32(outputLength,true);
+    return new Uint8Array(memory.buffer,output,length).slice();
+  } finally { free(input);free(outputLength);if(output)free_binary(output,length) }
+}
 
 export async function init(options={}) {
   if(instance) return;
@@ -48,3 +61,7 @@ export async function init(options={}) {
 }
 export function read_metadata(bytes){ return call(instance.exports.read_metadata,bytes) }
 export function read_preview(bytes,rowLimit){ if(!Number.isInteger(rowLimit)||rowLimit<1||rowLimit>0xffff_ffff) throw new RangeError("rowLimit must be an integer between 1 and 4294967295"); return call(instance.exports.read_preview,bytes,rowLimit) }
+export function read_data(bytes){ return call(instance.exports.read_data,bytes) }
+export function read_data_ndjson(bytes){ return call(instance.exports.read_data_ndjson,bytes) }
+export function read_data_parquet(bytes){ return callBinary(instance.exports.read_data_parquet,bytes) }
+export function read_data_feather(bytes){ return callBinary(instance.exports.read_data_feather,bytes) }
