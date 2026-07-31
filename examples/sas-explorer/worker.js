@@ -1,13 +1,13 @@
-import {init,read_data,read_data_feather,read_data_ndjson,read_data_parquet,read_metadata,read_preview} from "./readstat_wasm.js";
+import {init,read_data,read_data_feather,read_data_feather_reduced,read_data_ndjson,read_data_ndjson_reduced,read_data_parquet,read_data_parquet_reduced,read_data_reduced,read_metadata,read_preview} from "./readstat_wasm.js";
 
 // Central browser policy. The UI receives this exact configuration in `ready`.
 const MiB=1024*1024;
 export const POLICY=Object.freeze({recommendedBytes:250*MiB,hardMaxBytes:500*MiB,exportMaxBytes:100*MiB,previewOptions:[25,50,100,250,500,1000],defaultPreview:100});
 const EXPORTS=Object.freeze({
-  csv:{run:read_data,extension:"csv",mime:"text/csv;charset=utf-8"},
-  ndjson:{run:read_data_ndjson,extension:"ndjson",mime:"application/x-ndjson;charset=utf-8"},
-  parquet:{run:read_data_parquet,extension:"parquet",mime:"application/vnd.apache.parquet"},
-  feather:{run:read_data_feather,extension:"feather",mime:"application/vnd.apache.arrow.file"}
+  csv:{run:read_data,reduced:read_data_reduced,extension:"csv",mime:"text/csv;charset=utf-8"},
+  ndjson:{run:read_data_ndjson,reduced:read_data_ndjson_reduced,extension:"ndjson",mime:"application/x-ndjson;charset=utf-8"},
+  parquet:{run:read_data_parquet,reduced:read_data_parquet_reduced,extension:"parquet",mime:"application/vnd.apache.parquet"},
+  feather:{run:read_data_feather,reduced:read_data_feather_reduced,extension:"feather",mime:"application/vnd.apache.arrow.file"}
 });
 let activeOperation=0;
 let bytes=null;
@@ -38,17 +38,17 @@ function rerunPreview({operationId,rowLimit}){
   try { if(!bytes) throw new Error("Choose a file before requesting a preview"); state(operationId,"preview"); const ndjson=read_preview(bytes,rowLimit); send("result",{operationId,kind:"preview",ndjson,rowLimit}); state(operationId,"complete") }
   catch(error){ send("error",{operationId,message:error?.message||String(error)}) }
 }
-function exportData({operationId,format,sourceName}){
+function exportData({operationId,format,sourceName,selection}){
   activeOperation=operationId;
   try {
     if(!bytes) throw new Error("Choose a file before exporting");
-    if(bytes.byteLength>POLICY.exportMaxBytes) throw new Error(`Full export is limited to source files no larger than ${POLICY.exportMaxBytes} bytes`);
+    if(bytes.byteLength>POLICY.exportMaxBytes) throw new Error(`Export is limited to source files no larger than ${POLICY.exportMaxBytes} bytes`);
     const selected=EXPORTS[format]; if(!selected) throw new Error(`Unsupported export format: ${format}`);
     state(operationId,"exporting");
-    const result=selected.run(bytes);
+    const result=selection?selected.reduced(bytes,selection):selected.run(bytes);
     const output=typeof result==="string"?new TextEncoder().encode(result):result;
     const baseName=sourceName.replace(/\.sas7bdat$/i,"")||"dataset";
-    send("result",{operationId,kind:"export",output:output.buffer,filename:`${baseName}.${selected.extension}`,mime:selected.mime},[output.buffer]);
+    send("result",{operationId,kind:"export",output:output.buffer,filename:`${baseName}${selection?"-subset":""}.${selected.extension}`,mime:selected.mime},[output.buffer]);
     state(operationId,"complete");
   } catch(error){ if(operationId===activeOperation)send("error",{operationId,message:error?.message||String(error)}) }
 }

@@ -155,8 +155,12 @@ jobs:
             init,
             read_data,
             read_data_feather,
+            read_data_feather_reduced,
             read_data_ndjson,
+            read_data_ndjson_reduced,
             read_data_parquet,
+            read_data_parquet_reduced,
+            read_data_reduced,
             read_metadata,
             read_preview,
           } from "./pkg/readstat_wasm.js";
@@ -179,14 +183,39 @@ jobs:
           const ndjson = read_data_ndjson(input);
           const parquet = read_data_parquet(input);
           const feather = read_data_feather(input);
+          const selection = { columns: ["Brand", "Model", "CityMPG"], rowOffset: 10, rowLimit: 7 };
+          const reducedCsv = read_data_reduced(input, selection);
+          const reducedNdjson = read_data_ndjson_reduced(input, selection);
+          const reducedParquet = read_data_parquet_reduced(input, selection);
+          const reducedFeather = read_data_feather_reduced(input, selection);
           if (!csv.startsWith("Brand,") || ndjson.trim().split("\n").length !== metadata.row_count) {
             throw new Error("text exports were not complete");
+          }
+          if (!reducedCsv.startsWith("Brand,Model,CityMPG") || reducedCsv.trim().split("\n").length !== 8 || reducedNdjson.trim().split("\n").length !== 7) {
+            throw new Error("reduced text exports did not honor their rows and columns");
           }
           if (Buffer.from(parquet.subarray(0, 4)).toString() !== "PAR1") {
             throw new Error("Parquet export has an invalid header");
           }
           if (Buffer.from(feather.subarray(0, 6)).toString() !== "ARROW1") {
             throw new Error("Feather export has an invalid header");
+          }
+          if (Buffer.from(reducedParquet.subarray(0, 4)).toString() !== "PAR1" || Buffer.from(reducedFeather.subarray(0, 6)).toString() !== "ARROW1") {
+            throw new Error("reduced binary exports have invalid headers");
+          }
+          for (const invalid of [
+            { columns: ["NoSuchColumn"], rowOffset: 0, rowLimit: 1 },
+            { columns: ["Brand"], rowOffset: metadata.row_count, rowLimit: 1 },
+          ]) {
+            let reducedError;
+            try {
+              read_data_reduced(input, invalid);
+            } catch (error) {
+              reducedError = error;
+            }
+            if (!reducedError?.message) {
+              throw new Error(`invalid reduced selection unexpectedly succeeded: ${JSON.stringify(invalid)}`);
+            }
           }
           if (!progress.some(event => event.stage === 4) || !progress.some(event => event.stage === 5)) {
             throw new Error(`export progress was not reported: ${JSON.stringify(progress)}`);
@@ -216,8 +245,12 @@ jobs:
             init,
             read_data,
             read_data_feather,
+            read_data_feather_reduced,
             read_data_ndjson,
+            read_data_ndjson_reduced,
             read_data_parquet,
+            read_data_parquet_reduced,
+            read_data_reduced,
           } = await import("./target/sas_explorer_wrapper.mjs");
 
           const progress = [];
@@ -227,14 +260,25 @@ jobs:
           const ndjson = read_data_ndjson(input);
           const parquet = read_data_parquet(input);
           const feather = read_data_feather(input);
+          const selection = { columns: ["Brand", "Model", "CityMPG"], rowOffset: 10, rowLimit: 7 };
+          const reducedCsv = read_data_reduced(input, selection);
+          const reducedNdjson = read_data_ndjson_reduced(input, selection);
+          const reducedParquet = read_data_parquet_reduced(input, selection);
+          const reducedFeather = read_data_feather_reduced(input, selection);
           if (!csv.startsWith("Brand,") || ndjson.trim().split("\n").length !== 1081) {
             throw new Error("SAS Explorer text exports were not complete");
+          }
+          if (!reducedCsv.startsWith("Brand,Model,CityMPG") || reducedCsv.trim().split("\n").length !== 8 || reducedNdjson.trim().split("\n").length !== 7) {
+            throw new Error("SAS Explorer reduced text exports were incorrect");
           }
           if (Buffer.from(parquet.subarray(0, 4)).toString() !== "PAR1") {
             throw new Error("SAS Explorer Parquet export has an invalid header");
           }
           if (Buffer.from(feather.subarray(0, 6)).toString() !== "ARROW1") {
             throw new Error("SAS Explorer Feather export has an invalid header");
+          }
+          if (Buffer.from(reducedParquet.subarray(0, 4)).toString() !== "PAR1" || Buffer.from(reducedFeather.subarray(0, 6)).toString() !== "ARROW1") {
+            throw new Error("SAS Explorer reduced binary exports have invalid headers");
           }
           if (!progress.some(event => event.stage === "export-parse") ||
               !progress.some(event => event.stage === "export-encode")) {

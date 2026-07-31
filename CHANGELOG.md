@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Added browser-local CSV, NDJSON, Parquet, and Feather downloads to SAS Explorer, including selected-variable and bounded row-range exports with browser/PyArrow round-trip coverage.
+
 ## [0.29.1] - 2026-07-30
 
 ### Added

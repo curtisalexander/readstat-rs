@@ -112,7 +112,8 @@ WebAssembly build of the `readstat` library for parsing SAS `.sas7bdat` files in
 
 Exports: `read_metadata`, `read_metadata_fast`, bounded NDJSON `read_preview`,
 `read_data` (CSV), `read_data_ndjson`, `read_data_parquet`,
-`read_data_feather`, `readstat_last_error`, `free_string`, and `free_binary`.
+`read_data_feather`, reduced row/column variants of all four data exports,
+`readstat_last_error`, `free_string`, and `free_binary`.
 Browser builds import `env.readstat_progress` to report metadata, preview, and
 export stages while native work is running. Not published to crates.io
 (`publish = false`).
@@ -125,12 +126,12 @@ excluded WASM manifest during a version bump.
 
 The static SAS Explorer in `examples/sas-explorer/` processes local files
 entirely in a dedicated browser worker. It shows file and variable metadata plus
-a bounded row preview, and exports complete datasets as CSV, NDJSON, Parquet, or
-Feather without sending SAS bytes over the network. The normal Pages workflow
+a bounded row preview, and exports complete datasets or selected variables and
+bounded row ranges as CSV, NDJSON, Parquet, or Feather without sending SAS bytes
+over the network. The normal Pages workflow
 source-builds the canonical WASM module and publishes the app at `/explorer/`
-alongside mdBook. Reduced export and lightweight SQL are staged follow-up
-features. See [SAS-EXPLORER.md](SAS-EXPLORER.md) for the current product and
-technical plan.
+alongside mdBook. Lightweight SQL is the next optional product milestone. See
+[SAS-EXPLORER.md](SAS-EXPLORER.md) for the current product and technical plan.
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`

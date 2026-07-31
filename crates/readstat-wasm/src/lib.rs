@@ -151,7 +151,7 @@ pub unsafe extern "C" fn read_metadata_fast(ptr: *const u8, len: usize) -> *mut 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
     catch_export(std::ptr::null_mut(), || unsafe {
-        read_data_inner(ptr, len, &OutputFormat::Csv)
+        read_data_inner(ptr, len, &OutputFormat::Csv, None)
     })
 }
 
@@ -163,7 +163,50 @@ pub unsafe extern "C" fn read_data(ptr: *const u8, len: usize) -> *mut c_char {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn read_data_ndjson(ptr: *const u8, len: usize) -> *mut c_char {
     catch_export(std::ptr::null_mut(), || unsafe {
-        read_data_inner(ptr, len, &OutputFormat::Ndjson)
+        read_data_inner(ptr, len, &OutputFormat::Ndjson, None)
+    })
+}
+
+/// Read selected columns and a bounded row range as CSV.
+///
+/// # Safety
+///
+/// `ptr` must point to a valid byte buffer of at least `len` bytes.
+/// `columns_ptr` must point to a UTF-8 JSON array of column names containing
+/// `columns_len` bytes. `row_limit` must be greater than zero. The returned
+/// string follows the ownership contract of [`read_data`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_data_reduced(
+    ptr: *const u8,
+    len: usize,
+    columns_ptr: *const u8,
+    columns_len: usize,
+    row_offset: u32,
+    row_limit: u32,
+) -> *mut c_char {
+    catch_export(std::ptr::null_mut(), || unsafe {
+        let selection = read_selection(columns_ptr, columns_len, row_offset, row_limit)?;
+        read_data_inner(ptr, len, &OutputFormat::Csv, Some(&selection))
+    })
+}
+
+/// Read selected columns and a bounded row range as NDJSON.
+///
+/// # Safety
+///
+/// Same contract as [`read_data_reduced`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_data_ndjson_reduced(
+    ptr: *const u8,
+    len: usize,
+    columns_ptr: *const u8,
+    columns_len: usize,
+    row_offset: u32,
+    row_limit: u32,
+) -> *mut c_char {
+    catch_export(std::ptr::null_mut(), || unsafe {
+        let selection = read_selection(columns_ptr, columns_len, row_offset, row_limit)?;
+        read_data_inner(ptr, len, &OutputFormat::Ndjson, Some(&selection))
     })
 }
 
@@ -201,7 +244,7 @@ pub unsafe extern "C" fn read_data_parquet(
             return Err("out_len must not be null".to_owned());
         }
         *out_len = 0;
-        read_data_binary_inner(ptr, len, &BinaryOutputFormat::Parquet, out_len)
+        read_data_binary_inner(ptr, len, &BinaryOutputFormat::Parquet, out_len, None)
     })
 }
 
@@ -221,7 +264,70 @@ pub unsafe extern "C" fn read_data_feather(
             return Err("out_len must not be null".to_owned());
         }
         *out_len = 0;
-        read_data_binary_inner(ptr, len, &BinaryOutputFormat::Feather, out_len)
+        read_data_binary_inner(ptr, len, &BinaryOutputFormat::Feather, out_len, None)
+    })
+}
+
+/// Read selected columns and a bounded row range as Parquet bytes.
+///
+/// # Safety
+///
+/// The input and selection arguments follow [`read_data_reduced`]. `out_len`
+/// follows [`read_data_parquet`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_data_parquet_reduced(
+    ptr: *const u8,
+    len: usize,
+    columns_ptr: *const u8,
+    columns_len: usize,
+    row_offset: u32,
+    row_limit: u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    catch_export(std::ptr::null_mut(), || unsafe {
+        if out_len.is_null() {
+            return Err("out_len must not be null".to_owned());
+        }
+        *out_len = 0;
+        let selection = read_selection(columns_ptr, columns_len, row_offset, row_limit)?;
+        read_data_binary_inner(
+            ptr,
+            len,
+            &BinaryOutputFormat::Parquet,
+            out_len,
+            Some(&selection),
+        )
+    })
+}
+
+/// Read selected columns and a bounded row range as Feather bytes.
+///
+/// # Safety
+///
+/// Same contract as [`read_data_parquet_reduced`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_data_feather_reduced(
+    ptr: *const u8,
+    len: usize,
+    columns_ptr: *const u8,
+    columns_len: usize,
+    row_offset: u32,
+    row_limit: u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    catch_export(std::ptr::null_mut(), || unsafe {
+        if out_len.is_null() {
+            return Err("out_len must not be null".to_owned());
+        }
+        *out_len = 0;
+        let selection = read_selection(columns_ptr, columns_len, row_offset, row_limit)?;
+        read_data_binary_inner(
+            ptr,
+            len,
+            &BinaryOutputFormat::Feather,
+            out_len,
+            Some(&selection),
+        )
     })
 }
 
@@ -300,6 +406,55 @@ enum BinaryOutputFormat {
     Feather,
 }
 
+struct ExportSelection {
+    columns: Vec<String>,
+    row_offset: u32,
+    row_limit: u32,
+}
+
+unsafe fn read_selection(
+    columns_ptr: *const u8,
+    columns_len: usize,
+    row_offset: u32,
+    row_limit: u32,
+) -> Result<ExportSelection, String> {
+    if columns_ptr.is_null() || columns_len == 0 {
+        return Err("selected columns must not be null or empty".to_owned());
+    }
+    if row_limit == 0 {
+        return Err("export row limit must be greater than zero".to_owned());
+    }
+
+    // SAFETY: The caller guarantees `columns_ptr` is valid for `columns_len` bytes.
+    let encoded = unsafe { slice::from_raw_parts(columns_ptr, columns_len) };
+    let columns: Vec<String> = serde_json::from_slice(encoded)
+        .map_err(|error| format!("invalid selected columns: {error}"))?;
+    if columns.is_empty() {
+        return Err("select at least one column for export".to_owned());
+    }
+
+    Ok(ExportSelection {
+        columns,
+        row_offset,
+        row_limit,
+    })
+}
+
+fn select_export(
+    reader: ReadStatReader,
+    selection: Option<&ExportSelection>,
+) -> (ReadStatReader, Option<u64>) {
+    match selection {
+        Some(selection) => (
+            reader
+                .rows(selection.row_offset, Some(selection.row_limit))
+                .columns(selection.columns.iter().cloned()),
+            Some(u64::from(selection.row_limit)),
+        ),
+        None => (reader, None),
+    }
+}
+
 unsafe fn read_preview_inner(
     ptr: *const u8,
     len: usize,
@@ -344,6 +499,7 @@ unsafe fn read_data_inner(
     ptr: *const u8,
     len: usize,
     format: &OutputFormat,
+    selection: Option<&ExportSelection>,
 ) -> Result<*mut c_char, String> {
     if ptr.is_null() || len == 0 {
         return Err("input buffer must not be null or empty".to_owned());
@@ -358,6 +514,8 @@ unsafe fn read_data_inner(
     let metadata = reader.metadata().map_err(|error| error.to_string())?;
     report_progress(STAGE_METADATA, 1, 1);
     let rows = metadata.row_count.unwrap_or_default().max(0) as u64;
+    let (reader, selected_rows) = select_export(reader, selection);
+    let rows = selected_rows.unwrap_or(rows);
     let batch = reader
         .progress(Arc::new(WasmProgress::new(STAGE_EXPORT_PARSE, rows)))
         .read()
@@ -381,6 +539,7 @@ unsafe fn read_data_binary_inner(
     len: usize,
     format: &BinaryOutputFormat,
     out_len: *mut usize,
+    selection: Option<&ExportSelection>,
 ) -> Result<*mut u8, String> {
     if ptr.is_null() || len == 0 || out_len.is_null() {
         return Err(
@@ -397,6 +556,8 @@ unsafe fn read_data_binary_inner(
     let metadata = reader.metadata().map_err(|error| error.to_string())?;
     report_progress(STAGE_METADATA, 1, 1);
     let rows = metadata.row_count.unwrap_or_default().max(0) as u64;
+    let (reader, selected_rows) = select_export(reader, selection);
+    let rows = selected_rows.unwrap_or(rows);
     let batch = reader
         .progress(Arc::new(WasmProgress::new(STAGE_EXPORT_PARSE, rows)))
         .read()
@@ -449,5 +610,18 @@ mod tests {
         assert_eq!(catch_export(0, || panic!("broken parser")), 0);
         let error = unsafe { std::ffi::CStr::from_ptr(readstat_last_error()) };
         assert!(error.to_string_lossy().contains("broken parser"));
+    }
+
+    #[test]
+    fn reduced_export_selection_requires_columns_and_rows() {
+        let columns = br#"["name","age"]"#;
+        let selection = unsafe { read_selection(columns.as_ptr(), columns.len(), 7, 12) }.unwrap();
+        assert_eq!(selection.columns, ["name", "age"]);
+        assert_eq!(selection.row_offset, 7);
+        assert_eq!(selection.row_limit, 12);
+
+        let empty = br#"[]"#;
+        assert!(unsafe { read_selection(empty.as_ptr(), empty.len(), 0, 1) }.is_err());
+        assert!(unsafe { read_selection(columns.as_ptr(), columns.len(), 0, 0) }.is_err());
     }
 }

@@ -2,9 +2,10 @@
 
 ## Status and product decisions
 
-Milestones 0 and 1 are implemented in
-[`examples/sas-explorer`](../examples/sas-explorer/) and deployed at
+Milestones 0 and 1 are implemented in [`examples/sas-explorer`](../examples/sas-explorer/)
+and deployed at
 [curtisalexander.github.io/readstat-rs/explorer/](https://curtisalexander.github.io/readstat-rs/explorer/).
+Milestone 1b is implemented and will deploy with the next push to `main`.
 The modestly branded, desktop-oriented static app:
 
 - serves at `/explorer/` beside the existing mdBook GitHub Pages site;
@@ -13,12 +14,14 @@ The modestly branded, desktop-oriented static app:
 - shows file metadata, a searchable variable list, and a bounded row preview;
 - exports complete datasets as CSV, NDJSON, Parquet, or Feather inside the
   existing worker and downloads them with useful filenames and media types;
+- exports selected variables and bounded row ranges in all four formats without
+  routing parsed data through the UI thread;
 - reports WASM download, local file read, metadata, preview parse, and preview
   encoding state plus export parse and encoding state without blocking the UI;
 - defaults to 100 preview rows, with choices from 25 through 1,000;
 - recommends files no larger than 250 MiB and enforces a configurable 500 MiB
   hard maximum until browser measurements justify a different policy; and
-- separately limits full export to 100 MiB source files because the current ABI
+- separately limits export to 100 MiB source files because the current ABI
   materializes the parsed dataset and complete serialized output in memory.
 
 The implementation intentionally uses plain JavaScript and CSS with no runtime
@@ -27,8 +30,9 @@ serve both the app and its WASM module successfully, including the
 `application/wasm` content type. Pushes to `main` build and deploy the explorer
 with the documentation; no release tag or separate repository is required.
 
-**Next milestone:** add selected-column and bounded row-range export through a
-new reduced-export WASM API. Optional lightweight SQL follows that.
+**Next milestone:** decide whether lightweight SQL adds enough value to justify
+its dependency and memory costs. Streaming export remains a separate library/API
+project rather than part of the SQL milestone.
 
 ## Existing assets and lessons
 
@@ -170,13 +174,20 @@ them independently with PyArrow, and compares every decoded value. Testing
 against the deployed Pages URL and manual Firefox/Safari/Edge coverage remain
 follow-up work rather than Milestone 1 blockers.
 
-### Milestone 1b: reduced export (next)
+### Milestone 1b: reduced export (implemented)
 
-After full-data format selection works, add selected-column and bounded row-range
-export without routing the data through the UI thread. This likely requires a
-new WASM API because the current four export functions serialize the complete
-dataset. Define and test that API before adding reduction controls. SQL remains
-out of scope for this increment.
+Selected-column and bounded row-range export now remains entirely in the worker.
+Four additive reduced-export WASM functions accept a JSON-encoded non-empty
+column selection, a zero-based row offset, and a positive row limit. The
+existing full-export ABI remains compatible. SAS Explorer exposes one-based row
+controls and variable checkboxes, preserves dataset column order, and gives
+reduced downloads a distinct `-subset` filename.
+
+Generated-WASM smoke tests exercise both package and browser wrappers. The
+Chromium E2E test downloads full and reduced CSV, NDJSON, Parquet, and Feather,
+then uses PyArrow to verify the selected 25-row, three-column range and every
+decoded value against the full Parquet export. Invalid columns and row ranges
+surface native validation errors.
 
 All four full-data WASM exports already exist. Large output ultimately needs a
 chunked/streaming design; accepting a file for metadata and bounded preview does
@@ -248,9 +259,8 @@ serialized result simultaneously. Before advertising large-file support:
 4. Keep SQL optional. Evaluate engines only after a bounded data interface
    exists; do not solve SQL by silently materializing several full copies.
 
-The worker and bounded preview portions are complete. Browser limit measurement
-and streaming/reduced export remain separate library/API projects; they are not
-prerequisites for the initial selectable full-data export UI.
+The worker, bounded preview, and reduced export portions are complete. Browser
+limit measurement and streaming export remain separate library/API projects.
 
 ## Explicit non-goals
 

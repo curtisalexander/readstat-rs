@@ -33,7 +33,7 @@ function call(fn,bytes,...args){
   try { new Uint8Array(memory.buffer).set(bytes,input); output=fn(input,bytes.byteLength,...args); if(!output) throw new Error(lastError()); return cString(output) }
   finally { free(input); if(output) free_string(output) }
 }
-function callBinary(fn,bytes){
+function callBinary(fn,bytes,...args){
   if(!instance) throw new Error("WASM is not initialized");
   const {malloc,free,free_binary}=instance.exports;
   const input=malloc(bytes.byteLength); if(!input) throw new Error("Unable to allocate WASM input memory");
@@ -41,10 +41,21 @@ function callBinary(fn,bytes){
   let output=0,length=0;
   try {
     new Uint8Array(memory.buffer).set(bytes,input);
-    output=fn(input,bytes.byteLength,outputLength); if(!output) throw new Error(lastError());
+    output=fn(input,bytes.byteLength,...args,outputLength); if(!output) throw new Error(lastError());
     length=new DataView(memory.buffer).getUint32(outputLength,true);
     return new Uint8Array(memory.buffer,output,length).slice();
   } finally { free(input);free(outputLength);if(output)free_binary(output,length) }
+}
+function reduced(fn,bytes,selection,binary=false){
+  if(!instance) throw new Error("WASM is not initialized");
+  const {columns,rowOffset,rowLimit}=selection||{};
+  if(!Array.isArray(columns)||!columns.length||columns.some(name=>typeof name!=="string"||!name)) throw new TypeError("columns must be a non-empty array of column names");
+  if(!Number.isInteger(rowOffset)||rowOffset<0||rowOffset>0xffff_ffff) throw new RangeError("rowOffset must be an integer between 0 and 4294967295");
+  if(!Number.isInteger(rowLimit)||rowLimit<1||rowLimit>0xffff_ffff) throw new RangeError("rowLimit must be an integer between 1 and 4294967295");
+  const encoded=new TextEncoder().encode(JSON.stringify(columns)),pointer=instance.exports.malloc(encoded.length);
+  if(!pointer) throw new Error("Unable to allocate selected columns");
+  try { new Uint8Array(memory.buffer).set(encoded,pointer); const args=[pointer,encoded.length,rowOffset,rowLimit]; return binary?callBinary(fn,bytes,...args):call(fn,bytes,...args) }
+  finally { instance.exports.free(pointer) }
 }
 
 export async function init(options={}) {
@@ -65,3 +76,7 @@ export function read_data(bytes){ return call(instance.exports.read_data,bytes) 
 export function read_data_ndjson(bytes){ return call(instance.exports.read_data_ndjson,bytes) }
 export function read_data_parquet(bytes){ return callBinary(instance.exports.read_data_parquet,bytes) }
 export function read_data_feather(bytes){ return callBinary(instance.exports.read_data_feather,bytes) }
+export function read_data_reduced(bytes,selection){ return reduced(instance.exports.read_data_reduced,bytes,selection) }
+export function read_data_ndjson_reduced(bytes,selection){ return reduced(instance.exports.read_data_ndjson_reduced,bytes,selection) }
+export function read_data_parquet_reduced(bytes,selection){ return reduced(instance.exports.read_data_parquet_reduced,bytes,selection,true) }
+export function read_data_feather_reduced(bytes,selection){ return reduced(instance.exports.read_data_feather_reduced,bytes,selection,true) }

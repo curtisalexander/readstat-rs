@@ -122,7 +122,7 @@ function _callWasmStringFn(wasmFn, bytes, ...args) {
  * binary byte buffer. Handles memory allocation, copying input bytes, reading
  * the (ptr, len) result pair, and freeing via free_binary.
  */
-function _callWasmBinaryFn(wasmFn, bytes) {
+function _callWasmBinaryFn(wasmFn, bytes, ...args) {
   if (!instance) {
     throw new Error("WASM module not initialised — call init() first");
   }
@@ -144,7 +144,7 @@ function _callWasmBinaryFn(wasmFn, bytes) {
 
   let resultPtr;
   try {
-    resultPtr = wasmFn(inputPtr, bytes.length, outLenPtr);
+    resultPtr = wasmFn(inputPtr, bytes.length, ...args, outLenPtr);
   } catch (error) {
     instance.exports.free(outLenPtr);
     throw error;
@@ -169,6 +169,40 @@ function _callWasmBinaryFn(wasmFn, bytes) {
     return new Uint8Array(memory.buffer, resultPtr, resultLen).slice();
   } finally {
     free_binary(resultPtr, resultLen);
+  }
+}
+
+function _validateSelection(selection) {
+  const columns = selection?.columns;
+  const rowOffset = selection?.rowOffset;
+  const rowLimit = selection?.rowLimit;
+  if (!Array.isArray(columns) || columns.length === 0 || columns.some((name) => typeof name !== "string" || name.length === 0)) {
+    throw new TypeError("columns must be a non-empty array of column names");
+  }
+  if (!Number.isInteger(rowOffset) || rowOffset < 0 || rowOffset > 0xffff_ffff) {
+    throw new RangeError("rowOffset must be an integer between 0 and 4294967295");
+  }
+  if (!Number.isInteger(rowLimit) || rowLimit < 1 || rowLimit > 0xffff_ffff) {
+    throw new RangeError("rowLimit must be an integer between 1 and 4294967295");
+  }
+  return { columns: new TextEncoder().encode(JSON.stringify(columns)), rowOffset, rowLimit };
+}
+
+function _callWasmReducedFn(wasmFn, bytes, selection, binary) {
+  if (!instance) {
+    throw new Error("WASM module not initialised — call init() first");
+  }
+  const reduced = _validateSelection(selection);
+  const columnsPtr = instance.exports.malloc(reduced.columns.length);
+  if (columnsPtr === 0) throw new Error("malloc failed for selected columns");
+  try {
+    new Uint8Array(memory.buffer).set(reduced.columns, columnsPtr);
+    const args = [columnsPtr, reduced.columns.length, reduced.rowOffset, reduced.rowLimit];
+    return binary
+      ? _callWasmBinaryFn(wasmFn, bytes, ...args)
+      : _callWasmStringFn(wasmFn, bytes, ...args);
+  } finally {
+    instance.exports.free(columnsPtr);
   }
 }
 
@@ -234,6 +268,16 @@ export function read_data_ndjson(bytes) {
   return _callWasmStringFn(instance.exports.read_data_ndjson, bytes);
 }
 
+/** Read selected columns and a bounded row range as CSV. */
+export function read_data_reduced(bytes, selection) {
+  return _callWasmReducedFn(instance.exports.read_data_reduced, bytes, selection, false);
+}
+
+/** Read selected columns and a bounded row range as NDJSON. */
+export function read_data_ndjson_reduced(bytes, selection) {
+  return _callWasmReducedFn(instance.exports.read_data_ndjson_reduced, bytes, selection, false);
+}
+
 /**
  * Read a bounded row preview as newline-delimited JSON.
  *
@@ -266,6 +310,16 @@ export function read_data_parquet(bytes) {
  */
 export function read_data_feather(bytes) {
   return _callWasmBinaryFn(instance.exports.read_data_feather, bytes);
+}
+
+/** Read selected columns and a bounded row range as Parquet bytes. */
+export function read_data_parquet_reduced(bytes, selection) {
+  return _callWasmReducedFn(instance.exports.read_data_parquet_reduced, bytes, selection, true);
+}
+
+/** Read selected columns and a bounded row range as Feather bytes. */
+export function read_data_feather_reduced(bytes, selection) {
+  return _callWasmReducedFn(instance.exports.read_data_feather_reduced, bytes, selection, true);
 }
 
 export default init;

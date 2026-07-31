@@ -25,6 +25,9 @@ ROOT = Path(__file__).resolve().parents[2]
 EXPLORER = ROOT / "examples" / "sas-explorer"
 INPUT = ROOT / "crates" / "readstat-tests" / "tests" / "data" / "cars.sas7bdat"
 FORMATS = ("csv", "ndjson", "parquet", "feather")
+REDUCED_COLUMNS = ["Brand", "Model", "CityMPG"]
+REDUCED_OFFSET = 10
+REDUCED_ROWS = 25
 EXPECTED_COLUMNS = [
     "Brand",
     "Model",
@@ -105,6 +108,28 @@ def download_exports(destination: Path) -> dict[str, Path]:
             paths[output_format] = output_path
             page.wait_for_function("!document.querySelector('#exportButton').disabled")
 
+        page.locator("#clearVariables").click()
+        for column in REDUCED_COLUMNS:
+            page.get_by_label(f"Export {column}").check()
+        page.locator("#exportRowStart").fill(str(REDUCED_OFFSET + 1))
+        page.locator("#exportRowCount").fill(str(REDUCED_ROWS))
+
+        for output_format in FORMATS:
+            page.locator("#exportFormat").select_option(output_format)
+            with page.expect_download() as download_info:
+                page.locator("#exportButton").click()
+            download = download_info.value
+            expected_name = f"cars-subset.{output_format}"
+            if download.suggested_filename != expected_name:
+                raise AssertionError(
+                    f"expected download name {expected_name!r}, got "
+                    f"{download.suggested_filename!r}"
+                )
+            output_path = destination / expected_name
+            download.save_as(output_path)
+            paths[f"reduced_{output_format}"] = output_path
+            page.wait_for_function("!document.querySelector('#exportButton').disabled")
+
         browser.close()
 
     if errors:
@@ -113,17 +138,27 @@ def download_exports(destination: Path) -> dict[str, Path]:
 
 
 def read_exports(paths: dict[str, Path]) -> dict[str, pa.Table]:
-    return {
+    tables = {
         "csv": arrow_csv.read_csv(paths["csv"]),
         "ndjson": arrow_json.read_json(paths["ndjson"]),
         "parquet": parquet.read_table(paths["parquet"]),
         "feather": feather.read_table(paths["feather"]),
     }
+    tables.update(
+        {
+            "reduced_csv": arrow_csv.read_csv(paths["reduced_csv"]),
+            "reduced_ndjson": arrow_json.read_json(paths["reduced_ndjson"]),
+            "reduced_parquet": parquet.read_table(paths["reduced_parquet"]),
+            "reduced_feather": feather.read_table(paths["reduced_feather"]),
+        }
+    )
+    return tables
 
 
 def verify_round_trip(tables: dict[str, pa.Table]) -> None:
     expected_rows = tables["parquet"].to_pylist()
-    for output_format, table in tables.items():
+    for output_format in FORMATS:
+        table = tables[output_format]
         assert table.num_rows == 1081, (
             f"{output_format}: expected 1,081 rows, got {table.num_rows}"
         )
@@ -134,12 +169,30 @@ def verify_round_trip(tables: dict[str, pa.Table]) -> None:
             f"{output_format}: decoded values differ from the Parquet export"
         )
 
+    expected_reduced = (
+        tables["parquet"]
+        .select(REDUCED_COLUMNS)
+        .slice(REDUCED_OFFSET, REDUCED_ROWS)
+        .to_pylist()
+    )
+    for output_format in FORMATS:
+        table = tables[f"reduced_{output_format}"]
+        assert table.num_rows == REDUCED_ROWS, (
+            f"reduced {output_format}: expected {REDUCED_ROWS} rows, got {table.num_rows}"
+        )
+        assert table.column_names == REDUCED_COLUMNS, (
+            f"reduced {output_format}: unexpected columns {table.column_names}"
+        )
+        assert table.to_pylist() == expected_reduced, (
+            f"reduced {output_format}: decoded values differ from the selected source range"
+        )
+
 
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sas-explorer-e2e-") as directory:
         paths = download_exports(Path(directory))
         verify_round_trip(read_exports(paths))
-    print("SAS Explorer E2E round-trip passed for CSV, NDJSON, Parquet, and Feather")
+    print("SAS Explorer full and reduced E2E exports passed for all four formats")
 
 
 if __name__ == "__main__":
