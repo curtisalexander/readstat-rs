@@ -134,6 +134,14 @@ jobs:
           workspaces: crates/readstat-wasm
       - name: Install Emscripten
         uses: emscripten-core/setup-emsdk@v16
+      - name: Set up Python for browser round-trip test
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install browser round-trip test dependencies
+        run: |
+          python -m pip install playwright==1.54.0 pyarrow==21.0.0
+          python -m playwright install --with-deps chromium
       - name: Build WASM crate
         working-directory: crates/readstat-wasm
         run: cargo build --locked --target wasm32-unknown-emscripten --release
@@ -233,6 +241,11 @@ jobs:
             throw new Error(`SAS Explorer export progress was not reported: ${JSON.stringify(progress)}`);
           }
           NODE
+
+      - name: Test SAS Explorer browser download round-trip
+        run: |
+          cp crates/readstat-wasm/target/wasm32-unknown-emscripten/release/readstat_wasm.wasm examples/sas-explorer/
+          python examples/sas-explorer/e2e_test.py
 
   # Enforce the MSRV declared in `[workspace.package] rust-version` (and
   # advertised in the READMEs): the workspace must at least type-check on that

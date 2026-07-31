@@ -115,7 +115,7 @@ References:
   no more than the requested preview rows in the WASM smoke test.
 - [x] Rejects an invalid preview row limit with a useful native error.
 - [x] Reports bounded-preview and native progress through the package wrapper.
-- [ ] Add an automated deployed-browser smoke test.
+- [ ] Add an automated smoke test against the deployed Pages site.
 - [x] Confirm current desktop Chromium behavior with the release WASM build.
 - [ ] Confirm current desktop Firefox, Safari, and Edge behavior.
 - [x] Confirm in Chromium network logs that selecting, parsing, and exporting a
@@ -163,13 +163,12 @@ SQL or a new framework:
   in the worker's single policy object. The initial full-export source limit is
   100 MiB.
 
-Release hardening remains intentionally light: generated-WASM CI now exercises
-all four export functions, output signatures, row completeness, and native
-progress stages. A local headless Chromium pass covers worker loading, the
-bounded preview, all four browser downloads, malformed-input reporting, WASM
-MIME type, console/page errors, and post-selection network activity. Automated
-testing against the deployed Pages URL and manual Firefox/Safari/Edge coverage
-remain follow-up work rather than Milestone 1 blockers.
+Generated-WASM CI exercises all four export functions, output signatures, row
+completeness, and native progress stages. It also runs SAS Explorer in headless
+Chromium, uploads the browser smoke corpus, downloads all four formats, reads
+them independently with PyArrow, and compares every decoded value. Testing
+against the deployed Pages URL and manual Firefox/Safari/Edge coverage remain
+follow-up work rather than Milestone 1 blockers.
 
 ### Milestone 1b: reduced export (next)
 
