@@ -21,6 +21,8 @@
 node_modules/
 bun.lockb
 bun.lock
+/examples/sas-explorer/vendor/
+/examples/sas-explorer/readstat_wasm.wasm
 # book (generated files copied by build-book.sh)
 /book/src/introduction.md
 /book/src/building.md

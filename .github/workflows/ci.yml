@@ -73,6 +73,7 @@ jobs:
           node --input-type=module --check < examples/sas-explorer/app.js
           node --input-type=module --check < examples/sas-explorer/worker.js
           node --input-type=module --check < examples/sas-explorer/readstat_wasm.js
+          node --check scripts/build-sas-explorer-vendor.mjs
       - name: Check WASM crate on host
         run: |
           cargo fmt --manifest-path crates/readstat-wasm/Cargo.toml -- --check
@@ -142,6 +143,10 @@ jobs:
         run: |
           python -m pip install playwright==1.54.0 pyarrow==21.0.0
           python -m playwright install --with-deps chromium
+      - name: Build SAS Explorer DuckDB assets
+        run: |
+          npm ci --ignore-scripts
+          npm run build:sas-explorer-vendor
       - name: Build WASM crate
         working-directory: crates/readstat-wasm
         run: cargo build --locked --target wasm32-unknown-emscripten --release

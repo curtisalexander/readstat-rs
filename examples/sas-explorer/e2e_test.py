@@ -70,6 +70,11 @@ def download_exports(destination: Path) -> dict[str, Path]:
             "examples/sas-explorer/readstat_wasm.wasm is missing; copy the release "
             "WASM build into the Explorer directory before running this test"
         )
+    if not (EXPLORER / "vendor" / "duckdb-browser.mjs").is_file():
+        raise FileNotFoundError(
+            "SAS Explorer DuckDB assets are missing; run "
+            "`npm run build:sas-explorer-vendor` before this test"
+        )
 
     paths: dict[str, Path] = {}
     errors: list[str] = []
@@ -129,6 +134,56 @@ def download_exports(destination: Path) -> dict[str, Path]:
             download.save_as(output_path)
             paths[f"reduced_{output_format}"] = output_path
             page.wait_for_function("!document.querySelector('#exportButton').disabled")
+
+        page.locator("#sqlLoadButton").click()
+        page.locator("#sqlWorkspace").wait_for(state="visible", timeout=120_000)
+        page.wait_for_function("!document.querySelector('#sqlRunButton').disabled")
+        page.locator("#sqlQuery").fill(
+            'select count(*) as row_count, count(distinct "Brand") as brands '
+            "from data"
+        )
+        page.locator("#sqlRunButton").click()
+        page.locator("#sqlResults").wait_for(state="visible", timeout=60_000)
+        page.wait_for_function("!document.querySelector('#sqlRunButton').disabled")
+        headers = page.locator("#sqlResultHead th").all_text_contents()
+        values = page.locator("#sqlResultBody td").all_text_contents()
+        if headers != ["row_count", "brands"] or values[0] != str(REDUCED_ROWS):
+            raise AssertionError(
+                f"unexpected DuckDB result: headers={headers!r}, values={values!r}"
+            )
+        if "SAS → Parquet" not in page.locator("#sqlMetrics").inner_text():
+            raise AssertionError("DuckDB phase timings were not displayed")
+
+        page.locator("#sqlQuery").fill("select * from range(600) as rows(value)")
+        page.locator("#sqlRunButton").click()
+        page.wait_for_function("!document.querySelector('#sqlRunButton').disabled")
+        displayed = page.locator("#sqlResultBody tr").count()
+        if displayed != 500 or "capped" not in page.locator(
+            "#sqlResultNote"
+        ).inner_text():
+            raise AssertionError(
+                f"expected a capped 500-row SQL result, got {displayed} rows"
+            )
+
+        page.locator("#exportRowCount").fill("10")
+        page.locator("#sqlLoadButton").click()
+        page.wait_for_function(
+            "!document.querySelector('#sqlLoadButton').disabled", timeout=120_000
+        )
+        page.locator("#sqlQuery").fill("select count(*) as row_count from data")
+        page.locator("#sqlRunButton").click()
+        page.wait_for_function("!document.querySelector('#sqlRunButton').disabled")
+        if page.locator("#sqlResultBody td").inner_text() != "10":
+            raise AssertionError("reloading a different SQL selection failed")
+
+        page.locator("#sqlQuery").fill("delete from data")
+        page.locator("#sqlRunButton").click()
+        if "Only one read-only SELECT" not in page.locator("#sqlError").inner_text():
+            raise AssertionError("mutating SQL was not rejected")
+        page.locator("#sqlQuery").fill("select 1; select 2")
+        page.locator("#sqlRunButton").click()
+        if "Only one read-only SELECT" not in page.locator("#sqlError").inner_text():
+            raise AssertionError("multi-statement SQL was not rejected")
 
         browser.close()
 
@@ -192,7 +247,9 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sas-explorer-e2e-") as directory:
         paths = download_exports(Path(directory))
         verify_round_trip(read_exports(paths))
-    print("SAS Explorer full and reduced E2E exports passed for all four formats")
+    print(
+        "SAS Explorer full/reduced exports and bounded DuckDB SQL query passed"
+    )
 
 
 if __name__ == "__main__":

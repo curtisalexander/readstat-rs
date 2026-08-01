@@ -2,7 +2,7 @@ import {init,read_data,read_data_feather,read_data_feather_reduced,read_data_ndj
 
 // Central browser policy. The UI receives this exact configuration in `ready`.
 const MiB=1024*1024;
-export const POLICY=Object.freeze({recommendedBytes:250*MiB,hardMaxBytes:500*MiB,exportMaxBytes:100*MiB,previewOptions:[25,50,100,250,500,1000],defaultPreview:100});
+export const POLICY=Object.freeze({recommendedBytes:250*MiB,hardMaxBytes:500*MiB,exportMaxBytes:100*MiB,sqlMaxSourceBytes:100*MiB,sqlMaxRows:100000,sqlResultRows:500,previewOptions:[25,50,100,250,500,1000],defaultPreview:100});
 const EXPORTS=Object.freeze({
   csv:{run:read_data,reduced:read_data_reduced,extension:"csv",mime:"text/csv;charset=utf-8"},
   ndjson:{run:read_data_ndjson,reduced:read_data_ndjson_reduced,extension:"ndjson",mime:"application/x-ndjson;charset=utf-8"},
@@ -52,7 +52,19 @@ function exportData({operationId,format,sourceName,selection}){
     state(operationId,"complete");
   } catch(error){ if(operationId===activeOperation)send("error",{operationId,message:error?.message||String(error)}) }
 }
-self.onmessage=e=>{ const m=e.data; if(m.type==="select") selectFile(m); else if(m.type==="preview") rerunPreview(m); else if(m.type==="export") exportData(m); else if(m.type==="reset"){activeOperation=m.operationId;bytes=null} };
+function prepareSqlData({operationId,selection}){
+  activeOperation=operationId;
+  try {
+    if(!bytes)throw new Error("Choose a file before loading SQL data");
+    if(bytes.byteLength>POLICY.sqlMaxSourceBytes)throw new Error(`SQL is limited to source files no larger than ${POLICY.sqlMaxSourceBytes} bytes during this experiment`);
+    if(!selection||selection.rowLimit>POLICY.sqlMaxRows)throw new Error(`SQL input is limited to ${POLICY.sqlMaxRows.toLocaleString()} rows`);
+    state(operationId,"sql-preparing");
+    const output=read_data_parquet_reduced(bytes,selection);
+    send("result",{operationId,kind:"sql-data",output:output.buffer,selection},[output.buffer]);
+    state(operationId,"complete");
+  } catch(error){if(operationId===activeOperation)send("error",{operationId,message:error?.message||String(error)})}
+}
+self.onmessage=e=>{ const m=e.data; if(m.type==="select") selectFile(m); else if(m.type==="preview") rerunPreview(m); else if(m.type==="export") exportData(m); else if(m.type==="sql-load") prepareSqlData(m); else if(m.type==="reset"){activeOperation=m.operationId;bytes=null} };
 
 state(0,"initializing");
 init({

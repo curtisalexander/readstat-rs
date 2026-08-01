@@ -1,0 +1,13 @@
+{
+  "name": "readstat-rs-browser-assets",
+  "private": true,
+  "scripts": {
+    "build:sas-explorer-vendor": "node scripts/build-sas-explorer-vendor.mjs"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}

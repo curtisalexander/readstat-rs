@@ -124,14 +124,16 @@ excluded WASM manifest during a version bump.
 
 ### SAS Explorer
 
-The static SAS Explorer in `examples/sas-explorer/` processes local files
-entirely in a dedicated browser worker. It shows file and variable metadata plus
-a bounded row preview, and exports complete datasets or selected variables and
-bounded row ranges as CSV, NDJSON, Parquet, or Feather without sending SAS bytes
-over the network. The normal Pages workflow
-source-builds the canonical WASM module and publishes the app at `/explorer/`
-alongside mdBook. Lightweight SQL is the next optional product milestone. See
-[SAS-EXPLORER.md](SAS-EXPLORER.md) for the current product and technical plan.
+The static SAS Explorer in `examples/sas-explorer/` processes local files in a
+dedicated browser worker. It shows file and variable metadata plus a bounded row
+preview, and exports complete datasets or selected variables and bounded row
+ranges as CSV, NDJSON, Parquet, or Feather without sending SAS bytes over the
+network. Its experimental SQL path converts an explicitly bounded selection to
+Parquet, transfers it to a lazily loaded DuckDB-Wasm worker, and consumes bounded
+query results as Arrow batches. The normal Pages workflow source-builds the
+canonical parser WASM and self-hosted DuckDB assets, then publishes the app at
+`/explorer/` alongside mdBook. See [SAS-EXPLORER.md](SAS-EXPLORER.md) for the
+current product and technical plan.
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`

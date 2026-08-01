@@ -40,6 +40,11 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential clang
 
+      - name: Build SAS Explorer DuckDB assets
+        run: |
+          npm ci --ignore-scripts
+          npm run build:sas-explorer-vendor
+
       - name: Build SAS Explorer WASM
         working-directory: crates/readstat-wasm
         run: cargo build --locked --target wasm32-unknown-emscripten --release
@@ -54,12 +59,17 @@ jobs:
           cp examples/sas-explorer/app.js target/book/explorer/
           cp examples/sas-explorer/worker.js target/book/explorer/
           cp examples/sas-explorer/readstat_wasm.js target/book/explorer/
+          cp -R examples/sas-explorer/vendor target/book/explorer/
           cp crates/readstat-wasm/target/wasm32-unknown-emscripten/release/readstat_wasm.wasm target/book/explorer/
           test -s target/book/explorer/index.html
           test -s target/book/explorer/app.js
           test -s target/book/explorer/worker.js
           test -s target/book/explorer/readstat_wasm.js
           test -s target/book/explorer/readstat_wasm.wasm
+          test -s target/book/explorer/vendor/duckdb-browser.mjs
+          test -s target/book/explorer/vendor/duckdb-eh.wasm
+          test -s target/book/explorer/vendor/duckdb-mvp.wasm
+          test -s target/book/explorer/vendor/THIRD_PARTY_NOTICES.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
