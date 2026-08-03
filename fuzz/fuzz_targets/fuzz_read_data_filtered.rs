@@ -25,7 +25,7 @@ fuzz_target!(|input: FuzzInput| {
     }
 
     let total_var_count = md.var_count;
-    if total_var_count == 0 || total_var_count > MAX_VARS {
+    if !(1..=MAX_VARS).contains(&total_var_count) {
         return;
     }
 
@@ -54,10 +54,7 @@ fuzz_target!(|input: FuzzInput| {
         .iter()
         .enumerate()
         .filter_map(|(new_idx, &orig_idx)| {
-            md.vars
-                .get(&orig_idx)
-                .cloned()
-                .map(|v| (new_idx as i32, v))
+            md.vars.get(&orig_idx).cloned().map(|v| (new_idx as i32, v))
         })
         .collect();
 
@@ -75,7 +72,10 @@ fuzz_target!(|input: FuzzInput| {
     md.var_count = selected.len() as i32;
     md.schema = Schema::new(filtered_fields);
 
-    let row_count = (md.row_count.expect("exact metadata") as u32).min(MAX_ROWS);
+    let Some(row_count) = md.row_count.and_then(|count| u32::try_from(count).ok()) else {
+        return;
+    };
+    let row_count = row_count.min(MAX_ROWS);
     let mut d = ReadStatData::new()
         .set_column_filter(Some(Arc::new(filter)), total_var_count)
         .init(md, 0, row_count);

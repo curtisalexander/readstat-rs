@@ -13,10 +13,13 @@ fuzz_target!(|data: &[u8]| {
     if md.read_metadata_from_bytes(data, false).is_err() {
         return;
     }
-    if md.var_count > MAX_VARS {
+    if !(1..=MAX_VARS).contains(&md.var_count) {
         return;
     }
-    let row_count = (md.row_count.expect("exact metadata") as u32).min(MAX_ROWS);
+    let Some(row_count) = md.row_count.and_then(|count| u32::try_from(count).ok()) else {
+        return;
+    };
+    let row_count = row_count.min(MAX_ROWS);
     let mut d = ReadStatData::new().init(md, 0, row_count);
     let _ = d.read_data_from_bytes(data);
 });
