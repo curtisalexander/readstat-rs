@@ -1,6 +1,6 @@
 [package]
 name = "readstat-wasm"
-version = "0.29.1"
+version = "0.30.0"
 authors = ["Curtis Alexander <calex@calex.org>"]
 edition = "2024"
 rust-version = "1.88"
