@@ -616,6 +616,7 @@ pub struct readstat_variable_s {
     pub index: ::std::os::raw::c_int,
     pub name: [::std::os::raw::c_char; 300usize],
     pub format: [::std::os::raw::c_char; 256usize],
+    pub informat: [::std::os::raw::c_char; 256usize],
     pub label: [::std::os::raw::c_char; 1024usize],
     pub label_set: *mut readstat_label_set_t,
     pub offset: off_t,
@@ -631,7 +632,7 @@ pub struct readstat_variable_s {
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of readstat_variable_s"][::std::mem::size_of::<readstat_variable_s>() - 2168usize];
+    ["Size of readstat_variable_s"][::std::mem::size_of::<readstat_variable_s>() - 2424usize];
     ["Alignment of readstat_variable_s"][::std::mem::align_of::<readstat_variable_s>() - 8usize];
     ["Offset of field: readstat_variable_s::type_"]
         [::std::mem::offset_of!(readstat_variable_s, type_) - 0usize];
@@ -641,30 +642,32 @@ const _: () = {
         [::std::mem::offset_of!(readstat_variable_s, name) - 8usize];
     ["Offset of field: readstat_variable_s::format"]
         [::std::mem::offset_of!(readstat_variable_s, format) - 308usize];
+    ["Offset of field: readstat_variable_s::informat"]
+        [::std::mem::offset_of!(readstat_variable_s, informat) - 564usize];
     ["Offset of field: readstat_variable_s::label"]
-        [::std::mem::offset_of!(readstat_variable_s, label) - 564usize];
+        [::std::mem::offset_of!(readstat_variable_s, label) - 820usize];
     ["Offset of field: readstat_variable_s::label_set"]
-        [::std::mem::offset_of!(readstat_variable_s, label_set) - 1592usize];
+        [::std::mem::offset_of!(readstat_variable_s, label_set) - 1848usize];
     ["Offset of field: readstat_variable_s::offset"]
-        [::std::mem::offset_of!(readstat_variable_s, offset) - 1600usize];
+        [::std::mem::offset_of!(readstat_variable_s, offset) - 1856usize];
     ["Offset of field: readstat_variable_s::storage_width"]
-        [::std::mem::offset_of!(readstat_variable_s, storage_width) - 1608usize];
+        [::std::mem::offset_of!(readstat_variable_s, storage_width) - 1864usize];
     ["Offset of field: readstat_variable_s::user_width"]
-        [::std::mem::offset_of!(readstat_variable_s, user_width) - 1616usize];
+        [::std::mem::offset_of!(readstat_variable_s, user_width) - 1872usize];
     ["Offset of field: readstat_variable_s::missingness"]
-        [::std::mem::offset_of!(readstat_variable_s, missingness) - 1624usize];
+        [::std::mem::offset_of!(readstat_variable_s, missingness) - 1880usize];
     ["Offset of field: readstat_variable_s::measure"]
-        [::std::mem::offset_of!(readstat_variable_s, measure) - 2144usize];
+        [::std::mem::offset_of!(readstat_variable_s, measure) - 2400usize];
     ["Offset of field: readstat_variable_s::alignment"]
-        [::std::mem::offset_of!(readstat_variable_s, alignment) - 2148usize];
+        [::std::mem::offset_of!(readstat_variable_s, alignment) - 2404usize];
     ["Offset of field: readstat_variable_s::display_width"]
-        [::std::mem::offset_of!(readstat_variable_s, display_width) - 2152usize];
+        [::std::mem::offset_of!(readstat_variable_s, display_width) - 2408usize];
     ["Offset of field: readstat_variable_s::decimals"]
-        [::std::mem::offset_of!(readstat_variable_s, decimals) - 2156usize];
+        [::std::mem::offset_of!(readstat_variable_s, decimals) - 2412usize];
     ["Offset of field: readstat_variable_s::skip"]
-        [::std::mem::offset_of!(readstat_variable_s, skip) - 2160usize];
+        [::std::mem::offset_of!(readstat_variable_s, skip) - 2416usize];
     ["Offset of field: readstat_variable_s::index_after_skipping"]
-        [::std::mem::offset_of!(readstat_variable_s, index_after_skipping) - 2164usize];
+        [::std::mem::offset_of!(readstat_variable_s, index_after_skipping) - 2420usize];
 };
 pub type readstat_variable_t = readstat_variable_s;
 #[repr(C)]
@@ -681,7 +684,7 @@ pub struct readstat_schema_entry_s {
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of readstat_schema_entry_s"]
-        [::std::mem::size_of::<readstat_schema_entry_s>() - 2224usize];
+        [::std::mem::size_of::<readstat_schema_entry_s>() - 2480usize];
     ["Alignment of readstat_schema_entry_s"]
         [::std::mem::align_of::<readstat_schema_entry_s>() - 8usize];
     ["Offset of field: readstat_schema_entry_s::row"]
@@ -695,9 +698,9 @@ const _: () = {
     ["Offset of field: readstat_schema_entry_s::variable"]
         [::std::mem::offset_of!(readstat_schema_entry_s, variable) - 16usize];
     ["Offset of field: readstat_schema_entry_s::labelset"]
-        [::std::mem::offset_of!(readstat_schema_entry_s, labelset) - 2184usize];
+        [::std::mem::offset_of!(readstat_schema_entry_s, labelset) - 2440usize];
     ["Offset of field: readstat_schema_entry_s::decimal_separator"]
-        [::std::mem::offset_of!(readstat_schema_entry_s, decimal_separator) - 2216usize];
+        [::std::mem::offset_of!(readstat_schema_entry_s, decimal_separator) - 2472usize];
 };
 pub type readstat_schema_entry_t = readstat_schema_entry_s;
 #[repr(C)]
@@ -801,6 +804,11 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn readstat_variable_get_format(
+        variable: *const readstat_variable_t,
+    ) -> *const ::std::os::raw::c_char;
+}
+unsafe extern "C" {
+    pub fn readstat_variable_get_informat(
         variable: *const readstat_variable_t,
     ) -> *const ::std::os::raw::c_char;
 }
@@ -1560,6 +1568,12 @@ unsafe extern "C" {
     pub fn readstat_variable_set_format(
         variable: *mut readstat_variable_t,
         format: *const ::std::os::raw::c_char,
+    );
+}
+unsafe extern "C" {
+    pub fn readstat_variable_set_informat(
+        variable: *mut readstat_variable_t,
+        informat: *const ::std::os::raw::c_char,
     );
 }
 unsafe extern "C" {
