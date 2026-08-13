@@ -373,17 +373,25 @@ if [ "$APPLY" = true ]; then
         skipped=$((skipped + 1)); continue
       fi
       echo -ne "  ${YELLOW}↻${RESET} Updating ${CYAN}${C_NAMES[$i]}${RESET} → ${YELLOW}${C_AVAIL[$i]}${RESET}…"
-      if cargo update -p "${C_NAMES[$i]}" --precise "${C_AVAIL[$i]}" 2>/dev/null \
-         || cargo update -p "${C_NAMES[$i]}" 2>/dev/null; then
+      cargo update -p "${C_NAMES[$i]}" --precise "${C_AVAIL[$i]}" 2>/dev/null \
+        || cargo update -p "${C_NAMES[$i]}" 2>/dev/null \
+        || true
+      if awk -v crate="${C_NAMES[$i]}" -v version="${C_AVAIL[$i]}" '
+          /^\[\[package\]\]/ { name=""; found_version="" }
+          /^name = / { gsub(/"/, ""); name=$3 }
+          /^version = / { gsub(/"/, ""); found_version=$3 }
+          name == crate && found_version == version { found=1 }
+          END { exit !found }
+        ' Cargo.lock; then
         echo -e " ${GREEN}${CHECK}${RESET}"; applied=$((applied + 1))
       else
-        echo -e " ${RED}${BLOCK} held back (likely a transitive constraint)${RESET}"
+        echo -e " ${RED}${BLOCK} held back (likely a transitive constraint)${RESET}"; skipped=$((skipped + 1))
       fi
     done
     echo ""
     echo -e "${BOLD}Apply complete${RESET}"
     echo -e "  ${GREEN}${CHECK}${RESET} ${applied} crate(s) updated in Cargo.lock"
-    [ "$skipped" -gt 0 ] && echo -e "  ${RED}${BLOCK}${RESET} ${skipped} crate(s) skipped (quarantined)"
+    [ "$skipped" -gt 0 ] && echo -e "  ${RED}${BLOCK}${RESET} ${skipped} crate(s) skipped (quarantined or constrained)"
     echo ""
     echo -e "${DIM}Note: Only Cargo.lock was updated (semver-compatible range).${RESET}"
     echo -e "${DIM}MAJOR bumps and bindgen require the manual steps described above.${RESET}"

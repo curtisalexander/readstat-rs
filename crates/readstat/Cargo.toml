@@ -44,7 +44,7 @@ parquet = { workspace = true, optional = true }
 chrono = { workspace = true }
 crossbeam = { workspace = true }
 log = { workspace = true }
-num-derive = "0.4"
+num-derive = "0.5"
 num-traits = "0.2"
 regex = "1.12"
 serde = { workspace = true }

@@ -351,15 +351,18 @@ if ($Apply) {
             cargo update -p $r.Name --precise $r.Available 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) { $ok = $true }
             else { cargo update -p $r.Name 2>&1 | Out-Null; if ($LASTEXITCODE -eq 0) { $ok = $true } }
+            $lockText = Get-Content Cargo.lock -Raw
+            $locked = [regex]::IsMatch($lockText, "(?m)^name = `"$([regex]::Escape($r.Name))`"\r?\nversion = `"$([regex]::Escape($r.Available))`"")
+            $ok = $ok -and $locked
 
             if ($ok) { Write-Host " ✔" -ForegroundColor Green; $applied++ }
-            else { Write-Host " ✖ held back (likely a transitive constraint)" -ForegroundColor Red }
+            else { Write-Host " ✖ held back (likely a transitive constraint)" -ForegroundColor Red; $skipped++ }
         }
         Write-Host ""
         Write-Host "Apply complete" -ForegroundColor White
         Write-Host "  ✔ $applied crate(s) updated in Cargo.lock" -ForegroundColor Green
         if ($skipped -gt 0) {
-            Write-Host "  ✖ $skipped crate(s) skipped (quarantined)" -ForegroundColor Red
+            Write-Host "  ✖ $skipped crate(s) skipped (quarantined or constrained)" -ForegroundColor Red
         }
         Write-Host ""
         Write-Host "Note: Only Cargo.lock was updated (semver-compatible range)." -ForegroundColor DarkGray
