@@ -151,14 +151,15 @@ READSTAT_VER=$(grep '^version' "$ROOT_DIR/crates/readstat/Cargo.toml" | head -1 
 CLI_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-cli/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 WASM_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-wasm/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 WASM_PKG_VER=$(grep '"version"' "$ROOT_DIR/crates/readstat-wasm/pkg/package.json" | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+CHEATSHEET_VER=$(grep -o 'readstat-cli <strong style="color:#6366f1">v[0-9]*\.[0-9]*\.[0-9]*</strong>' "$ROOT_DIR/docs/readstat-cheatsheet.html" | sed 's/.*>v\([0-9.]*\)<.*/\1/')
 SYS_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 ICONV_VER=$(grep '^version' "$ROOT_DIR/crates/readstat-iconv-sys/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
-# readstat, readstat-cli, and the WASM artifact should match
-if [ "$READSTAT_VER" = "$CLI_VER" ] && [ "$READSTAT_VER" = "$WASM_VER" ] && [ "$WASM_VER" = "$WASM_PKG_VER" ]; then
-    pass "readstat, readstat-cli, readstat-wasm, and WASM package versions match ($READSTAT_VER)"
+# readstat, readstat-cli, the WASM artifact, and user-facing version text should match
+if [ "$READSTAT_VER" = "$CLI_VER" ] && [ "$READSTAT_VER" = "$WASM_VER" ] && [ "$WASM_VER" = "$WASM_PKG_VER" ] && [ "$READSTAT_VER" = "$CHEATSHEET_VER" ]; then
+    pass "readstat, CLI, WASM, package, and cheatsheet versions match ($READSTAT_VER)"
 else
-    fail "Version mismatch: readstat=$READSTAT_VER, readstat-cli=$CLI_VER, readstat-wasm=$WASM_VER, wasm-package=$WASM_PKG_VER"
+    fail "Version mismatch: readstat=$READSTAT_VER, readstat-cli=$CLI_VER, readstat-wasm=$WASM_VER, wasm-package=$WASM_PKG_VER, cheatsheet=$CHEATSHEET_VER"
 fi
 
 # readstat-sys and readstat-iconv-sys version independently (each is bumped

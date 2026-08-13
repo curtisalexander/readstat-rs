@@ -158,13 +158,14 @@ $readstatVer = (Select-String -Path "$RootDir\crates\readstat\Cargo.toml" -Patte
 $cliVer = (Select-String -Path "$RootDir\crates\readstat-cli\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $wasmVer = (Select-String -Path "$RootDir\crates\readstat-wasm\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $wasmPkgVer = (Get-Content "$RootDir\crates\readstat-wasm\pkg\package.json" -Raw | ConvertFrom-Json).version
+$cheatsheetVer = ((Select-String -Path "$RootDir\docs\readstat-cheatsheet.html" -Pattern 'readstat-cli <strong style="color:#6366f1">v([0-9]+\.[0-9]+\.[0-9]+)</strong>').Matches | Select-Object -First 1).Groups[1].Value
 $sysVer = (Select-String -Path "$RootDir\crates\readstat-sys\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 $iconvVer = (Select-String -Path "$RootDir\crates\readstat-iconv-sys\Cargo.toml" -Pattern '^version' | Select-Object -First 1).Line -replace '.*"(.*)".*', '$1'
 
-if (($readstatVer -eq $cliVer) -and ($readstatVer -eq $wasmVer) -and ($wasmVer -eq $wasmPkgVer)) {
-    Write-Pass "readstat, readstat-cli, readstat-wasm, and WASM package versions match ($readstatVer)"
+if (($readstatVer -eq $cliVer) -and ($readstatVer -eq $wasmVer) -and ($wasmVer -eq $wasmPkgVer) -and ($readstatVer -eq $cheatsheetVer)) {
+    Write-Pass "readstat, CLI, WASM, package, and cheatsheet versions match ($readstatVer)"
 } else {
-    Write-Fail "Version mismatch: readstat=$readstatVer, readstat-cli=$cliVer, readstat-wasm=$wasmVer, wasm-package=$wasmPkgVer"
+    Write-Fail "Version mismatch: readstat=$readstatVer, readstat-cli=$cliVer, readstat-wasm=$wasmVer, wasm-package=$wasmPkgVer, cheatsheet=$cheatsheetVer"
 }
 
 # readstat-sys and readstat-iconv-sys version independently (each is bumped

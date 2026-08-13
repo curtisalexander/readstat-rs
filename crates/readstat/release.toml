@@ -45,3 +45,9 @@ file = "../../docs/ARCHITECTURE.md"
 search = "### `readstat-wasm` \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)"
 replace = "### `readstat-wasm` (v{{version}})"
 exactly = 1
+
+[[pre-release-replacements]]
+file = "../../docs/readstat-cheatsheet.html"
+search = "readstat-cli <strong style=\"color:#6366f1\">v[0-9]+\\.[0-9]+\\.[0-9]+</strong>"
+replace = "readstat-cli <strong style=\"color:#6366f1\">v{{version}}</strong>"
+exactly = 1
