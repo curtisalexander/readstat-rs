@@ -5,7 +5,7 @@
 Milestones 0 and 1 are implemented in [`examples/sas-explorer`](../examples/sas-explorer/)
 and deployed at
 [curtisalexander.github.io/readstat-rs/explorer/](https://curtisalexander.github.io/readstat-rs/explorer/).
-Milestone 1b and the first bounded SQL experiment are implemented and will
+Milestone 1b and bounded, pull-based SQL ingestion are implemented and will
 deploy with the next push to `main`.
 The modestly branded, desktop-oriented static app:
 
@@ -24,11 +24,12 @@ The modestly branded, desktop-oriented static app:
   hard maximum until browser measurements justify a different policy;
 - separately limits export to 100 MiB source files because the current ABI
   materializes the parsed dataset and complete serialized output in memory;
-- lazily loads self-hosted DuckDB-Wasm only when SQL is requested, converts up
-  to 100,000 selected rows to Parquet, and runs read-only SQL in DuckDB's worker;
+- lazily loads self-hosted DuckDB-Wasm only when SQL is requested, pulls up to
+  100,000 selected rows as 10,000-row Arrow IPC streams from one stateful parser
+  session, and runs read-only SQL in DuckDB's worker;
   and
 - consumes Arrow result batches incrementally, caps displayed results at 500
-  rows, and reports parser, engine startup, registration, and query timings.
+  rows, and reports parser, engine startup, insertion, and query timings.
 
 The application code remains plain JavaScript and CSS. DuckDB-Wasm is the first
 runtime third-party dependency; its pinned browser module, workers, and MVP/EH
@@ -36,10 +37,9 @@ WASM variants are bundled and self-hosted by the Pages build. Pushes to `main`
 build and deploy the explorer with the documentation; no release tag or separate
 repository is required.
 
-**Next milestone:** evaluate the bounded DuckDB experiment on representative
-narrow, wide, low-cardinality, and high-cardinality data. If its value and
-measured costs justify continuing, add a chunked Arrow IPC parser interface so
-SQL input no longer requires a complete intermediate Parquet buffer. Streaming
+**Next milestone:** evaluate the bounded DuckDB implementation on representative
+narrow, wide, low-cardinality, and high-cardinality data, then decide whether
+its limits and measured costs are suitable for a supported feature. Streaming
 export remains a separate library/API project.
 
 ## Existing assets and lessons
@@ -209,19 +209,27 @@ not building a full analytics environment. Choose the SQL engine only after the
 bounded/reduced data interface exists, and keep it inside a worker so query work
 does not block the UI.
 
-Phase 1 uses DuckDB-Wasm against an explicitly bounded row/column selection. The
-parser materializes that selection as Parquet, DuckDB receives the transferable
-buffer in its own worker, and the UI consumes no more than 501 streamed result
-rows (500 displayed plus one truncation sentinel). Only one `SELECT` or `WITH`
-query is accepted; mutating and multi-statement SQL are rejected. This phase is
-instrumented to expose startup, conversion, registration, first-batch, and total
-query timing. A browser-attributed memory estimate is reported only when the
-experimental browser memory API is available and is not presented as a reliable
-worker-specific measurement or peak.
+DuckDB-Wasm operates against an explicitly bounded row/column selection. The
+parser worker creates one stateful WASM session that retains a source copy and
+resolved metadata, then returns one selected batch of up to 10,000 rows as a
+complete Arrow IPC stream. Explorer awaits its insertion before requesting the
+next batch. This pull-based protocol provides backpressure and eliminates both
+the complete intermediate Parquet buffer and repeated JavaScript-to-WASM source
+copies. Because synchronous WASM calls cannot pause while a separate DuckDB
+worker inserts data, each batch remains a separate bounded parse over the
+retained bytes rather than one suspended native parser invocation.
 
-Phase 2 is conditional on Phase 1 measurements and product value. It replaces
-the complete Parquet handoff with bounded Arrow IPC batches appended to DuckDB;
-it does not broaden query limits or promise native DuckDB-style disk spilling.
+The UI consumes no more than 501 streamed result rows (500 displayed plus one
+truncation sentinel). Only one `SELECT` or `WITH` query is accepted; mutating and
+multi-statement SQL are rejected. Metrics expose startup, cumulative Arrow IPC
+conversion, cumulative DuckDB insertion, input batch count/bytes, first result,
+and total query timing. During ingestion, a persistent SQL-panel indicator shows
+the current read/insert phase, completed rows and batches, elapsed time, and
+determinate row progress so a long local operation is not mistaken for a stalled
+page. A browser-attributed memory estimate is reported only when the experimental
+browser memory API is available and is not presented as a reliable worker-specific
+measurement or peak. This implementation does not broaden query limits or
+promise native DuckDB-style disk spilling.
 
 ## Later: SAS header visualization
 
@@ -276,13 +284,14 @@ serialized result simultaneously. Before advertising large-file support:
 2. Keep all parsing and generation in the dedicated Web Worker. The current
    implementation sends the `File` handle to the worker, which reads and retains
    the bytes without creating a main-thread source buffer.
-3. Extend the existing bounded preview API with a chunk/visitor WASM ABI for
-   reduced and streaming exports; do not return complete large outputs at once.
+3. Extend the pull-based Arrow IPC approach to exports only if product needs
+   justify it; do not return complete large outputs at once.
 4. Keep SQL optional. Evaluate engines only after a bounded data interface
    exists; do not solve SQL by silently materializing several full copies.
 
-The worker, bounded preview, and reduced export portions are complete. Browser
-limit measurement and streaming export remain separate library/API projects.
+The worker, bounded preview, reduced export, and pull-based SQL input portions
+are complete. Browser limit measurement and streaming export remain separate
+library/API projects.
 
 ## Explicit non-goals
 

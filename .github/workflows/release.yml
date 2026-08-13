@@ -145,6 +145,8 @@ jobs:
         with:
           targets: wasm32-unknown-emscripten
       - uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 4.0.15
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/readstat-wasm

@@ -19,7 +19,7 @@ Versioned bundles containing these three files are attached to GitHub Releases.
 All functions accept a `Uint8Array` of raw `.sas7bdat` file bytes.
 
 ```js
-import { init, read_metadata, read_metadata_fast, read_preview, read_data, read_data_reduced, read_data_ndjson, read_data_ndjson_reduced, read_data_parquet, read_data_parquet_reduced, read_data_feather, read_data_feather_reduced } from "readstat-wasm";
+import { init, read_metadata, read_metadata_fast, read_preview, read_data, read_data_reduced, read_data_ndjson, read_data_ndjson_reduced, read_data_parquet, read_data_parquet_reduced, read_data_feather, read_data_feather_reduced, read_data_arrow_stream_reduced, create_arrow_stream_session, read_arrow_stream_session_batch, free_arrow_stream_session } from "readstat-wasm";
 
 // Must be called once before using any other function
 await init();
@@ -45,6 +45,19 @@ const reducedCsv = read_data_reduced(bytes, selection);
 const reducedNdjson = read_data_ndjson_reduced(bytes, selection);
 const reducedParquet = read_data_parquet_reduced(bytes, selection);
 const reducedFeather = read_data_feather_reduced(bytes, selection);
+const reducedArrowStream = read_data_arrow_stream_reduced(bytes, selection);
+
+// Retain one input copy and resolved schema across multiple bounded reads.
+const session = create_arrow_stream_session(bytes, selection.columns);
+try {
+  const firstBatch = read_arrow_stream_session_batch(
+    session,
+    selection.rowOffset,
+    selection.rowLimit,
+  );
+} finally {
+  free_arrow_stream_session(session);
+}
 ```
 
 ### Functions
@@ -63,6 +76,10 @@ const reducedFeather = read_data_feather_reduced(bytes, selection);
 | `read_data_ndjson_reduced(bytes, selection)` | `string` | Selected columns and bounded rows as NDJSON |
 | `read_data_parquet_reduced(bytes, selection)` | `Uint8Array` | Selected columns and bounded rows as Parquet |
 | `read_data_feather_reduced(bytes, selection)` | `Uint8Array` | Selected columns and bounded rows as Feather |
+| `read_data_arrow_stream_reduced(bytes, selection)` | `Uint8Array` | Selected columns and bounded rows as an Arrow IPC stream |
+| `create_arrow_stream_session(bytes, columns)` | `number` | Retain one input copy and selected schema for bounded Arrow IPC reads |
+| `read_arrow_stream_session_batch(handle, rowOffset, rowLimit)` | `Uint8Array` | Read one bounded Arrow IPC stream from a session |
+| `free_arrow_stream_session(handle)` | `void` | Release a session and its retained input |
 
 Reduced exports require at least one column, a `rowOffset` from 0 through
 4,294,967,295, and a `rowLimit` from 1 through 4,294,967,295. Column order in
@@ -91,9 +108,13 @@ The WASM module exposes these C-compatible functions (used internally by the JS 
 | `read_data_ndjson_reduced` | `(ptr, len, columns_ptr, columns_len, row_offset, row_limit) -> *char` | Parse selected rows/columns as NDJSON |
 | `read_data_parquet_reduced` | `(ptr, len, columns_ptr, columns_len, row_offset, row_limit, out_len) -> *u8` | Parse selected rows/columns as Parquet |
 | `read_data_feather_reduced` | `(ptr, len, columns_ptr, columns_len, row_offset, row_limit, out_len) -> *u8` | Parse selected rows/columns as Feather |
+| `read_data_arrow_stream_reduced` | `(ptr, len, columns_ptr, columns_len, row_offset, row_limit, out_len) -> *u8` | Parse selected rows/columns as an Arrow IPC stream |
+| `create_arrow_stream_session` | `(ptr, len, columns_ptr, columns_len) -> u32` | Retain an input copy and selected schema, returning a session handle |
+| `read_arrow_stream_session_batch` | `(handle, row_offset, row_limit, out_len) -> *u8` | Parse one bounded Arrow IPC stream from a session |
+| `free_arrow_stream_session` | `(handle)` | Release a session and its retained input |
 | `readstat_last_error` | `() -> *char` | Borrow the last native error for the current thread |
 | `free_string` | `(ptr)` | Free a string returned by the above |
-| `free_binary` | `(ptr, len)` | Free a binary buffer returned by parquet/feather |
+| `free_binary` | `(ptr, len)` | Free a binary buffer returned by a binary data export |
 
 The reduced C exports accept `columns_ptr` as a UTF-8 JSON array of column
 names. Read functions return null on failure. `readstat_last_error` then returns an

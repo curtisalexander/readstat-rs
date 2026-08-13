@@ -1126,6 +1126,7 @@ dependencies = [
 name = "readstat-wasm"
 version = "0.29.1"
 dependencies = [
+ "arrow-ipc",
  "readstat",
  "serde_json",
 ]

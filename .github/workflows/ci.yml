@@ -135,6 +135,8 @@ jobs:
           workspaces: crates/readstat-wasm
       - name: Install Emscripten
         uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 4.0.15
       - name: Set up Python for browser round-trip test
         uses: actions/setup-python@v6
         with:
@@ -157,8 +159,12 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
           import {
+            create_arrow_stream_session,
+            free_arrow_stream_session,
             init,
+            read_arrow_stream_session_batch,
             read_data,
+            read_data_arrow_stream_reduced,
             read_data_feather,
             read_data_feather_reduced,
             read_data_ndjson,
@@ -193,6 +199,7 @@ jobs:
           const reducedNdjson = read_data_ndjson_reduced(input, selection);
           const reducedParquet = read_data_parquet_reduced(input, selection);
           const reducedFeather = read_data_feather_reduced(input, selection);
+          const reducedArrowStream = read_data_arrow_stream_reduced(input, selection);
           if (!csv.startsWith("Brand,") || ndjson.trim().split("\n").length !== metadata.row_count) {
             throw new Error("text exports were not complete");
           }
@@ -207,6 +214,27 @@ jobs:
           }
           if (Buffer.from(reducedParquet.subarray(0, 4)).toString() !== "PAR1" || Buffer.from(reducedFeather.subarray(0, 6)).toString() !== "ARROW1") {
             throw new Error("reduced binary exports have invalid headers");
+          }
+          if (Buffer.from(reducedArrowStream.subarray(0, 4)).toString("hex") !== "ffffffff") {
+            throw new Error("reduced Arrow IPC stream has an invalid continuation marker");
+          }
+          const session = create_arrow_stream_session(input, selection.columns);
+          const sessionBatches = [
+            read_arrow_stream_session_batch(session, 0, 1000),
+            read_arrow_stream_session_batch(session, 1000, 81),
+          ];
+          if (sessionBatches.some(batch => Buffer.from(batch.subarray(0, 4)).toString("hex") !== "ffffffff")) {
+            throw new Error("stateful Arrow IPC session returned an invalid batch");
+          }
+          free_arrow_stream_session(session);
+          let freedSessionError;
+          try {
+            read_arrow_stream_session_batch(session, 0, 1);
+          } catch (error) {
+            freedSessionError = error;
+          }
+          if (!freedSessionError?.message.includes("unknown Arrow stream session")) {
+            throw new Error(`freed Arrow IPC session unexpectedly remained usable: ${freedSessionError?.message}`);
           }
           for (const invalid of [
             { columns: ["NoSuchColumn"], rowOffset: 0, rowLimit: 1 },
@@ -247,8 +275,12 @@ jobs:
             headers: { "Content-Length": String(wasm.byteLength) },
           });
           const {
+            create_arrow_stream_session,
+            free_arrow_stream_session,
             init,
+            read_arrow_stream_session_batch,
             read_data,
+            read_data_arrow_stream_reduced,
             read_data_feather,
             read_data_feather_reduced,
             read_data_ndjson,
@@ -270,6 +302,7 @@ jobs:
           const reducedNdjson = read_data_ndjson_reduced(input, selection);
           const reducedParquet = read_data_parquet_reduced(input, selection);
           const reducedFeather = read_data_feather_reduced(input, selection);
+          const reducedArrowStream = read_data_arrow_stream_reduced(input, selection);
           if (!csv.startsWith("Brand,") || ndjson.trim().split("\n").length !== 1081) {
             throw new Error("SAS Explorer text exports were not complete");
           }
@@ -284,6 +317,27 @@ jobs:
           }
           if (Buffer.from(reducedParquet.subarray(0, 4)).toString() !== "PAR1" || Buffer.from(reducedFeather.subarray(0, 6)).toString() !== "ARROW1") {
             throw new Error("SAS Explorer reduced binary exports have invalid headers");
+          }
+          if (Buffer.from(reducedArrowStream.subarray(0, 4)).toString("hex") !== "ffffffff") {
+            throw new Error("SAS Explorer Arrow IPC stream has an invalid continuation marker");
+          }
+          const session = create_arrow_stream_session(input, selection.columns);
+          const sessionBatches = [
+            read_arrow_stream_session_batch(session, 0, 1000),
+            read_arrow_stream_session_batch(session, 1000, 81),
+          ];
+          if (sessionBatches.some(batch => Buffer.from(batch.subarray(0, 4)).toString("hex") !== "ffffffff")) {
+            throw new Error("SAS Explorer stateful Arrow IPC session returned an invalid batch");
+          }
+          free_arrow_stream_session(session);
+          let freedSessionError;
+          try {
+            read_arrow_stream_session_batch(session, 0, 1);
+          } catch (error) {
+            freedSessionError = error;
+          }
+          if (!freedSessionError?.message.includes("unknown Arrow stream session")) {
+            throw new Error(`SAS Explorer freed Arrow IPC session unexpectedly remained usable: ${freedSessionError?.message}`);
           }
           if (!progress.some(event => event.stage === "export-parse") ||
               !progress.some(event => event.stage === "export-encode")) {

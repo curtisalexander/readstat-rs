@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const worker=new Worker(new URL("./worker.js",import.meta.url),{type:"module"});
 let config=null, operationId=0, currentFile=null, pendingFile=null, variables=[], selectedColumns=new Set(), metadataRows=0, previewRows=[], previewColumns=[], variableTypes=new Map(), sort={column:null,direction:1}, parserBusy=true, sqlBusy=false, isBusy=true;
-let duckdbModule=null, duckdb=null, sqlConnection=null, sqlFileName="", sqlSelectionKey="", sqlGeneration=0, sqlQueryRunning=false, sqlLoadMetrics=null;
+let duckdbModule=null, duckdb=null, sqlConnection=null, sqlTableName="", sqlSelectionKey="", sqlGeneration=0, sqlQueryRunning=false, sqlLoadMetrics=null, sqlLoadState=null, sqlLoadTimer=null, sqlLoadStarted=0;
 const formatBytes=n=>n>=1024**2?`${(n/1024**2).toFixed(n<10*1024**2?1:0)} MiB`:`${Math.ceil(n/1024)} KiB`;
 function status(text,kind=""){ $("status").textContent=text; $("status").className=kind }
 function busy(value){ parserBusy=value;isBusy=parserBusy||sqlBusy;const disabled=isBusy||!config; $("previewLimit").disabled=isBusy||!currentFile; ["exportFormat","exportRowStart","exportRowCount","selectAllVariables","clearVariables"].forEach(id=>$(id).disabled=isBusy||!currentFile); document.querySelectorAll(".variable-select-input").forEach(input=>input.disabled=isBusy); $("exportButton").disabled=isBusy||!currentFile||currentFile.size>config.exportMaxBytes||selectedColumns.size===0||metadataRows===0; $("sqlLoadButton").disabled=isBusy||!currentFile||currentFile.size>config.sqlMaxSourceBytes||selectedColumns.size===0||metadataRows===0; $("sqlRunButton").disabled=isBusy||!sqlConnection; $("sqlCancelButton").disabled=!sqlQueryRunning; $("filePicker").disabled=disabled; $("replaceFile").disabled=disabled; $("startOver").disabled=disabled; $("dropZone").classList.toggle("disabled",disabled); $("dropZone").setAttribute("aria-disabled",String(disabled)) }
@@ -11,7 +11,7 @@ function clearProgress(){ $("progress").value=1;$("progress").max=1;$("progressT
 
 worker.onmessage=e=>{ const m=e.data; if(m.type==="ready"){config=m.config; setupConfig(); status("Ready — choose a SAS dataset");clearProgress();return} if(m.operationId!==operationId)return;
   if(m.type==="progress")progress(m); else if(m.type==="state"){busy(m.state!=="complete"); const labels={reading:"Reading the selected file…",metadata:"Inspecting metadata…",preview:"Building a bounded preview…",exporting:"Exporting selected data…","sql-preparing":"Preparing the bounded SQL dataset…",complete:`Ready — ${currentFile?.name||"dataset"}`}; if(labels[m.state]&&!(m.state==="complete"&&sqlBusy))status(labels[m.state]); if(m.state==="complete")clearProgress()}
-  else if(m.type==="error"){status(m.message,"error");if(sqlBusy)showSqlError(m.message);setSqlBusy(false);busy(false);clearProgress()} else if(m.type==="result"){if(m.kind==="metadata")renderMetadata(m.metadata);else if(m.kind==="preview")renderPreview(m.ndjson,m.rowLimit);else if(m.kind==="sql-data")void loadSqlData(m);else downloadExport(m)}
+  else if(m.type==="error"){if(sqlLoadState)void failSqlLoad(m.message);else{status(m.message,"error");if(sqlBusy)showSqlError(m.message);setSqlBusy(false);busy(false);clearProgress()}} else if(m.type==="result"){if(m.kind==="metadata")renderMetadata(m.metadata);else if(m.kind==="preview")renderPreview(m.ndjson,m.rowLimit);else if(m.kind==="sql-session")requestNextSqlBatch();else if(m.kind==="sql-batch")void insertSqlBatch(m);else downloadExport(m)}
 };
 worker.onerror=()=>{status("The analysis worker stopped unexpectedly. Reload the page to try again.","error");clearProgress();busy(true)};
 function setupConfig(){ $("pickLabel").classList.remove("disabled");$("policyText").textContent=`Recommended up to ${formatBytes(config.recommendedBytes)} · maximum ${formatBytes(config.hardMaxBytes)}`;$("exportPolicy").textContent=`Exports are limited to source files up to ${formatBytes(config.exportMaxBytes)} because output is still materialized in memory. Selecting fewer rows or variables reduces parsed and downloaded data but is not yet a streaming export.`; for(const n of config.previewOptions){const o=new Option(n,n,n===config.defaultPreview,n===config.defaultPreview);$("previewLimit").add(o)} busy(false) }
@@ -70,17 +70,24 @@ function updateSqlScope(){
   const start=Math.max(1,Number($("exportRowStart").value)||1),available=Math.max(0,metadataRows-start+1),requested=Number($("exportRowCount").value)||Math.min(available,config.sqlMaxRows),rows=Math.min(requested,available),columns=selectedColumns.size;
   const candidate={columns:variables.map(v=>v.var_name).filter(name=>selectedColumns.has(name)),rowOffset:start-1,rowLimit:rows},stale=sqlSelectionKey&&sqlSelectionKey!==sqlKey(candidate);
   $("sqlScope").textContent=`${rows.toLocaleString()} rows from row ${start.toLocaleString()} · ${columns.toLocaleString()} variables${stale?" · selection changed":""}`;
-  $("sqlPolicy").textContent=currentFile.size>config.sqlMaxSourceBytes?`This experiment accepts source files up to ${formatBytes(config.sqlMaxSourceBytes)}.`:`An empty Row count loads at most ${config.sqlMaxRows.toLocaleString()} rows. SQL data and results remain in browser memory.`;
+  $("sqlPolicy").textContent=currentFile.size>config.sqlMaxSourceBytes?`This experiment accepts source files up to ${formatBytes(config.sqlMaxSourceBytes)}.`:`An empty Row count loads at most ${config.sqlMaxRows.toLocaleString()} rows. Input uses bounded ${config.sqlChunkRows.toLocaleString()}-row batches.`;
   $("sqlLoadButton").textContent=sqlSelectionKey?"Reload selection":"Load selection into SQL";
 }
 $("exportRowStart").addEventListener("input",updateSqlScope);
 $("exportRowCount").addEventListener("input",updateSqlScope);
 
 function showSqlError(message){$("sqlError").textContent=message||"";$("sqlError").classList.toggle("hidden",!message)}
+function updateSqlLoadProgress(title,detail,current=0){const bar=$("sqlLoadBar");$("sqlLoadTitle").textContent=title;$("sqlLoadDetail").textContent=detail;bar.value=Math.min(Number(bar.max)||1,Math.max(0,current))}
+function startSqlLoadProgress(selection){
+  clearInterval(sqlLoadTimer);sqlLoadStarted=performance.now();$("sqlLoadProgress").classList.remove("hidden");$("sqlLoadBar").max=selection.rowLimit;$("sqlLoadButton").textContent="Loading…";
+  updateSqlLoadProgress("Starting the local SQL engine…",`Preparing ${selection.rowLimit.toLocaleString()} rows across ${selection.columns.length.toLocaleString()} variables. Everything stays in this browser.`);
+  const updateElapsed=()=>{const seconds=Math.floor((performance.now()-sqlLoadStarted)/1000);$("sqlLoadElapsed").textContent=seconds>=5?`Still working locally · ${seconds}s`:`${seconds}s`};updateElapsed();sqlLoadTimer=setInterval(updateElapsed,1000);
+}
+function stopSqlLoadProgress(){clearInterval(sqlLoadTimer);sqlLoadTimer=null;$("sqlLoadProgress").classList.add("hidden");$("sqlLoadElapsed").textContent="";if(config&&currentFile)updateSqlScope()}
 function metric(label,contents){const box=document.createElement("div"),dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=label;dd.textContent=contents;box.append(dt,dd);return box}
 function renderSqlMetrics(queryMetrics=null){
   if(!sqlLoadMetrics)return;
-  const entries=[["DuckDB startup",`${sqlLoadMetrics.engineMs.toFixed(0)} ms`],["SAS → Parquet",`${sqlLoadMetrics.parseMs.toFixed(0)} ms`],["DuckDB registration",`${sqlLoadMetrics.registerMs.toFixed(0)} ms`],["SQL input",`${sqlLoadMetrics.rows.toLocaleString()} rows · ${sqlLoadMetrics.columns.toLocaleString()} columns · ${formatBytes(sqlLoadMetrics.bytes)}`]];
+  const entries=[["DuckDB startup",`${sqlLoadMetrics.engineMs.toFixed(0)} ms`],["SAS → Arrow IPC",`${sqlLoadMetrics.parseMs.toFixed(0)} ms`],["DuckDB insertion",`${sqlLoadMetrics.insertMs.toFixed(0)} ms`],["SQL input",`${sqlLoadMetrics.rows.toLocaleString()} rows · ${sqlLoadMetrics.columns.toLocaleString()} columns · ${sqlLoadMetrics.batches.toLocaleString()} batches · ${formatBytes(sqlLoadMetrics.bytes)}`]];
   if(queryMetrics)entries.push(["First result batch",`${queryMetrics.firstBatchMs.toFixed(0)} ms`],["Query total",`${queryMetrics.totalMs.toFixed(0)} ms`],["Displayed",`${queryMetrics.rows.toLocaleString()} rows${queryMetrics.truncated?" (capped)":""}`],["Memory estimate",queryMetrics.memoryBytes?formatBytes(queryMetrics.memoryBytes):"Browser API unavailable"]);
   $("sqlMetrics").replaceChildren(...entries.map(([label,contents])=>metric(label,contents)));$("sqlMetrics").classList.remove("hidden");
 }
@@ -97,27 +104,52 @@ async function initializeDuckDb(){
   duckdb=nextDatabase;
   return performance.now()-started;
 }
-async function loadSqlData({output,selection}){
-  const generation=++sqlGeneration,parseStarted=sqlLoadMetrics?.parseStarted||performance.now(),parseMs=performance.now()-parseStarted,bytes=output.byteLength,nextFile=`sas-explorer-selection-${generation}.parquet`;
-  setSqlBusy(true);showSqlError("");status("Starting the local DuckDB engine…");
-  let nextConnection=null,fileRegistered=false;
+async function beginSqlLoad(selection){
+  const generation=++sqlGeneration;setSqlBusy(true);showSqlError("");startSqlLoadProgress(selection);status("Starting the local DuckDB engine…");
+  let connection=null;
   try{
     const engineMs=await initializeDuckDb();if(generation!==sqlGeneration)return;
-    const database=duckdb,previousConnection=sqlConnection,previousFile=sqlFileName;
-    nextConnection=await database.connect();
-    const registered=performance.now();
-    await database.registerFileBuffer(nextFile,new Uint8Array(output));fileRegistered=true;
-    await nextConnection.query(`create or replace view data as select * from read_parquet('${nextFile}')`);
-    if(generation!==sqlGeneration)return;
-    sqlConnection=nextConnection;nextConnection=null;sqlFileName=nextFile;sqlSelectionKey=sqlKey(selection);sqlLoadMetrics={engineMs,parseMs,registerMs:performance.now()-registered,bytes,rows:selection.rowLimit,columns:selection.columns.length};
-    try{await previousConnection?.close()}catch{}try{if(previousFile)await database.dropFile(previousFile)}catch{}
-    $("sqlWorkspace").classList.remove("hidden");$("sqlResults").classList.add("hidden");renderSqlMetrics();updateSqlScope();status(`SQL ready — ${selection.rowLimit.toLocaleString()} rows loaded locally`);setSqlBusy(false);
-  }catch(error){if(generation!==sqlGeneration)return;showSqlError(error?.message||String(error));status("SQL data could not be loaded.","error");setSqlBusy(false)}
-  finally{try{await nextConnection?.close()}catch{}try{if(fileRegistered&&nextFile!==sqlFileName)await duckdb?.dropFile(nextFile)}catch{}}
+    connection=await duckdb.connect();if(generation!==sqlGeneration){await connection.close();return}
+    sqlLoadState={generation,selection,connection,tableName:`sas_explorer_data_${generation}`,engineMs,parseMs:0,insertMs:0,bytes:0,rows:0,batches:0};connection=null;
+    operationId++;busy(true);status("Preparing selected data for SQL…");updateSqlLoadProgress("Preparing selected data…","Reading the dataset structure once before processing row batches.");worker.postMessage({type:"sql-start",operationId,columns:selection.columns});
+  }catch(error){try{await connection?.close()}catch{}if(generation===sqlGeneration)await failSqlLoad(error?.message||String(error))}
+}
+function requestNextSqlBatch(){
+  const load=sqlLoadState;if(!load||load.generation!==sqlGeneration)return;
+  const remaining=load.selection.rowLimit-load.rows,rowLimit=Math.min(config.sqlChunkRows,remaining),rowOffset=load.selection.rowOffset+load.rows,start=load.rows+1,end=load.rows+rowLimit,batch=load.batches+1,totalBatches=Math.ceil(load.selection.rowLimit/config.sqlChunkRows);
+  operationId++;busy(true);status(`Loading SQL rows ${start.toLocaleString()}–${end.toLocaleString()} of ${load.selection.rowLimit.toLocaleString()}…`);updateSqlLoadProgress(`Reading rows ${start.toLocaleString()}–${end.toLocaleString()}…`,`Batch ${batch.toLocaleString()} of ${totalBatches.toLocaleString()} · ${load.rows.toLocaleString()} rows ready so far`,load.rows);worker.postMessage({type:"sql-batch",operationId,rowOffset,rowLimit});
+}
+async function insertSqlBatch({output,rowLimit,parseMs}){
+  const load=sqlLoadState;if(!load||load.generation!==sqlGeneration)return;
+  try{
+    const bytes=output.byteLength,started=performance.now(),start=load.rows+1,end=load.rows+rowLimit,totalBatches=Math.ceil(load.selection.rowLimit/config.sqlChunkRows);
+    updateSqlLoadProgress(`Adding rows ${start.toLocaleString()}–${end.toLocaleString()} to SQL…`,`Batch ${(load.batches+1).toLocaleString()} of ${totalBatches.toLocaleString()} · Processing locally in DuckDB`,load.rows);
+    await load.connection.insertArrowFromIPCStream(new Uint8Array(output),{name:load.tableName,schema:"main",create:load.batches===0});
+    if(load.generation!==sqlGeneration)return;
+    load.insertMs+=performance.now()-started;load.parseMs+=parseMs;load.bytes+=bytes;load.rows+=rowLimit;load.batches++;
+    if(load.rows<load.selection.rowLimit){requestNextSqlBatch();return}
+    updateSqlLoadProgress("Finishing the SQL table…",`${load.rows.toLocaleString()} rows processed. Preparing the query workspace.`,load.rows);
+    await finishSqlLoad(load);
+  }catch(error){if(load.generation===sqlGeneration)await failSqlLoad(error?.message||String(error))}
+}
+async function finishSqlLoad(load){
+  const previousConnection=sqlConnection,previousTable=sqlTableName;
+  try{
+    await load.connection.query(`create or replace view data as select * from "${load.tableName}"`);if(load.generation!==sqlGeneration)return;
+    worker.postMessage({type:"sql-end"});sqlConnection=load.connection;sqlTableName=load.tableName;sqlSelectionKey=sqlKey(load.selection);sqlLoadMetrics={engineMs:load.engineMs,parseMs:load.parseMs,insertMs:load.insertMs,bytes:load.bytes,rows:load.rows,columns:load.selection.columns.length,batches:load.batches};sqlLoadState=null;
+    try{await previousConnection?.close()}catch{}if(previousTable)try{await sqlConnection.query(`drop table if exists "${previousTable}"`)}catch{}
+    $("sqlWorkspace").classList.remove("hidden");$("sqlResults").classList.add("hidden");renderSqlMetrics();stopSqlLoadProgress();status(`SQL ready — ${load.rows.toLocaleString()} rows loaded in ${load.batches.toLocaleString()} batches`);setSqlBusy(false);
+  }catch(error){if(load.generation===sqlGeneration)await failSqlLoad(error?.message||String(error))}
+}
+async function failSqlLoad(message){
+  const load=sqlLoadState;sqlLoadState=null;worker.postMessage({type:"sql-end"});
+  if(load){try{await load.connection.query(`drop table if exists "${load.tableName}"`)}catch{}try{await load.connection.close()}catch{}}
+  stopSqlLoadProgress();showSqlError(message);status("SQL data could not be loaded.","error");clearProgress();busy(false);setSqlBusy(false);
 }
 async function disposeSql(){
   sqlGeneration++;sqlSelectionKey="";sqlLoadMetrics=null;showSqlError("");$("sqlWorkspace").classList.add("hidden");$("sqlResults").classList.add("hidden");$("sqlMetrics").classList.add("hidden");
-  const connection=sqlConnection,database=duckdb;sqlConnection=null;sqlFileName="";duckdb=null;setSqlBusy(false);
+  const pending=sqlLoadState,connection=sqlConnection,database=duckdb;sqlLoadState=null;sqlConnection=null;sqlTableName="";duckdb=null;worker.postMessage({type:"sql-end"});stopSqlLoadProgress();setSqlBusy(false);
+  try{await pending?.connection.close()}catch{}
   try{await connection?.close()}catch{}
   try{await database?.terminate()}catch{}
 }
@@ -138,7 +170,7 @@ async function runSql(){
     if(generation!==sqlGeneration)return;const truncated=rows.length>limit;if(truncated)rows.length=limit;const queryMetrics={firstBatchMs:firstBatchMs??performance.now()-started,totalMs:performance.now()-started,rows:rows.length,truncated,memoryBytes:await memoryEstimate()};renderSqlResults(columns,rows,truncated);renderSqlMetrics(queryMetrics);status(`SQL complete — ${rows.length.toLocaleString()} rows displayed`);setSqlBusy(false);
   }catch(error){if(generation!==sqlGeneration)return;showSqlError(error?.message||String(error));status("SQL query failed.","error");setSqlBusy(false)}
 }
-$("sqlLoadButton").onclick=()=>{const selection=selectedRange(config.sqlMaxRows,true);if(!selection||isBusy)return;showSqlError("");sqlLoadMetrics={parseStarted:performance.now()};setSqlBusy(true);operationId++;busy(true);worker.postMessage({type:"sql-load",operationId,selection})};
+$("sqlLoadButton").onclick=()=>{const selection=selectedRange(config.sqlMaxRows,true);if(!selection||isBusy)return;void beginSqlLoad(selection)};
 $("sqlRunButton").onclick=()=>void runSql();
 $("sqlCancelButton").onclick=async()=>{try{await sqlConnection?.cancelSent();status("Cancelling SQL query…")}catch(error){showSqlError(error?.message||String(error))}};
 

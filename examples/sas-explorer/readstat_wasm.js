@@ -46,13 +46,23 @@ function callBinary(fn,bytes,...args){
     return new Uint8Array(memory.buffer,output,length).slice();
   } finally { free(input);free(outputLength);if(output)free_binary(output,length) }
 }
+function callSessionBinary(fn,...args){
+  if(!instance) throw new Error("WASM is not initialized");
+  const {malloc,free,free_binary}=instance.exports,outputLength=malloc(4);if(!outputLength)throw new Error("Unable to allocate WASM output length");
+  let output=0,length=0;
+  try{output=fn(...args,outputLength);if(!output)throw new Error(lastError());length=new DataView(memory.buffer).getUint32(outputLength,true);return new Uint8Array(memory.buffer,output,length).slice()}
+  finally{free(outputLength);if(output)free_binary(output,length)}
+}
+function encodedColumns(columns){
+  if(!Array.isArray(columns)||!columns.length||columns.some(name=>typeof name!=="string"||!name))throw new TypeError("columns must be a non-empty array of column names");
+  return new TextEncoder().encode(JSON.stringify(columns));
+}
 function reduced(fn,bytes,selection,binary=false){
   if(!instance) throw new Error("WASM is not initialized");
   const {columns,rowOffset,rowLimit}=selection||{};
-  if(!Array.isArray(columns)||!columns.length||columns.some(name=>typeof name!=="string"||!name)) throw new TypeError("columns must be a non-empty array of column names");
   if(!Number.isInteger(rowOffset)||rowOffset<0||rowOffset>0xffff_ffff) throw new RangeError("rowOffset must be an integer between 0 and 4294967295");
   if(!Number.isInteger(rowLimit)||rowLimit<1||rowLimit>0xffff_ffff) throw new RangeError("rowLimit must be an integer between 1 and 4294967295");
-  const encoded=new TextEncoder().encode(JSON.stringify(columns)),pointer=instance.exports.malloc(encoded.length);
+  const encoded=encodedColumns(columns),pointer=instance.exports.malloc(encoded.length);
   if(!pointer) throw new Error("Unable to allocate selected columns");
   try { new Uint8Array(memory.buffer).set(encoded,pointer); const args=[pointer,encoded.length,rowOffset,rowLimit]; return binary?callBinary(fn,bytes,...args):call(fn,bytes,...args) }
   finally { instance.exports.free(pointer) }
@@ -80,3 +90,18 @@ export function read_data_reduced(bytes,selection){ return reduced(instance.expo
 export function read_data_ndjson_reduced(bytes,selection){ return reduced(instance.exports.read_data_ndjson_reduced,bytes,selection) }
 export function read_data_parquet_reduced(bytes,selection){ return reduced(instance.exports.read_data_parquet_reduced,bytes,selection,true) }
 export function read_data_feather_reduced(bytes,selection){ return reduced(instance.exports.read_data_feather_reduced,bytes,selection,true) }
+export function read_data_arrow_stream_reduced(bytes,selection){ return reduced(instance.exports.read_data_arrow_stream_reduced,bytes,selection,true) }
+export function create_arrow_stream_session(bytes,columns){
+  if(!instance)throw new Error("WASM is not initialized");
+  const {malloc,free}=instance.exports,encoded=encodedColumns(columns),input=malloc(bytes.byteLength),selected=malloc(encoded.length);
+  if(!input||!selected){if(input)free(input);if(selected)free(selected);throw new Error("Unable to allocate Arrow stream session input")}
+  try{new Uint8Array(memory.buffer).set(bytes,input);new Uint8Array(memory.buffer).set(encoded,selected);const handle=instance.exports.create_arrow_stream_session(input,bytes.byteLength,selected,encoded.length);if(!handle)throw new Error(lastError());return handle}
+  finally{free(input);free(selected)}
+}
+export function read_arrow_stream_session_batch(handle,rowOffset,rowLimit){
+  if(!Number.isInteger(handle)||handle<1)throw new RangeError("session handle must be a positive integer");
+  if(!Number.isInteger(rowOffset)||rowOffset<0||rowOffset>0xffff_ffff)throw new RangeError("rowOffset must be an integer between 0 and 4294967295");
+  if(!Number.isInteger(rowLimit)||rowLimit<1||rowLimit>0xffff_ffff)throw new RangeError("rowLimit must be an integer between 1 and 4294967295");
+  return callSessionBinary(instance.exports.read_arrow_stream_session_batch,handle,rowOffset,rowLimit)
+}
+export function free_arrow_stream_session(handle){if(instance&&Number.isInteger(handle)&&handle>0)instance.exports.free_arrow_stream_session(handle)}

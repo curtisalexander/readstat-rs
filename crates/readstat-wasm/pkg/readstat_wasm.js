@@ -172,20 +172,42 @@ function _callWasmBinaryFn(wasmFn, bytes, ...args) {
   }
 }
 
+function _callWasmSessionBinaryFn(wasmFn, ...args) {
+  if (!instance) throw new Error("WASM module not initialised — call init() first");
+  const { malloc, free, free_binary } = instance.exports;
+  const outLenPtr = malloc(4);
+  if (outLenPtr === 0) throw new Error("malloc failed for out_len");
+  let resultPtr = 0;
+  let resultLen = 0;
+  try {
+    resultPtr = wasmFn(...args, outLenPtr);
+    if (resultPtr === 0) throw new Error(getLastError());
+    resultLen = new DataView(memory.buffer).getUint32(outLenPtr, true);
+    return new Uint8Array(memory.buffer, resultPtr, resultLen).slice();
+  } finally {
+    free(outLenPtr);
+    if (resultPtr) free_binary(resultPtr, resultLen);
+  }
+}
+
+function _encodeColumns(columns) {
+  if (!Array.isArray(columns) || columns.length === 0 || columns.some((name) => typeof name !== "string" || name.length === 0)) {
+    throw new TypeError("columns must be a non-empty array of column names");
+  }
+  return new TextEncoder().encode(JSON.stringify(columns));
+}
+
 function _validateSelection(selection) {
   const columns = selection?.columns;
   const rowOffset = selection?.rowOffset;
   const rowLimit = selection?.rowLimit;
-  if (!Array.isArray(columns) || columns.length === 0 || columns.some((name) => typeof name !== "string" || name.length === 0)) {
-    throw new TypeError("columns must be a non-empty array of column names");
-  }
   if (!Number.isInteger(rowOffset) || rowOffset < 0 || rowOffset > 0xffff_ffff) {
     throw new RangeError("rowOffset must be an integer between 0 and 4294967295");
   }
   if (!Number.isInteger(rowLimit) || rowLimit < 1 || rowLimit > 0xffff_ffff) {
     throw new RangeError("rowLimit must be an integer between 1 and 4294967295");
   }
-  return { columns: new TextEncoder().encode(JSON.stringify(columns)), rowOffset, rowLimit };
+  return { columns: _encodeColumns(columns), rowOffset, rowLimit };
 }
 
 function _callWasmReducedFn(wasmFn, bytes, selection, binary) {
@@ -320,6 +342,47 @@ export function read_data_parquet_reduced(bytes, selection) {
 /** Read selected columns and a bounded row range as Feather bytes. */
 export function read_data_feather_reduced(bytes, selection) {
   return _callWasmReducedFn(instance.exports.read_data_feather_reduced, bytes, selection, true);
+}
+
+/** Read selected columns and a bounded row range as an Arrow IPC stream. */
+export function read_data_arrow_stream_reduced(bytes, selection) {
+  return _callWasmReducedFn(instance.exports.read_data_arrow_stream_reduced, bytes, selection, true);
+}
+
+/** Create a session that retains one WASM-owned copy of the input and selected schema. */
+export function create_arrow_stream_session(bytes, columns) {
+  if (!instance) throw new Error("WASM module not initialised — call init() first");
+  const encoded = _encodeColumns(columns);
+  const inputPtr = instance.exports.malloc(bytes.length);
+  const columnsPtr = instance.exports.malloc(encoded.length);
+  if (!inputPtr || !columnsPtr) {
+    if (inputPtr) instance.exports.free(inputPtr);
+    if (columnsPtr) instance.exports.free(columnsPtr);
+    throw new Error("malloc failed for Arrow stream session");
+  }
+  try {
+    new Uint8Array(memory.buffer).set(bytes, inputPtr);
+    new Uint8Array(memory.buffer).set(encoded, columnsPtr);
+    const handle = instance.exports.create_arrow_stream_session(inputPtr, bytes.length, columnsPtr, encoded.length);
+    if (!handle) throw new Error(getLastError());
+    return handle;
+  } finally {
+    instance.exports.free(inputPtr);
+    instance.exports.free(columnsPtr);
+  }
+}
+
+/** Read one bounded Arrow IPC stream from a stateful session. */
+export function read_arrow_stream_session_batch(handle, rowOffset, rowLimit) {
+  if (!Number.isInteger(handle) || handle < 1) throw new RangeError("session handle must be a positive integer");
+  if (!Number.isInteger(rowOffset) || rowOffset < 0 || rowOffset > 0xffff_ffff) throw new RangeError("rowOffset must be an integer between 0 and 4294967295");
+  if (!Number.isInteger(rowLimit) || rowLimit < 1 || rowLimit > 0xffff_ffff) throw new RangeError("rowLimit must be an integer between 1 and 4294967295");
+  return _callWasmSessionBinaryFn(instance.exports.read_arrow_stream_session_batch, handle, rowOffset, rowLimit);
+}
+
+/** Release a stateful Arrow stream session. */
+export function free_arrow_stream_session(handle) {
+  if (instance && Number.isInteger(handle) && handle > 0) instance.exports.free_arrow_stream_session(handle);
 }
 
 export default init;

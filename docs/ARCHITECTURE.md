@@ -113,6 +113,8 @@ WebAssembly build of the `readstat` library for parsing SAS `.sas7bdat` files in
 Exports: `read_metadata`, `read_metadata_fast`, bounded NDJSON `read_preview`,
 `read_data` (CSV), `read_data_ndjson`, `read_data_parquet`,
 `read_data_feather`, reduced row/column variants of all four data exports,
+bounded Arrow IPC stream exports, and a stateful Arrow stream session API that
+retains one input copy and resolved metadata across batch reads,
 `readstat_last_error`, `free_string`, and `free_binary`.
 Browser builds import `env.readstat_progress` to report metadata, preview, and
 export stages while native work is running. Not published to crates.io
@@ -128,12 +130,13 @@ The static SAS Explorer in `examples/sas-explorer/` processes local files in a
 dedicated browser worker. It shows file and variable metadata plus a bounded row
 preview, and exports complete datasets or selected variables and bounded row
 ranges as CSV, NDJSON, Parquet, or Feather without sending SAS bytes over the
-network. Its experimental SQL path converts an explicitly bounded selection to
-Parquet, transfers it to a lazily loaded DuckDB-Wasm worker, and consumes bounded
-query results as Arrow batches. The normal Pages workflow source-builds the
-canonical parser WASM and self-hosted DuckDB assets, then publishes the app at
-`/explorer/` alongside mdBook. See [SAS-EXPLORER.md](SAS-EXPLORER.md) for the
-current product and technical plan.
+network. Its experimental SQL path pulls an explicitly bounded selection as
+10,000-row Arrow IPC streams from one stateful parser session, awaits each
+DuckDB-Wasm insertion for backpressure, and consumes bounded query results as
+Arrow batches. The normal Pages workflow
+source-builds the canonical parser WASM and self-hosted DuckDB assets, then
+publishes the app at `/explorer/` alongside mdBook. See
+[SAS-EXPLORER.md](SAS-EXPLORER.md) for the current product and technical plan.
 
 ### `readstat-tests` — Integration Tests
 **Path**: `crates/readstat-tests/`

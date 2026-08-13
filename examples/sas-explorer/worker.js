@@ -1,8 +1,8 @@
-import {init,read_data,read_data_feather,read_data_feather_reduced,read_data_ndjson,read_data_ndjson_reduced,read_data_parquet,read_data_parquet_reduced,read_data_reduced,read_metadata,read_preview} from "./readstat_wasm.js";
+import {create_arrow_stream_session,free_arrow_stream_session,init,read_arrow_stream_session_batch,read_data,read_data_feather,read_data_feather_reduced,read_data_ndjson,read_data_ndjson_reduced,read_data_parquet,read_data_parquet_reduced,read_data_reduced,read_metadata,read_preview} from "./readstat_wasm.js";
 
 // Central browser policy. The UI receives this exact configuration in `ready`.
 const MiB=1024*1024;
-export const POLICY=Object.freeze({recommendedBytes:250*MiB,hardMaxBytes:500*MiB,exportMaxBytes:100*MiB,sqlMaxSourceBytes:100*MiB,sqlMaxRows:100000,sqlResultRows:500,previewOptions:[25,50,100,250,500,1000],defaultPreview:100});
+export const POLICY=Object.freeze({recommendedBytes:250*MiB,hardMaxBytes:500*MiB,exportMaxBytes:100*MiB,sqlMaxSourceBytes:100*MiB,sqlMaxRows:100000,sqlChunkRows:10000,sqlResultRows:500,previewOptions:[25,50,100,250,500,1000],defaultPreview:100});
 const EXPORTS=Object.freeze({
   csv:{run:read_data,reduced:read_data_reduced,extension:"csv",mime:"text/csv;charset=utf-8"},
   ndjson:{run:read_data_ndjson,reduced:read_data_ndjson_reduced,extension:"ndjson",mime:"application/x-ndjson;charset=utf-8"},
@@ -11,6 +11,7 @@ const EXPORTS=Object.freeze({
 });
 let activeOperation=0;
 let bytes=null;
+let sqlSession=0;
 const send=(type,detail={},transfer=[])=>postMessage({type,...detail},transfer);
 const state=(operationId,name)=>send("state",{operationId,state:name});
 
@@ -19,7 +20,7 @@ function readFile(file,operationId){ return new Promise((resolve,reject)=>{ cons
 
 async function selectFile(message){
   const {operationId,file,rowLimit}=message; activeOperation=operationId;
-  bytes=null;
+  if(sqlSession)free_arrow_stream_session(sqlSession);sqlSession=0;bytes=null;
   try {
     if(file.size>POLICY.hardMaxBytes) throw new Error(`The selected file exceeds the ${POLICY.hardMaxBytes} byte maximum`);
     state(operationId,"reading"); const fileBytes=await readFile(file,operationId);
@@ -52,19 +53,29 @@ function exportData({operationId,format,sourceName,selection}){
     state(operationId,"complete");
   } catch(error){ if(operationId===activeOperation)send("error",{operationId,message:error?.message||String(error)}) }
 }
-function prepareSqlData({operationId,selection}){
+function startSqlSession({operationId,columns}){
   activeOperation=operationId;
-  try {
+  try{
     if(!bytes)throw new Error("Choose a file before loading SQL data");
     if(bytes.byteLength>POLICY.sqlMaxSourceBytes)throw new Error(`SQL is limited to source files no larger than ${POLICY.sqlMaxSourceBytes} bytes during this experiment`);
-    if(!selection||selection.rowLimit>POLICY.sqlMaxRows)throw new Error(`SQL input is limited to ${POLICY.sqlMaxRows.toLocaleString()} rows`);
+    if(sqlSession)free_arrow_stream_session(sqlSession);
+    sqlSession=create_arrow_stream_session(bytes,columns);
+    send("result",{operationId,kind:"sql-session"});state(operationId,"complete");
+  }catch(error){sqlSession=0;if(operationId===activeOperation)send("error",{operationId,message:error?.message||String(error)})}
+}
+function prepareSqlBatch({operationId,rowOffset,rowLimit}){
+  activeOperation=operationId;
+  try {
+    if(!sqlSession)throw new Error("Start an Arrow stream session before requesting SQL rows");
+    if(rowLimit>POLICY.sqlChunkRows)throw new Error(`Each SQL input batch is limited to ${POLICY.sqlChunkRows.toLocaleString()} rows`);
     state(operationId,"sql-preparing");
-    const output=read_data_parquet_reduced(bytes,selection);
-    send("result",{operationId,kind:"sql-data",output:output.buffer,selection},[output.buffer]);
+    const started=performance.now(),output=read_arrow_stream_session_batch(sqlSession,rowOffset,rowLimit),parseMs=performance.now()-started;
+    send("result",{operationId,kind:"sql-batch",output:output.buffer,rowOffset,rowLimit,parseMs},[output.buffer]);
     state(operationId,"complete");
   } catch(error){if(operationId===activeOperation)send("error",{operationId,message:error?.message||String(error)})}
 }
-self.onmessage=e=>{ const m=e.data; if(m.type==="select") selectFile(m); else if(m.type==="preview") rerunPreview(m); else if(m.type==="export") exportData(m); else if(m.type==="sql-load") prepareSqlData(m); else if(m.type==="reset"){activeOperation=m.operationId;bytes=null} };
+function endSqlSession(){if(sqlSession)free_arrow_stream_session(sqlSession);sqlSession=0}
+self.onmessage=e=>{ const m=e.data; if(m.type==="select") selectFile(m); else if(m.type==="preview") rerunPreview(m); else if(m.type==="export") exportData(m); else if(m.type==="sql-start") startSqlSession(m); else if(m.type==="sql-batch") prepareSqlBatch(m); else if(m.type==="sql-end")endSqlSession();else if(m.type==="reset"){activeOperation=m.operationId;endSqlSession();bytes=null} };
 
 state(0,"initializing");
 init({

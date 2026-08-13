@@ -1,8 +1,11 @@
+use arrow_ipc::writer::StreamWriter as IpcStreamWriter;
 use readstat::{
-    ProgressCallback, ReadStatMetadata, ReadStatReader, write_batch_to_csv_bytes,
-    write_batch_to_ndjson_bytes,
+    ProgressCallback, ReadStatData, ReadStatMetadata, ReadStatReader, ReadStatVarMetadata,
+    write_batch_to_csv_bytes, write_batch_to_ndjson_bytes,
 };
 use readstat::{write_batch_to_feather_bytes, write_batch_to_parquet_bytes};
+use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::slice;
@@ -69,6 +72,18 @@ impl ProgressCallback for WasmProgress {
 
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
+    static SQL_SESSIONS: RefCell<BTreeMap<u32, SqlSession>> = const { RefCell::new(BTreeMap::new()) };
+    static NEXT_SQL_SESSION: Cell<u32> = const { Cell::new(1) };
+}
+
+struct SqlSession {
+    bytes: Arc<[u8]>,
+    row_count: u32,
+    total_var_count: i32,
+    var_count: i32,
+    vars: Arc<BTreeMap<i32, ReadStatVarMetadata>>,
+    schema: Arc<readstat::arrow_schema::Schema>,
+    mapping: Arc<BTreeMap<i32, i32>>,
 }
 
 fn set_last_error(message: impl ToString) {
@@ -331,6 +346,140 @@ pub unsafe extern "C" fn read_data_feather_reduced(
     })
 }
 
+/// Read selected columns and a bounded row range as one Arrow IPC stream.
+///
+/// This export is intended for pull-based consumers that request one bounded
+/// batch at a time and apply their own backpressure between calls.
+///
+/// # Safety
+///
+/// Same contract as [`read_data_parquet_reduced`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_data_arrow_stream_reduced(
+    ptr: *const u8,
+    len: usize,
+    columns_ptr: *const u8,
+    columns_len: usize,
+    row_offset: u32,
+    row_limit: u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    catch_export(std::ptr::null_mut(), || unsafe {
+        if out_len.is_null() {
+            return Err("out_len must not be null".to_owned());
+        }
+        *out_len = 0;
+        let selection = read_selection(columns_ptr, columns_len, row_offset, row_limit)?;
+        read_data_binary_inner(
+            ptr,
+            len,
+            &BinaryOutputFormat::ArrowStream,
+            out_len,
+            Some(&selection),
+        )
+    })
+}
+
+/// Create a stateful Arrow-stream session that owns one copy of the SAS bytes.
+///
+/// The selected columns are resolved and metadata is cached once. Returns a
+/// nonzero session handle, which must eventually be passed to
+/// [`free_arrow_stream_session`].
+///
+/// # Safety
+///
+/// `ptr` and `columns_ptr` follow the corresponding reduced data export.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn create_arrow_stream_session(
+    ptr: *const u8,
+    len: usize,
+    columns_ptr: *const u8,
+    columns_len: usize,
+) -> u32 {
+    catch_export(0, || unsafe {
+        if ptr.is_null() || len == 0 {
+            return Err("input buffer must not be null or empty".to_owned());
+        }
+        let columns = read_columns(columns_ptr, columns_len)?;
+        let bytes: Arc<[u8]> = Arc::from(slice::from_raw_parts(ptr, len));
+        report_progress(STAGE_METADATA, 0, 0);
+        let metadata = ReadStatReader::from_bytes(bytes.clone())
+            .metadata()
+            .map_err(|error| error.to_string())?;
+        report_progress(STAGE_METADATA, 1, 1);
+        let row_count = u32::try_from(
+            metadata
+                .row_count
+                .ok_or_else(|| "row count is unavailable".to_owned())?,
+        )
+        .map_err(|error| error.to_string())?;
+        let mapping = metadata
+            .resolve_selected_columns(Some(columns))
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "select at least one column".to_owned())?;
+        let total_var_count = metadata.var_count;
+        let filtered = metadata.filter_to_selected_columns(&mapping);
+        let session = SqlSession {
+            bytes,
+            row_count,
+            total_var_count,
+            var_count: filtered.var_count,
+            vars: Arc::new(filtered.vars),
+            schema: Arc::new(filtered.schema),
+            mapping: Arc::new(mapping),
+        };
+        SQL_SESSIONS.with(|sessions| {
+            NEXT_SQL_SESSION.with(|next| {
+                let mut handle = next.get();
+                let mut sessions = sessions.borrow_mut();
+                while handle == 0 || sessions.contains_key(&handle) {
+                    handle = handle.wrapping_add(1);
+                }
+                next.set(handle.wrapping_add(1));
+                sessions.insert(handle, session);
+                Ok(handle)
+            })
+        })
+    })
+}
+
+/// Read one bounded Arrow IPC stream from a stateful session.
+///
+/// # Safety
+///
+/// `out_len` must point to a writable `usize`. The returned buffer follows the
+/// ownership contract of [`read_data_parquet`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn read_arrow_stream_session_batch(
+    handle: u32,
+    row_offset: u32,
+    row_limit: u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    catch_export(std::ptr::null_mut(), || unsafe {
+        if out_len.is_null() {
+            return Err("out_len must not be null".to_owned());
+        }
+        *out_len = 0;
+        let output = SQL_SESSIONS.with(|sessions| {
+            let sessions = sessions.borrow();
+            let session = sessions
+                .get(&handle)
+                .ok_or_else(|| format!("unknown Arrow stream session: {handle}"))?;
+            read_session_batch(session, row_offset, row_limit)
+        })?;
+        return_binary(output, out_len)
+    })
+}
+
+/// Release a stateful Arrow-stream session. Unknown handles are a no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn free_arrow_stream_session(handle: u32) {
+    SQL_SESSIONS.with(|sessions| {
+        sessions.borrow_mut().remove(&handle);
+    });
+}
+
 /// Free a string previously returned by any of the `read_*` string functions.
 ///
 /// # Safety
@@ -344,7 +493,7 @@ pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
     }
 }
 
-/// Free a binary buffer previously returned by [`read_data_parquet`] or [`read_data_feather`].
+/// Free a binary buffer previously returned by a binary `read_data_*` export.
 ///
 /// # Safety
 ///
@@ -404,6 +553,7 @@ enum OutputFormat {
 enum BinaryOutputFormat {
     Parquet,
     Feather,
+    ArrowStream,
 }
 
 struct ExportSelection {
@@ -418,11 +568,21 @@ unsafe fn read_selection(
     row_offset: u32,
     row_limit: u32,
 ) -> Result<ExportSelection, String> {
-    if columns_ptr.is_null() || columns_len == 0 {
-        return Err("selected columns must not be null or empty".to_owned());
-    }
+    let columns = unsafe { read_columns(columns_ptr, columns_len)? };
     if row_limit == 0 {
         return Err("export row limit must be greater than zero".to_owned());
+    }
+
+    Ok(ExportSelection {
+        columns,
+        row_offset,
+        row_limit,
+    })
+}
+
+unsafe fn read_columns(columns_ptr: *const u8, columns_len: usize) -> Result<Vec<String>, String> {
+    if columns_ptr.is_null() || columns_len == 0 {
+        return Err("selected columns must not be null or empty".to_owned());
     }
 
     // SAFETY: The caller guarantees `columns_ptr` is valid for `columns_len` bytes.
@@ -432,12 +592,68 @@ unsafe fn read_selection(
     if columns.is_empty() {
         return Err("select at least one column for export".to_owned());
     }
+    Ok(columns)
+}
 
-    Ok(ExportSelection {
-        columns,
-        row_offset,
-        row_limit,
-    })
+fn read_session_batch(
+    session: &SqlSession,
+    row_offset: u32,
+    row_limit: u32,
+) -> Result<Vec<u8>, String> {
+    if row_limit == 0 {
+        return Err("Arrow stream row limit must be greater than zero".to_owned());
+    }
+    let row_end = row_offset
+        .checked_add(row_limit)
+        .ok_or_else(|| "Arrow stream row range overflow".to_owned())?;
+    if row_offset > session.row_count || row_end > session.row_count {
+        return Err(format!(
+            "Arrow stream row range {row_offset}..{row_end} exceeds {} rows",
+            session.row_count
+        ));
+    }
+    let mut data = ReadStatData::new()
+        .set_column_filter(Some(session.mapping.clone()), session.total_var_count)
+        .init_shared(
+            session.var_count,
+            session.vars.clone(),
+            session.schema.clone(),
+            row_offset,
+            row_end,
+        )
+        .set_progress(Arc::new(WasmProgress::new(
+            STAGE_EXPORT_PARSE,
+            u64::from(row_limit),
+        )));
+    data.read_data_from_bytes(&session.bytes)
+        .map_err(|error| error.to_string())?;
+    let batch = data
+        .batch
+        .ok_or_else(|| "no Arrow batch was produced".to_owned())?;
+    report_progress(STAGE_EXPORT_ENCODE, 0, 0);
+    let output = encode_arrow_stream(&batch).map_err(|error| error.to_string())?;
+    report_progress(STAGE_EXPORT_ENCODE, 1, 1);
+    Ok(output)
+}
+
+fn encode_arrow_stream(
+    batch: &readstat::arrow_array::RecordBatch,
+) -> Result<Vec<u8>, readstat::arrow_schema::ArrowError> {
+    let mut output = Vec::new();
+    let mut writer = IpcStreamWriter::try_new(&mut output, &batch.schema())?;
+    writer.write(batch)?;
+    writer.finish()?;
+    drop(writer);
+    Ok(output)
+}
+
+unsafe fn return_binary(output: Vec<u8>, out_len: *mut usize) -> Result<*mut u8, String> {
+    let boxed = output.into_boxed_slice();
+    let data_len = boxed.len();
+    let data_ptr = Box::into_raw(boxed) as *mut u8;
+    // SAFETY: The caller checked `out_len` before calling this helper.
+    unsafe { *out_len = data_len };
+    Ok(data_ptr)
 }
 
 fn select_export(
@@ -567,20 +783,13 @@ unsafe fn read_data_binary_inner(
     let output_bytes = match format {
         BinaryOutputFormat::Parquet => write_batch_to_parquet_bytes(&batch),
         BinaryOutputFormat::Feather => write_batch_to_feather_bytes(&batch),
+        BinaryOutputFormat::ArrowStream => encode_arrow_stream(&batch).map_err(Into::into),
     };
 
     match output_bytes.map_err(|error| error.to_string()) {
         Ok(vec) => {
             report_progress(STAGE_EXPORT_ENCODE, 1, 1);
-            // Convert to a boxed slice so that the allocation size equals the
-            // data length exactly.  `free_binary` reconstructs this `Box<[u8]>`
-            // to deallocate with the correct layout.
-            let boxed = vec.into_boxed_slice();
-            let data_len = boxed.len();
-            let data_ptr = Box::into_raw(boxed) as *mut u8;
-            // SAFETY: `out_len` was checked non-null at the top of this function.
-            unsafe { *out_len = data_len };
-            Ok(data_ptr)
+            unsafe { return_binary(vec, out_len) }
         }
         Err(error) => Err(error),
     }
@@ -623,5 +832,39 @@ mod tests {
         let empty = br#"[]"#;
         assert!(unsafe { read_selection(empty.as_ptr(), empty.len(), 0, 1) }.is_err());
         assert!(unsafe { read_selection(columns.as_ptr(), columns.len(), 0, 0) }.is_err());
+    }
+
+    #[test]
+    fn arrow_stream_session_reuses_input_and_rejects_freed_handle() {
+        let input = include_bytes!("../../readstat-tests/tests/data/cars.sas7bdat");
+        let columns = br#"["Brand","CityMPG"]"#;
+        let handle = unsafe {
+            create_arrow_stream_session(
+                input.as_ptr(),
+                input.len(),
+                columns.as_ptr(),
+                columns.len(),
+            )
+        };
+        assert_ne!(handle, 0);
+
+        for (offset, rows) in [(0, 1_000), (1_000, 81)] {
+            let mut len = 0;
+            let output = unsafe { read_arrow_stream_session_batch(handle, offset, rows, &mut len) };
+            assert!(!output.is_null());
+            assert!(len > 8);
+            assert_eq!(unsafe { slice::from_raw_parts(output, 4) }, [0xff; 4]);
+            unsafe { free_binary(output, len) };
+        }
+
+        free_arrow_stream_session(handle);
+        let mut len = 0;
+        assert!(unsafe { read_arrow_stream_session_batch(handle, 0, 1, &mut len) }.is_null());
+        let error = unsafe { std::ffi::CStr::from_ptr(readstat_last_error()) };
+        assert!(
+            error
+                .to_string_lossy()
+                .contains("unknown Arrow stream session")
+        );
     }
 }

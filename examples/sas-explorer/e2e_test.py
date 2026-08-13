@@ -89,6 +89,17 @@ def download_exports(destination: Path) -> dict[str, Path]:
             else None,
         )
 
+        # Keep the small fixture while exercising DuckDB's append/backpressure
+        # path with more than one batch. Production retains the 10,000-row size.
+        def use_test_sql_chunk_size(route):
+            response = route.fetch()
+            body = response.body().decode().replace(
+                "sqlChunkRows:10000", "sqlChunkRows:1000"
+            )
+            route.fulfill(response=response, body=body)
+
+        page.route("**/worker.js", use_test_sql_chunk_size)
+
         page.goto(url, wait_until="networkidle")
         picker = page.locator("#filePicker")
         picker.wait_for(state="attached")
@@ -135,8 +146,21 @@ def download_exports(destination: Path) -> dict[str, Path]:
             paths[f"reduced_{output_format}"] = output_path
             page.wait_for_function("!document.querySelector('#exportButton').disabled")
 
+        page.locator("#selectAllVariables").click()
+        page.locator("#exportRowStart").fill("1")
+        page.locator("#exportRowCount").fill("")
         page.locator("#sqlLoadButton").click()
+        sql_load_progress = page.locator("#sqlLoadProgress")
+        sql_load_progress.wait_for(state="visible")
+        if "browser" not in page.locator("#sqlLoadDetail").inner_text():
+            raise AssertionError("SQL loading did not explain that processing is local")
         page.locator("#sqlWorkspace").wait_for(state="visible", timeout=120_000)
+        sql_load_progress.wait_for(state="hidden")
+        progress_value = page.locator("#sqlLoadBar").evaluate(
+            "bar => ({ value: bar.value, max: bar.max })"
+        )
+        if progress_value != {"value": 1081, "max": 1081}:
+            raise AssertionError(f"unexpected SQL load progress: {progress_value!r}")
         page.wait_for_function("!document.querySelector('#sqlRunButton').disabled")
         page.locator("#sqlQuery").fill(
             'select count(*) as row_count, count(distinct "Brand") as brands '
@@ -147,12 +171,13 @@ def download_exports(destination: Path) -> dict[str, Path]:
         page.wait_for_function("!document.querySelector('#sqlRunButton').disabled")
         headers = page.locator("#sqlResultHead th").all_text_contents()
         values = page.locator("#sqlResultBody td").all_text_contents()
-        if headers != ["row_count", "brands"] or values[0] != str(REDUCED_ROWS):
+        if headers != ["row_count", "brands"] or values[0] != "1081":
             raise AssertionError(
                 f"unexpected DuckDB result: headers={headers!r}, values={values!r}"
             )
-        if "SAS → Parquet" not in page.locator("#sqlMetrics").inner_text():
-            raise AssertionError("DuckDB phase timings were not displayed")
+        metrics = page.locator("#sqlMetrics").inner_text()
+        if "SAS → Arrow IPC" not in metrics or "2 batches" not in metrics:
+            raise AssertionError(f"DuckDB streaming metrics were not displayed: {metrics}")
 
         page.locator("#sqlQuery").fill("select * from range(600) as rows(value)")
         page.locator("#sqlRunButton").click()
