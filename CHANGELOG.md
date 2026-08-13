@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-08-13
+
+This release bumps `readstat-sys` to 0.6.0 for the updated ReadStat C ABI.
+
+### Added
+- Added support for SAS7BDAT files containing deleted rows; deleted observations are excluded from metadata row counts, row offsets, and parsed data.
+- Added raw ReadStat bindings for SAS informats and XPORT v8 informat reading and writing.
+
+### Fixed
+- Updated the vendored ReadStat `dev` snapshot from `3c68974` to `da9fcaa`, including parser guards for corrupt SAS numeric widths and row-offset underflow.
+
 ## [0.30.0] - 2026-08-13
 
 ### Added

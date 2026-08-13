@@ -32,7 +32,7 @@ readstat-rs/
 
 ## Crate Details
 
-### `readstat` (v0.30.0) — Library Crate
+### `readstat` (v0.30.1) — Library Crate
 **Path**: `crates/readstat/`
 
 Pure library for parsing SAS binary files into Arrow RecordBatch format.
@@ -70,7 +70,7 @@ Key public types:
 
 Major dependencies: Arrow v58 ecosystem, Parquet (5 compression codecs, optional), Rayon, chrono, memmap2.
 
-### `readstat-cli` (v0.30.0) — CLI Binary
+### `readstat-cli` (v0.30.1) — CLI Binary
 **Path**: `crates/readstat-cli/`
 
 Binary crate producing the `readstat` CLI tool. Uses clap with three subcommands:
@@ -85,7 +85,7 @@ Additional dependencies: clap v4, colored, indicatif, crossbeam, env_logger, pat
 The default CLI build includes all output formats but omits the substantially
 larger DataFusion SQL engine. The `sql` feature enables `--sql` and `--sql-file`.
 
-### `readstat-sys` (v0.5.2) — FFI Bindings
+### `readstat-sys` (v0.6.0) — FFI Bindings
 **Path**: `crates/readstat-sys/`
 
 `build.rs` compiles ~49 C source files from `vendor/ReadStat/` git submodule via the `cc` crate. Rust bindings are pre-generated per `(os, arch)` and checked in at `crates/readstat-sys/src/bindings/bindings_<os>_<arch>.rs`, so default builds need no `libclang` on any platform. Maintainers regenerate via `READSTAT_REGEN_BINDINGS=1 cargo build -p readstat-sys --features buildtime_bindgen` (requires `libclang`; the env var opts in to rewriting the checked-in file — the feature alone only writes to `OUT_DIR`). Exposes the **full** ReadStat API including support for SAS, SPSS, and Stata formats. Platform-specific linking for iconv and zlib:
@@ -105,7 +105,7 @@ Header include paths are propagated between crates using Cargo's `links` key:
 
 Windows-target-only (gated on `CARGO_CFG_TARGET_OS == "windows"` so cross-compilation works). Compiles [win-iconv](https://github.com/win-iconv/win-iconv) — a public-domain iconv implementation backed by the Win32 conversion APIs — from the `vendor/win-iconv/` git submodule using the `cc` crate, producing a static library. On non-Windows targets the build script is a no-op. The `links = "iconv"` key in `Cargo.toml` allows `readstat-sys` to discover the include path via the `DEP_ICONV_INCLUDE` environment variable.
 
-### `readstat-wasm` (v0.30.0) — WebAssembly Build
+### `readstat-wasm` (v0.30.1) — WebAssembly Build
 **Path**: `crates/readstat-wasm/`
 
 WebAssembly build of the `readstat` library for parsing SAS `.sas7bdat` files in JavaScript. Compiles the ReadStat C library and the Rust `readstat` library to WebAssembly via the `wasm32-unknown-emscripten` target. Excluded from the Cargo workspace (built separately with Emscripten).
