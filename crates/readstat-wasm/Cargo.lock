@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "readstat"
-version = "0.30.1"
+version = "0.30.2"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "readstat-wasm"
-version = "0.30.1"
+version = "0.30.2"
 dependencies = [
  "arrow-ipc",
  "readstat",
