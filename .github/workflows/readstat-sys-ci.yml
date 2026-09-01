@@ -62,6 +62,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
   RUSTDOCFLAGS: "-D warnings"
+  LLVM_VERSION: "21.1.8"
 
 jobs:
   detect-binding-changes:
@@ -199,19 +200,24 @@ jobs:
 
       - name: Install LLVM (Windows only — bindgen needs libclang)
         if: matrix.os == 'windows-latest'
+        uses: KyleMayes/install-llvm-action@v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+          arch: x64
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Configure libclang (Windows only)
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          choco uninstall llvm --no-progress -y
-          choco install llvm --version=17.0.6 --allow-downgrade --no-progress -y
-          $llvmBin = Join-Path $env:ProgramFiles "LLVM\bin"
+          $llvmBin = Join-Path $env:LLVM_PATH "bin"
           if (!(Test-Path (Join-Path $llvmBin "libclang.dll"))) {
             throw "libclang.dll not found in $llvmBin"
           }
           $clangVersion = & (Join-Path $llvmBin "clang.exe") --version
-          if ($clangVersion[0] -notmatch "17\.0\.6") {
-            throw "Expected LLVM 17.0.6, got: $($clangVersion[0])"
+          if ($clangVersion[0] -notmatch [regex]::Escape($env:LLVM_VERSION)) {
+            throw "Expected LLVM $env:LLVM_VERSION, got: $($clangVersion[0])"
           }
-          Add-Content $env:GITHUB_PATH $llvmBin
           Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=$llvmBin"
 
       - name: Install MinGW toolchain (windows-gnu only)
@@ -290,20 +296,24 @@ jobs:
         with:
           key: regen-iconv-windows
 
-      - name: Install LLVM (bindgen needs libclang)
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+          arch: x64
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Configure libclang
         shell: pwsh
         run: |
-          choco uninstall llvm --no-progress -y
-          choco install llvm --version=17.0.6 --allow-downgrade --no-progress -y
-          $llvmBin = Join-Path $env:ProgramFiles "LLVM\bin"
+          $llvmBin = Join-Path $env:LLVM_PATH "bin"
           if (!(Test-Path (Join-Path $llvmBin "libclang.dll"))) {
             throw "libclang.dll not found in $llvmBin"
           }
           $clangVersion = & (Join-Path $llvmBin "clang.exe") --version
-          if ($clangVersion[0] -notmatch "17\.0\.6") {
-            throw "Expected LLVM 17.0.6, got: $($clangVersion[0])"
+          if ($clangVersion[0] -notmatch [regex]::Escape($env:LLVM_VERSION)) {
+            throw "Expected LLVM $env:LLVM_VERSION, got: $($clangVersion[0])"
           }
-          Add-Content $env:GITHUB_PATH $llvmBin
           Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=$llvmBin"
 
       - name: Regenerate iconv bindings
